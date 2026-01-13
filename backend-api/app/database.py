@@ -1,9 +1,10 @@
 import os
-from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
-from sqlalchemy import text  
+import asyncio
+from sqlalchemy import text
 
 load_dotenv()
 
@@ -23,7 +24,7 @@ def _required(name: str) -> str:
     return value
 
 
-def _build_connection_string(
+def _build_async_connection_string(
     server: str,
     database: str,
     user: str,
@@ -32,11 +33,10 @@ def _build_connection_string(
     driver: str = "ODBC Driver 18 for SQL Server"
 ) -> str:
     """
-    Construye la cadena de conexión para SQL Server.
-    Usa cifrado y confía en el certificado del servidor.
+    Construye la cadena de conexión asíncrona para SQL Server usando aioodbc.
     """
     return (
-        f"mssql+pyodbc://{user}:{password}@{server},{port}/{database}?"
+        f"mssql+aioodbc://{user}:{password}@{server},{port}/{database}?"
         f"driver={driver.replace(' ', '+')}&Encrypt=yes&TrustServerCertificate=yes"
     )
 
@@ -53,38 +53,29 @@ DB_NAME = _required("DB_NAME")
 DB_PORT = os.getenv("DB_PORT", "1433")
 DB_DRIVER = os.getenv("DB_DRIVER", "ODBC Driver 18 for SQL Server")
 
-# Crear engine para BD Transaccional
-engine = create_engine(
-    _build_connection_string(
+async_engine = create_async_engine(
+    _build_async_connection_string(
         server=DB_SERVER,
         database=DB_NAME,
         user=DB_USER,
         password=DB_PASSWORD,
         port=DB_PORT,
-        driver=DB_DRIVER
+        driver=DB_DRIVER,
     ),
-    pool_pre_ping=True,  # Verifica conexión antes de usar del pool
-    pool_recycle=3600,   # Recicla conexiones cada hora
-    echo=False           # Cambia a True para debug SQL
+    echo=True,
+)
+AsyncSessionLocal = sessionmaker(
+    bind=async_engine,
+    class_=AsyncSession,
+    expire_on_commit=False
 )
 
-# Session maker para BD Transaccional
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-# Base declarativa para BD Transaccional
 Base = declarative_base()
 
-
-def get_db():
-    """
-    Generador de sesiones de base de datos Transaccional.
-    Uso: db: Session = Depends(get_db)
-    """
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+# Dependencia para obtener la sesión async
+async def get_db():
+    async with AsyncSessionLocal() as session:
+        yield session
 
 
 # ============================================================================
@@ -99,69 +90,50 @@ DB_NAME_ERP = _required("DB_NAME_ERP")
 DB_PORT_ERP = os.getenv("DB_PORT_ERP", "1433")
 DB_DRIVER_ERP = os.getenv("DB_DRIVER_ERP", "ODBC Driver 18 for SQL Server")
 
-# Crear engine para BD ERP
-engine_erp = create_engine(
-    _build_connection_string(
-        server=DB_SERVER_ERP,
-        database=DB_NAME_ERP,
-        user=DB_USER_ERP,
-        password=DB_PASSWORD_ERP,
-        port=DB_PORT_ERP,
-        driver=DB_DRIVER_ERP
-    ),
-    pool_pre_ping=True,
-    pool_recycle=3600,
-    echo=False
+
+# Crear engine async para BD ERP
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+engine_erp = create_async_engine(
+    f"mssql+aioodbc://{DB_USER_ERP}:{DB_PASSWORD_ERP}@{DB_SERVER_ERP},{DB_PORT_ERP}/{DB_NAME_ERP}?driver={DB_DRIVER_ERP.replace(' ', '+')}&Encrypt=yes&TrustServerCertificate=yes",
+    echo=True,
 )
 
-# Session maker para BD ERP
-SessionLocalERP = sessionmaker(autocommit=False, autoflush=False, bind=engine_erp)
+# Session maker async para BD ERP
+AsyncSessionLocalERP = sessionmaker(
+    bind=engine_erp,
+    class_=AsyncSession,
+    expire_on_commit=False
+)
 
 # Base declarativa para BD ERP
 BaseERP = declarative_base()
 
-
-def get_db_erp():
-    """
-    Generador de sesiones de base de datos ERP_POS_CENTRAL.
-    Uso: db_erp: Session = Depends(get_db_erp)
-    """
-    db = SessionLocalERP()
-    try:
-        yield db
-    finally:
-        db.close()
+# Dependencia async para obtener la sesión ERP
+async def get_db_erp():
+    async with AsyncSessionLocalERP() as session:
+        yield session
 
 
 # ============================================================================
 # VERIFICACIÓN DE CONEXIONES (Opcional - para debug)
 # ============================================================================
-
-def test_connections():
-    """
-    Función de utilidad para probar ambas conexiones.
-    NO se usa en producción, solo para verificar durante desarrollo.
-    """
-    print("🔍 Verificando conexiones a bases de datos...")
-    
+async def test_connections_async():
+    print("🔍 Verificando conexiones async a bases de datos...")
     # Test conexión Transaccional
     try:
-        db = SessionLocal()
-        db.execute(text("SELECT 1"))
-        db.close()
-        print("✅ Conexión a BD Transaccional: OK")
+        async with AsyncSessionLocal() as db:
+            await db.execute(text("SELECT 1"))
+        print("✅ Conexión async a BD Transaccional: OK")
     except Exception as e:
-        print(f"❌ Conexión a BD Transaccional: FALLO")
+        print(f"❌ Conexión async a BD Transaccional: FALLO")
         print(f"   Error: {e}")
-    
     # Test conexión ERP
     try:
-        db_erp = SessionLocalERP()
-        db_erp.execute(text("SELECT 1"))
-        db_erp.close()
-        print("✅ Conexión a BD ERP_POS_CENTRAL: OK")
+        async with AsyncSessionLocalERP() as db_erp:
+            await db_erp.execute(text("SELECT 1"))
+        print("✅ Conexión async a BD ERP_POS_CENTRAL: OK")
     except Exception as e:
-        print(f"❌ Conexión a BD ERP_POS_CENTRAL: FALLO")
+        print(f"❌ Conexión async a BD ERP_POS_CENTRAL: FALLO")
         print(f"   Error: {e}")
 
 
@@ -170,4 +142,4 @@ def test_connections():
 # ============================================================================
 
 if __name__ == "__main__":
-     test_connections()
+    asyncio.run(test_connections_async())

@@ -6,8 +6,9 @@ from ..schemas import PublicidadSchema
 router = APIRouter()
 
 
+
 @router.get("/banners", response_model=List[PublicidadSchema])
-def listar_banners():
+async def listar_banners():
     base = os.path.normpath(
         os.path.join(os.path.dirname(__file__), "..", "..", "static", "banners")
     )

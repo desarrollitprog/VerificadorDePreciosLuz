@@ -1,71 +1,63 @@
 
+
 from datetime import datetime
 from fastapi import FastAPI, Depends, HTTPException
-from sqlalchemy import and_, or_
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 from . import models, database, schemas
 from .routes import consultas, publicidad
-
-database.Base.metadata.create_all(bind=database.engine)
 
 app = FastAPI(title="Verificador de Precios Luz - Backend")
 
 @app.get("/ping")
-def ping():
+async def ping():
     return {"status": "Conexion Exitosa"}
 
-# Paso 1: Buscar producto y precio base
-def buscar_producto_y_precio(db: Session, codigo_barras: str):
-    """Busca el producto y su precio base por código de barras."""
-    resultado = (
-        db.query(models.Producto, models.ProductoPrecio)
-        .join(models.ProductoPrecio, models.Producto.IdProducto == models.ProductoPrecio.IdProducto)
-        .filter(models.Producto.SKU == codigo_barras, models.ProductoPrecio.CostoBase > 0)
-        .first()
+# Paso 1: Buscar producto y precio base (async)
+async def buscar_producto_y_precio(db: AsyncSession, codigo_barras: str):
+    stmt = select(models.Producto, models.ProductoPrecio).join(
+        models.ProductoPrecio, models.Producto.IdProducto == models.ProductoPrecio.IdProducto
+    ).where(
+        models.Producto.SKU == codigo_barras,
+        models.ProductoPrecio.CostoBase > 0
     )
-    return resultado
+    result = await db.execute(stmt)
+    return result.first()
 
-# Paso 2: Buscar oferta asociada
-def buscar_oferta(db: Session, id_producto: int):
-    """Busca la oferta asociada al producto."""
-    return db.query(models.ProductoOferta).filter(models.ProductoOferta.IdProducto == id_producto).first()
+# Paso 2: Buscar oferta asociada (async)
+async def buscar_oferta(db: AsyncSession, id_producto: int):
+    stmt = select(models.ProductoOferta).where(models.ProductoOferta.IdProducto == id_producto)
+    result = await db.execute(stmt)
+    return result.scalars().first()
 
-# Paso 3: Buscar detalle de oferta vigente
-def buscar_detalle_oferta_vigente(db: Session, precio, now):
-    """Busca si existe un detalle de oferta vigente para el empaque del producto."""
-    sub_ofertas_vigentes = (
-        db.query(models.OfertasxProductos.IdOfertaxProducto)
-        .filter(
-            models.OfertasxProductos.IndExpirado == 0,
-            models.OfertasxProductos.FechaInicio <= now,
-            or_(
-                models.OfertasxProductos.FechaFin == None,
-                models.OfertasxProductos.FechaFin >= now,
-            ),
-        )
-        .subquery()
+# Paso 3: Buscar detalle de oferta vigente (async)
+async def buscar_detalle_oferta_vigente(db: AsyncSession, precio, now):
+    sub_ofertas_vigentes = select(models.OfertasxProductos.IdOfertaxProducto).where(
+        models.OfertasxProductos.IndExpirado == 0,
+        models.OfertasxProductos.FechaInicio <= now,
+        or_(
+            models.OfertasxProductos.FechaFin == None,
+            models.OfertasxProductos.FechaFin >= now,
+        ),
     )
-    sub_ofertas_sucursal = (
-        db.query(models.OfertasxProductosxSucursal.IdOfertaxProductoxSucursal)
-        .filter(models.OfertasxProductosxSucursal.IdOfertaxProducto.in_(sub_ofertas_vigentes.select()))
-        .subquery()
+    result_vigentes = await db.execute(sub_ofertas_vigentes)
+    ids_vigentes = [row[0] for row in result_vigentes.fetchall()]
+
+    sub_ofertas_sucursal = select(models.OfertasxProductosxSucursal.IdOfertaxProductoxSucursal).where(
+        models.OfertasxProductosxSucursal.IdOfertaxProducto.in_(ids_vigentes)
     )
-    detalle = (
-        db.query(models.OfertasxProductosxSucursalesDetalles)
-        .filter(
-            models.OfertasxProductosxSucursalesDetalles.IdEmpaque == precio.IdEmpaque,
-            models.OfertasxProductosxSucursalesDetalles.IdOfertaxProductoxSucursal.in_(sub_ofertas_sucursal.select()),
-        )
-        .first()
+    result_sucursal = await db.execute(sub_ofertas_sucursal)
+    ids_sucursal = [row[0] for row in result_sucursal.fetchall()]
+
+    stmt_detalle = select(models.OfertasxProductosxSucursalesDetalles).where(
+        models.OfertasxProductosxSucursalesDetalles.IdEmpaque == precio.IdEmpaque,
+        models.OfertasxProductosxSucursalesDetalles.IdOfertaxProductoxSucursal.in_(ids_sucursal)
     )
-    return detalle
+    result_detalle = await db.execute(stmt_detalle)
+    return result_detalle.scalars().first()
 
-# Paso 4: Armar la respuesta final
-
-
-# Paso 4: Armar la respuesta final (ahora incluye IVA)
-def armar_respuesta(producto, precio, oferta, detalle, db, db_erp):
-    """Arma el diccionario de respuesta según si hay oferta vigente o no, e incluye IVA solo en el monto base (Bs)."""
+# Paso 4: Armar la respuesta final (igual que antes)
+def armar_respuesta(producto, precio, oferta, detalle):
     oferta_vigente = detalle is not None
     pvp_base = float(precio.PVPBase) if precio and precio.PVPBase is not None else None
     pvp_conversion = float(precio.PVPConversion) if precio and precio.PVPConversion is not None else None
@@ -82,28 +74,22 @@ def armar_respuesta(producto, precio, oferta, detalle, db, db_erp):
         "id_empaque": int(precio.IdEmpaque) if precio and precio.IdEmpaque is not None else None,
     }
 
-# Endpoint principal usando funciones auxiliares
-
+# Endpoint principal usando funciones auxiliares async
 @app.get("/consultar/{codigo_barras}", response_model=schemas.ProductoResponse)
-def obtener_precio(codigo_barras: str, db: Session = Depends(database.get_db)):
-    # 1. Buscar producto y precio base
-    resultado = buscar_producto_y_precio(db, codigo_barras)
+async def obtener_precio(codigo_barras: str, db: AsyncSession = Depends(database.get_db)):
+    resultado = await buscar_producto_y_precio(db, codigo_barras)
     if not resultado:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
     producto, precio = resultado
 
-    # 2. Buscar oferta asociada
-    oferta = buscar_oferta(db, producto.IdProducto)
-
-    # 3. Buscar detalle de oferta vigente
+    oferta = await buscar_oferta(db, producto.IdProducto)
     now = datetime.now()
-    detalle = buscar_detalle_oferta_vigente(db, precio, now)
+    detalle = await buscar_detalle_oferta_vigente(db, precio, now)
 
-    # 4. Crear sesión a la base ERP para consulta de tasas
-    db_erp = next(database.get_db_erp())
+    # Si tienes una base ERP asíncrona, deberías adaptar también esa conexión
+    # db_erp = await get_db_erp() (adaptar si aplica)
 
-    # 5. Armar respuesta final (incluye cálculo de IVA)
-    return armar_respuesta(producto, precio, oferta, detalle, db, db_erp)
+    return armar_respuesta(producto, precio, oferta, detalle)
 
 app.include_router(consultas)
 app.include_router(publicidad)

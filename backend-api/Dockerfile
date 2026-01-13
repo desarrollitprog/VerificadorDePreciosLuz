@@ -3,7 +3,7 @@ FROM python:3.11-slim
 
 ENV ACCEPT_EULA=Y
 
-# Instalar ODBC Driver 18 para SQL Server y build deps de pyodbc
+# Instalar ODBC Driver 18 para SQL Server y dependencias para aioodbc
 RUN apt-get update && apt-get install -y curl gnupg apt-transport-https unixodbc-dev gcc g++ \
     && curl https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /usr/share/keyrings/microsoft.gpg \
     && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/mssql-release.list \
@@ -16,10 +16,13 @@ WORKDIR /code
 
 # Copiar requirements primero para aprovechar caché
 COPY requirements.txt ./
+RUN pip install --upgrade pip
 RUN pip install --no-cache-dir --upgrade -r requirements.txt
 
 # Copiar el resto del código (no incluir .env en builds)
 COPY . .
 
-# Comando para arrancar FastAPI (ajustado a app/main.py)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Copiar entrypoint personalizado
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]

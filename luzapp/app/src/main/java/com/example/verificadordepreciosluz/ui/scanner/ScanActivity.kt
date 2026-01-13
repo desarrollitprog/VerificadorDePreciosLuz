@@ -32,6 +32,7 @@ import com.example.verificadordepreciosluz.data.network.ApiClient
 import com.example.verificadordepreciosluz.data.network.ApiService
 import com.example.verificadordepreciosluz.data.network.ProductoResponse
 import com.example.verificadordepreciosluz.databinding.ActivityScanBinding
+import com.example.verificadordepreciosluz.R
 import com.example.verificadordepreciosluz.util.NetworkUtils
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
@@ -268,7 +269,7 @@ class ScanActivity : AppCompatActivity() {
         val port = prefs.getString("puerto_servidor", getString(com.example.verificadordepreciosluz.R.string.default_port))
 
         val sanitized = host?.let { NetworkUtils.sanitizeHost(it) }
-        val defaultPort = getString(com.example.verificadordepreciosluz.R.string.default_port)
+        val defaultPort = getString (com.example.verificadordepreciosluz.R.string.default_port)
 
         if (sanitized.isNullOrBlank() || !NetworkUtils.validateHost(sanitized)) {
             goToConfig("Configura IP/puerto primero")
@@ -337,19 +338,28 @@ class ScanActivity : AppCompatActivity() {
     }
 
     private fun showResult(producto: ProductoResponse) {
+
         // Mostrar nombre
         binding.tvNombre.text = producto.nombre
 
         // Mostrar precio en Bs
-        val precioBs = producto.pvpBaseOferta ?: producto.precioFinalConIva ?: 0.0
-        binding.tvPrecioActual.text = getString(com.example.verificadordepreciosluz.R.string.currency_format, precioBs)
+        val precioBs = producto.pvpBaseOferta ?: producto.pvpBase ?: 0.0
+        binding.tvPrecioActual.text = getString(R.string.currency_format, precioBs)
 
-        // Mostrar precio en $
+        // Mostrar mensaje informativo de IVA
+        binding.tvIva.text = getString(R.string.price_with_iva_format)
+
+        // Mostrar precio en $ en txtprecio
         val precioUsd = producto.pvpOferta ?: producto.pvpConversion ?: 0.0
-        binding.tvPrecioDolar.text = "Precio en $: %.2f".format(precioUsd)
+        binding.tvPrecioDolar.text = getString(R.string.price_usd_format, precioUsd)
 
-        // Mostrar mensaje de precio neto
-        binding.tvIva.text = "Precio neto con impuestos incluidos (si aplican)"
+        // Cambiar color de fondo si está en oferta
+        if (producto.pvpOferta != null) {
+            binding.tvPrecioDolar.setBackgroundResource(R.color.vinotinto_oferta)
+        } else {
+            binding.tvPrecioDolar.setBackgroundResource(R.color.verde_luz)
+        }
+
 
         // Ocultar ubicación
         binding.tvUbicacion.visibility = View.GONE

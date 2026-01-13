@@ -155,28 +155,32 @@
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintHorizontal_weight="1">
 
-                    <TextView
-                        android:id="@+id/tvPrecioActual"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:background="@color/verde_luz"
-                        android:paddingHorizontal="16dp"
-                        android:paddingVertical="12dp"
-                        android:textColor="@color/blanco"
-                        android:textStyle="bold"
-                        android:textSize="28sp"
-                        app:layout_constraintTop_toTopOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"/>
 
                     <TextView
                         android:id="@+id/tvPrecioDolar"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:textColor="@color/verde_luz"
-                        android:textSize="18sp"
+                        android:background="@color/verde_luz"
+                        android:textColor="@color/blanco"
+                        android:textSize="26sp"
+                        android:textStyle="bold"
+                        android:paddingHorizontal="16dp"
+                        android:paddingVertical="12dp"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"/>
+
+                    <TextView
+                        android:id="@+id/tvPrecioActual"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="#222222"
+                        android:textSize="26sp"
+                        android:textStyle="bold"
+                        android:paddingHorizontal="16dp"
+                        android:paddingVertical="12dp"
                         android:layout_marginTop="8dp"
-                        app:layout_constraintTop_toBottomOf="@id/tvPrecioActual"
+                        app:layout_constraintTop_toBottomOf="@id/tvPrecioDolar"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"/>
 
@@ -187,7 +191,7 @@
                         android:textColor="#666666"
                         android:textSize="16sp"
                         android:layout_marginTop="4dp"
-                        app:layout_constraintTop_toBottomOf="@id/tvPrecioDolar"
+                        app:layout_constraintTop_toBottomOf="@id/tvPrecioActual"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"/>
 

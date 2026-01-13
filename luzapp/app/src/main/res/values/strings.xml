@@ -18,4 +18,6 @@
     <string name="label_location_placeholder">Ubicación: -</string>
     <string name="discount_percent">%1$d%% OFF</string>
     <string name="currency_format">Bs %1$.2f</string>
+    <string name="price_with_iva_format">IVA INCLUIDO (SI APLICA)</string>
+    <string name="price_usd_format">Precio en $: %.2f</string>
 </resources>

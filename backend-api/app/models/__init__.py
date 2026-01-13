@@ -10,8 +10,7 @@ from .producto_oferta import ProductoOferta
 from .ofertas_x_productos_sucursal import OfertasxProductosxSucursal
 from .ofertas_x_productos import OfertasxProductos
 from .ofertas_x_productos_sucursal_detalles import OfertasxProductosxSucursalesDetalles
-from .tasa_impuesto import TasaImpuesto
-from .productos_x_impuestos import ProductosXImpuestos
+# (Eliminado: importación de TasaImpuesto y ProductosXImpuestos, ya no se usan para IVA)
 
 # Exportar todos los modelos
 __all__ = [
@@ -21,6 +20,5 @@ __all__ = [
     "OfertasxProductosxSucursal",
     "OfertasxProductos",
     "OfertasxProductosxSucursalesDetalles",
-    "TasaImpuesto",
-    "ProductosXImpuestos",
+    # (Eliminado: TasaImpuesto, ProductosXImpuestos)
 ]

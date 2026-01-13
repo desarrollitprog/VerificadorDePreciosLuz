@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from . import models, database, schemas
 from .routes import consultas, publicidad
 
-models.Base.metadata.create_all(bind=database.engine)
+database.Base.metadata.create_all(bind=database.engine)
 
 app = FastAPI(title="Verificador de Precios Luz - Backend")
 
@@ -62,31 +62,6 @@ def buscar_detalle_oferta_vigente(db: Session, precio, now):
 
 # Paso 4: Armar la respuesta final
 
-# Paso extra: Calcular el IVA si corresponde
-
-# Solo calcular el IVA incluido en el precio base (Bs)
-def calcular_iva_incluido_bs(db: Session, db_erp: Session, producto, detalle, pvp_base):
-    """
-    Busca la tasa de impuesto asociada y calcula el IVA incluido en el precio base (Bs),
-    siempre que exista relación activa y precio base.
-    """
-    # Buscar relación activa en ProductosXImpuestos
-    rel = db.query(models.ProductosXImpuestos).filter(
-        models.ProductosXImpuestos.IdProducto == producto.IdProducto,
-        models.ProductosXImpuestos.IndActivo == 1
-    ).first()
-    if not rel:
-        return None, None
-    id_tasa = rel.IdTasaImpuesto
-    # Buscar la tasa en la base ERP
-    from .models import TasaImpuesto
-    tasa_obj = db_erp.query(TasaImpuesto).filter(TasaImpuesto.IdTasaImpuesto == id_tasa).first()
-    if not tasa_obj or pvp_base is None:
-        return id_tasa, None
-    tasa = float(tasa_obj.Tasa)
-    # IVA incluido en el precio base (Bs):
-    iva_incluido = round((pvp_base * tasa) / (100 + tasa), 2)
-    return id_tasa, iva_incluido
 
 # Paso 4: Armar la respuesta final (ahora incluye IVA)
 def armar_respuesta(producto, precio, oferta, detalle, db, db_erp):
@@ -96,20 +71,15 @@ def armar_respuesta(producto, precio, oferta, detalle, db, db_erp):
     pvp_conversion = float(precio.PVPConversion) if precio and precio.PVPConversion is not None else None
     pvp_oferta = float(oferta.PvpOferta) if oferta and oferta.PvpOferta is not None else None
     pvp_base_oferta = float(oferta.PvpBaseOferta) if oferta and oferta.PvpBaseOferta is not None else None
-    # Solo calcular IVA incluido en el precio base (Bs)
-    id_tasa, iva_incluido_bs = calcular_iva_incluido_bs(db, db_erp, producto, detalle, pvp_base)
     return {
         "id_producto": producto.IdProducto,
         "sku": producto.SKU,
         "nombre": producto.Nombre,
         "pvp_base": None if oferta_vigente else pvp_base,
         "pvp_conversion": None if oferta_vigente else pvp_conversion,
-        "ind_iva": int(precio.IndIVA) if precio and precio.IndIVA is not None else None,
         "pvp_oferta": pvp_oferta if oferta_vigente else None,
         "pvp_base_oferta": pvp_base_oferta if oferta_vigente else None,
         "id_empaque": int(precio.IdEmpaque) if precio and precio.IdEmpaque is not None else None,
-        "id_tasa_impuesto": id_tasa,
-        "iva_incluido_bs": iva_incluido_bs,
     }
 
 # Endpoint principal usando funciones auxiliares

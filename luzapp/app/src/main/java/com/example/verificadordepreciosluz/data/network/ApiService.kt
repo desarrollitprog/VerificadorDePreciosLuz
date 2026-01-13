@@ -26,7 +26,8 @@ data class ProductoResponse(
     @SerializedName("pvp_base_oferta") val pvpBaseOferta: Double?,
     @SerializedName("id_empaque") val idEmpaque: Int?,
     @SerializedName("id_tasa_impuesto") val idTasaImpuesto: Int?,
-    @SerializedName("iva_incluido_bs") val ivaIncluidoBs: Double?
+    @SerializedName("iva_incluido_bs") val ivaIncluidoBs: Double?,
+    @SerializedName("precio_final_con_iva") val precioFinalConIva: Double?
 )
 
 interface ApiService {

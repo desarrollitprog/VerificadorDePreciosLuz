@@ -236,7 +236,7 @@ class ScanActivity : AppCompatActivity() {
                     feedbackSuccess()
                     showResult(producto)
                     // Pausa el escáner 3s tras un éxito para evitar lecturas inmediatas repetidas
-                    pauseUntil = android.os.SystemClock.elapsedRealtime() + 3000
+                    pauseUntil = android.os.SystemClock.elapsedRealtime() + 4000
                 }
             } catch (e: Exception) {
                 uiHandler.post {
@@ -337,22 +337,19 @@ class ScanActivity : AppCompatActivity() {
     }
 
     private fun showResult(producto: ProductoResponse) {
-        // Mostrar solo el precio de oferta si existe, si no el precio base
-        val currentPrice = producto.pvpOferta ?: producto.pvpBase ?: 0.0
-        binding.tvPrecioActual.text = getString(com.example.verificadordepreciosluz.R.string.currency_format, currentPrice)
-
-        // Ocultar comparativas y badges
-        binding.tvPrecioAnterior.visibility = View.GONE
-        binding.tvDescuentoBadge.visibility = View.GONE
-
-        // Mostrar IVA incluido si aplica
-        val ivaIncluido = producto.ivaIncluidoBs
-        if (ivaIncluido != null && ivaIncluido > 0.0) {
-            binding.tvPrecioActual.append("\n(IVA incluido: S/ %.2f)".format(ivaIncluido))
-        }
-
         // Mostrar nombre
         binding.tvNombre.text = producto.nombre
+
+        // Mostrar precio en Bs
+        val precioBs = producto.pvpBaseOferta ?: producto.precioFinalConIva ?: 0.0
+        binding.tvPrecioActual.text = getString(com.example.verificadordepreciosluz.R.string.currency_format, precioBs)
+
+        // Mostrar precio en $
+        val precioUsd = producto.pvpOferta ?: producto.pvpConversion ?: 0.0
+        binding.tvPrecioDolar.text = "Precio en $: %.2f".format(precioUsd)
+
+        // Mostrar mensaje de precio neto
+        binding.tvIva.text = "Precio neto con impuestos incluidos (si aplican)"
 
         // Ocultar ubicación
         binding.tvUbicacion.visibility = View.GONE
@@ -366,7 +363,7 @@ class ScanActivity : AppCompatActivity() {
             binding.resultOverlay.visibility = View.GONE
             pauseAnalyzer(false)
             binding.etMockCode.requestFocus()
-        }, 3_000)
+        }, 4_000)
     }
 
     private fun finishWithMessage(msg: String) {

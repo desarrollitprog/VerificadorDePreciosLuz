@@ -2,5 +2,6 @@
 """
 
 from .producto_response import ProductoResponse
+from .publicidad import PublicidadSchema
 
-__all__ = ["ProductoResponse"]
+__all__ = ["ProductoResponse", "PublicidadSchema"]

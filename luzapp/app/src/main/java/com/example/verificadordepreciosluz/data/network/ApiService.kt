@@ -1,6 +1,7 @@
 package com.example.verificadordepreciosluz.data.network
 
 import com.google.gson.annotations.SerializedName
+import com.example.verificadordepreciosluz.util.NetworkUtils
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -32,13 +33,15 @@ interface ApiService {
 
 object ApiClient {
     fun create(baseUrl: String, enableLogs: Boolean = false): ApiService {
-        val normalized = normalizeBaseUrl(baseUrl)
+        val normalized = NetworkUtils.normalizeBase(baseUrl)
         val logging = HttpLoggingInterceptor().apply {
             level = if (enableLogs) HttpLoggingInterceptor.Level.BODY else HttpLoggingInterceptor.Level.NONE
         }
         val client = OkHttpClient.Builder()
+            .callTimeout(10, TimeUnit.SECONDS)
             .connectTimeout(5, TimeUnit.SECONDS)
             .readTimeout(5, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
             .addInterceptor(logging)
             .build()
 
@@ -48,10 +51,5 @@ object ApiClient {
             .client(client)
             .build()
         return retrofit.create(ApiService::class.java)
-    }
-
-    private fun normalizeBaseUrl(raw: String): String {
-        val withScheme = if (raw.startsWith("http://") || raw.startsWith("https://")) raw else "http://$raw"
-        return if (withScheme.endsWith("/")) withScheme else "$withScheme/"
     }
 }

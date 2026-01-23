@@ -8,10 +8,14 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.edit
 import androidx.lifecycle.lifecycleScope
 import com.example.verificadordepreciosluz.data.network.ApiClient
+import com.example.verificadordepreciosluz.BuildConfig
 import com.example.verificadordepreciosluz.databinding.ActivityMainBinding
+import com.example.verificadordepreciosluz.util.NetworkUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import retrofit2.HttpException
+import java.io.IOException
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
@@ -30,7 +34,10 @@ class MainActivity : AppCompatActivity() {
 
         // Si hay config guardada, probar ping antes de saltar al escáner (pero no cortamos la inicialización de la pantalla)
         if (!ipGuardada.isNullOrBlank()) {
-            probarConexion(ipGuardada, puertoGuardado.orEmpty(), autoLaunch = true)
+            val validation = validateConfig(ipGuardada, puertoGuardado.orEmpty())
+            if (validation.isValid) {
+                probarConexion(validation.sanitizedHost.orEmpty(), validation.portToUse.orEmpty(), autoLaunch = true)
+            }
         }
 
         // 3. Acción al hacer clic en el botón
@@ -38,27 +45,30 @@ class MainActivity : AppCompatActivity() {
             val ip = binding.etIpServidor.text.toString().trim()
             val puerto = binding.etPuertoServidor.text.toString().trim()
 
-            if (ip.isNotEmpty()) {
-                // Función de extensión KTX: guarda y aplica automáticamente
-                sharedPref.edit(commit = false) {
-                    putString("ip_servidor", ip)
-                    putString("puerto_servidor", puerto)
-                }
-
-                Toast.makeText(this, "IP Guardada: $ip:$puerto", Toast.LENGTH_SHORT).show()
-
-                // Probar conexión llamando /ping en el backend
-                probarConexion(ip, puerto, autoLaunch = false)
-            } else {
-                // Error si el campo está vacío
-                Toast.makeText(this, "Por favor, ingresa la IP del servidor", Toast.LENGTH_LONG).show()
+            val validation = validateConfig(ip, puerto)
+            if (!validation.isValid) {
+                Toast.makeText(this, validation.message, Toast.LENGTH_LONG).show()
+                return@setOnClickListener
             }
+
+            val sanitizedHost = validation.sanitizedHost.orEmpty()
+            val normalizedPort = validation.portToUse.orEmpty()
+
+            sharedPref.edit(commit = false) {
+                putString("ip_servidor", sanitizedHost)
+                putString("puerto_servidor", normalizedPort)
+            }
+
+            Toast.makeText(this, "IP Guardada: $sanitizedHost:$normalizedPort", Toast.LENGTH_SHORT).show()
+
+            // Probar conexión llamando /ping en el backend
+            probarConexion(sanitizedHost, normalizedPort, autoLaunch = false)
         }
     }
 
     private fun probarConexion(ip: String, puerto: String, autoLaunch: Boolean) {
-        val base = ensurePort(sanitizeHost(ip), puerto)
-        val api = ApiClient.create(base)
+        val base = NetworkUtils.buildBaseUrl(ip, puerto, getString(com.example.verificadordepreciosluz.R.string.default_port))
+        val api = ApiClient.create(base, BuildConfig.DEBUG)
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
@@ -80,11 +90,12 @@ class MainActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(
-                        this@MainActivity,
-                        "No se pudo conectar al servidor: ${e.localizedMessage}",
-                        Toast.LENGTH_LONG
-                    ).show()
+                    val message = when (e) {
+                        is HttpException -> "Error HTTP (${e.code()}) al conectar"
+                        is IOException -> "Tiempo de Conexion agotado"
+                        else -> "No se pudo conectar al servidor"
+                    }
+                    Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
                 }
             } finally {
                 withContext(Dispatchers.Main) {
@@ -95,12 +106,26 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun ensurePort(ip: String, port: String): String {
-        val p = port.ifBlank { getString(com.example.verificadordepreciosluz.R.string.default_port) }
-        return if (ip.contains(":")) ip else "$ip:$p"
+    private fun validateConfig(hostInput: String, portInput: String): ValidationResult {
+        val defaultPort = getString(com.example.verificadordepreciosluz.R.string.default_port)
+        val sanitizedHost = NetworkUtils.sanitizeHost(hostInput)
+
+        if (!NetworkUtils.validateHost(sanitizedHost)) {
+            return ValidationResult(false, "Host inválido. Usa IP o dominio válidos")
+        }
+
+        val portToUse = portInput.ifBlank { defaultPort }
+        if (!NetworkUtils.validatePort(portToUse)) {
+            return ValidationResult(false, "Puerto inválido (1-65535)")
+        }
+
+        return ValidationResult(true, null, sanitizedHost, portToUse)
     }
 
-    private fun sanitizeHost(raw: String): String {
-        return raw.removePrefix("http://").removePrefix("https://").trimEnd('/')
-    }
+    private data class ValidationResult(
+        val isValid: Boolean,
+        val message: String?,
+        val sanitizedHost: String? = null,
+        val portToUse: String? = null
+    )
 }

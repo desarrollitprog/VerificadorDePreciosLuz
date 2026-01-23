@@ -14,7 +14,7 @@
     <string name="hint_mock_code">Ingresar código de barras</string>
     <string name="btn_mock_scan">Simular</string>
     <string name="label_price_result">Resultado de precio</string>
-    <string name="label_countdown">El precio desaparecerá en 10 segundos...</string>
+    <string name="label_countdown">El precio desaparecerá en 3 segundos…</string>
     <string name="label_location_placeholder">Ubicación: -</string>
     <string name="discount_percent">%1$d%% OFF</string>
     <string name="currency_format">S/ %1$.2f</string>

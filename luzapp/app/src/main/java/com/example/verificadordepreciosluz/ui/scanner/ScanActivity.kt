@@ -1,3 +1,5 @@
+@file:Suppress("OPT_IN_ARGUMENT_IS_NOT_MARKER")
+
 package com.example.verificadordepreciosluz.ui.scanner
 
 import android.Manifest
@@ -17,16 +19,19 @@ import android.os.VibratorManager
 import android.view.HapticFeedbackConstants
 import android.view.View
 import android.widget.Toast
+import android.util.Log
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import com.example.verificadordepreciosluz.MainActivity
+import com.example.verificadordepreciosluz.BuildConfig
 import com.example.verificadordepreciosluz.data.network.ApiClient
 import com.example.verificadordepreciosluz.data.network.ApiService
 import com.example.verificadordepreciosluz.data.network.ProductoResponse
 import com.example.verificadordepreciosluz.databinding.ActivityScanBinding
+import com.example.verificadordepreciosluz.util.NetworkUtils
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
 import retrofit2.HttpException
@@ -37,12 +42,16 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.io.IOException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.net.SocketTimeoutException
 import kotlin.math.roundToInt
 
 @OptIn(androidx.camera.core.ExperimentalGetImage::class)
 class ScanActivity : AppCompatActivity() {
+    companion object { private const val TAG = "ScanActivity" }
+
     private lateinit var binding: ActivityScanBinding
     private lateinit var cameraExecutor: ExecutorService
     private var requestInFlight = false
@@ -55,6 +64,10 @@ class ScanActivity : AppCompatActivity() {
     private val scope = CoroutineScope(Dispatchers.IO + job)
     private var api: ApiService? = null
     private var pingJob: Job? = null
+    private var imageAnalysis: ImageAnalysis? = null
+    private var analyzerPaused = false
+    private var lastErrorKey: String? = null
+    private var lastErrorAt = 0L
 
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -106,7 +119,7 @@ class ScanActivity : AppCompatActivity() {
                 it.setSurfaceProvider(binding.previewView.surfaceProvider)
             }
 
-            val analyzer = ImageAnalysis.Builder()
+            imageAnalysis = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
                 .also { it.setAnalyzer(cameraExecutor, ::analyzeImage) }
@@ -115,7 +128,7 @@ class ScanActivity : AppCompatActivity() {
 
             try {
                 cameraProvider.unbindAll()
-                cameraProvider.bindToLifecycle(this, cameraSelector, preview, analyzer)
+                cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalysis)
             } catch (e: Exception) {
                 finishWithMessage("Error iniciando cámara: ${e.localizedMessage}")
             }
@@ -157,15 +170,12 @@ class ScanActivity : AppCompatActivity() {
     }
 
     private fun sanitizeCode(raw: String): String? {
-        // Limpia espacios y filtra códigos demasiado cortos o con ruido.
-        val trimmed = raw.trim()
-        val digitsOnly = trimmed.filter { it.isDigit() }
-        val candidate = when {
-            digitsOnly.length >= 8 -> digitsOnly
-            trimmed.length >= 8 && trimmed.all { it.isLetterOrDigit() } -> trimmed
+        // Acepta solo dígitos para EAN-13, EAN-8 o UPC-E/UPC-A (12)
+        val digits = raw.filter { it.isDigit() }
+        return when (digits.length) {
+            8, 12, 13 -> digits
             else -> null
         }
-        return candidate
     }
 
     private fun onBarcodeDetected(code: String) {
@@ -186,15 +196,17 @@ class ScanActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 uiHandler.post {
-                    val msg = when (e) {
+                    val (key, msg) = when (e) {
                         is HttpException -> when (e.code()) {
-                            404 -> "Producto no encontrado"
-                            in 500..599 -> "Error del servidor (${e.code()})"
-                            else -> "Error HTTP (${e.code()})"
+                            404 -> "404" to "Producto no encontrado"
+                            in 500..599 -> "5xx" to "Error del servidor (${e.code()})"
+                            else -> "4xx" to "Error HTTP (${e.code()})"
                         }
-                        else -> "Fallo de red o conexión"
+                        is SocketTimeoutException -> "timeout" to "Tiempo de Conexion agotado"
+                        is IOException -> "network" to "Fallo de red o conexión"
+                        else -> "unknown" to "Error inesperado"
                     }
-                    Toast.makeText(this@ScanActivity, msg, Toast.LENGTH_SHORT).show()
+                    showThrottledError(key, msg)
                 }
             } finally {
                 // Permitir reintentar incluso con el mismo código después de un error
@@ -211,13 +223,22 @@ class ScanActivity : AppCompatActivity() {
         val host = prefs.getString("ip_servidor", null)
         val port = prefs.getString("puerto_servidor", getString(com.example.verificadordepreciosluz.R.string.default_port))
 
-        if (host.isNullOrBlank()) {
+        val sanitized = host?.let { NetworkUtils.sanitizeHost(it) }
+        val defaultPort = getString(com.example.verificadordepreciosluz.R.string.default_port)
+
+        if (sanitized.isNullOrBlank() || !NetworkUtils.validateHost(sanitized)) {
             goToConfig("Configura IP/puerto primero")
             return false
         }
 
-        val normalized = ensurePort(sanitizeHost(host), port ?: getString(com.example.verificadordepreciosluz.R.string.default_port))
-        api = ApiClient.create(normalized)
+        val portToUse = port ?: defaultPort
+        if (!NetworkUtils.validatePort(portToUse)) {
+            goToConfig("Puerto inválido. Regresando a configuración")
+            return false
+        }
+
+        val normalized = NetworkUtils.buildBaseUrl(sanitized, portToUse, defaultPort)
+        api = ApiClient.create(normalized, BuildConfig.DEBUG)
         return true
     }
 
@@ -226,19 +247,43 @@ class ScanActivity : AppCompatActivity() {
         pingJob?.cancel()
         pingJob = scope.launch {
             while (isActive) {
-                try {
-                    service.ping()
-                } catch (_: Exception) {
-                    goToConfig("Conexión perdida. Regresando a configuración")
-                    break
+                val (ok, reason) = pingWithRetries(service)
+                if (!ok) {
+                    goToConfig(reason ?: "Conexión perdida. Regresando a configuración")
+                    return@launch
                 }
                 delay(5000)
             }
         }
     }
 
+    private suspend fun pingWithRetries(service: ApiService): Pair<Boolean, String?> {
+        val delays = listOf(0L, 1500L, 3000L)
+        var lastReason: String? = null
+        for (waitMs in delays) {
+            if (waitMs > 0) delay(waitMs)
+            try {
+                service.ping()
+                return true to null
+            } catch (e: HttpException) {
+                lastReason = if (e.code() in 400..499) {
+                    "Ping falló (${e.code()}). Revisa la configuración"
+                } else {
+                    "Servidor responde con error (${e.code()})"
+                }
+                if (e.code() in 400..499) break
+            } catch (e: SocketTimeoutException) {
+                lastReason = "Tiempo de Conexion agotado"
+            } catch (e: IOException) {
+                lastReason = "Ping sin conexión"
+            }
+        }
+        return false to lastReason
+    }
+
     private fun goToConfig(reason: String? = null) {
         runOnUiThread {
+            pingJob?.cancel()
             reason?.let {
                 Toast.makeText(this@ScanActivity, it, Toast.LENGTH_LONG).show()
             }
@@ -272,10 +317,14 @@ class ScanActivity : AppCompatActivity() {
         binding.tvNombre.text = producto.nombre
         binding.tvUbicacion.text = getString(com.example.verificadordepreciosluz.R.string.label_location_placeholder)
         binding.resultOverlay.visibility = View.VISIBLE
+        pauseAnalyzer(true)
 
         // Ocultar automáticamente tras 10 segundos, limpiando anteriores
         uiHandler.removeCallbacksAndMessages(null)
-        uiHandler.postDelayed({ binding.resultOverlay.visibility = View.GONE }, 10_000)
+        uiHandler.postDelayed({
+            binding.resultOverlay.visibility = View.GONE
+            pauseAnalyzer(false)
+        }, 3_000)
     }
 
     private fun finishWithMessage(msg: String) {
@@ -283,8 +332,30 @@ class ScanActivity : AppCompatActivity() {
         finish()
     }
 
-    private fun ensurePort(ip: String, port: String): String = if (ip.contains(":")) ip else "$ip:$port"
-    private fun sanitizeHost(raw: String): String = raw.removePrefix("http://").removePrefix("https://").trimEnd('/')
+    private fun pauseAnalyzer(paused: Boolean) {
+        if (analyzerPaused == paused) return
+        analyzerPaused = paused
+        imageAnalysis?.let { analysis ->
+            if (paused) {
+                analysis.clearAnalyzer()
+            } else {
+                analysis.setAnalyzer(cameraExecutor, ::analyzeImage)
+            }
+        }
+    }
+
+    private fun showThrottledError(key: String, message: String, minIntervalMs: Long = 2000) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (key == lastErrorKey && (now - lastErrorAt) < minIntervalMs) return
+        lastErrorKey = key
+        lastErrorAt = now
+
+        val overlayVisible = binding.resultOverlay.visibility == View.VISIBLE
+        Log.w(TAG, "scan_error key=$key overlay=$overlayVisible msg=$message")
+        if (!overlayVisible) {
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        }
+    }
 
     private fun feedbackSuccess() {
         // Beep corto
@@ -317,5 +388,21 @@ class ScanActivity : AppCompatActivity() {
         pingJob?.cancel()
         job.cancel()
         scope.cancel()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // Pausa el monitor de ping cuando la actividad no está en primer plano
+        pingJob?.cancel()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Reanuda el monitor de ping al volver al primer plano
+        if (api == null) {
+            // Si se perdió la instancia por cualquier motivo, intenta reconfigurar
+            if (!configureBackend()) return
+        }
+        startPingMonitor()
     }
 }

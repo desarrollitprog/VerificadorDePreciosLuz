@@ -1,0 +1,21 @@
+<resources>
+    <string name="app_name">Verificador de Precios Luz</string>
+    <string name="btn_validar_ip">VALIDAR IP</string>
+    <string name="titulo_configuracion">CONFIGURACIÓN DE RED</string>
+    <string name="hint_ip_servidor">Ej: 192.168.1.10</string>
+    <string name="hint_puerto_servidor">Puerto (ej: 8000)</string>
+    <string name="default_port">8000</string>
+    <string name="label_scan_here">Escanea aquí</string>
+    <string name="title_verify_price">¡VERIFICA EL PRECIO!</string>
+    <string name="label_producto">Producto</string>
+    <string name="label_precio">Precio</string>
+    <string name="label_oferta">Oferta</string>
+    <string name="label_sin_oferta">Sin oferta</string>
+    <string name="hint_mock_code">Ingresar código de barras</string>
+    <string name="btn_mock_scan">Simular</string>
+    <string name="label_price_result">Resultado de precio</string>
+    <string name="label_countdown">El precio desaparecerá en 10 segundos...</string>
+    <string name="label_location_placeholder">Ubicación: -</string>
+    <string name="discount_percent">%1$d%% OFF</string>
+    <string name="currency_format">S/ %1$.2f</string>
+</resources>

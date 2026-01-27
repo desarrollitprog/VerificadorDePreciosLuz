@@ -20,11 +20,13 @@ import android.view.HapticFeedbackConstants
 import android.view.View
 import android.widget.Toast
 import android.util.Log
+import android.view.inputmethod.EditorInfo
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
+import androidx.core.widget.addTextChangedListener
 import com.example.verificadordepreciosluz.MainActivity
 import com.example.verificadordepreciosluz.BuildConfig
 import com.example.verificadordepreciosluz.data.network.ApiClient
@@ -48,7 +50,7 @@ import java.util.concurrent.Executors
 import java.net.SocketTimeoutException
 import kotlin.math.roundToInt
 
-@OptIn(androidx.camera.core.ExperimentalGetImage::class)
+@OptIn(ExperimentalGetImage::class)
 class ScanActivity : AppCompatActivity() {
     companion object { private const val TAG = "ScanActivity" }
 
@@ -68,6 +70,9 @@ class ScanActivity : AppCompatActivity() {
     private var analyzerPaused = false
     private var lastErrorKey: String? = null
     private var lastErrorAt = 0L
+    private var lastMockSubmitAt = 0L
+    private var pendingMockText: String? = null
+    private var mockIdleRunnable: Runnable? = null
 
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -94,10 +99,37 @@ class ScanActivity : AppCompatActivity() {
             binding.mockPanel.visibility = if (binding.mockPanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
         }
 
+        setupMockInput()
+    }
+
+    private fun setupMockInput() {
         binding.btnMockScan.setOnClickListener {
             val code = binding.etMockCode.text?.toString()?.trim().orEmpty()
-            if (code.isNotEmpty()) {
-                maybeProcessCode(code)
+            submitMockIfValid(code)
+        }
+
+        binding.etMockCode.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                val code = binding.etMockCode.text?.toString()?.trim().orEmpty()
+                submitMockIfValid(code)
+                true
+            } else {
+                false
+            }
+        }
+
+        binding.etMockCode.addTextChangedListener { editable ->
+            val text = editable?.toString()?.trim().orEmpty()
+            mockIdleRunnable?.let { uiHandler.removeCallbacks(it) }
+
+            // Solo programa disparo si tiene longitud válida
+            pendingMockText = if (text.length == 8 || text.length == 12 || text.length == 13) text else null
+
+            pendingMockText?.let { candidate ->
+                mockIdleRunnable = Runnable {
+                    submitMockIfValid(candidate)
+                }
+                uiHandler.postDelayed(mockIdleRunnable!!, 120)
             }
         }
     }
@@ -167,6 +199,19 @@ class ScanActivity : AppCompatActivity() {
         lastCode = clean
         lastScanAt = now
         onBarcodeDetected(clean)
+    }
+
+    private fun submitMockIfValid(raw: String) {
+        val code = raw.trim()
+        if (code.isEmpty()) return
+        val now = android.os.SystemClock.elapsedRealtime()
+        // Evita disparos duplicados en milisegundos
+        if (now - lastMockSubmitAt < 250) return
+        lastMockSubmitAt = now
+        mockIdleRunnable?.let { uiHandler.removeCallbacks(it) }
+        pendingMockText = null
+        maybeProcessCode(code)
+        binding.etMockCode.text?.clear()
     }
 
     private fun sanitizeCode(raw: String): String? {
@@ -272,9 +317,9 @@ class ScanActivity : AppCompatActivity() {
                     "Servidor responde con error (${e.code()})"
                 }
                 if (e.code() in 400..499) break
-            } catch (e: SocketTimeoutException) {
+            } catch (_: SocketTimeoutException) {
                 lastReason = "Tiempo de Conexion agotado"
-            } catch (e: IOException) {
+            } catch (_: IOException) {
                 lastReason = "Ping sin conexión"
             }
         }

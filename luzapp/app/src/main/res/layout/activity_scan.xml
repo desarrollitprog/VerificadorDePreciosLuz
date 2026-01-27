@@ -10,9 +10,9 @@
     <!-- Cámara activa, oculta (1dp) -->
     <androidx.camera.view.PreviewView
         android:id="@+id/previewView"
-        android:layout_width="1dp"
-        android:layout_height="1dp"
-        android:alpha="0"
+        android:layout_width="100dp"
+        android:layout_height="100dp"
+        android:visibility="invisible"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
@@ -44,57 +44,59 @@
         android:id="@+id/mockPanel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:padding="8dp"
-        android:background="#66FFFFFF"
-        android:visibility="gone"
-        tools:visibility="visible"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
         android:layout_marginTop="16dp"
-        android:layout_marginEnd="16dp">
+        android:layout_marginEnd="16dp"
+        android:background="#66FFFFFF"
+        android:orientation="vertical"
+        android:padding="8dp"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:visibility="visible">
 
         <EditText
             android:id="@+id/etMockCode"
             android:layout_width="200dp"
             android:layout_height="wrap_content"
-            android:hint="@string/hint_mock_code"
-            android:inputType="text"
-            android:singleLine="true"
             android:autofillHints=""
+            android:hint="@string/hint_mock_code"
+            android:imeOptions="actionDone"
+            android:inputType="text"
             android:minHeight="48dp"
-            android:paddingVertical="8dp"
             android:paddingHorizontal="12dp"
-            android:imeOptions="actionDone"/>
+            android:paddingVertical="8dp"
+            android:singleLine="true" />
 
         <Button
             android:id="@+id/btnMockScan"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/btn_mock_scan"
-            android:minHeight="48dp"
+            android:layout_marginStart="8dp"
             android:minWidth="48dp"
+            android:minHeight="48dp"
             android:paddingHorizontal="16dp"
-            android:layout_marginStart="8dp"/>
+            android:text="@string/btn_mock_scan" />
     </LinearLayout>
 
     <!-- Título central en encabezado -->
+
+    <!-- Imagen central de canasta (placeholder) -->
+
+
     <TextView
         android:id="@+id/tvTituloScanner"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@string/title_verify_price"
-        android:textStyle="bold"
-        android:textSize="36sp"
-        android:textColor="@android:color/white"
         android:textAlignment="center"
-        app:layout_constraintTop_toTopOf="@id/headerBackground"
+        android:textColor="@android:color/white"
+        android:textSize="36sp"
+        android:textStyle="bold"
         app:layout_constraintBottom_toBottomOf="@id/headerBackground"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"/>
-
-    <!-- Imagen central de canasta (placeholder) -->
-
+        app:layout_constraintTop_toTopOf="@id/headerBackground"
+        app:layout_constraintVertical_bias="0.526" />
 
     <ImageView
         android:id="@+id/ivCanastaCentro"

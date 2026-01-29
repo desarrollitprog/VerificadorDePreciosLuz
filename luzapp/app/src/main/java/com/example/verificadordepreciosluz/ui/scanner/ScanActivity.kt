@@ -9,7 +9,6 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.WindowManager
-import android.graphics.Paint
 import android.media.ToneGenerator
 import android.media.AudioManager
 import android.os.Build
@@ -48,7 +47,6 @@ import java.io.IOException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.net.SocketTimeoutException
-import kotlin.math.roundToInt
 
 @OptIn(ExperimentalGetImage::class)
 class ScanActivity : AppCompatActivity() {
@@ -94,9 +92,9 @@ class ScanActivity : AppCompatActivity() {
 
         ensurePermissionAndStart()
 
-        // Toggle del panel de prueba tocando el título (para emulador)
+        // Toggle del panel de prueba tocando el título (para emulador/técnico)
         binding.tvTituloScanner.setOnClickListener {
-            binding.mockPanel.visibility = if (binding.mockPanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+            toggleMockPanel()
         }
 
         setupMockInput()
@@ -167,6 +165,7 @@ class ScanActivity : AppCompatActivity() {
         }, ContextCompat.getMainExecutor(this))
     }
 
+    @androidx.annotation.OptIn(ExperimentalGetImage::class)
     private fun analyzeImage(imageProxy: ImageProxy) {
         val mediaImage = imageProxy.image
         if (mediaImage == null) {
@@ -338,37 +337,35 @@ class ScanActivity : AppCompatActivity() {
     }
 
     private fun showResult(producto: ProductoResponse) {
-        val regularPrice = producto.precio
-        val offerPrice = producto.precioOferta
-        val currentPrice = offerPrice ?: regularPrice
-
+        // Mostrar solo el precio de oferta si existe, si no el precio base
+        val currentPrice = producto.pvpOferta ?: producto.pvpBase ?: 0.0
         binding.tvPrecioActual.text = getString(com.example.verificadordepreciosluz.R.string.currency_format, currentPrice)
 
-        if (offerPrice != null) {
-            binding.tvPrecioAnterior.visibility = View.VISIBLE
-            binding.tvPrecioAnterior.text = getString(com.example.verificadordepreciosluz.R.string.currency_format, regularPrice)
-            binding.tvPrecioAnterior.paintFlags = binding.tvPrecioAnterior.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
+        // Ocultar comparativas y badges
+        binding.tvPrecioAnterior.visibility = View.GONE
+        binding.tvDescuentoBadge.visibility = View.GONE
 
-            val descuento = if (regularPrice > 0) ((regularPrice - offerPrice) / regularPrice * 100).roundToInt() else null
-            binding.tvDescuentoBadge.visibility = View.VISIBLE
-            binding.tvDescuentoBadge.text = descuento?.let {
-                getString(com.example.verificadordepreciosluz.R.string.discount_percent, it)
-            } ?: getString(com.example.verificadordepreciosluz.R.string.label_oferta)
-        } else {
-            binding.tvPrecioAnterior.visibility = View.GONE
-            binding.tvDescuentoBadge.visibility = View.GONE
+        // Mostrar IVA incluido si aplica
+        val ivaIncluido = producto.ivaIncluidoBs
+        if (ivaIncluido != null && ivaIncluido > 0.0) {
+            binding.tvPrecioActual.append("\n(IVA incluido: S/ %.2f)".format(ivaIncluido))
         }
 
+        // Mostrar nombre
         binding.tvNombre.text = producto.nombre
-        binding.tvUbicacion.text = getString(com.example.verificadordepreciosluz.R.string.label_location_placeholder)
+
+        // Ocultar ubicación
+        binding.tvUbicacion.visibility = View.GONE
+
         binding.resultOverlay.visibility = View.VISIBLE
         pauseAnalyzer(true)
 
-        // Ocultar automáticamente tras 10 segundos, limpiando anteriores
+        // Ocultar automáticamente tras 3 segundos, limpiando anteriores
         uiHandler.removeCallbacksAndMessages(null)
         uiHandler.postDelayed({
             binding.resultOverlay.visibility = View.GONE
             pauseAnalyzer(false)
+            binding.etMockCode.requestFocus()
         }, 3_000)
     }
 
@@ -407,18 +404,21 @@ class ScanActivity : AppCompatActivity() {
         tone?.startTone(ToneGenerator.TONE_PROP_BEEP, 120)
         // Haptic breve
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vm = getSystemService(VibratorManager::class.java)
-                vm.defaultVibrator.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE))
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager = getSystemService(VIBRATOR_MANAGER_SERVICE) as VibratorManager
+                vibratorManager.defaultVibrator
             } else {
-                val vib = getSystemService(VIBRATOR_SERVICE) as Vibrator
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vib.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE))
-                } else {
-                    @Suppress("DEPRECATION")
-                    vib.vibrate(30)
-                }
+                @Suppress("DEPRECATION")
+                getSystemService(VIBRATOR_SERVICE) as Vibrator
             }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(30)
+            }
+        } catch (_: Exception) {
+            // fallback: haptic en la vista si vibración falla
         } catch (_: Exception) {
             // fallback: haptic en la vista si vibración falla
             binding.previewView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
@@ -448,6 +448,21 @@ class ScanActivity : AppCompatActivity() {
             // Si se perdió la instancia por cualquier motivo, intenta reconfigurar
             if (!configureBackend()) return
         }
+        binding.etMockCode.requestFocus()
         startPingMonitor()
+    }
+
+    private fun toggleMockPanel() {
+        val isHidden = binding.mockPanel.alpha == 0f
+        if (isHidden) {
+            binding.mockPanel.alpha = 1f
+            binding.etMockCode.alpha = 1f
+            binding.etMockCode.requestFocus()
+        } else {
+            binding.mockPanel.alpha = 0f
+            binding.etMockCode.alpha = 0f
+            // Mantener view visible para que siga existiendo; foco opcional si se usa lector
+            binding.etMockCode.requestFocus()
+        }
     }
 }

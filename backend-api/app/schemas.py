@@ -3,11 +3,9 @@ from pydantic import BaseModel
 
 
 class ProductoSchema(BaseModel):
-    id: int
-    codigo_barras: str
+    id_producto: int
+    sku: str
     nombre: str
-    precio: float
-    precio_oferta: Optional[float] = None
 
     class Config:
         orm_mode = True

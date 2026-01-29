@@ -16,11 +16,17 @@ data class PingResponse(
 )
 
 data class ProductoResponse(
-    val id: Int,
-    @SerializedName("codigo_barras") val codigoBarras: String,
+    @SerializedName("id_producto") val idProducto: Int,
+    val sku: String,
     val nombre: String,
-    val precio: Double,
-    @SerializedName("precio_oferta") val precioOferta: Double?
+    @SerializedName("pvp_base") val pvpBase: Double?,
+    @SerializedName("pvp_conversion") val pvpConversion: Double?,
+    @SerializedName("ind_iva") val indIva: Int?,
+    @SerializedName("pvp_oferta") val pvpOferta: Double?,
+    @SerializedName("pvp_base_oferta") val pvpBaseOferta: Double?,
+    @SerializedName("id_empaque") val idEmpaque: Int?,
+    @SerializedName("id_tasa_impuesto") val idTasaImpuesto: Int?,
+    @SerializedName("iva_incluido_bs") val ivaIncluidoBs: Double?
 )
 
 interface ApiService {

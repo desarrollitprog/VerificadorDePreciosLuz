@@ -12,18 +12,16 @@ def listar_productos(skip: int = 0, limit: int = 100, db: Session = Depends(data
     limit = max(1, min(limit or 100, 500))
     productos = (
         db.query(models.Producto)
-        .order_by(models.Producto.Id)
+        .order_by(models.Producto.IdProducto)
         .offset(skip)
         .limit(limit)
         .all()
     )
     return [
         {
-            "id": p.Id,
-            "codigo_barras": p.CodigoBarras,
+            "id_producto": p.IdProducto,
+            "sku": p.SKU,
             "nombre": p.Nombre,
-            "precio": float(p.Precio),
-            "precio_oferta": float(p.PrecioOferta) if p.PrecioOferta else None,
         }
         for p in productos
     ]

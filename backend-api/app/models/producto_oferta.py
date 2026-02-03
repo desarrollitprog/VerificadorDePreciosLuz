@@ -17,7 +17,7 @@ class ProductoOferta(Base):
     IdProducto = Column("IdProducto", Integer, nullable=False, index=True)
     IdEmpaque = Column("IdEmpaque", Integer, nullable=False, index=True)
 
-    # Indicador de IVA (0/1/2)
+    # Indicador de IVA (0/1)
     IndActivo = Column("IndActivo", Integer, nullable=False, index=True)
 
     # Precios de oferta

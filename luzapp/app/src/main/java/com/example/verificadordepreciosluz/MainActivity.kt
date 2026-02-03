@@ -4,6 +4,8 @@ import android.os.Bundle
 import android.content.Intent
 import android.view.View
 import android.widget.Toast
+import android.provider.Settings
+import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.edit
 import androidx.lifecycle.lifecycleScope
@@ -14,6 +16,7 @@ import com.example.verificadordepreciosluz.util.NetworkUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.example.verificadordepreciosluz.data.local.BackupRepository
 import retrofit2.HttpException
 import java.io.IOException
 
@@ -32,8 +35,21 @@ class MainActivity : AppCompatActivity() {
         val puertoGuardado = sharedPref.getString("puerto_servidor", getString(com.example.verificadordepreciosluz.R.string.default_port))
         binding.etPuertoServidor.setText(puertoGuardado)
 
+        val hasNetwork = NetworkUtils.isNetworkAvailable(this)
+
+        if (!hasNetwork) {
+            val backup = BackupRepository(this@MainActivity).loadBackup()
+            if (backup != null) {
+                startActivity(Intent(this@MainActivity, com.example.verificadordepreciosluz.ui.scanner.ScanActivity::class.java))
+                finish()
+                return
+            } else {
+                Toast.makeText(this, "Sin conexión y sin respaldo local", Toast.LENGTH_LONG).show()
+            }
+        }
+
         // Si hay config guardada, probar ping antes de saltar al escáner (pero no cortamos la inicialización de la pantalla)
-        if (!ipGuardada.isNullOrBlank()) {
+        if (hasNetwork && !ipGuardada.isNullOrBlank()) {
             val validation = validateConfig(ipGuardada, puertoGuardado.orEmpty())
             if (validation.isValid) {
                 probarConexion(validation.sanitizedHost.orEmpty(), validation.portToUse.orEmpty(), autoLaunch = true)
@@ -61,14 +77,26 @@ class MainActivity : AppCompatActivity() {
 
             Toast.makeText(this, "IP Guardada: $sanitizedHost:$normalizedPort", Toast.LENGTH_SHORT).show()
 
-            // Probar conexión llamando /ping en el backend
-            probarConexion(sanitizedHost, normalizedPort, autoLaunch = false)
+            if (NetworkUtils.isNetworkAvailable(this)) {
+                // Probar conexión llamando /ping en el backend
+                probarConexion(sanitizedHost, normalizedPort, autoLaunch = false)
+            } else {
+                val backup = BackupRepository(this@MainActivity).loadBackup()
+                if (backup != null) {
+                    Toast.makeText(this, "Sin conexión: iniciando modo offline", Toast.LENGTH_LONG).show()
+                    startActivity(Intent(this@MainActivity, com.example.verificadordepreciosluz.ui.scanner.ScanActivity::class.java))
+                    finish()
+                } else {
+                    Toast.makeText(this, "Sin conexión y sin respaldo local", Toast.LENGTH_LONG).show()
+                }
+            }
         }
     }
 
     private fun probarConexion(ip: String, puerto: String, autoLaunch: Boolean) {
         val base = NetworkUtils.buildBaseUrl(ip, puerto, getString(com.example.verificadordepreciosluz.R.string.default_port))
         val api = ApiClient.create(base, BuildConfig.DEBUG)
+        val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
@@ -76,7 +104,7 @@ class MainActivity : AppCompatActivity() {
                     binding.btnValidar.isEnabled = false
                     binding.progressBar.visibility = View.VISIBLE
                 }
-                val result = api.ping()
+                val result = api.ping(deviceId)
                 withContext(Dispatchers.Main) {
                     if (!autoLaunch) {
                         Toast.makeText(

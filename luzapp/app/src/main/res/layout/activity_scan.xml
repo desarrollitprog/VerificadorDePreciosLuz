@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+0<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
@@ -13,8 +13,8 @@
         android:layout_width="100dp"
         android:layout_height="100dp"
         android:visibility="invisible"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
     <!-- Panel de prueba (emulador): oculto por defecto; togglear tocando el título -->
     <LinearLayout
@@ -23,10 +23,10 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:layout_marginEnd="16dp"
+        android:alpha="0"
         android:background="#00FFFFFF"
         android:orientation="vertical"
         android:padding="8dp"
-        android:alpha="0"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         tools:visibility="visible">
@@ -35,6 +35,7 @@
             android:id="@+id/etMockCode"
             android:layout_width="200dp"
             android:layout_height="wrap_content"
+            android:alpha="0"
             android:autofillHints=""
             android:focusable="true"
             android:focusableInTouchMode="true"
@@ -44,8 +45,7 @@
             android:minHeight="48dp"
             android:paddingHorizontal="12dp"
             android:paddingVertical="8dp"
-            android:singleLine="true"
-            android:alpha="0" />
+            android:singleLine="true" />
 
         <Button
             android:id="@+id/btnMockScan"
@@ -58,34 +58,74 @@
             android:text="@string/btn_mock_scan" />
     </LinearLayout>
 
-    <TextView
-        android:id="@+id/tvTituloScanner"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="20dp"
-        android:text="@string/title_verify_price"
-        android:textAlignment="center"
-        android:textColor="@color/negro"
-        android:textSize="32sp"
-        android:textStyle="bold"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <TextView
-        android:id="@+id/tvScanLabel"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="@string/label_scan_here"
-        android:textSize="28sp"
-        android:textStyle="bold"
-        android:textColor="#B00020"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tvTituloScanner"
-        app:layout_constraintStart_toStartOf="parent"
+    <ImageView
+        android:id="@+id/ivLogoLuz"
+        android:layout_width="220dp"
+        android:layout_height="220dp"
+        android:contentDescription="@string/app_name"
+        android:scaleType="centerInside"
+        android:src="@drawable/logo_luz"
+        app:layout_constraintBottom_toTopOf="@+id/messageBar"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginBottom="40dp"/>
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.45"
+        tools:src="@mipmap/ic_launcher" />
+
+    <!-- Indicador de modo offline (se muestra cuando no hay conexión) -->
+    <TextView
+        android:id="@+id/tvOfflineIndicator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:layout_marginEnd="16dp"
+        android:text="@string/offline_indicator"
+        android:textColor="#B00020"
+        android:textSize="14sp"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Última actualización del respaldo local -->
+    <TextView
+        android:id="@+id/tvOfflineUpdated"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:layout_marginEnd="16dp"
+        android:textColor="#B00020"
+        android:textSize="12sp"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tvOfflineIndicator" />
+
+    <LinearLayout
+        android:id="@+id/messageBar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="24dp"
+        android:layout_marginEnd="24dp"
+        android:layout_marginBottom="24dp"
+        android:background="@drawable/message_bar_bg"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="16dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <TextView
+            android:id="@+id/tvTituloScanner"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/title_verify_price"
+            android:textAlignment="center"
+            android:textColor="@color/blanco"
+            android:textSize="24sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
 
     <!-- Overlay de resultado a pantalla completa -->
     <androidx.constraintlayout.widget.ConstraintLayout
@@ -94,144 +134,184 @@
         android:layout_height="0dp"
         android:background="#CC000000"
         android:visibility="gone"
-        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent">
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
         <androidx.cardview.widget.CardView
             android:id="@+id/resultCard"
             android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:layout_margin="24dp"
-            app:cardCornerRadius="28dp"
-            app:cardUseCompatPadding="true"
-            app:layout_constraintTop_toTopOf="parent"
+            android:layout_height="400dp"
+            android:layout_margin="16dp"
+            android:foreground="?android:attr/selectableItemBackground"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="8dp"
             app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent">
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintWidth_percent="0.70">
 
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:padding="20dp">
+                android:layout_height="match_parent">
 
                 <TextView
                     android:id="@+id/tvResultTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:layout_marginTop="10dp"
                     android:text="@string/label_price_result"
+                    android:textColor="#777777"
+                    android:textSize="12sp"
                     android:textStyle="bold"
-                    android:textSize="16sp"
-                    android:textColor="#666666"
-                    app:layout_constraintTop_toTopOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"/>
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent" />
 
-                <ImageView
-                    android:id="@+id/ivProducto"
+                <!-- Sección de imagen de sede (izquierda) -->
+                <FrameLayout
+                    android:id="@+id/imageSection"
                     android:layout_width="0dp"
                     android:layout_height="0dp"
-                    android:minHeight="140dp"
-                    android:minWidth="120dp"
-                    android:contentDescription="@null"
-                    android:scaleType="centerInside"
-                    android:src="@mipmap/ic_launcher"
-                    app:layout_constraintTop_toTopOf="parent"
-                    app:layout_constraintBottom_toTopOf="@+id/tvCountdown"
+                    app:layout_constraintBottom_toBottomOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintEnd_toStartOf="@+id/infoGroup"
-                    app:layout_constraintHorizontal_chainStyle="packed"
-                    app:layout_constraintDimensionRatio="3:5"
-                    tools:src="@mipmap/ic_launcher_round" />
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintWidth_percent="0.40">
 
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/infoGroup"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="16dp"
-                    app:layout_constraintTop_toTopOf="@id/ivProducto"
-                    app:layout_constraintBottom_toBottomOf="@id/ivProducto"
-                    app:layout_constraintStart_toEndOf="@id/ivProducto"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintHorizontal_weight="1">
+                    <ImageView
+                        android:id="@+id/ivStoreImage"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:contentDescription="@string/store_image_desc"
+                        android:scaleType="centerCrop"
+                        android:src="@drawable/img_tarjeta"
+                        tools:src="@drawable/img_tarjeta" />
 
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="80dp"
+                        android:layout_gravity="bottom"
+                        android:background="@drawable/gradient_overlay" />
 
                     <TextView
-                        android:id="@+id/tvPrecioDolar"
+                        android:id="@+id/tvUbicacion"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="bottom"
+                        android:padding="12dp"
+                        android:text="@string/store_default_name"
+                        android:textColor="@android:color/white"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:shadowColor="#80000000"
+                        android:shadowDx="0"
+                        android:shadowDy="2"
+                        android:shadowRadius="4" />
+
+                </FrameLayout>
+
+                <!-- Línea divisoria vertical -->
+                <View
+                    android:id="@+id/divider"
+                    android:layout_width="2dp"
+                    android:layout_height="0dp"
+                    android:layout_marginTop="18dp"
+                    android:layout_marginBottom="18dp"
+                    android:background="@drawable/gradient_divider"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintStart_toEndOf="@id/imageSection"
+                    app:layout_constraintTop_toTopOf="parent" />
+
+                <!-- Sección de contenido (derecha) -->
+                <LinearLayout
+                    android:id="@+id/infoGroup"
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    android:background="@drawable/gradient_background"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:padding="16dp"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toEndOf="@id/divider"
+                    app:layout_constraintTop_toTopOf="parent">
+
+                    <TextView
+                        android:id="@+id/tvNombre"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:background="@color/verde_luz"
-                        android:textColor="@color/blanco"
-                        android:textSize="26sp"
-                        android:textStyle="bold"
-                        android:paddingHorizontal="16dp"
-                        android:paddingVertical="12dp"
-                        app:layout_constraintTop_toTopOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"/>
+                        android:layout_marginBottom="10dp"
+                        android:ellipsize="end"
+                        android:gravity="center"
+                        android:maxLines="2"
+                        android:textColor="#555555"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvPriceLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="4dp"
+                        android:letterSpacing="0.1"
+                        android:text="@string/price_label"
+                        android:textColor="#999999"
+                        android:textSize="12sp" />
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/tvPriceCurrency"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginEnd="4dp"
+                            android:text="$"
+                            android:textColor="@color/verde_luz"
+                            android:textSize="26sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvPrecioDolar"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/verde_luz"
+                            android:textSize="44sp"
+                            android:textStyle="bold" />
+
+                    </LinearLayout>
 
                     <TextView
                         android:id="@+id/tvPrecioActual"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:textColor="#222222"
-                        android:textSize="26sp"
-                        android:textStyle="bold"
-                        android:paddingHorizontal="16dp"
-                        android:paddingVertical="12dp"
-                        android:layout_marginTop="8dp"
-                        app:layout_constraintTop_toBottomOf="@id/tvPrecioDolar"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"/>
+                        android:layout_marginTop="6dp"
+                        android:textColor="@color/rojo_luz_logo"
+                        android:textSize="14sp" />
 
                     <TextView
                         android:id="@+id/tvIva"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:textColor="#666666"
-                        android:textSize="16sp"
-                        android:layout_marginTop="4dp"
-                        app:layout_constraintTop_toBottomOf="@id/tvPrecioActual"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"/>
+                        android:layout_marginTop="2dp"
+                        android:textColor="#999999"
+                        android:textSize="12sp" />
 
                     <TextView
-                        android:id="@+id/tvNombre"
-                        android:layout_width="0dp"
+                        android:id="@+id/tvCountdown"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:textStyle="bold"
-                        android:textColor="#000000"
-                        android:textSize="22sp"
-                        android:layout_marginTop="16dp"
-                        app:layout_constraintTop_toBottomOf="@id/tvIva"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"/>
+                        android:layout_marginTop="6dp"
+                        android:text="@string/label_countdown"
+                        android:textColor="#999999"
+                        android:textSize="20sp" />
 
-                    <TextView
-                        android:id="@+id/tvUbicacion"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:textColor="#666666"
-                        android:textSize="14sp"
-                        android:layout_marginTop="8dp"
-                        app:layout_constraintTop_toBottomOf="@id/tvNombre"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"/>
-
-                </androidx.constraintlayout.widget.ConstraintLayout>
-
-                <TextView
-                    android:id="@+id/tvCountdown"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/label_countdown"
-                    android:textColor="#333333"
-                    android:textSize="14sp"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="12dp"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"/>
+                </LinearLayout>
 
             </androidx.constraintlayout.widget.ConstraintLayout>
 

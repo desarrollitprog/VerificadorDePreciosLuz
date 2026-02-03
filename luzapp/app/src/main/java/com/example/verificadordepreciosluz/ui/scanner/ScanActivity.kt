@@ -15,11 +15,15 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.provider.Settings
 import android.view.HapticFeedbackConstants
 import android.view.View
 import android.widget.Toast
 import android.util.Log
 import android.view.inputmethod.EditorInfo
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.*
@@ -31,6 +35,10 @@ import com.example.verificadordepreciosluz.BuildConfig
 import com.example.verificadordepreciosluz.data.network.ApiClient
 import com.example.verificadordepreciosluz.data.network.ApiService
 import com.example.verificadordepreciosluz.data.network.ProductoResponse
+import com.example.verificadordepreciosluz.data.local.BackupOferta
+import com.example.verificadordepreciosluz.data.local.BackupPrecio
+import com.example.verificadordepreciosluz.data.local.BackupRepository
+import com.example.verificadordepreciosluz.data.local.BackupResponse
 import com.example.verificadordepreciosluz.databinding.ActivityScanBinding
 import com.example.verificadordepreciosluz.R
 import com.example.verificadordepreciosluz.util.NetworkUtils
@@ -72,6 +80,12 @@ class ScanActivity : AppCompatActivity() {
     private var lastMockSubmitAt = 0L
     private var pendingMockText: String? = null
     private var mockIdleRunnable: Runnable? = null
+    private var offlineMode = false
+    private var offlineBackup: BackupResponse? = null
+    private val backupMaxAgeMs = (2.5 * 60 * 60 * 1000L).toLong()
+    private val deviceId: String by lazy {
+        Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
+    }
 
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -87,9 +101,22 @@ class ScanActivity : AppCompatActivity() {
         cameraExecutor = Executors.newSingleThreadExecutor()
         tone = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80)
 
-        if (!configureBackend()) return
+        val hasNetwork = NetworkUtils.isNetworkAvailable(this)
 
-        startPingMonitor()
+        if (hasNetwork) {
+            if (!configureBackend()) return
+            startPingMonitor()
+            syncBackupOnStart()
+        } else {
+            // Configura backend aunque no haya red para poder recuperar conexión luego.
+            configureBackend()
+            // Inicia modo offline inmediato.
+            startOfflineModeOnLaunch()
+            // Arranca el monitor de ping si hay configuración válida.
+            if (api != null) {
+                startPingMonitor()
+            }
+        }
 
         ensurePermissionAndStart()
 
@@ -99,6 +126,15 @@ class ScanActivity : AppCompatActivity() {
         }
 
         setupMockInput()
+    }
+
+    private fun startOfflineModeOnLaunch() {
+        setOfflineMode(true)
+        offlineBackup = loadOfflineBackup()
+        updateOfflineTimestamp(offlineBackup)
+        if (offlineBackup == null) {
+            Toast.makeText(this, "Sin respaldo local. Conéctate para sincronizar", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun setupMockInput() {
@@ -223,7 +259,233 @@ class ScanActivity : AppCompatActivity() {
         }
     }
 
+    // ===== MODO OFFLINE: helpers modulares =====
+
+    // 1) Activar o desactivar indicador visual de modo offline
+    private fun setOfflineMode(enabled: Boolean) {
+        // Guarda el estado lógico, independiente del hilo.
+        offlineMode = enabled
+        // Ejecuta la actualización visual SIEMPRE en el hilo principal.
+        if (Looper.getMainLooper().isCurrentThread) {
+            // Actualiza el indicador principal de modo offline.
+            binding.tvOfflineIndicator.visibility = if (enabled) View.VISIBLE else View.GONE
+            // Actualiza la etiqueta de última sincronización del backup.
+            binding.tvOfflineUpdated.visibility = if (enabled) View.VISIBLE else View.GONE
+        } else {
+            // Si estamos en un hilo de fondo, re-enviamos la UI al main thread.
+            runOnUiThread {
+                // Actualiza el indicador principal de modo offline.
+                binding.tvOfflineIndicator.visibility = if (enabled) View.VISIBLE else View.GONE
+                // Actualiza la etiqueta de última sincronización del backup.
+                binding.tvOfflineUpdated.visibility = if (enabled) View.VISIBLE else View.GONE
+            }
+        }
+    }
+
+    // 2) Cargar respaldo local desde almacenamiento interno
+    private fun loadOfflineBackup(): BackupResponse? {
+        val repo = BackupRepository(this)
+        val updatedAt = repo.getUpdatedAt() ?: return null
+        return BackupResponse(updatedAt = updatedAt)
+    }
+
+    // 2.5) Descarga inicial del backup al entrar en ScanActivity
+    private fun syncBackupOnStart() {
+        val service = api ?: return
+        scope.launch {
+            try {
+                Log.i(TAG, "Iniciando sincronización de backup (ScanActivity)")
+                if (!shouldDownloadBackup()) {
+                    Log.i(TAG, "Backup vigente, no se descarga")
+                    offlineBackup = loadOfflineBackup()
+                    uiHandler.post { updateOfflineTimestamp(offlineBackup) }
+                    return@launch
+                }
+                val repo = BackupRepository(this@ScanActivity, service)
+                val result = repo.downloadAndSaveBackup()
+                Log.i(TAG, "Resultado backup en ScanActivity: ${result.isSuccess}")
+                offlineBackup = loadOfflineBackup()
+                uiHandler.post { updateOfflineTimestamp(offlineBackup) }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error al sincronizar backup", e)
+            }
+        }
+    }
+
+    // 2.1) Re-sincronizar respaldo local cuando vuelve la conexión
+    private fun resyncBackupIfOnline(service: ApiService) {
+        scope.launch {
+            try {
+                if (!shouldDownloadBackup()) {
+                    offlineBackup = loadOfflineBackup()
+                    uiHandler.post { updateOfflineTimestamp(offlineBackup) }
+                    return@launch
+                }
+                val repo = BackupRepository(this@ScanActivity, service)
+                repo.downloadAndSaveBackup()
+                offlineBackup = loadOfflineBackup()
+                uiHandler.post { updateOfflineTimestamp(offlineBackup) }
+            } catch (_: Exception) {
+                // En caso de fallo, mantener el respaldo existente
+            }
+        }
+    }
+
+    private fun shouldDownloadBackup(): Boolean {
+        val repo = BackupRepository(this)
+        val updatedAt = repo.getUpdatedAt() ?: return true
+        val updatedAtMillis = parseIsoToMillis(updatedAt) ?: return true
+        return System.currentTimeMillis() - updatedAtMillis > backupMaxAgeMs
+    }
+
+    // 2.2) Actualizar texto de última sincronización del backup
+    private fun updateOfflineTimestamp(backup: BackupResponse?) {
+        val updatedAt = backup?.updatedAt
+        val formatted = formatIsoToReadable(updatedAt) ?: "-"
+        binding.tvOfflineUpdated.text = getString(
+            com.example.verificadordepreciosluz.R.string.offline_last_update_format,
+            formatted
+        )
+    }
+
+    // 2.4) Validar antigüedad del respaldo local (máx 24h)
+    private fun isBackupStale(backup: BackupResponse?): Boolean {
+        val updatedAtMillis = parseIsoToMillis(backup?.updatedAt) ?: return true
+        return System.currentTimeMillis() - updatedAtMillis > backupMaxAgeMs
+    }
+
+    // 2.3) Formatear fecha ISO a formato legible local (dd/MM/yyyy HH:mm)
+    private fun formatIsoToReadable(value: String?): String? {
+        if (value.isNullOrBlank()) return null
+        return try {
+            val clean = value.replace("Z", "").substringBefore(".")
+            val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
+            sdf.timeZone = TimeZone.getTimeZone("UTC")
+            val date = sdf.parse(clean) ?: return null
+            val out = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+            out.format(date)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    // 3) Parsear fechas ISO a milisegundos (maneja Z y milisegundos)
+    private fun parseIsoToMillis(value: String?): Long? {
+        if (value.isNullOrBlank()) return null
+        val clean = value.replace("Z", "").substringBefore(".")
+        return try {
+            val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
+            sdf.timeZone = TimeZone.getTimeZone("UTC")
+            sdf.parse(clean)?.time
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    // 4) Determinar si hay oferta vigente para un empaque
+    private fun isOfertaVigente(backup: BackupResponse, idEmpaque: Int): Boolean {
+        val now = System.currentTimeMillis()
+        val vigentes = backup.ofertasVigencia.filter { vig ->
+            val inicio = parseIsoToMillis(vig.fechaInicio)
+            val fin = parseIsoToMillis(vig.fechaFin)
+            val noExpirada = vig.indExpirado != 1
+            val cumpleInicio = inicio == null || now >= inicio
+            val cumpleFin = fin == null || now <= fin
+            noExpirada && cumpleInicio && cumpleFin
+        }
+        if (vigentes.isEmpty()) return false
+
+        val idsVigentes = vigentes.map { it.idOfertaxProducto }.toSet()
+        val idsSucursal = backup.ofertasSucursal
+            .filter { idsVigentes.contains(it.idOfertaxProducto) }
+            .map { it.idOfertaxProductoxSucursal }
+            .toSet()
+        if (idsSucursal.isEmpty()) return false
+
+        return backup.ofertasDetalles.any { det ->
+            det.idEmpaque == idEmpaque && idsSucursal.contains(det.idOfertaxProductoxSucursal)
+        }
+    }
+
+    // 5) Obtener tasa de impuesto desde el respaldo local
+    private fun obtenerTasaImpuesto(backup: BackupResponse, idProducto: Int, indIva: Boolean?): Double? {
+        if (indIva != true) return null
+        val impuesto = backup.impuestosProducto.firstOrNull {
+            it.idProducto == idProducto && it.indActivo == 1
+        } ?: return null
+
+        val tasa = backup.tasasImpuesto.firstOrNull {
+            it.idTasaImpuesto == impuesto.idTasaImpuesto
+        } ?: return null
+
+        return tasa.tasa
+    }
+
+    // 6) Construir respuesta local equivalente a la del backend
+    private fun buildOfflineProducto(backup: BackupResponse, sku: String): ProductoResponse? {
+        val productosEncontrados = backup.productos.count { it.sku == sku }
+        Log.i(TAG, "offline_lookup sku=$sku productos=$productosEncontrados")
+        val producto = backup.productos.firstOrNull { it.sku == sku } ?: return null
+        val candidatosPrecio = backup.precios.filter {
+            it.idProducto == producto.idProducto &&
+                (it.costoBase ?: 0.0) > 0.0 &&
+                (it.pvpBase ?: 0.0) > 0.0
+        }
+        Log.i(TAG, "offline_lookup sku=$sku precios=${candidatosPrecio.size}")
+
+        val precio = candidatosPrecio.maxWithOrNull(
+            compareBy<BackupPrecio> { if ((it.pvpConversion ?: 0.0) > 0.0) 1 else 0 }
+                .thenBy { it.pvpBase ?: 0.0 }
+        ) ?: return null
+
+        val candidatosOferta = backup.ofertas.filter {
+            it.idProducto == producto.idProducto &&
+                it.idEmpaque == precio.idEmpaque
+        }
+        Log.i(TAG, "offline_lookup sku=$sku ofertas=${candidatosOferta.size}")
+
+        val oferta = candidatosOferta.maxWithOrNull(
+            compareBy<BackupOferta> { if ((it.pvpOferta ?: 0.0) > 0.0) 1 else 0 }
+                .thenBy { it.pvpOferta ?: 0.0 }
+                .thenBy { it.pvpBaseOferta ?: 0.0 }
+        )
+        val ofertaValida = oferta != null &&
+            (oferta.pvpOferta ?: 0.0) > 0.0 &&
+            (oferta.pvpBaseOferta ?: 0.0) > 0.0
+        val ofertaVigente = ofertaValida && isOfertaVigente(backup, precio.idEmpaque)
+
+        val tasa = obtenerTasaImpuesto(backup, producto.idProducto, precio.indIva)
+        val factor = if (tasa != null) 1 + (tasa / 100.0) else 1.0
+
+        val pvpBase = precio.pvpBase?.times(factor)
+        val rawConversion = precio.pvpConversion?.times(factor)
+        val pvpConversion = if (rawConversion != null && rawConversion > 0.0) rawConversion else pvpBase
+        val pvpOferta = oferta?.pvpOferta?.times(factor)
+        val pvpBaseOferta = oferta?.pvpBaseOferta?.times(factor)
+
+        return ProductoResponse(
+            idProducto = producto.idProducto,
+            sku = producto.sku,
+            nombre = producto.nombre,
+            pvpBase = if (ofertaVigente) null else pvpBase,
+            pvpConversion = if (ofertaVigente) null else pvpConversion,
+            indIva = if (precio.indIva == true) 1 else 0,
+            pvpOferta = if (ofertaVigente) pvpOferta else null,
+            pvpBaseOferta = if (ofertaVigente) pvpBaseOferta else null,
+            idEmpaque = precio.idEmpaque,
+            idTasaImpuesto = null,
+            ivaIncluidoBs = null,
+            precioFinalConIva = null,
+        )
+    }
+
     private fun onBarcodeDetected(code: String) {
+        // 7) Consulta offline si el modo offline está activo
+        if (offlineMode) {
+            handleOfflineLookup(code)
+            return
+        }
+
         val api = api ?: run {
             goToConfig("Configura IP/puerto primero")
             return
@@ -263,6 +525,49 @@ class ScanActivity : AppCompatActivity() {
         }
     }
 
+    // 8) Resolver consulta con respaldo local
+    private fun handleOfflineLookup(code: String) {
+        scope.launch {
+            requestInFlight = true
+            try {
+                val backup = offlineBackup ?: loadOfflineBackup()
+                if (backup == null) {
+                    uiHandler.post {
+                        showThrottledError("offline_no_backup", "Sin respaldo local")
+                    }
+                    return@launch
+                }
+                if (isBackupStale(backup)) {
+                    uiHandler.post {
+                        showThrottledError("offline_stale", "Respaldo vencido (24h). Conéctate al servidor")
+                    }
+                    return@launch
+                }
+                offlineBackup = backup
+
+                val repo = BackupRepository(this@ScanActivity)
+                val producto = repo.lookupProductoOffline(code)
+                if (producto == null) {
+                    uiHandler.post {
+                        showThrottledError("offline_not_found", "Producto no encontrado")
+                    }
+                    return@launch
+                }
+
+                uiHandler.post {
+                    feedbackSuccess()
+                    showResult(producto)
+                    pauseUntil = android.os.SystemClock.elapsedRealtime() + 4000
+                }
+            } finally {
+                if (lastCode == code) {
+                    lastCode = null
+                }
+                requestInFlight = false
+            }
+        }
+    }
+
     private fun configureBackend(): Boolean {
         val prefs = getSharedPreferences("ConfigLuz", MODE_PRIVATE)
         val host = prefs.getString("ip_servidor", null)
@@ -294,8 +599,27 @@ class ScanActivity : AppCompatActivity() {
             while (isActive) {
                 val (ok, reason) = pingWithRetries(service)
                 if (!ok) {
+                    val backup = offlineBackup ?: loadOfflineBackup()
+                    if (backup != null) {
+                        if (isBackupStale(backup)) {
+                            uiHandler.post {
+                                showThrottledError("offline_stale", "Respaldo vencido (24h). Conéctate al servidor")
+                            }
+                            goToConfig("Respaldo vencido. Regresando a configuración")
+                            return@launch
+                        }
+                        offlineBackup = backup
+                        setOfflineMode(true)
+                        uiHandler.post { updateOfflineTimestamp(offlineBackup) }
+                        delay(5000)
+                        continue
+                    }
                     goToConfig(reason ?: "Conexión perdida. Regresando a configuración")
                     return@launch
+                }
+                if (offlineMode) {
+                    setOfflineMode(false)
+                    resyncBackupIfOnline(service)
                 }
                 delay(5000)
             }
@@ -308,7 +632,7 @@ class ScanActivity : AppCompatActivity() {
         for (waitMs in delays) {
             if (waitMs > 0) delay(waitMs)
             try {
-                service.ping()
+                service.ping(deviceId)
                 return true to null
             } catch (e: HttpException) {
                 lastReason = if (e.code() in 400..499) {
@@ -353,16 +677,14 @@ class ScanActivity : AppCompatActivity() {
         val precioUsd = producto.pvpOferta ?: producto.pvpConversion ?: 0.0
         binding.tvPrecioDolar.text = getString(R.string.price_usd_format, precioUsd)
 
-        // Cambiar color de fondo si está en oferta
+        // Cambiar color de texto si está en oferta
         if (producto.pvpOferta != null) {
-            binding.tvPrecioDolar.setBackgroundResource(R.color.vinotinto_oferta)
+            binding.tvPrecioDolar.setTextColor(getColor(R.color.vinotinto_oferta))
+            binding.tvPriceCurrency.setTextColor(getColor(R.color.vinotinto_oferta))
         } else {
-            binding.tvPrecioDolar.setBackgroundResource(R.color.verde_luz)
+            binding.tvPrecioDolar.setTextColor(getColor(R.color.verde_luz))
+            binding.tvPriceCurrency.setTextColor(getColor(R.color.verde_luz))
         }
-
-
-        // Ocultar ubicación
-        binding.tvUbicacion.visibility = View.GONE
 
         binding.resultOverlay.visibility = View.VISIBLE
         pauseAnalyzer(true)
@@ -404,6 +726,14 @@ class ScanActivity : AppCompatActivity() {
         if (!overlayVisible) {
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         }
+        resetScanStateAfterError()
+    }
+
+    private fun resetScanStateAfterError() {
+        pauseUntil = 0L
+        requestInFlight = false
+        lastCode = null
+        pauseAnalyzer(false)
     }
 
     private fun feedbackSuccess() {
@@ -450,6 +780,18 @@ class ScanActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        val hasNetwork = NetworkUtils.isNetworkAvailable(this)
+
+        if (!hasNetwork) {
+            setOfflineMode(true)
+            if (offlineBackup == null) {
+                offlineBackup = loadOfflineBackup()
+            }
+            updateOfflineTimestamp(offlineBackup)
+            binding.etMockCode.requestFocus()
+            return
+        }
+
         // Reanuda el monitor de ping al volver al primer plano
         if (api == null) {
             // Si se perdió la instancia por cualquier motivo, intenta reconfigurar

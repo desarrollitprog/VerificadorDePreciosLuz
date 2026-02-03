@@ -62,7 +62,7 @@ async_engine = create_async_engine(
         port=DB_PORT,
         driver=DB_DRIVER,
     ),
-    echo=True,
+    echo=False,
 )
 AsyncSessionLocal = sessionmaker(
     bind=async_engine,
@@ -95,7 +95,7 @@ DB_DRIVER_ERP = os.getenv("DB_DRIVER_ERP", "ODBC Driver 18 for SQL Server")
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 engine_erp = create_async_engine(
     f"mssql+aioodbc://{DB_USER_ERP}:{DB_PASSWORD_ERP}@{DB_SERVER_ERP},{DB_PORT_ERP}/{DB_NAME_ERP}?driver={DB_DRIVER_ERP.replace(' ', '+')}&Encrypt=yes&TrustServerCertificate=yes",
-    echo=True,
+    echo=False,
 )
 
 # Session maker async para BD ERP
@@ -141,5 +141,5 @@ async def test_connections_async():
 # EJECUCIÓN DE PRUEBA (Descomentar para probar)
 # ============================================================================
 
-if __name__ == "__main__":
-    asyncio.run(test_connections_async())
+#if __name__ == "__main__":
+  #  asyncio.run(test_connections_async())

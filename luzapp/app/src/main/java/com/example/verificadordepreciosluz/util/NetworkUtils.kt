@@ -1,5 +1,9 @@
 package com.example.verificadordepreciosluz.util
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.os.Build
 import java.net.IDN
 
 object NetworkUtils {
@@ -31,5 +35,20 @@ object NetworkUtils {
         val sanitized = sanitizeHost(raw)
         val withScheme = if (sanitized.startsWith("http://") || sanitized.startsWith("https://")) sanitized else "http://$sanitized"
         return if (withScheme.endsWith('/')) withScheme else "$withScheme/"
+    }
+
+    fun isNetworkAvailable(context: Context): Boolean {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return false
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val network = cm.activeNetwork ?: return false
+            val caps = cm.getNetworkCapabilities(network) ?: return false
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+        } else {
+            @Suppress("DEPRECATION")
+            cm.activeNetworkInfo?.isConnected == true
+        }
     }
 }

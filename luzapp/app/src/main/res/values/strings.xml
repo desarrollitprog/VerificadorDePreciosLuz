@@ -19,5 +19,10 @@
     <string name="discount_percent">%1$d%% OFF</string>
     <string name="currency_format">Bs %1$.2f</string>
     <string name="price_with_iva_format">IVA INCLUIDO (SI APLICA)</string>
-    <string name="price_usd_format">Precio en $: %.2f</string>
+    <string name="price_usd_format">%.2f</string>
+    <string name="price_label">PRECIO</string>
+    <string name="store_image_desc">Imagen de sede</string>
+    <string name="store_default_name">Sede Luz</string>
+    <string name="offline_indicator">• Offline</string>
+    <string name="offline_last_update_format">Última actualización: %1$s</string>
 </resources>

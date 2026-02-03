@@ -8,13 +8,18 @@ from ..schemas import ProductoResponse
 router = APIRouter()
 
 @router.get("/productos", response_model=list[ProductoResponse])
-async def listar_productos(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(database.get_db)):
+async def listar_productos(
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(database.get_db),
+    db_erp: AsyncSession = Depends(database.get_db_erp),
+):
     limit = max(1, min(limit or 100, 500))
     stmt = select(models.Producto).order_by(models.Producto.IdProducto).offset(skip).limit(limit)
     result = await db.execute(stmt)
     productos = result.scalars().all()
 
-    from app.main import armar_respuesta
+    from app.main import armar_respuesta, buscar_tasa_impuesto
     responses = []
     for p in productos:
         # Consultas asíncronas para precio y oferta
@@ -27,5 +32,6 @@ async def listar_productos(skip: int = 0, limit: int = 100, db: AsyncSession = D
         oferta = oferta_result.scalars().first()
 
         detalle = None  # Si tienes lógica de oferta vigente, puedes agregarla aquí
-        responses.append(armar_respuesta(p, precio, oferta, detalle))
+        tasa_impuesto = await buscar_tasa_impuesto(db, db_erp, p.IdProducto, precio)
+        responses.append(armar_respuesta(p, precio, oferta, detalle, tasa_impuesto))
     return responses

@@ -17,5 +17,6 @@ class ProductosXImpuestos(Base):
     def __repr__(self):
         return (
             f"<ProductosXImpuestos(IdProductoxImpuesto={self.IdProductoxImpuesto}, "
-            f"IdProducto={self.IdProducto}, IdTasaImpuesto={self.IdTasaImpuesto}, IndActivo={self.IndActivo})>"
+            f"IdProducto={self.IdProducto}, IdTasaImpuesto={self.IdTasaImpuesto}, "
+            f"IndActivo={self.IndActivo})>"
         )

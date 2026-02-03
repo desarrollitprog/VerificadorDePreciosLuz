@@ -1,6 +1,7 @@
 package com.example.verificadordepreciosluz.data.network
 
 import com.google.gson.annotations.SerializedName
+import com.example.verificadordepreciosluz.data.local.BackupResponse
 import com.example.verificadordepreciosluz.util.NetworkUtils
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -8,6 +9,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
 import retrofit2.http.Path
+import retrofit2.http.Query
 import java.util.concurrent.TimeUnit
 
 // DTOs que mapean las respuestas del backend
@@ -32,7 +34,14 @@ data class ProductoResponse(
 
 interface ApiService {
     @GET("ping")
-    suspend fun ping(): PingResponse
+    suspend fun ping(@Query("device_id") deviceId: String): PingResponse
+
+    @GET("backup")
+    suspend fun backup(
+        @Query("section") section: String,
+        @Query("offset") offset: Int,
+        @Query("limit") limit: Int,
+    ): BackupResponse
 
     @GET("consultar/{codigo}")
     suspend fun consultar(@Path("codigo") codigo: String): ProductoResponse
@@ -45,9 +54,9 @@ object ApiClient {
             level = if (enableLogs) HttpLoggingInterceptor.Level.BODY else HttpLoggingInterceptor.Level.NONE
         }
         val client = OkHttpClient.Builder()
-            .callTimeout(10, TimeUnit.SECONDS)
+            .callTimeout(30, TimeUnit.SECONDS)
             .connectTimeout(5, TimeUnit.SECONDS)
-            .readTimeout(5, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .addInterceptor(logging)
             .build()

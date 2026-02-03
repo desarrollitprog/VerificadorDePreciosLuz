@@ -8,4 +8,15 @@
     <color name="gris_suave">#F2F2F2</color>
     <color name="fondo_logo">#F7EFEA</color>
 
+    <!-- Tarjeta premium (overlay precio) -->
+    <color name="vinotinto_dark">#420816</color>
+    <color name="vinotinto_light">#750E23</color>
+    <color name="dorado_mostaza">#E6B748</color>
+    <color name="dorado_texto">#FFD54F</color>
+    <color name="dorado_texto_soft">#CCB15C</color>
+
+    <!-- Logo Luz (aprox) -->
+    <color name="rojo_luz_logo">#B51F1F</color>
+    <color name="rojo_luz_logo_dark">#8F1414</color>
+
 </resources>

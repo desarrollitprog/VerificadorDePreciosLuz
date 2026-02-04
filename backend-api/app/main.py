@@ -5,6 +5,8 @@ import asyncio
 import logging
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
+import os
 from fastapi.middleware.gzip import GZipMiddleware
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +19,11 @@ logger = logging.getLogger("uvicorn.error")
 
 # Comprimir respuestas grandes para reducir tiempo de descarga
 app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+# Servir archivos estáticos (banners)
+static_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "static"))
+if os.path.isdir(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 DEVICE_LAST_SEEN: dict[str, dict[str, object]] = {}
 DEVICE_LOCK = asyncio.Lock()

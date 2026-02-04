@@ -3,6 +3,7 @@
 package com.example.verificadordepreciosluz.ui.scanner
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -15,30 +16,44 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import android.provider.Settings
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.view.HapticFeedbackConstants
 import android.view.View
 import android.widget.Toast
 import android.util.Log
 import android.view.inputmethod.EditorInfo
+import android.view.WindowInsets
+import android.view.WindowInsetsController
+import android.view.inputmethod.InputMethodManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Rect
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
+import androidx.core.view.isVisible
+import androidx.core.view.WindowCompat
 import androidx.core.widget.addTextChangedListener
 import com.example.verificadordepreciosluz.MainActivity
 import com.example.verificadordepreciosluz.BuildConfig
 import com.example.verificadordepreciosluz.data.network.ApiClient
 import com.example.verificadordepreciosluz.data.network.ApiService
 import com.example.verificadordepreciosluz.data.network.ProductoResponse
-import com.example.verificadordepreciosluz.data.local.BackupOferta
-import com.example.verificadordepreciosluz.data.local.BackupPrecio
 import com.example.verificadordepreciosluz.data.local.BackupRepository
 import com.example.verificadordepreciosluz.data.local.BackupResponse
+import com.example.verificadordepreciosluz.data.local.BackupIndexRepository
+import com.example.verificadordepreciosluz.data.local.BannerRepository
+import com.example.verificadordepreciosluz.data.local.BannerCacheItem
 import com.example.verificadordepreciosluz.databinding.ActivityScanBinding
 import com.example.verificadordepreciosluz.R
 import com.example.verificadordepreciosluz.util.NetworkUtils
@@ -81,10 +96,54 @@ class ScanActivity : AppCompatActivity() {
     private var pendingMockText: String? = null
     private var mockIdleRunnable: Runnable? = null
     private var offlineMode = false
+    private var isNetworkAvailable = false
+    private var networkCallbackRegistered = false
+    private var connectivityManager: ConnectivityManager? = null
     private var offlineBackup: BackupResponse? = null
+    private var backupReady = false
+    private var backupReadyNotified = false
     private val backupMaxAgeMs = (2.5 * 60 * 60 * 1000L).toLong()
+
+    // ===== PUBLICIDAD / STANDBY =====
+    // Tiempo máximo para refrescar banners (2.5h)
+    private val bannerMaxAgeMs = (2.5 * 60 * 60 * 1000L).toLong()
+    // Base URL para descargar media de banners
+    private var backendBaseUrl: String? = null
+    // Tiempo de inactividad para entrar en modo standby
+    private val standbyIdleMs = 15_000L
+    // Lista cacheada de banners a reproducir
+    private var standbyItems: List<BannerCacheItem> = emptyList()
+    // Índice actual del carrusel
+    private var standbyIndex = 0
+    // Estado del carrusel (activo/inactivo)
+    private var standbyActive = false
+    // Timer que dispara el modo standby
+    private var standbyTimerRunnable: Runnable? = null
+    // Timer por diapositiva (imágenes)
+    private var standbySlideRunnable: Runnable? = null
+    private var resultHideRunnable: Runnable? = null
     private val deviceId: String by lazy {
-        Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
+        val prefs = getSharedPreferences("ConfigLuz", MODE_PRIVATE)
+        val existing = prefs.getString("device_id", null)
+        if (!existing.isNullOrBlank()) return@lazy existing
+        val generated = java.util.UUID.randomUUID().toString()
+        prefs.edit { putString("device_id", generated) }
+        generated
+    }
+
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            handleNetworkChange(true)
+        }
+
+        override fun onLost(network: Network) {
+            handleNetworkChange(false)
+        }
+
+        override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+            val hasInternet = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            handleNetworkChange(hasInternet)
+        }
     }
 
     private val requestPermissionLauncher =
@@ -97,25 +156,35 @@ class ScanActivity : AppCompatActivity() {
         binding = ActivityScanBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (!backupReady) {
+                    Toast.makeText(this@ScanActivity, "Respaldo no está listo. Espera la sincronización", Toast.LENGTH_SHORT).show()
+                    return
+                }
+                isEnabled = false
+                onBackPressedDispatcher.onBackPressed()
+            }
+        })
+
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         cameraExecutor = Executors.newSingleThreadExecutor()
         tone = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80)
 
         val hasNetwork = NetworkUtils.isNetworkAvailable(this)
+        isNetworkAvailable = hasNetwork
+        setBackupReady(BackupRepository(this).getUpdatedAt() != null)
 
         if (hasNetwork) {
             if (!configureBackend()) return
-            startPingMonitor()
             syncBackupOnStart()
+            syncBannersOnStart()
         } else {
             // Configura backend aunque no haya red para poder recuperar conexión luego.
             configureBackend()
             // Inicia modo offline inmediato.
             startOfflineModeOnLaunch()
-            // Arranca el monitor de ping si hay configuración válida.
-            if (api != null) {
-                startPingMonitor()
-            }
         }
 
         ensurePermissionAndStart()
@@ -126,12 +195,30 @@ class ScanActivity : AppCompatActivity() {
         }
 
         setupMockInput()
+        resetStandbyTimer()
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
+        applyImmersiveMode()
+        hideKeyboard()
+        excludeSystemGestures()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            applyImmersiveMode()
+            hideKeyboard()
+            excludeSystemGestures()
+        }
     }
 
     private fun startOfflineModeOnLaunch() {
         setOfflineMode(true)
         offlineBackup = loadOfflineBackup()
+        setBackupReady(offlineBackup != null)
         updateOfflineTimestamp(offlineBackup)
+        scope.launch {
+            BackupIndexRepository(this@ScanActivity).ensureIndex(offlineBackup?.updatedAt)
+        }
         if (offlineBackup == null) {
             Toast.makeText(this, "Sin respaldo local. Conéctate para sincronizar", Toast.LENGTH_LONG).show()
         }
@@ -142,7 +229,7 @@ class ScanActivity : AppCompatActivity() {
             val code = binding.etMockCode.text?.toString()?.trim().orEmpty()
             submitMockIfValid(code)
         }
-
+        binding.etMockCode.showSoftInputOnFocus = false
         binding.etMockCode.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_DONE) {
                 val code = binding.etMockCode.text?.toString()?.trim().orEmpty()
@@ -174,6 +261,40 @@ class ScanActivity : AppCompatActivity() {
             startCamera()
         } else {
             requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    private fun applyImmersiveMode() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            window.insetsController?.let { controller ->
+                controller.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+                controller.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = (
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+                    View.SYSTEM_UI_FLAG_FULLSCREEN or
+                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                )
+        }
+    }
+
+    private fun hideKeyboard() {
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as? InputMethodManager ?: return
+        imm.hideSoftInputFromWindow(binding.root.windowToken, 0)
+    }
+
+    private fun excludeSystemGestures() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            binding.root.post {
+                val rect = Rect(0, 0, binding.root.width, binding.root.height)
+                binding.root.systemGestureExclusionRects = listOf(rect)
+            }
         }
     }
 
@@ -236,7 +357,6 @@ class ScanActivity : AppCompatActivity() {
         lastScanAt = now
         onBarcodeDetected(clean)
     }
-
     private fun submitMockIfValid(raw: String) {
         val code = raw.trim()
         if (code.isEmpty()) return
@@ -268,17 +388,42 @@ class ScanActivity : AppCompatActivity() {
         // Ejecuta la actualización visual SIEMPRE en el hilo principal.
         if (Looper.getMainLooper().isCurrentThread) {
             // Actualiza el indicador principal de modo offline.
-            binding.tvOfflineIndicator.visibility = if (enabled) View.VISIBLE else View.GONE
+            binding.tvOfflineIndicator.isVisible = enabled
             // Actualiza la etiqueta de última sincronización del backup.
-            binding.tvOfflineUpdated.visibility = if (enabled) View.VISIBLE else View.GONE
+            binding.tvOfflineUpdated.isVisible = enabled
         } else {
             // Si estamos en un hilo de fondo, re-enviamos la UI al main thread.
             runOnUiThread {
                 // Actualiza el indicador principal de modo offline.
-                binding.tvOfflineIndicator.visibility = if (enabled) View.VISIBLE else View.GONE
+                binding.tvOfflineIndicator.isVisible = enabled
                 // Actualiza la etiqueta de última sincronización del backup.
-                binding.tvOfflineUpdated.visibility = if (enabled) View.VISIBLE else View.GONE
+                binding.tvOfflineUpdated.isVisible = enabled
             }
+        }
+    }
+
+    private fun handleNetworkChange(available: Boolean) {
+        if (available == isNetworkAvailable) return
+        isNetworkAvailable = available
+
+        if (!available) {
+            pingJob?.cancel()
+            setOfflineMode(true)
+            if (offlineBackup == null) {
+                offlineBackup = loadOfflineBackup()
+            }
+            updateOfflineTimestamp(offlineBackup)
+            return
+        }
+
+        if (api == null) {
+            configureBackend()
+        }
+        setOfflineMode(false)
+        api?.let { service ->
+            startPingMonitor()
+            resyncBackupIfOnline(service)
+            syncBannersOnStart()
         }
     }
 
@@ -305,11 +450,118 @@ class ScanActivity : AppCompatActivity() {
                 val result = repo.downloadAndSaveBackup()
                 Log.i(TAG, "Resultado backup en ScanActivity: ${result.isSuccess}")
                 offlineBackup = loadOfflineBackup()
+                setBackupReady(offlineBackup != null)
+                scope.launch {
+                    BackupIndexRepository(this@ScanActivity).ensureIndex(offlineBackup?.updatedAt)
+                }
                 uiHandler.post { updateOfflineTimestamp(offlineBackup) }
             } catch (e: Exception) {
                 Log.e(TAG, "Error al sincronizar backup", e)
             }
         }
+    }
+
+    // Sincroniza banners en segundo plano si están vencidos
+    private fun syncBannersOnStart() {
+        val service = api ?: return
+        val baseUrl = backendBaseUrl ?: return
+        scope.launch {
+            try {
+                val repo = BannerRepository(this@ScanActivity, service, baseUrl)
+                repo.refreshIfStale(bannerMaxAgeMs)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error al sincronizar banners", e)
+            }
+        }
+    }
+
+    // Reinicia el temporizador de inactividad
+    private fun resetStandbyTimer() {
+        standbyTimerRunnable?.let { uiHandler.removeCallbacks(it) }
+        standbyTimerRunnable = Runnable { startStandbyCarousel() }
+        uiHandler.postDelayed(standbyTimerRunnable!!, standbyIdleMs)
+        Log.d(TAG, "Standby timer programado en ${standbyIdleMs}ms")
+    }
+
+    // Inicia el carrusel leyendo el cache local
+    private fun startStandbyCarousel() {
+        if (standbyActive) return
+        val baseUrl = backendBaseUrl ?: return
+        val repo = api?.let { BannerRepository(this, it, baseUrl) } ?: return
+        val cache = repo.loadCache() ?: return
+        if (cache.items.isEmpty()) {
+            Log.w(TAG, "Standby: cache vacío, no inicia carrusel")
+            return
+        }
+
+        Log.i(TAG, "Standby: cache cargado items=${cache.items.size}")
+
+        standbyItems = cache.items
+        standbyIndex = 0
+        standbyActive = true
+        binding.standbyOverlay.visibility = View.VISIBLE
+        playStandbyItem()
+    }
+
+    // Reproduce un item del carrusel (imagen o video)
+    private fun playStandbyItem() {
+        if (!standbyActive || standbyItems.isEmpty()) return
+        val item = standbyItems[standbyIndex]
+        val fileExists = java.io.File(item.localPath).exists()
+        Log.i(TAG, "Standby: item idx=$standbyIndex tipo=${item.tipo} path=${item.localPath} exists=$fileExists")
+
+        standbySlideRunnable?.let { uiHandler.removeCallbacks(it) }
+        binding.standbyImage.visibility = View.GONE
+        binding.standbyVideo.visibility = View.GONE
+
+        if (item.tipo == "video") {
+            binding.standbyVideo.visibility = View.VISIBLE
+            binding.standbyVideo.setOnCompletionListener {
+                nextStandbyItem()
+            }
+            binding.standbyVideo.setOnPreparedListener { mp ->
+                mp.setVideoScalingMode(android.media.MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT)
+            }
+            binding.standbyVideo.setOnErrorListener { _, what, extra ->
+                Log.w(TAG, "Standby: error video what=$what extra=$extra")
+                nextStandbyItem()
+                true
+            }
+            binding.standbyVideo.setVideoPath(item.localPath)
+            binding.standbyVideo.start()
+        } else {
+            binding.standbyImage.visibility = View.VISIBLE
+            val options = BitmapFactory.Options().apply {
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+                inScaled = false
+            }
+            val bitmap = BitmapFactory.decodeFile(item.localPath, options)
+            if (bitmap == null) {
+                Log.w(TAG, "Standby: bitmap nulo para ${item.localPath}")
+            }
+            binding.standbyImage.setImageBitmap(bitmap)
+            val durationMs = ((item.duracionSeg ?: 10) * 1000L)
+            standbySlideRunnable = Runnable { nextStandbyItem() }
+            uiHandler.postDelayed(standbySlideRunnable!!, durationMs)
+        }
+    }
+
+    // Avanza al siguiente elemento del carrusel
+    private fun nextStandbyItem() {
+        if (!standbyActive || standbyItems.isEmpty()) return
+        standbyIndex = (standbyIndex + 1) % standbyItems.size
+        playStandbyItem()
+    }
+
+    // Detiene el carrusel y limpia el overlay
+    private fun stopStandbyCarousel() {
+        if (!standbyActive) return
+        standbyActive = false
+        standbySlideRunnable?.let { uiHandler.removeCallbacks(it) }
+        binding.standbyVideo.stopPlayback()
+        binding.standbyOverlay.visibility = View.GONE
+        binding.standbyImage.setImageDrawable(null)
+        Log.d(TAG, "Standby: detenido")
     }
 
     // 2.1) Re-sincronizar respaldo local cuando vuelve la conexión
@@ -324,9 +576,23 @@ class ScanActivity : AppCompatActivity() {
                 val repo = BackupRepository(this@ScanActivity, service)
                 repo.downloadAndSaveBackup()
                 offlineBackup = loadOfflineBackup()
+                setBackupReady(offlineBackup != null)
+                scope.launch {
+                    BackupIndexRepository(this@ScanActivity).ensureIndex(offlineBackup?.updatedAt)
+                }
                 uiHandler.post { updateOfflineTimestamp(offlineBackup) }
             } catch (_: Exception) {
                 // En caso de fallo, mantener el respaldo existente
+            }
+        }
+    }
+
+    private fun setBackupReady(ready: Boolean) {
+        backupReady = ready
+        if (ready && !backupReadyNotified) {
+            backupReadyNotified = true
+            uiHandler.post {
+                Toast.makeText(this, "Respaldo listo. Puedes salir", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -343,7 +609,7 @@ class ScanActivity : AppCompatActivity() {
         val updatedAt = backup?.updatedAt
         val formatted = formatIsoToReadable(updatedAt) ?: "-"
         binding.tvOfflineUpdated.text = getString(
-            com.example.verificadordepreciosluz.R.string.offline_last_update_format,
+            R.string.offline_last_update_format,
             formatted
         )
     }
@@ -382,104 +648,15 @@ class ScanActivity : AppCompatActivity() {
         }
     }
 
-    // 4) Determinar si hay oferta vigente para un empaque
-    private fun isOfertaVigente(backup: BackupResponse, idEmpaque: Int): Boolean {
-        val now = System.currentTimeMillis()
-        val vigentes = backup.ofertasVigencia.filter { vig ->
-            val inicio = parseIsoToMillis(vig.fechaInicio)
-            val fin = parseIsoToMillis(vig.fechaFin)
-            val noExpirada = vig.indExpirado != 1
-            val cumpleInicio = inicio == null || now >= inicio
-            val cumpleFin = fin == null || now <= fin
-            noExpirada && cumpleInicio && cumpleFin
-        }
-        if (vigentes.isEmpty()) return false
-
-        val idsVigentes = vigentes.map { it.idOfertaxProducto }.toSet()
-        val idsSucursal = backup.ofertasSucursal
-            .filter { idsVigentes.contains(it.idOfertaxProducto) }
-            .map { it.idOfertaxProductoxSucursal }
-            .toSet()
-        if (idsSucursal.isEmpty()) return false
-
-        return backup.ofertasDetalles.any { det ->
-            det.idEmpaque == idEmpaque && idsSucursal.contains(det.idOfertaxProductoxSucursal)
-        }
-    }
-
-    // 5) Obtener tasa de impuesto desde el respaldo local
-    private fun obtenerTasaImpuesto(backup: BackupResponse, idProducto: Int, indIva: Boolean?): Double? {
-        if (indIva != true) return null
-        val impuesto = backup.impuestosProducto.firstOrNull {
-            it.idProducto == idProducto && it.indActivo == 1
-        } ?: return null
-
-        val tasa = backup.tasasImpuesto.firstOrNull {
-            it.idTasaImpuesto == impuesto.idTasaImpuesto
-        } ?: return null
-
-        return tasa.tasa
-    }
-
-    // 6) Construir respuesta local equivalente a la del backend
-    private fun buildOfflineProducto(backup: BackupResponse, sku: String): ProductoResponse? {
-        val productosEncontrados = backup.productos.count { it.sku == sku }
-        Log.i(TAG, "offline_lookup sku=$sku productos=$productosEncontrados")
-        val producto = backup.productos.firstOrNull { it.sku == sku } ?: return null
-        val candidatosPrecio = backup.precios.filter {
-            it.idProducto == producto.idProducto &&
-                (it.costoBase ?: 0.0) > 0.0 &&
-                (it.pvpBase ?: 0.0) > 0.0
-        }
-        Log.i(TAG, "offline_lookup sku=$sku precios=${candidatosPrecio.size}")
-
-        val precio = candidatosPrecio.maxWithOrNull(
-            compareBy<BackupPrecio> { if ((it.pvpConversion ?: 0.0) > 0.0) 1 else 0 }
-                .thenBy { it.pvpBase ?: 0.0 }
-        ) ?: return null
-
-        val candidatosOferta = backup.ofertas.filter {
-            it.idProducto == producto.idProducto &&
-                it.idEmpaque == precio.idEmpaque
-        }
-        Log.i(TAG, "offline_lookup sku=$sku ofertas=${candidatosOferta.size}")
-
-        val oferta = candidatosOferta.maxWithOrNull(
-            compareBy<BackupOferta> { if ((it.pvpOferta ?: 0.0) > 0.0) 1 else 0 }
-                .thenBy { it.pvpOferta ?: 0.0 }
-                .thenBy { it.pvpBaseOferta ?: 0.0 }
-        )
-        val ofertaValida = oferta != null &&
-            (oferta.pvpOferta ?: 0.0) > 0.0 &&
-            (oferta.pvpBaseOferta ?: 0.0) > 0.0
-        val ofertaVigente = ofertaValida && isOfertaVigente(backup, precio.idEmpaque)
-
-        val tasa = obtenerTasaImpuesto(backup, producto.idProducto, precio.indIva)
-        val factor = if (tasa != null) 1 + (tasa / 100.0) else 1.0
-
-        val pvpBase = precio.pvpBase?.times(factor)
-        val rawConversion = precio.pvpConversion?.times(factor)
-        val pvpConversion = if (rawConversion != null && rawConversion > 0.0) rawConversion else pvpBase
-        val pvpOferta = oferta?.pvpOferta?.times(factor)
-        val pvpBaseOferta = oferta?.pvpBaseOferta?.times(factor)
-
-        return ProductoResponse(
-            idProducto = producto.idProducto,
-            sku = producto.sku,
-            nombre = producto.nombre,
-            pvpBase = if (ofertaVigente) null else pvpBase,
-            pvpConversion = if (ofertaVigente) null else pvpConversion,
-            indIva = if (precio.indIva == true) 1 else 0,
-            pvpOferta = if (ofertaVigente) pvpOferta else null,
-            pvpBaseOferta = if (ofertaVigente) pvpBaseOferta else null,
-            idEmpaque = precio.idEmpaque,
-            idTasaImpuesto = null,
-            ivaIncluidoBs = null,
-            precioFinalConIva = null,
-        )
-    }
-
     private fun onBarcodeDetected(code: String) {
+        stopStandbyCarousel()
+        if (!isNetworkAvailable) {
+            if (!offlineMode) {
+                setOfflineMode(true)
+            }
+            handleOfflineLookup(code)
+            return
+        }
         // 7) Consulta offline si el modo offline está activo
         if (offlineMode) {
             handleOfflineLookup(code)
@@ -544,9 +721,9 @@ class ScanActivity : AppCompatActivity() {
                     return@launch
                 }
                 offlineBackup = backup
-
-                val repo = BackupRepository(this@ScanActivity)
-                val producto = repo.lookupProductoOffline(code)
+                val indexRepo = BackupIndexRepository(this@ScanActivity)
+                val producto = indexRepo.lookupProductoOffline(code)
+                    ?: BackupRepository(this@ScanActivity).lookupProductoOffline(code)
                 if (producto == null) {
                     uiHandler.post {
                         showThrottledError("offline_not_found", "Producto no encontrado")
@@ -571,10 +748,10 @@ class ScanActivity : AppCompatActivity() {
     private fun configureBackend(): Boolean {
         val prefs = getSharedPreferences("ConfigLuz", MODE_PRIVATE)
         val host = prefs.getString("ip_servidor", null)
-        val port = prefs.getString("puerto_servidor", getString(com.example.verificadordepreciosluz.R.string.default_port))
+        val port = prefs.getString("puerto_servidor", getString(R.string.default_port))
 
         val sanitized = host?.let { NetworkUtils.sanitizeHost(it) }
-        val defaultPort = getString (com.example.verificadordepreciosluz.R.string.default_port)
+        val defaultPort = getString(R.string.default_port)
 
         if (sanitized.isNullOrBlank() || !NetworkUtils.validateHost(sanitized)) {
             goToConfig("Configura IP/puerto primero")
@@ -588,6 +765,7 @@ class ScanActivity : AppCompatActivity() {
         }
 
         val normalized = NetworkUtils.buildBaseUrl(sanitized, portToUse, defaultPort)
+        backendBaseUrl = normalized
         api = ApiClient.create(normalized, BuildConfig.DEBUG)
         return true
     }
@@ -621,13 +799,13 @@ class ScanActivity : AppCompatActivity() {
                     setOfflineMode(false)
                     resyncBackupIfOnline(service)
                 }
-                delay(5000)
+                delay(300000)
             }
         }
     }
 
     private suspend fun pingWithRetries(service: ApiService): Pair<Boolean, String?> {
-        val delays = listOf(0L, 1500L, 3000L)
+        val delays = listOf(0L, 1500L)
         var lastReason: String? = null
         for (waitMs in delays) {
             if (waitMs > 0) delay(waitMs)
@@ -686,16 +864,18 @@ class ScanActivity : AppCompatActivity() {
             binding.tvPriceCurrency.setTextColor(getColor(R.color.verde_luz))
         }
 
-        binding.resultOverlay.visibility = View.VISIBLE
+        binding.resultOverlay.isVisible = true
         pauseAnalyzer(true)
 
         // Ocultar automáticamente tras 3 segundos, limpiando anteriores
-        uiHandler.removeCallbacksAndMessages(null)
-        uiHandler.postDelayed({
-            binding.resultOverlay.visibility = View.GONE
+        resultHideRunnable?.let { uiHandler.removeCallbacks(it) }
+        resultHideRunnable = Runnable {
+            binding.resultOverlay.isVisible = false
             pauseAnalyzer(false)
             binding.etMockCode.requestFocus()
-        }, 4_000)
+            resetStandbyTimer()
+        }
+        uiHandler.postDelayed(resultHideRunnable!!, 4_000)
     }
 
     private fun finishWithMessage(msg: String) {
@@ -716,6 +896,7 @@ class ScanActivity : AppCompatActivity() {
     }
 
     private fun showThrottledError(key: String, message: String, minIntervalMs: Long = 2000) {
+        resetScanStateAfterError()
         val now = android.os.SystemClock.elapsedRealtime()
         if (key == lastErrorKey && (now - lastErrorAt) < minIntervalMs) return
         lastErrorKey = key
@@ -726,11 +907,11 @@ class ScanActivity : AppCompatActivity() {
         if (!overlayVisible) {
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         }
-        resetScanStateAfterError()
     }
 
     private fun resetScanStateAfterError() {
         pauseUntil = 0L
+        lastScanAt = 0L
         requestInFlight = false
         lastCode = null
         pauseAnalyzer(false)
@@ -762,43 +943,48 @@ class ScanActivity : AppCompatActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        val cm = connectivityManager ?: return
+        if (!networkCallbackRegistered) {
+            val request = NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            runCatching {
+                cm.registerNetworkCallback(request, networkCallback)
+                networkCallbackRegistered = true
+            }
+        }
+        handleNetworkChange(NetworkUtils.isNetworkAvailable(this))
+    }
+
+    override fun onStop() {
+        super.onStop()
+        val cm = connectivityManager ?: return
+        if (networkCallbackRegistered) {
+            runCatching {
+                cm.unregisterNetworkCallback(networkCallback)
+                networkCallbackRegistered = false
+            }
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         cameraExecutor.shutdown()
         tone?.release()
         tone = null
-        pingJob?.cancel()
         job.cancel()
         scope.cancel()
     }
 
     override fun onPause() {
         super.onPause()
-        // Pausa el monitor de ping cuando la actividad no está en primer plano
-        pingJob?.cancel()
     }
 
     override fun onResume() {
         super.onResume()
-        val hasNetwork = NetworkUtils.isNetworkAvailable(this)
-
-        if (!hasNetwork) {
-            setOfflineMode(true)
-            if (offlineBackup == null) {
-                offlineBackup = loadOfflineBackup()
-            }
-            updateOfflineTimestamp(offlineBackup)
-            binding.etMockCode.requestFocus()
-            return
-        }
-
-        // Reanuda el monitor de ping al volver al primer plano
-        if (api == null) {
-            // Si se perdió la instancia por cualquier motivo, intenta reconfigurar
-            if (!configureBackend()) return
-        }
         binding.etMockCode.requestFocus()
-        startPingMonitor()
     }
 
     private fun toggleMockPanel() {

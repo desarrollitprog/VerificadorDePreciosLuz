@@ -5,7 +5,6 @@ import android.util.Log
 import com.example.verificadordepreciosluz.data.network.ApiService
 import com.example.verificadordepreciosluz.data.network.ProductoResponse
 import com.google.gson.Gson
-import com.google.gson.JsonSyntaxException
 import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonReader
 import java.io.File
@@ -45,8 +44,8 @@ class BackupRepository(
         )
         val limit = 2000
 
-        val productos = mutableListOf<BackupProducto>()
-        val precios = mutableListOf<BackupPrecio>()
+        val productosMap = LinkedHashMap<String, BackupProducto>()
+        val preciosMap = LinkedHashMap<String, BackupPrecio>()
         val ofertas = mutableListOf<BackupOferta>()
         val ofertasVigencia = mutableListOf<BackupOfertaVigencia>()
         val ofertasSucursal = mutableListOf<BackupOfertaSucursal>()
@@ -64,8 +63,37 @@ class BackupRepository(
                     updatedAt = page.updatedAt
                 }
                 when (section) {
-                    "productos" -> productos.addAll(page.productos)
-                    "precios" -> precios.addAll(page.precios)
+                    "productos" -> {
+                        page.productos.forEach { item ->
+                            productosMap.putIfAbsent(item.sku, item)
+                        }
+                    }
+                    "precios" -> {
+                        page.precios.forEach { item ->
+                            val hasCosto = (item.costoBase ?: 0.0) > 0.0
+                            val hasPvpBase = (item.pvpBase ?: 0.0) > 0.0
+                            val hasPvpConversion = (item.pvpConversion ?: 0.0) > 0.0
+                            if (!hasCosto || (!hasPvpBase && !hasPvpConversion)) return@forEach
+
+                            val key = "${item.idProducto}:${item.idEmpaque}"
+                            val existing = preciosMap[key]
+                            if (existing == null) {
+                                preciosMap[key] = item
+                                return@forEach
+                            }
+
+                            val existingHasConversion = (existing.pvpConversion ?: 0.0) > 0.0
+                            val shouldReplace = when {
+                                hasPvpConversion && !existingHasConversion -> true
+                                hasPvpConversion == existingHasConversion ->
+                                    (item.pvpBase ?: 0.0) > (existing.pvpBase ?: 0.0)
+                                else -> false
+                            }
+                            if (shouldReplace) {
+                                preciosMap[key] = item
+                            }
+                        }
+                    }
                     "ofertas" -> ofertas.addAll(page.ofertas)
                     "ofertas_vigencia" -> ofertasVigencia.addAll(page.ofertasVigencia)
                     "ofertas_sucursal" -> ofertasSucursal.addAll(page.ofertasSucursal)
@@ -83,8 +111,8 @@ class BackupRepository(
 
         return BackupResponse(
             updatedAt = updatedAt,
-            productos = productos,
-            precios = precios,
+            productos = productosMap.values.toList(),
+            precios = preciosMap.values.toList(),
             ofertas = ofertas,
             ofertasVigencia = ofertasVigencia,
             ofertasSucursal = ofertasSucursal,
@@ -137,8 +165,8 @@ class BackupRepository(
                 impuestosProducto = readSection(FILE_IMPUESTOS),
                 tasasImpuesto = readSection(FILE_TASAS),
             )
-        } catch (e: JsonSyntaxException) {
-            Log.e("BackupRepository", "Backup corrupto, eliminando secciones", e)
+        } catch (e: Exception) {
+            Log.e("BackupRepository", "Backup corrupto o incompleto, eliminando secciones", e)
             deleteAllSections()
             null
         }
@@ -314,50 +342,84 @@ class BackupRepository(
     private inline fun <reified T> streamArray(fileName: String, crossinline onItem: (T) -> Unit) {
         val file = File(context.filesDir, fileName)
         if (!file.exists()) return
-        file.reader().use { reader ->
-            val jsonReader = JsonReader(reader)
-            val adapter = gson.getAdapter(T::class.java)
-            jsonReader.beginArray()
-            while (jsonReader.hasNext()) {
-                val item = adapter.read(jsonReader)
-                if (item != null) {
-                    onItem(item)
+        try {
+            file.reader().use { reader ->
+                val jsonReader = JsonReader(reader)
+                val adapter = gson.getAdapter(T::class.java)
+                jsonReader.beginArray()
+                while (jsonReader.hasNext()) {
+                    val item = adapter.read(jsonReader)
+                    if (item != null) {
+                        onItem(item)
+                    }
                 }
+                jsonReader.endArray()
             }
-            jsonReader.endArray()
+        } catch (e: Exception) {
+            Log.e("BackupRepository", "Sección corrupta $fileName, eliminando archivo", e)
+            file.delete()
         }
     }
 
     private fun writeMeta(updatedAt: String?) {
-        val file = File(context.filesDir, FILE_META)
-        file.writer().use { writer ->
+        writeJsonAtomic(FILE_META) { writer ->
             gson.toJson(BackupMeta(updatedAt), writer)
-            writer.flush()
         }
     }
 
     private fun readMeta(): String? {
         val file = File(context.filesDir, FILE_META)
         if (!file.exists()) return null
-        file.reader().use { reader ->
-            return gson.fromJson(reader, BackupMeta::class.java)?.updatedAt
+        return try {
+            file.reader().use { reader ->
+                gson.fromJson(reader, BackupMeta::class.java)?.updatedAt
+            }
+        } catch (e: Exception) {
+            Log.e("BackupRepository", "Meta corrupta, eliminando archivo", e)
+            file.delete()
+            null
         }
     }
 
     private fun <T> writeSection(fileName: String, data: List<T>) {
-        val file = File(context.filesDir, fileName)
-        file.writer().use { writer ->
+        writeJsonAtomic(fileName) { writer ->
             gson.toJson(data, writer)
-            writer.flush()
         }
     }
 
     private inline fun <reified T> readSection(fileName: String): List<T> {
         val file = File(context.filesDir, fileName)
         if (!file.exists()) return emptyList()
-        file.reader().use { reader ->
-            val type = object : TypeToken<List<T>>() {}.type
-            return gson.fromJson(reader, type)
+        return try {
+            file.reader().use { reader ->
+                val type = object : TypeToken<List<T>>() {}.type
+                gson.fromJson(reader, type)
+            }
+        } catch (e: Exception) {
+            Log.e("BackupRepository", "Sección corrupta $fileName, eliminando archivo", e)
+            file.delete()
+            emptyList()
+        }
+    }
+
+    private inline fun writeJsonAtomic(fileName: String, writeBlock: (java.io.Writer) -> Unit) {
+        val dir = context.filesDir
+        val target = File(dir, fileName)
+        val temp = File(dir, "$fileName.tmp")
+        try {
+            temp.writer().use { writer ->
+                writeBlock(writer)
+                writer.flush()
+            }
+            if (target.exists()) {
+                target.delete()
+            }
+            if (!temp.renameTo(target)) {
+                throw IllegalStateException("No se pudo reemplazar $fileName")
+            }
+        } catch (e: Exception) {
+            Log.e("BackupRepository", "Error guardando $fileName de forma atómica", e)
+            temp.delete()
         }
     }
 

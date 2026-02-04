@@ -32,6 +32,16 @@ data class ProductoResponse(
     @SerializedName("precio_final_con_iva") val precioFinalConIva: Double?
 )
 
+data class BannerResponse(
+    val id: Int,
+    val titulo: String?,
+    val tipo: String,
+    val url: String,
+    @SerializedName("duracion_seg") val duracionSeg: Int?,
+    val prioridad: Int?,
+    @SerializedName("updated_at") val updatedAt: String?
+)
+
 interface ApiService {
     @GET("ping")
     suspend fun ping(@Query("device_id") deviceId: String): PingResponse
@@ -45,6 +55,9 @@ interface ApiService {
 
     @GET("consultar/{codigo}")
     suspend fun consultar(@Path("codigo") codigo: String): ProductoResponse
+
+    @GET("banners")
+    suspend fun banners(): List<BannerResponse>
 }
 
 object ApiClient {

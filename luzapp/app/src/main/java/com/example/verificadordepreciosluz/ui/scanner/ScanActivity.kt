@@ -103,6 +103,7 @@ class ScanActivity : AppCompatActivity() {
     private var backupReady = false
     private var backupReadyNotified = false
     private val backupMaxAgeMs = (2.5 * 60 * 60 * 1000L).toLong()
+    private var cameraProvider: ProcessCameraProvider? = null
 
     // ===== PUBLICIDAD / STANDBY =====
     // Tiempo máximo para refrescar banners (2.5h)
@@ -160,6 +161,7 @@ class ScanActivity : AppCompatActivity() {
             override fun handleOnBackPressed() {
                 if (!backupReady) {
                     Toast.makeText(this@ScanActivity, "Respaldo no está listo. Espera la sincronización", Toast.LENGTH_SHORT).show()
+                    binding.etMockCode.requestFocus()
                     return
                 }
                 isEnabled = false
@@ -221,6 +223,7 @@ class ScanActivity : AppCompatActivity() {
         }
         if (offlineBackup == null) {
             Toast.makeText(this, "Sin respaldo local. Conéctate para sincronizar", Toast.LENGTH_LONG).show()
+            binding.etMockCode.requestFocus()
         }
     }
 
@@ -301,6 +304,7 @@ class ScanActivity : AppCompatActivity() {
     private fun startCamera() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
         cameraProviderFuture.addListener({
+            cameraProvider = cameraProviderFuture.get()
             val cameraProvider = cameraProviderFuture.get()
 
             val preview = Preview.Builder().build().also {
@@ -366,6 +370,7 @@ class ScanActivity : AppCompatActivity() {
         lastMockSubmitAt = now
         mockIdleRunnable?.let { uiHandler.removeCallbacks(it) }
         pendingMockText = null
+        resetStandbyTimer() // Reinicia el timer de publicidad también en mock
         maybeProcessCode(code)
         binding.etMockCode.text?.clear()
     }
@@ -608,10 +613,12 @@ class ScanActivity : AppCompatActivity() {
     private fun updateOfflineTimestamp(backup: BackupResponse?) {
         val updatedAt = backup?.updatedAt
         val formatted = formatIsoToReadable(updatedAt) ?: "-"
-        binding.tvOfflineUpdated.text = getString(
-            R.string.offline_last_update_format,
-            formatted
-        )
+        runOnUiThread {
+            binding.tvOfflineUpdated.text = getString(
+                R.string.offline_last_update_format,
+                formatted
+            )
+        }
     }
 
     // 2.4) Validar antigüedad del respaldo local (máx 24h)
@@ -650,6 +657,7 @@ class ScanActivity : AppCompatActivity() {
 
     private fun onBarcodeDetected(code: String) {
         stopStandbyCarousel()
+        resetStandbyTimer() // Reinicia el timer de publicidad cada vez que se escanea
         if (!isNetworkAvailable) {
             if (!offlineMode) {
                 setOfflineMode(true)
@@ -907,6 +915,8 @@ class ScanActivity : AppCompatActivity() {
         if (!overlayVisible) {
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         }
+        // Asegura que el input recupere el foco tras error
+        binding.etMockCode.requestFocus()
     }
 
     private fun resetScanStateAfterError() {
@@ -972,6 +982,7 @@ class ScanActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        cameraProvider?.unbindAll()
         cameraExecutor.shutdown()
         tone?.release()
         tone = null
@@ -981,10 +992,12 @@ class ScanActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        cameraProvider?.unbindAll()
     }
 
     override fun onResume() {
         super.onResume()
+        startCamera()
         binding.etMockCode.requestFocus()
     }
 

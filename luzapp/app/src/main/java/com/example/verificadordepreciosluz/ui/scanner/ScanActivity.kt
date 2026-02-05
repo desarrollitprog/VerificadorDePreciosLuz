@@ -915,6 +915,7 @@ class ScanActivity : AppCompatActivity() {
         requestInFlight = false
         lastCode = null
         pauseAnalyzer(false)
+        resetStandbyTimer() // Reinicia el temporizador de standby para que vuelva la publicidad
     }
 
     private fun feedbackSuccess() {

@@ -207,11 +207,16 @@ def armar_respuesta(
     }
 
 
+from fastapi import Query
+from typing import Optional
+from dateutil.parser import isoparse
+
 @app.get("/backup")
 async def backup_data(
     section: str = "productos",
     offset: int = 0,
     limit: int = 2000,
+    updated_since: Optional[str] = Query(None, description="ISO8601 timestamp para cambios incrementales"),
     db: AsyncSession = Depends(database.get_db),
     db_erp: AsyncSession = Depends(database.get_db_erp),
 ):
@@ -233,7 +238,7 @@ async def backup_data(
     if section not in allowed_sections:
         raise HTTPException(status_code=400, detail="Sección de backup inválida")
 
-    logger.info("/backup section=%s offset=%s limit=%s", section, offset, limit)
+    logger.info("/backup section=%s offset=%s limit=%s updated_since=%s", section, offset, limit, updated_since)
 
     productos: list[models.Producto] = []
     precios: list[models.ProductoPrecio] = []
@@ -244,24 +249,27 @@ async def backup_data(
     impuestos_producto: list[models.ProductosXImpuestos] = []
     tasas_impuesto: list[models.TasaImpuesto] = []
 
+    # Soporte incremental solo para productos y precios (ejemplo)
     if section == "productos":
-        productos = (
-            await db.execute(
-                select(models.Producto)
-                .order_by(models.Producto.IdProducto)
-                .offset(offset)
-                .limit(limit)
-            )
-        ).scalars().all()
+        stmt = select(models.Producto).order_by(models.Producto.IdProducto)
+        if updated_since:
+            try:
+                dt = isoparse(updated_since)
+                stmt = stmt.where(models.Producto.UpdatedAt > dt)
+            except Exception:
+                raise HTTPException(status_code=400, detail="updated_since inválido")
+        stmt = stmt.offset(offset).limit(limit)
+        productos = (await db.execute(stmt)).scalars().all()
     elif section == "precios":
-        precios = (
-            await db.execute(
-                select(models.ProductoPrecio)
-                .order_by(models.ProductoPrecio.IdProductosXEmpaqueXSucursal)
-                .offset(offset)
-                .limit(limit)
-            )
-        ).scalars().all()
+        stmt = select(models.ProductoPrecio).order_by(models.ProductoPrecio.IdProductosXEmpaqueXSucursal)
+        if updated_since:
+            try:
+                dt = isoparse(updated_since)
+                stmt = stmt.where(models.ProductoPrecio.FechaModifica > dt)
+            except Exception:
+                raise HTTPException(status_code=400, detail="updated_since inválido")
+        stmt = stmt.offset(offset).limit(limit)
+        precios = (await db.execute(stmt)).scalars().all()
     elif section == "ofertas":
         ofertas = (
             await db.execute(
@@ -352,6 +360,8 @@ async def backup_data(
                 "IdProducto": p.IdProducto,
                 "SKU": p.SKU,
                 "Nombre": p.Nombre,
+                # Solo si existe el campo UpdatedAt
+                **({"UpdatedAt": p.UpdatedAt.isoformat()} if hasattr(p, "UpdatedAt") and p.UpdatedAt else {})
             }
             for p in productos
         ],
@@ -364,6 +374,7 @@ async def backup_data(
                 "PVPBase": float(pr.PVPBase) if pr.PVPBase is not None else None,
                 "PVPConversion": float(pr.PVPConversion) if pr.PVPConversion is not None else None,
                 "IndIVA": pr.IndIVA,
+                **({"FechaModifica": pr.FechaModifica.isoformat()} if hasattr(pr, "FechaModifica") and pr.FechaModifica else {})
             }
             for pr in precios
         ],

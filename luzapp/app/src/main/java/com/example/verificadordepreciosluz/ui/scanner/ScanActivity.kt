@@ -3,7 +3,6 @@
 package com.example.verificadordepreciosluz.ui.scanner
 
 import android.Manifest
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -40,10 +39,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
-import androidx.core.content.edit
-import androidx.core.view.isVisible
-import androidx.core.view.WindowCompat
-import androidx.core.widget.addTextChangedListener
+import android.provider.Settings
 import com.example.verificadordepreciosluz.MainActivity
 import com.example.verificadordepreciosluz.BuildConfig
 import com.example.verificadordepreciosluz.data.network.ApiClient
@@ -71,11 +67,12 @@ import java.io.IOException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.net.SocketTimeoutException
+import androidx.core.view.WindowCompat
+import androidx.core.view.isVisible
 
 @OptIn(ExperimentalGetImage::class)
 class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListener {
-    companion object { private const val TAG = "ScanActivity" }
-
+    // Variables globales y binding
     private lateinit var binding: ActivityScanBinding
     private lateinit var cameraExecutor: ExecutorService
     private var requestInFlight = false
@@ -100,38 +97,21 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private var networkCallbackRegistered = false
     private var connectivityManager: ConnectivityManager? = null
     private var offlineBackup: BackupResponse? = null
-    private var backupReady = false
     private var backupReadyNotified = false
     private val backupMaxAgeMs = (2.5 * 60 * 60 * 1000L).toLong()
     private var cameraProvider: ProcessCameraProvider? = null
-
-    // ===== PUBLICIDAD / STANDBY =====
-    // Tiempo máximo para refrescar banners (2.5h)
     private val bannerMaxAgeMs = (2.5 * 60 * 60 * 1000L).toLong()
-    // Base URL para descargar media de banners
     private var backendBaseUrl: String? = null
-    // Tiempo de inactividad para entrar en modo standby
     private val standbyIdleMs = 15_000L
-    // Lista cacheada de banners a reproducir
     private var standbyItems: List<BannerCacheItem> = emptyList()
-    // Índice actual del carrusel
     private var standbyIndex = 0
-    // Estado del carrusel (activo/inactivo)
     private var standbyActive = false
-    // Timer que dispara el modo standby
     private var standbyTimerRunnable: Runnable? = null
-    // Timer por diapositiva (imágenes)
     private var standbySlideRunnable: Runnable? = null
     private var resultHideRunnable: Runnable? = null
     private val deviceId: String by lazy {
-        val prefs = getSharedPreferences("ConfigLuz", MODE_PRIVATE)
-        val existing = prefs.getString("device_id", null)
-        if (!existing.isNullOrBlank()) return@lazy existing
-        val generated = java.util.UUID.randomUUID().toString()
-        prefs.edit { putString("device_id", generated) }
-        generated
+        Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
     }
-
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
             handleNetworkChange(true)
@@ -148,9 +128,13 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     }
 
     private val requestPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) startCamera() else finishWithMessage("Permiso de cámara denegado")
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
+            if (isGranted) startCamera() else finishWithMessage("Permiso de cámara denegado")
         }
+    companion object { private const val TAG = "ScanActivity" }
+
+    // Declarar backupReady como propiedad de la clase, antes de cualquier uso
+    private var backupReady: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -170,22 +154,24 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         })
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        connectivityManager = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
         cameraExecutor = Executors.newSingleThreadExecutor()
         tone = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80)
 
+        val forceOffline = intent.getBooleanExtra("force_offline_mode", false)
         val hasNetwork = NetworkUtils.isNetworkAvailable(this)
         isNetworkAvailable = hasNetwork
         setBackupReady(BackupRepository(this).getUpdatedAt() != null)
 
-        if (hasNetwork) {
+        if (forceOffline) {
+            configureBackend()
+            startOfflineModeOnLaunch()
+        } else if (hasNetwork) {
             if (!configureBackend()) return
             syncBackupOnStart()
             syncBannersOnStart()
         } else {
-            // Configura backend aunque no haya red para poder recuperar conexión luego.
             configureBackend()
-            // Inicia modo offline inmediato.
             startOfflineModeOnLaunch()
         }
 
@@ -202,6 +188,26 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         applyImmersiveMode()
         hideKeyboard()
         excludeSystemGestures()
+    }
+
+    // Implementación de métodos de la interfaz BackupProgressListener
+    override fun onProgress(section: String, offset: Int, received: Int, total: Int) {
+        runOnUiThread {
+            val progressContainer = findViewById<android.widget.FrameLayout>(R.id.progressContainer)
+            val progressBar = findViewById<android.widget.ProgressBar>(R.id.progressBar)
+            val progressText = findViewById<android.widget.TextView>(R.id.progressText)
+            val percent = if (total > 0) (received * 100 / total) else 0
+            progressBar.max = total
+            progressBar.progress = received
+            progressText.text = getString(R.string.progress_section_percent, section, percent)
+            progressContainer.visibility = View.VISIBLE
+        }
+    }
+    override fun onError(section: String, error: Throwable) {
+        runOnUiThread {
+            findViewById<android.widget.FrameLayout>(R.id.progressContainer).visibility = View.GONE
+            Toast.makeText(this, "Error en $section: ${error.localizedMessage}", Toast.LENGTH_SHORT).show()
+        }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -227,6 +233,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         }
     }
 
+    // Reemplazar en setupMockInput el addTextChangedListener por un TextWatcher explícito
     private fun setupMockInput() {
         binding.btnMockScan.setOnClickListener {
             val code = binding.etMockCode.text?.toString()?.trim().orEmpty()
@@ -242,21 +249,21 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 false
             }
         }
-
-        binding.etMockCode.addTextChangedListener { editable ->
-            val text = editable?.toString()?.trim().orEmpty()
-            mockIdleRunnable?.let { uiHandler.removeCallbacks(it) }
-
-            // Solo programa disparo si tiene longitud válida
-            pendingMockText = if (text.length == 8 || text.length == 12 || text.length == 13) text else null
-
-            pendingMockText?.let { candidate ->
-                mockIdleRunnable = Runnable {
-                    submitMockIfValid(candidate)
+        binding.etMockCode.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(editable: android.text.Editable?) {
+                val text = editable?.toString()?.trim().orEmpty()
+                mockIdleRunnable?.let { uiHandler.removeCallbacks(it) }
+                pendingMockText = if (text.length == 8 || text.length == 12 || text.length == 13) text else null
+                pendingMockText?.let { candidate ->
+                    mockIdleRunnable = Runnable {
+                        submitMockIfValid(candidate)
+                    }
+                    uiHandler.postDelayed(mockIdleRunnable!!, 120)
                 }
-                uiHandler.postDelayed(mockIdleRunnable!!, 120)
             }
-        }
+        })
     }
 
     private fun ensurePermissionAndStart() {
@@ -393,16 +400,16 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         // Ejecuta la actualización visual SIEMPRE en el hilo principal.
         if (Looper.getMainLooper().isCurrentThread) {
             // Actualiza el indicador principal de modo offline.
-            binding.tvOfflineIndicator.isVisible = enabled
+            binding.tvOfflineIndicator.visibility = if (enabled) View.VISIBLE else View.GONE
             // Actualiza la etiqueta de última sincronización del backup.
-            binding.tvOfflineUpdated.isVisible = enabled
+            binding.tvOfflineUpdated.visibility = if (enabled) View.VISIBLE else View.GONE
         } else {
             // Si estamos en un hilo de fondo, re-enviamos la UI al main thread.
             runOnUiThread {
                 // Actualiza el indicador principal de modo offline.
-                binding.tvOfflineIndicator.isVisible = enabled
+                binding.tvOfflineIndicator.visibility = if (enabled) View.VISIBLE else View.GONE
                 // Actualiza la etiqueta de última sincronización del backup.
-                binding.tvOfflineUpdated.isVisible = enabled
+                binding.tvOfflineUpdated.visibility = if (enabled) View.VISIBLE else View.GONE
             }
         }
     }
@@ -691,17 +698,27 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                     pauseUntil = android.os.SystemClock.elapsedRealtime() + 4000
                 }
             } catch (e: Exception) {
-                uiHandler.post {
-                    val (key, msg) = when (e) {
-                        is HttpException -> when (e.code()) {
-                            404 -> "404" to "Producto no encontrado"
-                            in 500..599 -> "5xx" to "Error del servidor (${e.code()})"
-                            else -> "4xx" to "Error HTTP (${e.code()})"
-                        }
-                        is SocketTimeoutException -> "timeout" to "Tiempo de Conexion agotado"
-                        is IOException -> "network" to "Fallo de red o conexión"
-                        else -> "unknown" to "Error inesperado"
+                var setOffline = false
+                val (key, msg) = when (e) {
+                    is HttpException -> when (e.code()) {
+                        404 -> "404" to "Producto no encontrado"
+                        in 500..599 -> "5xx" to "Error del servidor (${e.code()})"
+                        else -> "4xx" to "Error HTTP (${e.code()})"
                     }
+                    is SocketTimeoutException -> {
+                        setOffline = true
+                        "timeout" to "Tiempo de Conexion agotado"
+                    }
+                    is IOException -> {
+                        setOffline = true
+                        "network" to "Fallo de red o conexión"
+                    }
+                    else -> "unknown" to "Error inesperado"
+                }
+                if (setOffline && !offlineMode) {
+                    setOfflineMode(true)
+                }
+                uiHandler.post {
                     showThrottledError(key, msg)
                 }
             } finally {
@@ -876,13 +893,13 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             binding.tvPriceCurrency.setTextColor(getColor(R.color.verde_luz))
         }
 
-        binding.resultOverlay.isVisible = true
+        binding.resultOverlay.visibility = View.VISIBLE
         pauseAnalyzer(true)
 
         // Ocultar automáticamente tras 3 segundos, limpiando anteriores
         resultHideRunnable?.let { uiHandler.removeCallbacks(it) }
         resultHideRunnable = Runnable {
-            binding.resultOverlay.isVisible = false
+            binding.resultOverlay.visibility = View.GONE
             pauseAnalyzer(false)
             binding.etMockCode.requestFocus()
             resetStandbyTimer()
@@ -914,7 +931,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         lastErrorKey = key
         lastErrorAt = now
 
-        val overlayVisible = binding.resultOverlay.visibility == View.VISIBLE
+        val overlayVisible = binding.resultOverlay.isVisible
         Log.w(TAG, "scan_error key=$key overlay=$overlayVisible msg=$message")
         if (!overlayVisible) {
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
@@ -1019,29 +1036,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         }
     }
 
-    override fun onProgress(section: String, offset: Int, received: Int, total: Int) {
-        runOnUiThread {
-            val progressContainer = findViewById<android.widget.FrameLayout>(R.id.progressContainer)
-            val progressBar = findViewById<android.widget.ProgressBar>(R.id.progressBar)
-            val progressText = findViewById<android.widget.TextView>(R.id.progressText)
-            progressContainer.visibility = View.VISIBLE
-            // Calcula el porcentaje de avance de la sección actual
-            val percent = if (total > 0) (received * 100 / total) else 0
-            progressBar.progress = percent
-            progressText.text = "$section: $percent%"
-        }
-    }
-
-    override fun onError(section: String, error: Throwable) {
-        runOnUiThread {
-            findViewById<android.widget.FrameLayout>(R.id.progressContainer).visibility = View.GONE
-            Toast.makeText(this, "Error en $section: ${error.localizedMessage}", Toast.LENGTH_SHORT).show()
-        }
-    }
-
+    // Implementar hideProgress antes de cualquier uso
     private fun hideProgress() {
-        runOnUiThread {
-            findViewById<android.widget.FrameLayout>(R.id.progressContainer).visibility = View.GONE
-        }
+        // Aquí puedes ocultar un ProgressBar o similar
     }
 }

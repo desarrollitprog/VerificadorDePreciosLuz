@@ -222,7 +222,7 @@ async def backup_data(
 ):
     updated_at = datetime.utcnow().isoformat() + "Z"
 
-    limit = max(1000, min(limit, 5000))
+    limit = max(1, min(limit or 1000, 5000))
     offset = max(0, offset)
 
     allowed_sections = {
@@ -249,15 +249,9 @@ async def backup_data(
     impuestos_producto: list[models.ProductosXImpuestos] = []
     tasas_impuesto: list[models.TasaImpuesto] = []
 
-    # Soporte incremental solo para productos y precios (ejemplo)
+    # Soporte incremental solo para precios (ejemplo)
     if section == "productos":
         stmt = select(models.Producto).order_by(models.Producto.IdProducto)
-        if updated_since:
-            try:
-                dt = isoparse(updated_since)
-                stmt = stmt.where(models.Producto.UpdatedAt > dt)
-            except Exception:
-                raise HTTPException(status_code=400, detail="updated_since inválido")
         stmt = stmt.offset(offset).limit(limit)
         productos = (await db.execute(stmt)).scalars().all()
     elif section == "precios":
@@ -359,9 +353,7 @@ async def backup_data(
             {
                 "IdProducto": p.IdProducto,
                 "SKU": p.SKU,
-                "Nombre": p.Nombre,
-                # Solo si existe el campo UpdatedAt
-                **({"UpdatedAt": p.UpdatedAt.isoformat()} if hasattr(p, "UpdatedAt") and p.UpdatedAt else {})
+                "Nombre": p.Nombre
             }
             for p in productos
         ],

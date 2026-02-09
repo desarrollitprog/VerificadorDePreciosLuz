@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.example.verificadordepreciosluz.data.network.ApiService
 import com.example.verificadordepreciosluz.data.network.ProductoResponse
+import com.example.verificadordepreciosluz.util.SyncPrefs
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonReader
@@ -18,97 +19,115 @@ class BackupRepository(
 ) {
     private val gson = Gson()
 
-    suspend fun downloadAndSaveBackup(): Result<BackupResponse> {
+    interface BackupProgressListener {
+        fun onProgress(section: String, offset: Int, received: Int, total: Int)
+        fun onError(section: String, error: Throwable)
+    }
+
+    suspend fun downloadAndSaveBackup(progressListener: BackupProgressListener? = null): Result<BackupResponse> {
         return try {
             Log.i("BackupRepository", "Iniciando descarga de backup")
             val service = api ?: return Result.failure(IllegalStateException("ApiService no disponible"))
-            val backup = downloadPagedBackup(service)
+            val backup = downloadPagedBackup(service, progressListener)
             saveBackup(backup)
             Result.success(backup)
         } catch (e: Exception) {
             Log.e("BackupRepository", "Error descargando backup", e)
+            progressListener?.onError("general", e)
             Result.failure(e)
         }
     }
 
-    private suspend fun downloadPagedBackup(service: ApiService): BackupResponse {
-        val sections = listOf(
-            "productos",
-            "precios",
-            "ofertas",
-            "ofertas_vigencia",
-            "ofertas_sucursal",
-            "ofertas_detalles",
-            "impuestos_producto",
-            "tasas_impuesto",
-        )
-        val limit = 2000
-
-        val productosMap = LinkedHashMap<String, BackupProducto>()
-        val preciosMap = LinkedHashMap<String, BackupPrecio>()
+    private suspend fun downloadPagedBackup(
+        service: ApiService,
+        progressListener: BackupProgressListener? = null
+    ): BackupResponse {
+        val productosMap = mutableMapOf<String, BackupProducto>()
+        val preciosMap = mutableMapOf<String, BackupPrecio>()
         val ofertas = mutableListOf<BackupOferta>()
         val ofertasVigencia = mutableListOf<BackupOfertaVigencia>()
         val ofertasSucursal = mutableListOf<BackupOfertaSucursal>()
         val ofertasDetalles = mutableListOf<BackupOfertaDetalle>()
         val impuestosProducto = mutableListOf<BackupImpuestoProducto>()
         val tasasImpuesto = mutableListOf<BackupTasaImpuesto>()
-
         var updatedAt: String? = null
-
+        val sections = listOf(
+            "productos", "precios", "ofertas", "ofertas_vigencia", "ofertas_sucursal",
+            "ofertas_detalles", "impuestos_producto", "tasas_impuesto"
+        )
+        val limit = 1000
+        var maxFechaModifica: String? = null
         for (section in sections) {
+            var totalItems = 0
             var offset = 0
-            while (true) {
-                val page = service.backup(section = section, offset = offset, limit = limit)
-                if (updatedAt == null) {
-                    updatedAt = page.updatedAt
-                }
-                when (section) {
-                    "productos" -> {
-                        page.productos.forEach { item ->
-                            productosMap.putIfAbsent(item.sku, item)
-                        }
+            do {
+                try {
+                    val updatedSince = if (section == "precios") SyncPrefs.getFechaModifica(context) else null
+                    val page = if (section == "precios") {
+                        service.getBackupSection(section, offset, limit, updatedSince)
+                    } else {
+                        service.getBackupSection(section, offset, limit, null)
                     }
-                    "precios" -> {
-                        page.precios.forEach { item ->
-                            val hasCosto = (item.costoBase ?: 0.0) > 0.0
-                            val hasPvpBase = (item.pvpBase ?: 0.0) > 0.0
-                            val hasPvpConversion = (item.pvpConversion ?: 0.0) > 0.0
-                            if (!hasCosto || (!hasPvpBase && !hasPvpConversion)) return@forEach
-
-                            val key = "${item.idProducto}:${item.idEmpaque}"
-                            val existing = preciosMap[key]
-                            if (existing == null) {
-                                preciosMap[key] = item
-                                return@forEach
-                            }
-
-                            val existingHasConversion = (existing.pvpConversion ?: 0.0) > 0.0
-                            val shouldReplace = when {
-                                hasPvpConversion && !existingHasConversion -> true
-                                hasPvpConversion == existingHasConversion ->
-                                    (item.pvpBase ?: 0.0) > (existing.pvpBase ?: 0.0)
-                                else -> false
-                            }
-                            if (shouldReplace) {
-                                preciosMap[key] = item
-                            }
+                    if (updatedAt == null) updatedAt = page.updatedAt
+                    when (section) {
+                        "productos" -> {
+                            page.productos.forEach { item -> productosMap.putIfAbsent(item.sku, item) }
+                            totalItems += page.productos.size
                         }
+                        "precios" -> {
+                            page.precios.forEach { item ->
+                                val hasCosto = (item.costoBase ?: 0.0) > 0.0
+                                val hasPvpBase = (item.pvpBase ?: 0.0) > 0.0
+                                val hasPvpConversion = (item.pvpConversion ?: 0.0) > 0.0
+                                if (!hasCosto || (!hasPvpBase && !hasPvpConversion)) return@forEach
+                                val key = "${item.idProducto}:${item.idEmpaque}"
+                                val existing = preciosMap[key]
+                                if (existing == null) {
+                                    preciosMap[key] = item
+                                } else {
+                                    val existingHasConversion = (existing.pvpConversion ?: 0.0) > 0.0
+                                    val shouldReplace = when {
+                                        hasPvpConversion && !existingHasConversion -> true
+                                        hasPvpConversion == existingHasConversion ->
+                                            (item.pvpBase ?: 0.0) > (existing.pvpBase ?: 0.0)
+                                        else -> false
+                                    }
+                                    if (shouldReplace) {
+                                        preciosMap[key] = item
+                                    }
+                                }
+                                // Actualizar maxFechaModifica
+                                if (!item.fechaModifica.isNullOrBlank()) {
+                                    if (maxFechaModifica == null || item.fechaModifica > maxFechaModifica) {
+                                        maxFechaModifica = item.fechaModifica
+                                    }
+                                }
+                            }
+                            totalItems += page.precios.size
+                        }
+                        "ofertas" -> { ofertas.addAll(page.ofertas); totalItems += page.ofertas.size }
+                        "ofertas_vigencia" -> { ofertasVigencia.addAll(page.ofertasVigencia); totalItems += page.ofertasVigencia.size }
+                        "ofertas_sucursal" -> { ofertasSucursal.addAll(page.ofertasSucursal); totalItems += page.ofertasSucursal.size }
+                        "ofertas_detalles" -> { ofertasDetalles.addAll(page.ofertasDetalles); totalItems += page.ofertasDetalles.size }
+                        "impuestos_producto" -> { impuestosProducto.addAll(page.impuestosProducto); totalItems += page.impuestosProducto.size }
+                        "tasas_impuesto" -> { tasasImpuesto.addAll(page.tasasImpuesto); totalItems += page.tasasImpuesto.size }
                     }
-                    "ofertas" -> ofertas.addAll(page.ofertas)
-                    "ofertas_vigencia" -> ofertasVigencia.addAll(page.ofertasVigencia)
-                    "ofertas_sucursal" -> ofertasSucursal.addAll(page.ofertasSucursal)
-                    "ofertas_detalles" -> ofertasDetalles.addAll(page.ofertasDetalles)
-                    "impuestos_producto" -> impuestosProducto.addAll(page.impuestosProducto)
-                    "tasas_impuesto" -> tasasImpuesto.addAll(page.tasasImpuesto)
+                    val received = countSectionItems(page, section)
+                    progressListener?.onProgress(section, offset, received, totalItems)
+                    Log.i("BackupRepository", "backup section=$section offset=$offset received=$received")
+                    if (received < limit) break
+                    offset += limit
+                } catch (e: Exception) {
+                    progressListener?.onError(section, e)
+                    throw e
                 }
-
-                val received = countSectionItems(page, section)
-                Log.i("BackupRepository", "backup section=$section offset=$offset received=$received")
-                if (received < limit) break
-                offset += limit
-            }
+            } while (true)
         }
-
+        // Guardar el máximo FechaModifica de precios si se descargó la sección
+        if (maxFechaModifica != null) {
+            SyncPrefs.saveFechaModifica(context, maxFechaModifica)
+            Log.i("BackupRepository", "[downloadPagedBackup] Guardada maxFechaModifica precios: $maxFechaModifica")
+        }
         return BackupResponse(
             updatedAt = updatedAt,
             productos = productosMap.values.toList(),

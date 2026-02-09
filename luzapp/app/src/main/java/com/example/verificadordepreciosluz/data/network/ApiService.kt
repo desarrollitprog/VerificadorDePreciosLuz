@@ -58,6 +58,14 @@ interface ApiService {
 
     @GET("banners")
     suspend fun banners(): List<BannerResponse>
+
+    @GET("backup")
+    suspend fun getBackupSection(
+        @Query("section") section: String,
+        @Query("offset") offset: Int,
+        @Query("limit") limit: Int,
+        @Query("updated_since") updatedSince: String? = null
+    ): BackupResponse
 }
 
 object ApiClient {

@@ -40,6 +40,7 @@ data class BackupPrecio(
     @SerializedName("PVPBase") val pvpBase: Double?,
     @SerializedName("PVPConversion") val pvpConversion: Double?,
     @SerializedName("IndIVA") val indIva: Boolean?,
+    @SerializedName("FechaModifica") val fechaModifica: String? // <-- agregado
 )
 
 data class BackupOferta(

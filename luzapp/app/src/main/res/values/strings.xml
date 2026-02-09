@@ -26,4 +26,5 @@
     <string name="store_default_name">Sede Luz</string>
     <string name="offline_indicator">• Offline</string>
     <string name="offline_last_update_format">Última actualización: %1$s</string>
+    <string name="progress_percent_default">0%</string>
 </resources>

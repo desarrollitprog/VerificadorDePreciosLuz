@@ -73,7 +73,7 @@ import java.util.concurrent.Executors
 import java.net.SocketTimeoutException
 
 @OptIn(ExperimentalGetImage::class)
-class ScanActivity : AppCompatActivity() {
+class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListener {
     companion object { private const val TAG = "ScanActivity" }
 
     private lateinit var binding: ActivityScanBinding
@@ -452,7 +452,7 @@ class ScanActivity : AppCompatActivity() {
                     return@launch
                 }
                 val repo = BackupRepository(this@ScanActivity, service)
-                val result = repo.downloadAndSaveBackup()
+                val result = repo.downloadAndSaveBackup(this@ScanActivity)
                 Log.i(TAG, "Resultado backup en ScanActivity: ${result.isSuccess}")
                 offlineBackup = loadOfflineBackup()
                 setBackupReady(offlineBackup != null)
@@ -462,6 +462,8 @@ class ScanActivity : AppCompatActivity() {
                 uiHandler.post { updateOfflineTimestamp(offlineBackup) }
             } catch (e: Exception) {
                 Log.e(TAG, "Error al sincronizar backup", e)
+            } finally {
+                hideProgress()
             }
         }
     }
@@ -579,7 +581,7 @@ class ScanActivity : AppCompatActivity() {
                     return@launch
                 }
                 val repo = BackupRepository(this@ScanActivity, service)
-                repo.downloadAndSaveBackup()
+                repo.downloadAndSaveBackup(this@ScanActivity)
                 offlineBackup = loadOfflineBackup()
                 setBackupReady(offlineBackup != null)
                 scope.launch {
@@ -588,6 +590,8 @@ class ScanActivity : AppCompatActivity() {
                 uiHandler.post { updateOfflineTimestamp(offlineBackup) }
             } catch (_: Exception) {
                 // En caso de fallo, mantener el respaldo existente
+            } finally {
+                hideProgress()
             }
         }
     }
@@ -1012,6 +1016,32 @@ class ScanActivity : AppCompatActivity() {
             binding.etMockCode.alpha = 0f
             // Mantener view visible para que siga existiendo; foco opcional si se usa lector
             binding.etMockCode.requestFocus()
+        }
+    }
+
+    override fun onProgress(section: String, offset: Int, received: Int, total: Int) {
+        runOnUiThread {
+            val progressContainer = findViewById<android.widget.FrameLayout>(R.id.progressContainer)
+            val progressBar = findViewById<android.widget.ProgressBar>(R.id.progressBar)
+            val progressText = findViewById<android.widget.TextView>(R.id.progressText)
+            progressContainer.visibility = View.VISIBLE
+            // Calcula el porcentaje de avance de la sección actual
+            val percent = if (total > 0) (received * 100 / total) else 0
+            progressBar.progress = percent
+            progressText.text = "$section: $percent%"
+        }
+    }
+
+    override fun onError(section: String, error: Throwable) {
+        runOnUiThread {
+            findViewById<android.widget.FrameLayout>(R.id.progressContainer).visibility = View.GONE
+            Toast.makeText(this, "Error en $section: ${error.localizedMessage}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun hideProgress() {
+        runOnUiThread {
+            findViewById<android.widget.FrameLayout>(R.id.progressContainer).visibility = View.GONE
         }
     }
 }

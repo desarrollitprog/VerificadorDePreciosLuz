@@ -5,7 +5,7 @@
     <color name="negro">#000000</color>
     <color name="vinotinto_oferta">#800020</color>
     <color name="blanco">#FFFFFF</color>
-    <color name="gris_suave">#F2F2F2</color>
+    <color name="gris_suave">#9E9E9E</color>
     <color name="fondo_logo">#F7EFEA</color>
 
     <!-- Tarjeta premium (overlay precio) -->
@@ -18,5 +18,9 @@
     <!-- Logo Luz (aprox) -->
     <color name="rojo_luz_logo">#B51F1F</color>
     <color name="rojo_luz_logo_dark">#8F1414</color>
+
+    <!-- Colores adicionales -->
+    <color name="oferta_background">#6B1010</color>
+    <color name="cardview_default_background">#FFFFFF</color>
 
 </resources>

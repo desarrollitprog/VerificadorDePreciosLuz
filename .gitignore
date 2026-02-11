@@ -1,0 +1,28 @@
+# Entorno virtual de Python
+venv/
+
+# Archivos de configuración sensibles
+backend-api/.env
+
+# Archivos y carpetas generados por Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build de React
+dashboard/build/
+
+# Dependencias de Node.js
+dashboard/node_modules/
+
+# Archivos de logs y temporales
+*.log
+*.tmp
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de Docker opcionales
+*.pid

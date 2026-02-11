@@ -170,26 +170,29 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+        app:layout_constraintTop_toTopOf="parent"
+        tools:visibility="visible">
 
         <androidx.cardview.widget.CardView
             android:id="@+id/resultCard"
             android:layout_width="0dp"
             android:layout_height="0dp"
-            android:layout_margin="16dp"
+            android:layout_margin="20dp"
             android:foreground="?android:attr/selectableItemBackground"
+            android:visibility="visible"
             app:cardCornerRadius="20dp"
             app:cardElevation="8dp"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHeight_percent="0.90"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintWidth_percent="0.70"
-            app:layout_constraintHeight_percent="0.55">
+            app:layout_constraintWidth_percent="0.90">
 
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent">
+                android:layout_height="match_parent"
+                android:background="@android:color/transparent">
 
                 <TextView
                     android:id="@+id/tvResultTitle"
@@ -199,7 +202,7 @@
                     android:layout_marginTop="10dp"
                     android:text="@string/label_price_result"
                     android:textColor="#777777"
-                    android:textSize="12sp"
+                    android:textSize="14sp"
                     android:textStyle="bold"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toTopOf="parent" />
@@ -218,8 +221,8 @@
                         android:id="@+id/ivStoreImage"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
+                        android:scaleType="fitXY"
                         android:contentDescription="@string/store_image_desc"
-                        android:scaleType="centerCrop"
                         android:src="@drawable/img_tarjeta"
                         tools:src="@drawable/img_tarjeta" />
 
@@ -235,14 +238,14 @@
                         android:layout_height="wrap_content"
                         android:layout_gravity="bottom"
                         android:padding="12dp"
-                        android:text="@string/store_default_name"
-                        android:textColor="@android:color/white"
-                        android:textSize="13sp"
-                        android:textStyle="bold"
                         android:shadowColor="#80000000"
                         android:shadowDx="0"
                         android:shadowDy="2"
-                        android:shadowRadius="4" />
+                        android:shadowRadius="4"
+                        android:text="@string/store_default_name"
+                        android:textColor="@android:color/white"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
 
                 </FrameLayout>
 
@@ -263,7 +266,6 @@
                     android:id="@+id/infoGroup"
                     android:layout_width="0dp"
                     android:layout_height="0dp"
-                    android:background="@drawable/gradient_background"
                     android:gravity="center"
                     android:orientation="vertical"
                     android:padding="16dp"
@@ -281,7 +283,7 @@
                         android:gravity="center"
                         android:maxLines="2"
                         android:textColor="#555555"
-                        android:textSize="15sp"
+                        android:textSize="40sp"
                         android:textStyle="bold" />
 
                     <TextView
@@ -292,7 +294,7 @@
                         android:letterSpacing="0.1"
                         android:text="@string/price_label"
                         android:textColor="#999999"
-                        android:textSize="12sp" />
+                        android:textSize="15sp" />
 
                     <LinearLayout
                         android:layout_width="wrap_content"
@@ -307,7 +309,7 @@
                             android:layout_marginEnd="4dp"
                             android:text="@string/currency_symbol"
                             android:textColor="@color/verde_luz"
-                            android:textSize="26sp"
+                            android:textSize="30sp"
                             android:textStyle="bold" />
 
                         <TextView
@@ -315,7 +317,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:textColor="@color/verde_luz"
-                            android:textSize="44sp"
+                            android:textSize="150sp"
                             android:textStyle="bold" />
 
                     </LinearLayout>
@@ -326,30 +328,44 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
                         android:textColor="@color/rojo_luz_logo"
-                        android:textSize="14sp" />
+                        android:textSize="50sp" />
 
                     <TextView
                         android:id="@+id/tvIva"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:textColor="#999999"
-                        android:textSize="12sp" />
+                        android:textColor="#F2F2F2"
+                        android:textSize="16sp" />
 
-                    <TextView
-                        android:id="@+id/tvCountdown"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
-                        android:text="@string/label_countdown"
-                        android:textColor="#999999"
-                        android:textSize="20sp" />
+<!--                    <TextView-->
+<!--                        android:id="@+id/tvCountdown"-->
+<!--                        android:layout_width="wrap_content"-->
+<!--                        android:layout_height="wrap_content"-->
+<!--                        android:layout_marginTop="6dp"-->
+<!--                        android:text="@string/label_countdown"-->
+<!--                        android:textColor="#F2F2F2"-->
+<!--                        android:textSize="16sp" />-->
 
                 </LinearLayout>
 
             </androidx.constraintlayout.widget.ConstraintLayout>
 
         </androidx.cardview.widget.CardView>
+
+        <TextView
+            android:id="@+id/tvOferta"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_margin="12dp"
+            android:background="@drawable/bg_oferta"
+            android:padding="8dp"
+            android:text="¡OFERTA!"
+            android:textColor="@android:color/white"
+            android:textStyle="bold"
+            android:visibility="gone"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 

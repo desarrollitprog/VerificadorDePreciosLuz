@@ -69,6 +69,8 @@ import java.util.concurrent.Executors
 import java.net.SocketTimeoutException
 import androidx.core.view.WindowCompat
 import androidx.core.view.isVisible
+import java.text.DecimalFormat
+import java.text.DecimalFormatSymbols
 
 @OptIn(ExperimentalGetImage::class)
 class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListener {
@@ -828,7 +830,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                     setOfflineMode(false)
                     resyncBackupIfOnline(service)
                 }
-                delay(300000)
+                delay(240000)
             }
         }
     }
@@ -873,9 +875,15 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         // Mostrar nombre
         binding.tvNombre.text = producto.nombre
 
-        // Mostrar precio en Bs
+        // Mostrar precio en Bs con separador de miles y decimales
         val precioBs = producto.pvpBaseOferta ?: producto.pvpBase ?: 0.0
-        binding.tvPrecioActual.text = getString(R.string.currency_format, precioBs)
+        val symbols = DecimalFormatSymbols(Locale("es", "VE")).apply {
+            groupingSeparator = '.'
+            decimalSeparator = ','
+        }
+        val formatter = DecimalFormat("#,##0.##", symbols)
+        val precioBsFormateado = formatter.format(precioBs)
+        binding.tvPrecioActual.text = precioBsFormateado
 
         // Mostrar mensaje informativo de IVA
         binding.tvIva.text = getString(R.string.price_with_iva_format)
@@ -884,13 +892,24 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         val precioUsd = producto.pvpOferta ?: producto.pvpConversion ?: 0.0
         binding.tvPrecioDolar.text = getString(R.string.price_usd_format, precioUsd)
 
-        // Cambiar color de texto si está en oferta
         if (producto.pvpOferta != null) {
-            binding.tvPrecioDolar.setTextColor(getColor(R.color.vinotinto_oferta))
-            binding.tvPriceCurrency.setTextColor(getColor(R.color.vinotinto_oferta))
+            // Oferta: fondo vinotinto y textos blancos
+            binding.resultCard.setCardBackgroundColor(getColor(R.color.oferta_background))
+            binding.tvOferta.visibility = View.VISIBLE
+            binding.tvPrecioDolar.setTextColor(getColor(R.color.blanco))
+            binding.tvPriceCurrency.setTextColor(getColor(R.color.blanco))
+            binding.tvPrecioActual.setTextColor(getColor(R.color.blanco))
+            binding.tvIva.setTextColor(getColor(R.color.blanco))
+//            binding.tvCountdown.setTextColor(getColor(R.color.blanco))
         } else {
+            // Normal: fondo blanco y colores NEGROS para máximo contraste
+            binding.resultCard.setCardBackgroundColor(getColor(R.color.cardview_default_background))
+            binding.tvOferta.visibility = View.GONE
             binding.tvPrecioDolar.setTextColor(getColor(R.color.verde_luz))
             binding.tvPriceCurrency.setTextColor(getColor(R.color.verde_luz))
+            binding.tvPrecioActual.setTextColor(getColor(R.color.rojo_luz_logo))
+            binding.tvIva.setTextColor(getColor(R.color.gris_suave))
+//            binding.tvCountdown.setTextColor(getColor(R.color.gris_suave))
         }
 
         binding.resultOverlay.visibility = View.VISIBLE

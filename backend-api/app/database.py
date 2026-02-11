@@ -113,6 +113,37 @@ async def get_db_erp():
     async with AsyncSessionLocalERP() as session:
         yield session
 
+# ============================================================================
+# CONEXIÓN 3: BASE DE DATOS usuarios_dashboard 
+# Variables de entorno para BD de usuarios
+DB_USER_USUARIOS = _required("DB_USER_USUARIOS")
+DB_PASSWORD_USUARIOS = _required("DB_PASSWORD_USUARIOS")
+DB_SERVER_USUARIOS = _required("DB_SERVER_USUARIOS")
+DB_NAME_USUARIOS = _required("DB_NAME_USUARIOS")
+DB_PORT_USUARIOS = os.getenv("DB_PORT_USUARIOS", "1433")
+DB_DRIVER_USUARIOS = os.getenv("DB_DRIVER_USUARIOS", "ODBC Driver 18 for SQL Server")
+
+engine_usuarios = create_async_engine(
+    f"mssql+aioodbc://{DB_USER_USUARIOS}:{DB_PASSWORD_USUARIOS}@{DB_SERVER_USUARIOS},{DB_PORT_USUARIOS}/{DB_NAME_USUARIOS}?driver={DB_DRIVER_USUARIOS.replace(' ', '+')}&Encrypt=yes&TrustServerCertificate=yes",
+    echo=False,
+)
+
+AsyncSessionLocalUsuarios = sessionmaker(
+    bind=engine_usuarios,
+    class_=AsyncSession,
+    expire_on_commit=False
+)
+
+BaseUsuarios = declarative_base()
+
+# Dependencia async para obtener la sesión de usuarios
+async def get_db_usuarios():
+    async with AsyncSessionLocalUsuarios() as session:
+        yield session
+# ============================================================================
+
+
+
 
 # ============================================================================
 # VERIFICACIÓN DE CONEXIONES (Opcional - para debug)

@@ -12,7 +12,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import database, models, schemas
-from .routes import consultas, publicidad
+from .routes import consultas, publicidad, auth
 
 app = FastAPI(title="Verificador de Precios Luz - Backend")
 logger = logging.getLogger("uvicorn.error")
@@ -27,7 +27,7 @@ if os.path.isdir(static_dir):
 
 DEVICE_LAST_SEEN: dict[str, dict[str, object]] = {}
 DEVICE_LOCK = asyncio.Lock()
-DISCONNECT_THRESHOLD = timedelta(seconds=60)
+DISCONNECT_THRESHOLD = timedelta(seconds=360)
 CHECK_INTERVAL_SECONDS = 10
 
 
@@ -447,3 +447,4 @@ async def obtener_precio(
 
 app.include_router(consultas)
 app.include_router(publicidad)
+app.include_router(auth.router)

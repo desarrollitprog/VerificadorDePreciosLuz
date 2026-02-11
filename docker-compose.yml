@@ -1,0 +1,38 @@
+version: '3.8'
+services:
+  dashboard-backend:
+    build:
+      context: ./backend-api
+      dockerfile: Dockerfile
+    container_name: dashboard-backend
+    env_file:
+      - ./backend-api/.env.dashboard
+    ports:
+      - "8001:8000"
+    restart: always
+    depends_on:
+      - sql-usuarios
+
+  dashboard-frontend:
+    build: ./dashboard
+    container_name: dashboard-frontend
+    env_file:
+      - ./dashboard/.env
+    ports:
+      - "3000:80"
+    depends_on:
+      - dashboard-backend
+
+  sql-usuarios:
+    image: mcr.microsoft.com/mssql/server:2019-latest
+    container_name: sql-usuarios
+    environment:
+      SA_PASSWORD: "TuPasswordSegura123!"
+      ACCEPT_EULA: "Y"
+    ports:
+      - "1433:1433"
+    volumes:
+      - sql-usuarios-data:/var/opt/mssql
+
+volumes:
+  sql-usuarios-data:

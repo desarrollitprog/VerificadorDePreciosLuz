@@ -447,4 +447,3 @@ async def obtener_precio(
 
 app.include_router(consultas)
 app.include_router(publicidad)
-app.include_router(auth.router)

@@ -3,7 +3,7 @@ from ..database import Base
 
 class Usuario(Base):
     __tablename__ = "usuarios"
-    __table_args__ = {"schema": "dbo"}  # Ajusta el schema si es necesario
+    __table_args__ = {"schema": "dbo"}
 
     id = Column(Integer, primary_key=True, index=True)
     nombre_usuario = Column(String(50), unique=True, nullable=False, index=True)

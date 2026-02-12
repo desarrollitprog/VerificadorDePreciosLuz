@@ -12,7 +12,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import database, models, schemas
-from .routes import consultas, publicidad, auth
+from .routes import consultas, publicidad
 
 app = FastAPI(title="Verificador de Precios Luz - Backend")
 logger = logging.getLogger("uvicorn.error")

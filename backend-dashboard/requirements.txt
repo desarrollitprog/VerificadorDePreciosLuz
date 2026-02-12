@@ -8,3 +8,4 @@ passlib==1.7.4
 bcrypt==4.1.2
 pydantic==1.10.7
 pyodbc==5.1.0
+python-multipart==0.0.6

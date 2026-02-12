@@ -51,8 +51,8 @@ AsyncSessionLocalUsuarios = sessionmaker(
     expire_on_commit=False
 )
 
-BaseUsuarios = declarative_base()
-
 async def get_db_usuarios():
     async with AsyncSessionLocalUsuarios() as session:
         yield session
+
+Base = declarative_base()

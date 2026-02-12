@@ -1,7 +1,10 @@
-fastapi
-uvicorn
-sqlalchemy
-aioodbc
-python-dotenv
-jose
-passlib
+fastapi==0.109.2
+uvicorn==0.27.1
+sqlalchemy==2.0.27
+aioodbc==0.5.0
+python-dotenv==1.0.1
+python-jose==3.3.0
+passlib==1.7.4
+bcrypt==4.1.2
+pydantic==1.10.7
+pyodbc==5.1.0

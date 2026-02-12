@@ -2,16 +2,15 @@ version: '3.8'
 services:
   dashboard-backend:
     build:
-      context: ./backend-api
+      context: ./backend-dashboard
       dockerfile: Dockerfile
     container_name: dashboard-backend
     env_file:
-      - ./backend-api/.env.dashboard
+      - ./backend-dashboard/.env.dashboard
     ports:
       - "8001:8000"
     restart: always
-    depends_on:
-      - sql-usuarios
+    # depends_on eliminado: ahora se conecta a SQL Server externo
 
   dashboard-frontend:
     build: ./dashboard
@@ -23,16 +22,6 @@ services:
     depends_on:
       - dashboard-backend
 
-  sql-usuarios:
-    image: mcr.microsoft.com/mssql/server:2019-latest
-    container_name: sql-usuarios
-    environment:
-      SA_PASSWORD: "123456789"
-      ACCEPT_EULA: "Y"
-    ports:
-      - "1435:1433"
-    volumes:
-      - sql-usuarios-data:/var/opt/mssql
 
-volumes:
-  sql-usuarios-data:
+
+

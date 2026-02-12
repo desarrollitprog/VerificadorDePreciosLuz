@@ -10,9 +10,11 @@ function LoginForm({ onLogin }) {
     e.preventDefault();
     setError('');
     try {
-      const res = await axios.post('/api/auth/login', {
-        username,
-        password
+      const params = new URLSearchParams();
+      params.append('username', username);
+      params.append('password', password);
+      const res = await axios.post('/api/auth/login', params, {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       });
       localStorage.setItem('token', res.data.access_token);
       onLogin();

@@ -1,6 +1,25 @@
 # Entorno virtual de Python
 venv/
 
+# Archivos de entorno y configuración sensibles
+backend-dashboard/.env.dashboard
+backend-dashboard/.env
+backend-dashboard/venv/
+backend-dashboard/.vscode/
+backend-dashboard/hash_script.py
+backend-dashboard/static/banners/
+backend-api/.env
+backend-api/venv/
+backend-api/.vscode/
+dashboard/.env
+dashboard/.env.local
+dashboard/.env.production
+dashboard/.vscode/
+luzapp/.idea/
+luzapp/.gradle/
+luzapp/build/
+luzapp/local.properties
+
 # Archivos de configuración sensibles
 backend-api/.env
 

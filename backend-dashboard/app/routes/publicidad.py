@@ -36,3 +36,15 @@ async def listar_banners():
                 }
             )
     return banners
+
+@router.get("/banners/list")
+def listar_archivos_banners():
+    banners_dir = os.path.normpath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "static", "banners")
+    )
+    archivos = []
+    if os.path.exists(banners_dir):
+        archivos = [f for f in os.listdir(banners_dir) if os.path.isfile(os.path.join(banners_dir, f))]
+    return {"banners": archivos}
+
+

@@ -1,15 +1,25 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import BannerForm from '../components/BannerForm';
 import BannerTable from '../components/BannerTable';
 import ProtectedRoute from '../components/ProtectedRoute';
+import { getBanners } from '../utils/axiosConfig';
 
 function DashboardPage() {
-  // TODO: Lógica de dashboard principal
+  const [banners, setBanners] = useState([]);
+
+  useEffect(() => {
+    const fetchBanners = async () => {
+      const data = await getBanners();
+      setBanners(data);
+    };
+    fetchBanners();
+  }, []);
+
   return (
     <ProtectedRoute>
       <div>
         <BannerForm onUpload={() => {}} />
-        <BannerTable banners={[]} onDelete={() => {}} onToggle={() => {}} />
+        <BannerTable banners={banners} onDelete={() => {}} onToggle={() => {}} />
       </div>
     </ProtectedRoute>
   );

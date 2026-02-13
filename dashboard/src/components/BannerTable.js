@@ -3,19 +3,19 @@ import React from 'react';
 const mockBanners = [
   {
     id: 1,
-    nombre: 'Banner Promoción 1',
+    titulo: 'Banner Promoción 1',
     url: '/static/banners/banner1.jpg',
     activo: true,
-    fechaInicio: '2026-02-01',
-    fechaFin: '2026-02-28',
+    FechaInicio: '2026-02-01',
+    FechaFin: '2026-02-28',
   },
   {
     id: 2,
-    nombre: 'Banner Promoción 2',
+    titulo: 'Banner Promoción 2',
     url: '/static/banners/banner2.jpg',
     activo: false,
-    fechaInicio: '2026-03-01',
-    fechaFin: '2026-03-31',
+    FechaInicio: '2026-03-01',
+    FechaFin: '2026-03-31',
   },
 ];
 
@@ -37,11 +37,11 @@ function BannerTable({ banners = mockBanners, onDelete, onToggle }) {
         <tbody>
           {banners.map((banner) => (
             <tr key={banner.id}>
-              <td>{banner.nombre}</td>
-              <td><img src={banner.url} alt={banner.nombre} width={100} /></td>
+              <td>{banner.titulo}</td>
+              <td><img src={banner.url} alt={banner.titulo} width={100} /></td>
               <td>{banner.activo ? 'Sí' : 'No'}</td>
-              <td>{banner.fechaInicio}</td>
-              <td>{banner.fechaFin}</td>
+              <td>{banner.FechaInicio}</td>
+              <td>{banner.FechaFin}</td>
               <td>
                 <button className="btn btn-sm btn-danger me-2" onClick={() => onDelete && onDelete(banner.id)}>Eliminar</button>
                 <button className="btn btn-sm btn-secondary" onClick={() => onToggle && onToggle(banner.id)}>

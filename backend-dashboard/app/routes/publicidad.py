@@ -1,41 +1,27 @@
 import os
 from typing import List
-from fastapi import APIRouter
-from ..schemas import PublicidadResponse
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from ..models import Publicidad
+from ..schemas import PublicidadResponse, PublicidadCreate
+from ..database import get_db_usuarios
 
 router = APIRouter()
 
 @router.get("/banners", response_model=List[PublicidadResponse])
-async def listar_banners():
-    base = os.path.normpath(
-        os.path.join(os.path.dirname(__file__), "..", "..", "static", "banners")
-    )
-    banners = []
-    if os.path.isdir(base):
-        for fn in sorted(os.listdir(base)):
-            lower = fn.lower()
-            if lower.endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")):
-                tipo = "image"
-            elif lower.endswith((".mp4", ".webm", ".mkv")):
-                tipo = "video"
-            else:
-                continue
-
-            banners.append(
-                {
-                    "id": len(banners) + 1,
-                    "titulo": fn,
-                    "tipo": tipo,
-                    "url": f"/static/banners/{fn}",
-                    "activo": True,
-                    "prioridad": len(banners),
-                    "fecha_inicio": None,
-                    "fecha_fin": None,
-                    "duracion_seg": None,
-                    "updated_at": None,
-                }
-            )
+async def listar_banners(db: AsyncSession = Depends(get_db_usuarios)):
+    result = await db.execute(select(Publicidad).order_by(Publicidad.prioridad, Publicidad.id))
+    banners = result.scalars().all()
     return banners
+
+@router.post("/banners", response_model=PublicidadResponse)
+async def crear_banner(banner: PublicidadCreate, db: AsyncSession = Depends(get_db_usuarios)):
+    nuevo_banner = Publicidad(**banner.dict())
+    db.add(nuevo_banner)
+    await db.commit()
+    await db.refresh(nuevo_banner)
+    return nuevo_banner
 
 @router.get("/banners/list")
 def listar_archivos_banners():

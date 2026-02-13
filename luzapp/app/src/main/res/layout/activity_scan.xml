@@ -93,8 +93,8 @@
 
     <ImageView
         android:id="@+id/ivLogoLuz"
-        android:layout_width="220dp"
-        android:layout_height="220dp"
+        android:layout_width="460dp"
+        android:layout_height="460dp"
         android:contentDescription="@string/app_name"
         android:scaleType="centerInside"
         android:src="@drawable/logo_luz"
@@ -171,7 +171,7 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        tools:visibility="visible">
+        tools:visibility="gone">
 
         <androidx.cardview.widget.CardView
             android:id="@+id/resultCard"
@@ -221,8 +221,8 @@
                         android:id="@+id/ivStoreImage"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:scaleType="fitXY"
                         android:contentDescription="@string/store_image_desc"
+                        android:scaleType="fitXY"
                         android:src="@drawable/img_tarjeta"
                         tools:src="@drawable/img_tarjeta" />
 
@@ -338,14 +338,14 @@
                         android:textColor="#F2F2F2"
                         android:textSize="16sp" />
 
-<!--                    <TextView-->
-<!--                        android:id="@+id/tvCountdown"-->
-<!--                        android:layout_width="wrap_content"-->
-<!--                        android:layout_height="wrap_content"-->
-<!--                        android:layout_marginTop="6dp"-->
-<!--                        android:text="@string/label_countdown"-->
-<!--                        android:textColor="#F2F2F2"-->
-<!--                        android:textSize="16sp" />-->
+                    <!--                    <TextView-->
+                    <!--                        android:id="@+id/tvCountdown"-->
+                    <!--                        android:layout_width="wrap_content"-->
+                    <!--                        android:layout_height="wrap_content"-->
+                    <!--                        android:layout_marginTop="6dp"-->
+                    <!--                        android:text="@string/label_countdown"-->
+                    <!--                        android:textColor="#F2F2F2"-->
+                    <!--                        android:textSize="16sp" />-->
 
                 </LinearLayout>
 

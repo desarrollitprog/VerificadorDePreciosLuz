@@ -22,18 +22,6 @@ export const deleteBanner = async (id) => {
   }
 };
 
-// Interceptor para agregar el token JWT a cada petición
-axios.interceptors.request.use(config => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-// Usar la URL del .env (REACT_APP_API_URL)
-const API_URL = process.env.REACT_APP_API_URL;
-
 export const getBanners = async () => {
   try {
     const response = await axios.get(`${API_URL}/publicidad/banners`);

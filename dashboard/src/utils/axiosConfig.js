@@ -42,4 +42,18 @@ export const createBanner = async (banner) => {
   }
 };
 
+export const uploadBanner = async (file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const response = await axios.post(`${API_URL}/publicidad/banners/upload`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error al subir archivo:', error);
+    throw error;
+  }
+};
+
 export default axios;

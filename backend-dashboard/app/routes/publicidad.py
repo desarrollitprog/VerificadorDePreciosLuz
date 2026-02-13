@@ -1,11 +1,30 @@
 import os
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+import shutil
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from ..models import Publicidad
 from ..schemas import PublicidadResponse, PublicidadCreate
 from ..database import get_db_usuarios
+
+@router.post("/banners/upload")
+async def upload_banner(file: UploadFile = File(...)):
+    banners_dir = os.path.normpath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "static", "banners")
+    )
+    os.makedirs(banners_dir, exist_ok=True)
+    file_location = os.path.join(banners_dir, file.filename)
+    with open(file_location, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    # Detecta tipo por extensión
+    ext = file.filename.lower().split('.')[-1]
+    tipo = "video" if ext in ["mp4", "webm", "mkv"] else "image"
+    return {
+        "filename": file.filename,
+        "url": f"/static/banners/{file.filename}",
+        "tipo": tipo
+    }
 
 router = APIRouter()
 

@@ -4,11 +4,13 @@ import Header from './Header';
 import StatsCards from './StatsCards';
 import BannerForm from './BannerForm';
 import BannerTable from './BannerTable';
+import './Sidebar.css';
+import './app-flex-layout.css';
 
 const DashboardLayout = ({ banners, onBannerView, onBannerEdit, onBannerDelete, onBannerSubmit }) => (
-  <div className="app-container">
+  <div className="app-flex-layout">
     <Sidebar />
-    <main className="main-content">
+    <div className="main-flex-content">
       <Header />
       <StatsCards />
       <BannerForm onSubmit={onBannerSubmit} />
@@ -18,7 +20,7 @@ const DashboardLayout = ({ banners, onBannerView, onBannerEdit, onBannerDelete, 
         onEdit={onBannerEdit}
         onDelete={onBannerDelete}
       />
-    </main>
+    </div>
   </div>
 );
 

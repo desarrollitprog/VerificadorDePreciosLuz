@@ -3,7 +3,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 20px;
-  padding: 30px 40px;
+  padding: 16px 24px 0 24px;
 }
 .stat-card {
   background: #fff;

@@ -1,58 +1,65 @@
+
 import React from 'react';
+import {
+  CCard,
+  CCardBody,
+  CCardHeader,
+  CTable,
+  CTableBody,
+  CTableDataCell,
+  CTableHead,
+  CTableHeaderCell,
+  CTableRow,
+  CButton,
+  CBadge,
+} from '@coreui/react';
 
-const mockBanners = [
-  {
-    id: 1,
-    titulo: 'Banner Promoción 1',
-    url: '/static/banners/banner1.jpg',
-    activo: true,
-    FechaInicio: '2026-02-01',
-    FechaFin: '2026-02-28',
-  },
-  {
-    id: 2,
-    titulo: 'Banner Promoción 2',
-    url: '/static/banners/banner2.jpg',
-    activo: false,
-    FechaInicio: '2026-03-01',
-    FechaFin: '2026-03-31',
-  },
-];
-
-function BannerTable({ banners = mockBanners, onDelete, onToggle }) {
+function BannerTable({ banners = [], onDelete, onToggle }) {
   return (
-    <div className="container">
-      <h2>Banners Publicitarios</h2>
-      <table className="table table-striped">
-        <thead>
-          <tr>
-            <th>Nombre</th>
-            <th>Imagen</th>
-            <th>Activo</th>
-            <th>Fecha Inicio</th>
-            <th>Fecha Fin</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          {banners.map((banner) => (
-            <tr key={banner.id}>
-              <td>{banner.titulo}</td>
-              <td><img src={banner.url} alt={banner.titulo} width={100} /></td>
-              <td>{banner.activo ? 'Sí' : 'No'}</td>
-              <td>{banner.FechaInicio}</td>
-              <td>{banner.FechaFin}</td>
-              <td>
-                <button className="btn btn-sm btn-danger me-2" onClick={() => onDelete && onDelete(banner.id)}>Eliminar</button>
-                <button className="btn btn-sm btn-secondary" onClick={() => onToggle && onToggle(banner.id)}>
-                  {banner.activo ? 'Desactivar' : 'Activar'}
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <CCard className="mb-4">
+      <CCardHeader>
+        <h5 className="mb-0">Banners Publicitarios</h5>
+      </CCardHeader>
+      <CCardBody>
+        <CTable striped hover responsive align="middle">
+          <CTableHead color="dark">
+            <CTableRow>
+              <CTableHeaderCell>Nombre</CTableHeaderCell>
+              <CTableHeaderCell>Imagen</CTableHeaderCell>
+              <CTableHeaderCell>Activo</CTableHeaderCell>
+              <CTableHeaderCell>Fecha Inicio</CTableHeaderCell>
+              <CTableHeaderCell>Fecha Fin</CTableHeaderCell>
+              <CTableHeaderCell>Acciones</CTableHeaderCell>
+            </CTableRow>
+          </CTableHead>
+          <CTableBody>
+            {banners.map((banner) => (
+              <CTableRow key={banner.id}>
+                <CTableDataCell>{banner.titulo}</CTableDataCell>
+                <CTableDataCell>
+                  <img src={banner.url} alt={banner.titulo} width={100} style={{ borderRadius: 8 }} />
+                </CTableDataCell>
+                <CTableDataCell>
+                  <CBadge color={banner.activo ? 'success' : 'secondary'}>
+                    {banner.activo ? 'Sí' : 'No'}
+                  </CBadge>
+                </CTableDataCell>
+                <CTableDataCell>{banner.FechaInicio}</CTableDataCell>
+                <CTableDataCell>{banner.FechaFin}</CTableDataCell>
+                <CTableDataCell>
+                  <CButton color="danger" size="sm" className="me-2" onClick={() => onDelete && onDelete(banner.id)}>
+                    Eliminar
+                  </CButton>
+                  <CButton color={banner.activo ? 'secondary' : 'success'} size="sm" onClick={() => onToggle && onToggle(banner.id)}>
+                    {banner.activo ? 'Desactivar' : 'Activar'}
+                  </CButton>
+                </CTableDataCell>
+              </CTableRow>
+            ))}
+          </CTableBody>
+        </CTable>
+      </CCardBody>
+    </CCard>
   );
 }
 

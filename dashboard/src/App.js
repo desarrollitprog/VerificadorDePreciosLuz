@@ -1,25 +1,15 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import Navbar from './components/Navbar';
-import ProtectedRoute from './components/ProtectedRoute';
+
+import DefaultLayout from './Layout/DefaultLayout';
 import LoginPage from './pages/LoginPage';
-import DashboardPage from './pages/DashboardPage';
 
 function App() {
   return (
     <Router>
-      <Navbar />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <DashboardPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route path="*" element={<LoginPage />} />
+        <Route path="/*" element={<DefaultLayout />} />
       </Routes>
     </Router>
   );

@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@coreui/icons": "^3.0.1",
+    "@coreui/icons-react": "^2.3.0",
     "@coreui/react": "^5.9.2",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
@@ -10,10 +12,13 @@
     "@testing-library/user-event": "^13.5.0",
     "axios": "^1.13.5",
     "bootstrap": "^5.3.8",
+    "icons-react": "^3.7.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "react-redux": "^9.2.0",
     "react-router-dom": "^7.13.0",
     "react-scripts": "5.0.1",
+    "simplebar-react": "^3.3.2",
     "web-vitals": "^2.1.4"
   },
   "scripts": {

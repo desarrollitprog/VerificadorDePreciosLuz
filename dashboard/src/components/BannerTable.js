@@ -1,66 +1,63 @@
-
 import React from 'react';
-import {
-  CCard,
-  CCardBody,
-  CCardHeader,
-  CTable,
-  CTableBody,
-  CTableDataCell,
-  CTableHead,
-  CTableHeaderCell,
-  CTableRow,
-  CButton,
-  CBadge,
-} from '@coreui/react';
 
-function BannerTable({ banners = [], onDelete, onToggle }) {
-  return (
-    <CCard className="mb-4">
-      <CCardHeader>
-        <h5 className="mb-0">Banners Publicitarios</h5>
-      </CCardHeader>
-      <CCardBody>
-        <CTable striped hover responsive align="middle">
-          <CTableHead color="dark">
-            <CTableRow>
-              <CTableHeaderCell>Nombre</CTableHeaderCell>
-              <CTableHeaderCell>Imagen</CTableHeaderCell>
-              <CTableHeaderCell>Activo</CTableHeaderCell>
-              <CTableHeaderCell>Fecha Inicio</CTableHeaderCell>
-              <CTableHeaderCell>Fecha Fin</CTableHeaderCell>
-              <CTableHeaderCell>Acciones</CTableHeaderCell>
-            </CTableRow>
-          </CTableHead>
-          <CTableBody>
-            {banners.map((banner) => (
-              <CTableRow key={banner.id}>
-                <CTableDataCell>{banner.titulo}</CTableDataCell>
-                <CTableDataCell>
-                  <img src={banner.url} alt={banner.titulo} width={100} style={{ borderRadius: 8 }} />
-                </CTableDataCell>
-                <CTableDataCell>
-                  <CBadge color={banner.activo ? 'success' : 'secondary'}>
-                    {banner.activo ? 'Sí' : 'No'}
-                  </CBadge>
-                </CTableDataCell>
-                <CTableDataCell>{banner.FechaInicio}</CTableDataCell>
-                <CTableDataCell>{banner.FechaFin}</CTableDataCell>
-                <CTableDataCell>
-                  <CButton color="danger" size="sm" className="me-2" onClick={() => onDelete && onDelete(banner.id)}>
-                    Eliminar
-                  </CButton>
-                  <CButton color={banner.activo ? 'secondary' : 'success'} size="sm" onClick={() => onToggle && onToggle(banner.id)}>
-                    {banner.activo ? 'Desactivar' : 'Activar'}
-                  </CButton>
-                </CTableDataCell>
-              </CTableRow>
-            ))}
-          </CTableBody>
-        </CTable>
-      </CCardBody>
-    </CCard>
-  );
-}
+const BannerTable = ({ banners = [], onDelete, onToggle }) => (
+  <div className="card mb-4">
+    <div className="card-header">
+      <h5 className="mb-0">Banners Publicitarios</h5>
+    </div>
+    <div className="card-body p-0">
+      <div className="table-responsive">
+        <table className="table table-striped table-hover mb-0">
+          <thead className="table-dark">
+            <tr>
+              <th>Nombre</th>
+              <th>Imagen</th>
+              <th>Activo</th>
+              <th>Fecha Inicio</th>
+              <th>Fecha Fin</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {banners.length === 0 ? (
+              <tr>
+                <td colSpan="6" className="text-center">No hay banners registrados.</td>
+              </tr>
+            ) : (
+              banners.map((banner) => (
+                <tr key={banner.id}>
+                  <td>{banner.titulo}</td>
+                  <td>
+                    {banner.url && (
+                      <img src={banner.url} alt={banner.titulo} width={100} style={{ borderRadius: 8 }} />
+                    )}
+                  </td>
+                  <td>
+                    <span className={`badge ${banner.activo ? 'bg-success' : 'bg-secondary'}`}>
+                      {banner.activo ? 'Sí' : 'No'}
+                    </span>
+                  </td>
+                  <td>{banner.FechaInicio}</td>
+                  <td>{banner.FechaFin}</td>
+                  <td>
+                    <button className="btn btn-sm btn-danger me-2" onClick={() => onDelete && onDelete(banner.id)}>
+                      Eliminar
+                    </button>
+                    <button
+                      className={`btn btn-sm ${banner.activo ? 'btn-secondary' : 'btn-success'}`}
+                      onClick={() => onToggle && onToggle(banner.id)}
+                    >
+                      {banner.activo ? 'Desactivar' : 'Activar'}
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+);
 
 export default BannerTable;

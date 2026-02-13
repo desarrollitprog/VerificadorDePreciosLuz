@@ -1,7 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 
-import DefaultLayout from './layout/DefaultLayout';
 import LoginPage from './pages/LoginPage';
 
 function App() {
@@ -9,7 +8,7 @@ function App() {
     <Router>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/*" element={<DefaultLayout />} />
+        {/* Aquí puedes agregar tu layout o dashboard personalizado más adelante */}
       </Routes>
     </Router>
   );

@@ -1,10 +1,10 @@
 import React from 'react';
+import { Navigate } from 'react-router-dom';
 
 function ProtectedRoute({ children }) {
   const token = localStorage.getItem('token');
   if (!token) {
-    window.location.href = '/'; // Redirige al login si no hay token
-    return null;
+    return <Navigate to="/login" replace />;
   }
   return children;
 }

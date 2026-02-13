@@ -12,13 +12,23 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 def get_current_user(token: str = Depends(oauth2_scheme)):
     payload = verificar_token_jwt(token)
-    if not payload or "sub" not in payload:
+    if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token inválido o expirado",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return payload["sub"]
+    # Consumir los claims relevantes
+    usuario = payload.get("sub")
+    audiencia = payload.get("aud")
+    emitido_en = payload.get("iat")
+    not_before = payload.get("nbf")
+    return {
+        "usuario": usuario,
+        "audiencia": audiencia,
+        "emitido_en": emitido_en,
+        "not_before": not_before
+    }
 
 @router.post("/auth/login")
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db_usuarios)):
@@ -35,5 +45,5 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSessi
 
 # Ejemplo de endpoint protegido
 @router.get("/auth/me")
-async def me(usuario: str = Depends(get_current_user)):
-    return {"usuario": usuario}
+async def me(info: dict = Depends(get_current_user)):
+    return info

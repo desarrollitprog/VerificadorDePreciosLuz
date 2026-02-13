@@ -1,5 +1,3 @@
-
-import React, { useState } from 'react';
 import { createBanner } from '../utils/axiosConfig';
 import React, { useState } from 'react';
 

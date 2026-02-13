@@ -1,3 +1,12 @@
+export const deleteBanner = async (id) => {
+  try {
+    const response = await axios.delete(`${API_URL}/publicidad/banners/${id}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error al eliminar banner:', error);
+    throw error;
+  }
+};
 import axios from 'axios';
 
 // Interceptor para agregar el token JWT a cada petición

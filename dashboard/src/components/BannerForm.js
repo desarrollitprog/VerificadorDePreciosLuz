@@ -1,13 +1,14 @@
 import { createBanner } from '../utils/axiosConfig';
 import React, { useState } from 'react';
+import './BannerForm.css'; // Puedes mover los estilos aquí si lo deseas
 
   const BannerForm = ({ onSubmit }) => {
     const [form, setForm] = useState({
       titulo: '',
-      url: '',
+    imagenUrl: '',
       activo: true,
-      FechaInicio: '',
-      FechaFin: '',
+    fechaInicio: '',
+    fechaFin: '',
     });
     const [error, setError] = useState('');
 
@@ -53,7 +54,7 @@ import React, { useState } from 'react';
               <div className="col-md-3">
                 <label className="form-label">URL de la imagen</label>
                 <input
-                  name="url"
+                name="imagenUrl"
                   value={form.url}
                   onChange={handleChange}
                   className="form-control"
@@ -80,7 +81,7 @@ import React, { useState } from 'react';
               <div className="col-md-2">
                 <label className="form-label">Fecha Inicio</label>
                 <input
-                  name="FechaInicio"
+                name="fechaInicio"
                   type="date"
                   value={form.FechaInicio}
                   onChange={handleChange}
@@ -90,7 +91,7 @@ import React, { useState } from 'react';
               <div className="col-md-2">
                 <label className="form-label">Fecha Fin</label>
                 <input
-                  name="FechaFin"
+                name="fechaFin"
                   type="date"
                   value={form.FechaFin}
                   onChange={handleChange}

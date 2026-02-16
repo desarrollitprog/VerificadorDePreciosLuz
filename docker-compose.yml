@@ -13,10 +13,12 @@ services:
     # depends_on eliminado: ahora se conecta a SQL Server externo
 
   dashboard-frontend:
-    build: ./dashboard
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
     container_name: dashboard-frontend
     env_file:
-      - ./dashboard/.env
+      - ./dashboard/.env.local
     ports:
       - "3000:80"
     depends_on:

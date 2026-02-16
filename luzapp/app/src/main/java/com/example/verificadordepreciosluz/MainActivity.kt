@@ -156,4 +156,7 @@ class MainActivity : AppCompatActivity() {
         val sanitizedHost: String? = null,
         val portToUse: String? = null
     )
+
+
+
 }

@@ -1,7 +1,7 @@
 import os
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 import shutil
+from typing import List
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Path
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from ..models import Publicidad
@@ -10,47 +10,155 @@ from ..database import get_db_usuarios
 
 router = APIRouter()
 
-@router.get("/banners", response_model=List[PublicidadResponse])
+@router.get("/banners")
 async def listar_banners(db: AsyncSession = Depends(get_db_usuarios)):
-    result = await db.execute(select(Publicidad).order_by(Publicidad.prioridad, Publicidad.id))
-    banners = result.scalars().all()
-    return banners
+    try:
+        result = await db.execute(select(Publicidad).order_by(Publicidad.Prioridad, Publicidad.IdPublicidad))
+        banners = result.scalars().all()
+        return {
+            "success": True,
+            "message": "Banners obtenidos correctamente.",
+            "banners": banners
+        }
+    except Exception as e:
+        return {"success": False, "message": f"Error al obtener banners: {str(e)}", "banners": []}, 500
 
-@router.post("/banners", response_model=PublicidadResponse)
+@router.post("/banners")
 async def crear_banner(banner: PublicidadCreate, db: AsyncSession = Depends(get_db_usuarios)):
-    nuevo_banner = Publicidad(**banner.dict())
-    db.add(nuevo_banner)
-    await db.commit()
-    await db.refresh(nuevo_banner)
-    return nuevo_banner
+    try:
+        nuevo_banner = Publicidad(**banner.dict())
+        db.add(nuevo_banner)
+        await db.commit()
+        await db.refresh(nuevo_banner)
+        return {
+            "success": True,
+            "message": "Banner creado correctamente.",
+            "banner": nuevo_banner
+        }
+    except Exception as e:
+        return {"success": False, "message": f"Error al crear banner: {str(e)}", "banner": None}, 500
 
 @router.get("/banners/list")
 def listar_archivos_banners():
-    banners_dir = os.path.normpath(
-        os.path.join(os.path.dirname(__file__), "..", "..", "static", "banners")
-    )
-    archivos = []
-    if os.path.exists(banners_dir):
-        archivos = [f for f in os.listdir(banners_dir) if os.path.isfile(os.path.join(banners_dir, f))]
-    return {"banners": archivos}
+    try:
+        banners_dir = os.path.normpath(
+            os.path.join(os.path.dirname(__file__), "..", "..", "static", "banners")
+        )
+        archivos = []
+        if os.path.exists(banners_dir):
+            archivos = [f for f in os.listdir(banners_dir) if os.path.isfile(os.path.join(banners_dir, f))]
+        return {
+            "success": True,
+            "message": "Lista de archivos de banners obtenida correctamente.",
+            "banners": archivos
+        }
+    except Exception as e:
+        return {"success": False, "message": f"Error al listar archivos: {str(e)}", "banners": []}, 500
 
 @router.post("/banners/upload")
-async def upload_banner(file: UploadFile = File(...)):
+async def upload_banner(
+    file: UploadFile = File(...),
+    Titulo: str = Form(None),
+    Prioridad: int = Form(0),
+    FechaInicio: str = Form(None),
+    FechaFin: str = Form(None),
+    DuracionSeg: int = Form(None),
+    db: AsyncSession = Depends(get_db_usuarios)
+):
+    import uuid
+    from datetime import datetime
+
     banners_dir = os.path.normpath(
         os.path.join(os.path.dirname(__file__), "..", "..", "static", "banners")
     )
     os.makedirs(banners_dir, exist_ok=True)
-    file_location = os.path.join(banners_dir, file.filename)
-    with open(file_location, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    # Detecta tipo por extensión
     ext = file.filename.lower().split('.')[-1]
-    tipo = "video" if ext in ["mp4", "webm", "mkv"] else "image"
-    return {
-        "filename": file.filename,
-        "url": f"/static/banners/{file.filename}",
-        "tipo": tipo
-    }
+    allowed_images = ["jpg", "jpeg", "png", "gif", "bmp", "webp"]
+    allowed_videos = ["mp4", "webm", "mkv", "avi", "mov"]
+    if ext in allowed_images:
+        Tipo = "image"
+        max_size = 10 * 1024 * 1024  # 10 MB
+    elif ext in allowed_videos:
+        Tipo = "video"
+        max_size = 100 * 1024 * 1024  # 100 MB
+    else:
+        return {"success": False, "message": f"Tipo de archivo no permitido: .{ext}"}, 400
 
+    # Validar tamaño máximo
+    file.file.seek(0, 2)  # Ir al final
+    file_size = file.file.tell()
+    file.file.seek(0)
+    if file_size > max_size:
+        return {"success": False, "message": f"El archivo excede el tamaño máximo permitido ({max_size // (1024*1024)} MB)."}, 400
+
+    # Evitar sobrescribir: renombrar si existe
+    filename = file.filename
+    file_location = os.path.join(banners_dir, filename)
+    if os.path.exists(file_location):
+        unique_suffix = uuid.uuid4().hex[:8]
+        filename = f"{os.path.splitext(file.filename)[0]}_{unique_suffix}.{ext}"
+        file_location = os.path.join(banners_dir, filename)
+
+    try:
+        with open(file_location, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        return {"success": False, "message": f"Error al guardar el archivo: {str(e)}"}, 500
+
+    # Guardar metadatos en la base de datos
+    url = f"/static/banners/{filename}"
+    try:
+        FechaInicio_dt = datetime.fromisoformat(FechaInicio) if FechaInicio else None
+        FechaFin_dt = datetime.fromisoformat(FechaFin) if FechaFin else None
+        nuevo_banner = Publicidad(
+            Titulo=Titulo,
+            Tipo=Tipo,
+            Url=url,
+            Activo=True,
+            Prioridad=Prioridad,
+            FechaInicio=FechaInicio_dt,
+            FechaFin=FechaFin_dt,
+            DuracionSeg=DuracionSeg
+        )
+        db.add(nuevo_banner)
+        await db.commit()
+        await db.refresh(nuevo_banner)
+    except Exception as e:
+        # Si falla la BD, elimina el archivo subido
+        if os.path.exists(file_location):
+            os.remove(file_location)
+        return {"success": False, "message": f"Error al guardar metadatos en la base de datos: {str(e)}"}, 500
+
+    return {
+        "success": True,
+        "message": "Archivo y metadatos guardados correctamente.",
+        "filename": filename,
+        "url": url,
+        "tipo": Tipo,
+        "banner": {
+            "IdPublicidad": nuevo_banner.IdPublicidad,
+            "Titulo": nuevo_banner.Titulo,
+            "Prioridad": nuevo_banner.Prioridad,
+            "FechaInicio": str(nuevo_banner.FechaInicio) if nuevo_banner.FechaInicio else None,
+            "FechaFin": str(nuevo_banner.FechaFin) if nuevo_banner.FechaFin else None,
+            "DuracionSeg": nuevo_banner.DuracionSeg
+        }
+    }
+@router.delete("/banners/{id}")
+async def eliminar_banner(id: int = Path(..., description="ID del banner a eliminar"), db: AsyncSession = Depends(get_db_usuarios)):
+    try:
+        banner = await db.get(Publicidad, id)
+        if not banner:
+            return {"success": False, "message": "Banner no encontrado."}, 404
+        # Eliminar archivo físico si existe
+        if banner.Url:
+            file_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", banner.Url.lstrip("/")))
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        await db.delete(banner)
+        await db.commit()
+        return {"success": True, "message": "Banner eliminado correctamente."}
+    except Exception as e:
+        return {"success": False, "message": f"Error al eliminar banner: {str(e)}"}, 500
 
 

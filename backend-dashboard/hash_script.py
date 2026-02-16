@@ -1,2 +1,2 @@
 from app.utils.security import hashear_contrasena
-print(hashear_contrasena("test12"))
+print(hashear_contrasena("Pit12345*"))

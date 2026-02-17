@@ -152,7 +152,8 @@ async def eliminar_banner(id: int = Path(..., description="ID del banner a elimi
             return {"success": False, "message": "Banner no encontrado."}, 404
         # Eliminar archivo físico si existe
         if banner.Url:
-            file_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", banner.Url.lstrip("/")))
+            filename = os.path.basename(banner.Url)
+            file_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "static", "banners", filename))
             if os.path.exists(file_path):
                 os.remove(file_path)
         await db.delete(banner)

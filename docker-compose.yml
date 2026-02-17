@@ -10,6 +10,8 @@ services:
     ports:
       - "8001:8000"
     restart: always
+    volumes:
+      - ./backend-dashboard/app/static/banners:/app/static/banners
     # depends_on eliminado: ahora se conecta a SQL Server externo
 
   dashboard-frontend:

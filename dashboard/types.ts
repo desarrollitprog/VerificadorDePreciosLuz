@@ -1,36 +1,19 @@
-export interface Device {
-  id: string;
-  name: string;
-  location: string;
-  ip: string;
-  status: 'online' | 'offline' | 'warning';
-  battery: number;
-  wifiSignal: number; // dBm
-  currentContent: string;
-  lastSync: string;
-  thumbnail: string;
+export enum VideoStatus {
+  Live = 'Live',
+  Processing = 'Processing',
+  Error = 'Error',
+  Queued = 'Queued'
 }
 
-export interface MediaItem {
+export interface Video {
   id: string;
-  title: string;
+  filename: string;
+  thumbnail: string;
   duration: string;
-  status: 'live' | 'scheduled' | 'expired';
-  resolution: string;
-  dateRange: string;
-  thumbnail: string;
-  type: 'video' | 'image';
-  fileSize?: string;
+  date: string;
+  size: string;
+  status: VideoStatus;
+  views?: number;
 }
 
-export interface PlaylistItem {
-  id: string;
-  mediaId: string;
-  order: number;
-}
-
-export enum AnalyticsPeriod {
-  Last24h = '24h',
-  Last7d = '7d',
-  Last30d = '30d'
-}
+export type Screen = 'login' | 'dashboard' | 'list';

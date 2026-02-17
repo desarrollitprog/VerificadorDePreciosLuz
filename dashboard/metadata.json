@@ -1,5 +1,4 @@
 {
-  "name": "PConnect Dashboard",
-  "description": "A comprehensive digital signage management dashboard featuring real-time device monitoring, media library management, and detailed video analytics.",
-  "requestFramePermissions": []
+  "name": "Video Manager Admin",
+  "description": "A professional video management dashboard featuring a login screen, video grid view, and detailed list view with administrative controls."
 }

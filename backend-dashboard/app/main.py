@@ -24,5 +24,5 @@ app.add_middleware(
 )
 
 app.include_router(publicidad.router)
-app.include_router(auth.router)
+app.include_router(auth.router, prefix="/api")
 app.mount("/static", StaticFiles(directory="static"), name="static")

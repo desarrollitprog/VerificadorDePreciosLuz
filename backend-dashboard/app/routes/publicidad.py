@@ -66,7 +66,8 @@ async def upload_banner(
     import uuid
     from datetime import datetime
 
-    banners_dir = os.path.join("static", "banners")
+    # Calcula la ruta absoluta para static/banners, robusto ante cwd
+    banners_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "static", "banners"))
     os.makedirs(banners_dir, exist_ok=True)
     ext = file.filename.lower().split('.')[-1]
     allowed_images = ["jpg", "jpeg", "png", "gif", "bmp", "webp"]

@@ -1,13 +1,14 @@
+
 import React, { useEffect, useState } from 'react';
+import { Search, Filter, UploadCloud, MoreVertical, Play, Eye, Trash, Film, HardDrive, TrendingUp, Plus } from 'lucide-react';
+import { getVideos, uploadMedia, deleteVideo } from '../services/videoService';
+
+export const DashboardScreen: React.FC = () => {
   const [preview, setPreview] = useState<{url: string, tipo: string, titulo: string} | null>(null);
   const handlePreview = (video: any) => {
     setPreview({ url: video.url, tipo: video.tipo, titulo: video.titulo || video.filename });
   };
   const closePreview = () => setPreview(null);
-import { Search, Filter, UploadCloud, MoreVertical, Play, Eye, Trash, Film, HardDrive, TrendingUp, Plus } from 'lucide-react';
-import { getVideos, uploadMedia, deleteVideo } from '../services/videoService';
-
-export const DashboardScreen: React.FC = () => {
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);

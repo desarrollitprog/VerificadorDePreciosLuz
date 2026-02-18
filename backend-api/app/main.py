@@ -1,16 +1,16 @@
 from __future__ import annotations
-
 from datetime import datetime, timedelta
+from dateutil.parser import isoparse
 import asyncio
 import logging
-
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import JSONResponse
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 import os
 from fastapi.middleware.gzip import GZipMiddleware
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from typing import Optional
 from . import database, models, schemas
 from .routes import consultas, publicidad
 
@@ -20,10 +20,27 @@ logger = logging.getLogger("uvicorn.error")
 # Comprimir respuestas grandes para reducir tiempo de descarga
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
+
 # Servir archivos estáticos (banners)
 static_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "static"))
 if os.path.isdir(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+
+# Endpoint para consultar el estado de los dispositivos
+
+@app.get("/devices/status")
+async def get_devices_status():
+    async with DEVICE_LOCK:
+        # Copia segura del estado actual
+        status = {
+            device_id: {
+                "online": info.get("online", False),
+                "last_seen": info.get("last_seen").isoformat() if info.get("last_seen") else None
+            }
+            for device_id, info in DEVICE_LAST_SEEN.items()
+        }
+    return JSONResponse(content=status)
 
 DEVICE_LAST_SEEN: dict[str, dict[str, object]] = {}
 DEVICE_LOCK = asyncio.Lock()
@@ -110,6 +127,7 @@ async def buscar_detalle_oferta_vigente(
         )
         .where(
             models.OfertasxProductosxSucursalesDetalles.IdEmpaque == precio.IdEmpaque,
+            models.OfertasxProductos.IdProducto == precio.IdProducto,  # Filtro por producto
             or_(
                 models.OfertasxProductosxSucursalesDetalles.IndActivo == 1,
                 models.OfertasxProductosxSucursalesDetalles.IndActivo.is_(None),
@@ -205,11 +223,6 @@ def armar_respuesta(
         "pvp_base_oferta": pvp_base_oferta if oferta_vigente else None,
         "id_empaque": int(precio.IdEmpaque) if precio and precio.IdEmpaque is not None else None,
     }
-
-
-from fastapi import Query
-from typing import Optional
-from dateutil.parser import isoparse
 
 @app.get("/backup")
 async def backup_data(
@@ -339,7 +352,7 @@ async def backup_data(
         return 0
 
     count = _count_for_section()
-    has_more = count == limit
+    has_more = count >= limit  
     next_offset = offset + limit if has_more else None
 
     return {

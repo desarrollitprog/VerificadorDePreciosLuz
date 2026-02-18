@@ -805,6 +805,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         val service = api ?: return
         pingJob?.cancel()
         pingJob = scope.launch {
+            var offlineRetry = false
             while (isActive) {
                 val (ok, reason) = pingWithRetries(service)
                 if (!ok) {
@@ -820,17 +821,21 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                         offlineBackup = backup
                         setOfflineMode(true)
                         uiHandler.post { updateOfflineTimestamp(offlineBackup) }
-                        delay(5000)
+                        // Reintenta ping cada 60 segundos en modo offline
+                        delay(60000)
+                        offlineRetry = true
                         continue
                     }
                     goToConfig(reason ?: "Conexión perdida. Regresando a configuración")
                     return@launch
                 }
-                if (offlineMode) {
+                if (offlineMode || offlineRetry) {
                     setOfflineMode(false)
                     resyncBackupIfOnline(service)
+                    offlineRetry = false
                 }
-                delay(240000)
+                // Ping cada 180 segundos (3 minutos) en modo online
+                delay(180000)
             }
         }
     }

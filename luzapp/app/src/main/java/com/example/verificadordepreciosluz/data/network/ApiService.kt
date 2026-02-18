@@ -75,9 +75,9 @@ object ApiClient {
             level = if (enableLogs) HttpLoggingInterceptor.Level.BODY else HttpLoggingInterceptor.Level.NONE
         }
         val client = OkHttpClient.Builder()
-            .callTimeout(30, TimeUnit.SECONDS)
-            .connectTimeout(5, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
+            .callTimeout(60, TimeUnit.SECONDS) // Aumenta el timeout de llamada
+            .connectTimeout(20, TimeUnit.SECONDS) // Aumenta el timeout de conexión
+            .readTimeout(60, TimeUnit.SECONDS) // Aumenta el timeout de lectura
             .retryOnConnectionFailure(true)
             .addInterceptor(logging)
             .build()

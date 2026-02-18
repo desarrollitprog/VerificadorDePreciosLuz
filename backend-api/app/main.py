@@ -44,7 +44,7 @@ async def get_devices_status():
 
 DEVICE_LAST_SEEN: dict[str, dict[str, object]] = {}
 DEVICE_LOCK = asyncio.Lock()
-DISCONNECT_THRESHOLD = timedelta(seconds=360)
+DISCONNECT_THRESHOLD = timedelta(seconds=420)  # Considerar desconectado si no se ve en 10 minutos y 20 segundos
 CHECK_INTERVAL_SECONDS = 10
 
 

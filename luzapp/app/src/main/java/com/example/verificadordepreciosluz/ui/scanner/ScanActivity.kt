@@ -104,7 +104,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private var cameraProvider: ProcessCameraProvider? = null
     private val bannerMaxAgeMs = (2.5 * 60 * 60 * 1000L).toLong()
     private var backendBaseUrl: String? = null
-    private val standbyIdleMs = 15_000L
+    private val standbyIdleMs = 20_000L
     private var standbyItems: List<BannerCacheItem> = emptyList()
     private var standbyIndex = 0
     private var standbyActive = false

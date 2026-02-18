@@ -41,9 +41,7 @@ async def crear_banner(banner: PublicidadCreate, db: AsyncSession = Depends(get_
 @router.get("/banners/list")
 def listar_archivos_banners():
     try:
-        banners_dir = os.path.normpath(
-              os.path.join(os.path.dirname(__file__), "..", "static", "banners")
-        )
+        banners_dir = os.path.join("static", "banners")
         archivos = []
         if os.path.exists(banners_dir):
             archivos = [f for f in os.listdir(banners_dir) if os.path.isfile(os.path.join(banners_dir, f))]
@@ -68,9 +66,7 @@ async def upload_banner(
     import uuid
     from datetime import datetime
 
-    banners_dir = os.path.normpath(
-          os.path.join(os.path.dirname(__file__), "..", "static", "banners")
-    )
+    banners_dir = os.path.join("static", "banners")
     os.makedirs(banners_dir, exist_ok=True)
     ext = file.filename.lower().split('.')[-1]
     allowed_images = ["jpg", "jpeg", "png", "gif", "bmp", "webp"]
@@ -154,7 +150,7 @@ async def eliminar_banner(id: int = Path(..., description="ID del banner a elimi
         if banner.Url:
             filename = os.path.basename(banner.Url)
             file_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "static", "banners", filename))
-            file_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "static", "banners", filename))
+            file_path = os.path.join("static", "banners", filename)
             if os.path.exists(file_path):
                 os.remove(file_path)
         await db.delete(banner)

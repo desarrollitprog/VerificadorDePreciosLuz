@@ -127,7 +127,6 @@ async def buscar_detalle_oferta_vigente(
         )
         .where(
             models.OfertasxProductosxSucursalesDetalles.IdEmpaque == precio.IdEmpaque,
-            models.OfertasxProductos.IdProducto == precio.IdProducto,  # Filtro por producto
             or_(
                 models.OfertasxProductosxSucursalesDetalles.IndActivo == 1,
                 models.OfertasxProductosxSucursalesDetalles.IndActivo.is_(None),

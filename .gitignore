@@ -20,6 +20,24 @@ luzapp/.gradle/
 luzapp/build/
 luzapp/local.properties
 
+# Archivos de entorno globales
+*.env
+*.env.*
+local.properties
+
+# Entornos virtuales Python
+.venv/
+venv/
+
+# Archivos de base de datos temporales
+*.sqlite3
+*.db
+
+# Archivos de llaves y certificados
+*.pem
+*.key
+*.crt
+
 # Archivos de configuración sensibles
 backend-api/.env
 

@@ -7,6 +7,7 @@ from sqlalchemy.future import select
 from ..models import Publicidad
 from ..schemas import PublicidadResponse, PublicidadCreate
 from ..database import get_db_usuarios
+from ..services.replicacion_service import replicar_archivo_al_api
 
 router = APIRouter()
 
@@ -125,6 +126,23 @@ async def upload_banner(
         if os.path.exists(file_location):
             os.remove(file_location)
         return {"success": False, "message": f"Error al guardar metadatos en la base de datos: {str(e)}"}, 500
+
+    # Replicar archivo al backend-api
+    try:
+        # URL del endpoint del backend-api
+        api_url = os.getenv("BACKEND_API_URL", "http://192.168.1.109:8000/replicar-archivo") # Puedes parametrizar esto con una variable de entorno
+        replicar_archivo_al_api(
+            api_url=api_url,
+            file_path=file_location,
+            titulo=Titulo,
+            tipo=Tipo,
+            prioridad=Prioridad,
+            fecha_inicio=FechaInicio,
+            fecha_fin=FechaFin,
+            duracion_seg=DuracionSeg
+        )
+    except Exception as e:
+        return {"success": False, "message": f"Error al replicar archivo al backend-api: {str(e)}"}, 500
 
     return {
         "success": True,

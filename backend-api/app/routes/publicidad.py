@@ -16,8 +16,8 @@ async def listar_banners(db: AsyncSession = Depends(get_db_publicidad)):
     result = await db.execute(
         Publicidad.__table__.select().order_by(Publicidad.prioridad, Publicidad.id)
     )
-    banners = result.fetchall()
-    return [PublicidadResponse.model_validate(dict(row)) for row in banners]
+    banners = result.scalars().all()  # Cambia fetchall() por scalars().all() para obtener instancias del modelo
+    return [PublicidadResponse.model_validate(banner.__dict__) for banner in banners]
 
 @router.post("/replicar-archivo")
 async def replicar_archivo(

@@ -1,22 +1,22 @@
 from fastapi import UploadFile, File, Form, APIRouter, HTTPException, status, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from ..database import get_db_publicidad
 import shutil
 from datetime import datetime
 import os
 from typing import List
-
 from ..schemas import PublicidadResponse
+from ..models.publicidad import Publicidad
 
 router = APIRouter()
 
 @router.get("/banners", response_model=List[PublicidadResponse])
 async def listar_banners(db: AsyncSession = Depends(get_db_publicidad)):
-    from ..models.publicidad import Publicidad
     result = await db.execute(
-        Publicidad.__table__.select().order_by(Publicidad.prioridad, Publicidad.id)
+        select(Publicidad).order_by(Publicidad.prioridad, Publicidad.id)
     )
-    banners = result.scalars().all()  # Cambia fetchall() por scalars().all() para obtener instancias del modelo
+    banners = result.scalars().all()
     return [PublicidadResponse.model_validate(banner.__dict__) for banner in banners]
 
 @router.post("/replicar-archivo")

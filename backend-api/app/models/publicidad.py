@@ -10,7 +10,6 @@ class Publicidad(Base):
     """
 
     __tablename__ = "Publicidad"
-    __table_args__ = {"schema": "ConfiguracionPOS"}
 
     id = Column("IdPublicidad", Integer, primary_key=True, index=True)
     titulo = Column("Titulo", String(200), nullable=True)

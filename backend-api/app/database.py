@@ -118,6 +118,45 @@ async def get_db_erp():
         yield session
 
 # ============================================================================
+# CONEXIÓN 3: BASE DE DATOS PUBLICIDAD SECUNDARIA
+# ============================================================================
+
+# Variables de entorno para BD Publicidad Secundaria
+DB_USER_PUBLICIDAD = _required("DB_USER_PUBLICIDAD")
+DB_PASSWORD_PUBLICIDAD = _required("DB_PASSWORD_PUBLICIDAD")
+DB_SERVER_PUBLICIDAD = _required("DB_SERVER_PUBLICIDAD")
+DB_NAME_PUBLICIDAD = _required("DB_NAME_PUBLICIDAD")
+DB_PORT_PUBLICIDAD = os.getenv("DB_PORT_PUBLICIDAD", "1433")
+DB_DRIVER_PUBLICIDAD = os.getenv("DB_DRIVER_PUBLICIDAD", "ODBC Driver 18 for SQL Server")
+
+async_engine_publicidad = create_async_engine(
+    _build_async_connection_string(
+        server=DB_SERVER_PUBLICIDAD,
+        database=DB_NAME_PUBLICIDAD,
+        user=DB_USER_PUBLICIDAD,
+        password=DB_PASSWORD_PUBLICIDAD,
+        port=DB_PORT_PUBLICIDAD,
+        driver=DB_DRIVER_PUBLICIDAD,
+    ),
+    echo=False,
+    pool_pre_ping=True,
+    pool_recycle=1800,
+)
+AsyncSessionLocalPublicidad = sessionmaker(
+    bind=async_engine_publicidad,
+    class_=AsyncSession,
+    expire_on_commit=False
+)
+
+BasePublicidad = declarative_base()
+
+# Dependencia para obtener la sesión async de publicidad secundaria
+async def get_db_publicidad():
+    async with AsyncSessionLocalPublicidad() as session:
+        yield session
+
+
+# ============================================================================
 # VERIFICACIÓN DE CONEXIONES (Opcional - para debug)
 # ============================================================================
 async def test_connections_async():
@@ -137,6 +176,14 @@ async def test_connections_async():
         print("✅ Conexión async a BD ERP_POS_CENTRAL: OK")
     except Exception as e:
         print(f"❌ Conexión async a BD ERP_POS_CENTRAL: FALLO")
+        print(f"   Error: {e}")
+    # Test conexión Publicidad Secundaria
+    try:
+        async with AsyncSessionLocalPublicidad() as db_publicidad:
+            await db_publicidad.execute(text("SELECT 1"))
+        print("✅ Conexión async a BD PUBLICIDAD SECUNDARIA: OK")
+    except Exception as e:
+        print(f"❌ Conexión async a BD PUBLICIDAD SECUNDARIA: FALLO")
         print(f"   Error: {e}")
 
 

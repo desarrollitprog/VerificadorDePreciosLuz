@@ -176,9 +176,11 @@ async def eliminar_banner(id: int = Path(..., description="ID del banner a elimi
         # Intentar borrar remotamente en backend-api antes de borrar localmente
         try:
             api_url = os.getenv("BACKEND_API_URL", "http://192.168.1.109:8000/api")
-            remote_result = Borrado_api(api_url, id)
-            if not remote_result.get("success", False):
-                raise Exception(f"No se pudo borrar remotamente: {remote_result.get('message', 'Sin mensaje')}")
+            remote_id = banner.IdPublicidadRemoto
+            if remote_id:
+                remote_result = Borrado_api(api_url, remote_id)
+                if not remote_result.get("success", False):
+                    raise Exception(f"No se pudo borrar remotamente: {remote_result.get('message', 'Sin mensaje')}")
         except Exception as e:
             return {"success": False, "message": f"Error al borrar remotamente: {str(e)}"}, 500
 

@@ -101,6 +101,7 @@ async def upload_banner(
     try:
         with open(file_location, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
+        print(f"Se ha guardado correctamente en la ruta: {file_location}")
     except Exception as e:
         return {"success": False, "message": f"Error al guardar el archivo: {str(e)}"}, 500
 
@@ -122,6 +123,7 @@ async def upload_banner(
         db.add(nuevo_banner)
         await db.commit()
         await db.refresh(nuevo_banner)
+        print(f"Se ha guardado correctamente en la base de datos: Id={nuevo_banner.IdPublicidad}, Titulo={nuevo_banner.Titulo}, Url={nuevo_banner.Url}")
     except Exception as e:
         # Si falla la BD, elimina el archivo subido
         if os.path.exists(file_location):
@@ -132,7 +134,12 @@ async def upload_banner(
     id_remoto = None
     try:
         api_url = os.getenv("BACKEND_API_URL", "http://192.168.1.109:8000/api")
+<<<<<<< HEAD
         resp = replicar_archivo_al_api(
+=======
+        print(f"Replicando archivo al backend-api: {file_location} -> {api_url}")
+        replicar_archivo_al_api(
+>>>>>>> 68363aa80d2ed3954c4dbe624d7fada2582fe543
             api_url=api_url,
             file_path=file_location,
             titulo=Titulo,
@@ -142,7 +149,11 @@ async def upload_banner(
             fecha_fin=FechaFin,
             duracion_seg=DuracionSeg
         )
+<<<<<<< HEAD
         id_remoto = resp.get("id")
+=======
+        print("Replicación al backend-api finalizada")
+>>>>>>> 68363aa80d2ed3954c4dbe624d7fada2582fe543
     except Exception as e:
         return {"success": False, "message": f"Error al replicar archivo al backend-api: {str(e)}"}, 500
 

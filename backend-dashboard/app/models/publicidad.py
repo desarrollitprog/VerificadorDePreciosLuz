@@ -10,7 +10,6 @@ class Publicidad(Base):
     __tablename__ = "Publicidad"
 
     IdPublicidad = Column("IdPublicidad", Integer, primary_key=True, index=True)
-    IdPublicidadRemoto = Column("IdPublicidadRemoto", Integer, nullable=True, index=True)
     Titulo = Column("Titulo", String(200), nullable=True)
     Tipo = Column("Tipo", String(10), nullable=False, default="image")
     Url = Column("Url", String(500), nullable=False)

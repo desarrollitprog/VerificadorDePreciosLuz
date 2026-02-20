@@ -45,12 +45,12 @@ def replicar_archivo_al_api(
     response.raise_for_status()
     return response.json()
 
-def Borrado_api(api_url: str, banner_id: int, timeout: int = 30) -> dict:
+def Borrado_api(api_url: str, id_remoto: int, timeout: int = 30) -> dict:
     """
-    Envía una petición DELETE al backend-api para eliminar un banner remoto por ID.
+    Envía una petición DELETE al backend-api para eliminar un banner remoto por IdPublicidadRemoto.
     Retorna la respuesta del API como dict.
     """
-    url = f"{api_url.rstrip('/')}/banners/{banner_id}"
+    url = f"{api_url.rstrip('/')}/banners/remoto/{id_remoto}"
     response = requests.delete(url, timeout=timeout)
     try:
         return response.json()

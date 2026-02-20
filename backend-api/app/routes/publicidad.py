@@ -89,16 +89,15 @@ async def replicar_archivo(
         "id": nuevo_banner.id
     }
 
-@router.delete("/banners/{banner_id}")
-async def eliminar_banner(banner_id: int, db: AsyncSession = Depends(get_db_publicidad)):
+@router.delete("/banners/remoto/{id_remoto}")
+async def eliminar_banner_remoto(id_remoto: int, db: AsyncSession = Depends(get_db_publicidad)):
     from ..models.publicidad import Publicidad
-    result = await db.execute(select(Publicidad).where(Publicidad.id == banner_id))
+    result = await db.execute(select(Publicidad).where(Publicidad.IdPublicidadRemoto == id_remoto))
     banner = result.scalars().first()
     if not banner:
-        raise HTTPException(status_code=404, detail="Banner no encontrado")
+        raise HTTPException(status_code=404, detail="Banner no encontrado por IdPublicidadRemoto")
     # Eliminar archivo físico si existe
     if banner.url:
-        # url es tipo /static/banners/filename.ext
         file_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", banner.url.lstrip("/")))
         if os.path.exists(file_path):
             try:
@@ -107,4 +106,4 @@ async def eliminar_banner(banner_id: int, db: AsyncSession = Depends(get_db_publ
                 pass
     await db.delete(banner)
     await db.commit()
-    return {"success": True, "message": "Banner eliminado correctamente."}
+    return {"success": True, "message": "Banner eliminado correctamente por IdPublicidadRemoto."}

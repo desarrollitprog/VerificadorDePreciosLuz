@@ -81,3 +81,23 @@ async def replicar_archivo(
         raise HTTPException(status_code=500, detail=f"Error al guardar metadatos: {str(e)}")
 
     return {"success": True, "message": "Archivo replicado y registrado correctamente.", "url": url}
+
+@router.delete("/banners/{banner_id}")
+async def eliminar_banner(banner_id: int, db: AsyncSession = Depends(get_db_publicidad)):
+    from ..models.publicidad import Publicidad
+    result = await db.execute(select(Publicidad).where(Publicidad.id == banner_id))
+    banner = result.scalars().first()
+    if not banner:
+        raise HTTPException(status_code=404, detail="Banner no encontrado")
+    # Eliminar archivo físico si existe
+    if banner.url:
+        # url es tipo /static/banners/filename.ext
+        file_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", banner.url.lstrip("/")))
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except Exception:
+                pass
+    await db.delete(banner)
+    await db.commit()
+    return {"success": True, "message": "Banner eliminado correctamente."}

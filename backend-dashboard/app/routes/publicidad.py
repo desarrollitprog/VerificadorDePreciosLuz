@@ -1,5 +1,7 @@
 import os
 import shutil
+import uuid
+from datetime import datetime
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Path
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -64,11 +66,9 @@ async def upload_banner(
     DuracionSeg: int = Form(None),
     db: AsyncSession = Depends(get_db_usuarios)
 ):
-    import uuid
-    from datetime import datetime
-
+  
     # Calcula la ruta absoluta para static/banners, robusto ante cwd
-    banners_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "static", "banners"))
+    banners_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "static", "banners"))
     os.makedirs(banners_dir, exist_ok=True)
     ext = file.filename.lower().split('.')[-1]
     allowed_images = ["jpg", "jpeg", "png", "gif", "bmp", "webp"]

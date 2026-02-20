@@ -150,11 +150,7 @@ async def upload_banner(
     except Exception as e:
         return {"success": False, "message": f"Error al replicar archivo al backend-api: {str(e)}"}, 500
 
-    # Guardar el ID remoto en el registro local
-    if id_remoto:
-        nuevo_banner.IdPublicidadRemoto = id_remoto
-        await db.commit()
-        await db.refresh(nuevo_banner)
+
 
     return {
         "success": True,
@@ -184,14 +180,13 @@ async def eliminar_banner(id: int = Path(..., description="ID del banner a elimi
             file_path = os.path.join("static", "banners", filename)
             if os.path.exists(file_path):
                 os.remove(file_path)
-        # Intentar borrar remotamente en backend-api usando el IdPublicidadRemoto
+        # Intentar borrar remotamente en backend-api usando el IdPublicidad como IdPublicidadRemoto
         try:
             api_url = os.getenv("BACKEND_API_URL", "http://192.168.1.109:8000/api")
-            remote_id = banner.IdPublicidadRemoto
-            if remote_id:
-                remote_result = Borrado_api(api_url, remote_id)
-                if not remote_result.get("success", False):
-                    raise Exception(f"No se pudo borrar remotamente: {remote_result.get('message', 'Sin mensaje')}")
+            remote_id = banner.IdPublicidad
+            remote_result = Borrado_api(api_url, remote_id)
+            if not remote_result.get("success", False):
+                raise Exception(f"No se pudo borrar remotamente: {remote_result.get('message', 'Sin mensaje')}")
         except Exception as e:
             return {"success": False, "message": f"Error al borrar remotamente: {str(e)}"}, 500
 

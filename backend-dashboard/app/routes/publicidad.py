@@ -138,6 +138,7 @@ async def upload_banner(
         resp = replicar_archivo_al_api(
                 api_url=api_url,
                 file_path=file_location,
+                IdPublicidadRemoto=nuevo_banner.IdPublicidad,
                 titulo=Titulo,
                 tipo=Tipo,
                 prioridad=Prioridad,

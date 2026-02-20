@@ -134,26 +134,19 @@ async def upload_banner(
     id_remoto = None
     try:
         api_url = os.getenv("BACKEND_API_URL", "http://192.168.1.109:8000/api")
-<<<<<<< HEAD
-        resp = replicar_archivo_al_api(
-=======
         print(f"Replicando archivo al backend-api: {file_location} -> {api_url}")
-        replicar_archivo_al_api(
->>>>>>> 68363aa80d2ed3954c4dbe624d7fada2582fe543
-            api_url=api_url,
-            file_path=file_location,
-            titulo=Titulo,
-            tipo=Tipo,
-            prioridad=Prioridad,
-            fecha_inicio=FechaInicio,
-            fecha_fin=FechaFin,
-            duracion_seg=DuracionSeg
-        )
-<<<<<<< HEAD
-        id_remoto = resp.get("id")
-=======
+        resp = replicar_archivo_al_api(
+                api_url=api_url,
+                file_path=file_location,
+                titulo=Titulo,
+                tipo=Tipo,
+                prioridad=Prioridad,
+                fecha_inicio=FechaInicio,
+                fecha_fin=FechaFin,
+                duracion_seg=DuracionSeg
+            )
         print("Replicación al backend-api finalizada")
->>>>>>> 68363aa80d2ed3954c4dbe624d7fada2582fe543
+        id_remoto = resp.get("id") if resp else None
     except Exception as e:
         return {"success": False, "message": f"Error al replicar archivo al backend-api: {str(e)}"}, 500
 

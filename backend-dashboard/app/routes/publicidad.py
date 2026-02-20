@@ -128,11 +128,11 @@ async def upload_banner(
             os.remove(file_location)
         return {"success": False, "message": f"Error al guardar metadatos en la base de datos: {str(e)}"}, 500
 
-    # Replicar archivo al backend-api
+    # Replicar archivo al backend-api y guardar el ID remoto
+    id_remoto = None
     try:
-        # URL base del backend-api (termina en /api)
         api_url = os.getenv("BACKEND_API_URL", "http://192.168.1.109:8000/api")
-        replicar_archivo_al_api(
+        resp = replicar_archivo_al_api(
             api_url=api_url,
             file_path=file_location,
             titulo=Titulo,
@@ -142,8 +142,15 @@ async def upload_banner(
             fecha_fin=FechaFin,
             duracion_seg=DuracionSeg
         )
+        id_remoto = resp.get("id")
     except Exception as e:
         return {"success": False, "message": f"Error al replicar archivo al backend-api: {str(e)}"}, 500
+
+    # Guardar el ID remoto en el registro local
+    if id_remoto:
+        nuevo_banner.IdPublicidadRemoto = id_remoto
+        await db.commit()
+        await db.refresh(nuevo_banner)
 
     return {
         "success": True,
@@ -173,16 +180,18 @@ async def eliminar_banner(id: int = Path(..., description="ID del banner a elimi
             file_path = os.path.join("static", "banners", filename)
             if os.path.exists(file_path):
                 os.remove(file_path)
-        # Intentar borrar remotamente en backend-api antes de borrar localmente
+        # Intentar borrar remotamente en backend-api usando el IdPublicidadRemoto
         try:
             api_url = os.getenv("BACKEND_API_URL", "http://192.168.1.109:8000/api")
-            remote_result = Borrado_api(api_url, id)
-            if not remote_result.get("success", False):
-                raise Exception(f"No se pudo borrar remotamente: {remote_result.get('message', 'Sin mensaje')}")
+            remote_id = banner.IdPublicidadRemoto
+            if remote_id:
+                remote_result = Borrado_api(api_url, remote_id)
+                if not remote_result.get("success", False):
+                    raise Exception(f"No se pudo borrar remotamente: {remote_result.get('message', 'Sin mensaje')}")
         except Exception as e:
             return {"success": False, "message": f"Error al borrar remotamente: {str(e)}"}, 500
 
-        # Si el borrado remoto fue exitoso, borrar localmente
+        # Si el borrado remoto fue exitoso o no hay ID remoto, borrar localmente
         await db.delete(banner)
         await db.commit()
         return {"success": True, "message": "Banner eliminado correctamente."}

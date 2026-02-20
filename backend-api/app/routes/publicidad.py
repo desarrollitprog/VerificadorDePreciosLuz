@@ -80,7 +80,12 @@ async def replicar_archivo(
             os.remove(file_location)
         raise HTTPException(status_code=500, detail=f"Error al guardar metadatos: {str(e)}")
 
-    return {"success": True, "message": "Archivo replicado y registrado correctamente.", "url": url}
+    return {
+        "success": True,
+        "message": "Archivo replicado y registrado correctamente.",
+        "url": url,
+        "id": nuevo_banner.id
+    }
 
 @router.delete("/banners/{banner_id}")
 async def eliminar_banner(banner_id: int, db: AsyncSession = Depends(get_db_publicidad)):

@@ -22,6 +22,7 @@ async def listar_banners(db: AsyncSession = Depends(get_db_publicidad)):
 @router.post("/replicar-archivo")
 async def replicar_archivo(
     file: UploadFile = File(...),
+    IdPublicidadRemoto: int = Form(None),
     titulo: str = Form(None),
     tipo: str = Form(None),
     prioridad: int = Form(0),
@@ -70,7 +71,8 @@ async def replicar_archivo(
             prioridad=prioridad,
             fecha_inicio=fecha_inicio_dt,
             fecha_fin=fecha_fin_dt,
-            duracion_seg=duracion_seg
+            duracion_seg=duracion_seg,
+            IdPublicidadRemoto=IdPublicidadRemoto
         )
         db.add(nuevo_banner)
         await db.commit()

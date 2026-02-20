@@ -4,6 +4,7 @@ import os
 def replicar_archivo_al_api(
     api_url: str,
     file_path: str,
+    IdPublicidadRemoto: int = None,
     titulo: str = None,
     tipo: str = None,
     prioridad: int = 0,
@@ -21,6 +22,7 @@ def replicar_archivo_al_api(
 
     files = {"file": open(file_path, "rb")}
     data = {
+        "IdPublicidadRemoto": IdPublicidadRemoto,
         "titulo": titulo,
         "tipo": tipo,
         "prioridad": prioridad,

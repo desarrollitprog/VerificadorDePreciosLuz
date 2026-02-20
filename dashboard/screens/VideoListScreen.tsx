@@ -179,7 +179,7 @@ export const VideoListScreen: React.FC = () => {
           >
             <option value="">Tipo</option>
             <option value="video">Video</option>
-            <option value="foto">Foto</option>
+            <option value="image">Foto</option>
           </select>
         </div>
       </div>

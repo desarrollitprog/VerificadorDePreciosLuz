@@ -31,8 +31,8 @@ def replicar_archivo_al_api(
     # Elimina campos None
     data = {k: v for k, v in data.items() if v is not None}
 
-    # Concatenar endpoint de subida si no está incluido
-    upload_url = api_url.rstrip('/') + '/banners/upload' if not api_url.rstrip('/').endswith('/banners/upload') else api_url
+    # Concatenar endpoint de subida correcto
+    upload_url = api_url.rstrip('/') + '/replicar-archivo' if not api_url.rstrip('/').endswith('/replicar-archivo') else api_url
     response = requests.post(
         upload_url,
         files=files,

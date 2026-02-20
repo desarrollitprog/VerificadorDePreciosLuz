@@ -31,8 +31,10 @@ def replicar_archivo_al_api(
     # Elimina campos None
     data = {k: v for k, v in data.items() if v is not None}
 
+    # Concatenar endpoint de subida si no está incluido
+    upload_url = api_url.rstrip('/') + '/banners/upload' if not api_url.rstrip('/').endswith('/banners/upload') else api_url
     response = requests.post(
-        api_url,
+        upload_url,
         files=files,
         data=data,
         timeout=timeout
@@ -40,3 +42,15 @@ def replicar_archivo_al_api(
     files["file"].close()
     response.raise_for_status()
     return response.json()
+
+def Borrado_api(api_url: str, banner_id: int, timeout: int = 30) -> dict:
+    """
+    Envía una petición DELETE al backend-api para eliminar un banner remoto por ID.
+    Retorna la respuesta del API como dict.
+    """
+    url = f"{api_url.rstrip('/')}/banners/{banner_id}"
+    response = requests.delete(url, timeout=timeout)
+    try:
+        return response.json()
+    except Exception:
+        return {"success": False, "message": f"Respuesta inválida del API: {response.text}"}

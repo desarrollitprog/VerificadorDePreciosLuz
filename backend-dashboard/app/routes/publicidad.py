@@ -9,7 +9,8 @@ from sqlalchemy.future import select
 from ..models import Publicidad
 from ..schemas import PublicidadResponse, PublicidadCreate
 from ..database import get_db_usuarios
-from ..services.replicacion_service import replicar_archivo_al_api
+from ..services.replicacion_service import replicar_archivo_al_api, Borrado_api
+
 
 router = APIRouter()
 
@@ -129,8 +130,8 @@ async def upload_banner(
 
     # Replicar archivo al backend-api
     try:
-        # URL del endpoint del backend-api
-        api_url = os.getenv("BACKEND_API_URL", "http://192.168.1.109:8000/replicar-archivo") # Puedes parametrizar esto con una variable de entorno
+        # URL base del backend-api (termina en /api)
+        api_url = os.getenv("BACKEND_API_URL", "http://192.168.1.109:8000/api")
         replicar_archivo_al_api(
             api_url=api_url,
             file_path=file_location,
@@ -172,6 +173,16 @@ async def eliminar_banner(id: int = Path(..., description="ID del banner a elimi
             file_path = os.path.join("static", "banners", filename)
             if os.path.exists(file_path):
                 os.remove(file_path)
+        # Intentar borrar remotamente en backend-api antes de borrar localmente
+        try:
+            api_url = os.getenv("BACKEND_API_URL", "http://192.168.1.109:8000/api")
+            remote_result = Borrado_api(api_url, id)
+            if not remote_result.get("success", False):
+                raise Exception(f"No se pudo borrar remotamente: {remote_result.get('message', 'Sin mensaje')}")
+        except Exception as e:
+            return {"success": False, "message": f"Error al borrar remotamente: {str(e)}"}, 500
+
+        # Si el borrado remoto fue exitoso, borrar localmente
         await db.delete(banner)
         await db.commit()
         return {"success": True, "message": "Banner eliminado correctamente."}

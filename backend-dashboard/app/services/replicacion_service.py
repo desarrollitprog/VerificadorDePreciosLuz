@@ -20,7 +20,9 @@ def replicar_archivo_al_api(
     if not os.path.isfile(file_path):
         raise FileNotFoundError(f"Archivo no encontrado: {file_path}")
 
-    files = {"file": open(file_path, "rb")}
+    with open(file_path, "rb") as f:
+        files = {"file": f}
+        # ...existing code...
     data = {
         "IdPublicidadRemoto": IdPublicidadRemoto,
         "titulo": titulo,

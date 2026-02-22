@@ -18,7 +18,13 @@ ALGORITHM = "HS256"
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
-def crear_token_jwt(data: dict, audience: str = "dashboard", subject: str = None):
+def crear_token_jwt(
+    data: dict,
+    audience: str = "dashboard",
+    subject: str | None = None,
+    role: str | None = None,
+    user_id: int | None = None,
+):
     to_encode = data.copy()
     now = datetime.utcnow()
     expire = now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -30,6 +36,10 @@ def crear_token_jwt(data: dict, audience: str = "dashboard", subject: str = None
     })
     if subject:
         to_encode["sub"] = subject
+    if role is not None:
+        to_encode["rol"] = role
+    if user_id is not None:
+        to_encode["user_id"] = int(user_id)
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 def verificar_token_jwt(token: str, audience: str = "dashboard"):
@@ -39,7 +49,7 @@ def verificar_token_jwt(token: str, audience: str = "dashboard"):
             SECRET_KEY,
             algorithms=[ALGORITHM],
             audience=audience,  # Valida el claim 'aud'
-            options={"require": ["exp", "nbf", "iat", "aud", "sub"]}  # Requiere estos claims
+            options={"require": ["exp", "nbf", "iat", "aud", "sub", "rol", "user_id"]}  # Requiere estos claims
         )
         return payload
     except Exception as e:

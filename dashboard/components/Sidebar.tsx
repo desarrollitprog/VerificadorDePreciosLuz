@@ -1,6 +1,7 @@
-import React from 'react';
-import { LayoutGrid, Video, Settings, LogOut, X } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { LayoutGrid, Video, Settings, LogOut, X, Users } from 'lucide-react';
 import { Screen } from '../types';
+import { getUserRole } from '../services/authService';
 
 interface SidebarProps {
   currentScreen: Screen;
@@ -10,7 +11,12 @@ interface SidebarProps {
   onLogout: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, onClose, onLogout }) => {
+  const [role, setRole] = useState<'ADMIN' | 'CLIENTE' | null>(null);
+
+  useEffect(() => {
+    setRole(getUserRole());
+  }, []);
+
   return (
     <aside 
       className={`
@@ -61,6 +67,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isO
         </button>
 
         <div className="my-2 border-t border-slate-800"></div>
+
+        {/* Gestión de Usuarios solo para ADMIN */}
+        {role === 'ADMIN' && (
+          <button 
+            className="flex items-center gap-3 px-3 py-3 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors w-full text-left group"
+            onClick={() => { onNavigate('users'); onClose(); }}
+          >
+            <Users size={20} />
+            <span className="text-sm font-medium">Gestión de Usuarios</span>
+          </button>
+        )}
 
         <button 
           className="flex items-center gap-3 px-3 py-3 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors w-full text-left group"

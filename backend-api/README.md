@@ -52,6 +52,13 @@ Rutas útiles
 - GET /consultas/productos  -> lista productos
 - GET /publicidad/banners   -> lista banners desde `static/banners`
 
+Heartbeat (monitoreo hacia backend-dashboard)
+- Este backend corre en cada servidor secundario (kiosko). Para que el dashboard central vea el estado y el almacenamiento, ejecuta en segundo plano el cliente de heartbeat:
+```powershell
+python heartbeat_client.py
+```
+- Variables en `.env`: `DASHBOARD_URL` (URL del backend-dashboard, ej. http://192.168.1.105:8000), `HEARTBEAT_API_KEY` (misma clave que en el .env del dashboard). Opcional: `HEARTBEAT_DISK_PATH` (ej. C:\ o ruta de multimedia), `HEARTBEAT_INTERVAL_SECONDS` (default 60).
+
 Notas
 - No incluyas credenciales en commits; usa `.env` y guarda las credenciales localmente.
 - Si tienes problemas con la conexión ODBC en Windows, verifica que el driver sea 18 y/o ajusta `DB_DRIVER` en `.env`.

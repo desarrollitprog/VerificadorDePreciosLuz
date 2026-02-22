@@ -20,14 +20,18 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
         )
     # Consumir los claims relevantes
     usuario = payload.get("sub")
+    user_id = payload.get("user_id")
     audiencia = payload.get("aud")
     emitido_en = payload.get("iat")
     not_before = payload.get("nbf")
+    rol = payload.get("rol")
     return {
         "usuario": usuario,
+        "user_id": int(user_id) if user_id is not None else None,
         "audiencia": audiencia,
         "emitido_en": emitido_en,
-        "not_before": not_before
+        "not_before": not_before,
+        "rol": rol,
     }
 
 @router.post("/auth/login")
@@ -39,8 +43,14 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSessi
         raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
     if not verificar_contrasena(form_data.password, usuario.contrasena_hash):
         raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
-    # Generar JWT real
-    token = crear_token_jwt({"sub": usuario.nombre_usuario})
+    # Verificar rol en BD y generar JWT con sub, rol y user_id
+    rol_valor = usuario.rol.value if hasattr(usuario.rol, "value") else str(usuario.rol)
+    token = crear_token_jwt(
+        {"sub": usuario.nombre_usuario},
+        subject=usuario.nombre_usuario,
+        role=rol_valor,
+        user_id=usuario.id,
+    )
     return {"access_token": token, "token_type": "bearer"}
 
 # Ejemplo de endpoint protegido

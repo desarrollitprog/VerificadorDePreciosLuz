@@ -9,13 +9,19 @@ from sqlalchemy.future import select
 from ..models import Publicidad
 from ..schemas import PublicidadResponse, PublicidadCreate
 from ..database import get_db_usuarios
+from ..dependencies import get_current_cliente
+from ..services.notificacion_service import registrar_accion
 from ..services.replicacion_service import replicar_archivo_al_api, Borrado_api
 
 
 router = APIRouter()
 
+
 @router.get("/banners")
-async def listar_banners(db: AsyncSession = Depends(get_db_usuarios)):
+async def listar_banners(
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_cliente),
+):
     try:
         result = await db.execute(select(Publicidad).order_by(Publicidad.Prioridad, Publicidad.IdPublicidad))
         banners = result.scalars().all()
@@ -25,10 +31,14 @@ async def listar_banners(db: AsyncSession = Depends(get_db_usuarios)):
             "banners": banners
         }
     except Exception as e:
-        return {"success": False, "message": f"Error al obtener banners: {str(e)}", "banners": []}, 500
+        raise HTTPException(status_code=500, detail=f"Error al obtener banners: {str(e)}")
 
 @router.post("/banners")
-async def crear_banner(banner: PublicidadCreate, db: AsyncSession = Depends(get_db_usuarios)):
+async def crear_banner(
+    banner: PublicidadCreate,
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_cliente),
+):
     try:
         nuevo_banner = Publicidad(**banner.dict())
         db.add(nuevo_banner)
@@ -40,10 +50,10 @@ async def crear_banner(banner: PublicidadCreate, db: AsyncSession = Depends(get_
             "banner": nuevo_banner
         }
     except Exception as e:
-        return {"success": False, "message": f"Error al crear banner: {str(e)}", "banner": None}, 500
+        raise HTTPException(status_code=500, detail=f"Error al crear banner: {str(e)}")
 
 @router.get("/banners/list")
-def listar_archivos_banners():
+def listar_archivos_banners(current_user: dict = Depends(get_current_cliente)):
     try:
         banners_dir = os.path.join("static", "banners")
         archivos = []
@@ -55,7 +65,7 @@ def listar_archivos_banners():
             "banners": archivos
         }
     except Exception as e:
-        return {"success": False, "message": f"Error al listar archivos: {str(e)}", "banners": []}, 500
+        raise HTTPException(status_code=500, detail=f"Error al listar archivos: {str(e)}")
 
 @router.post("/banners/upload")
 async def upload_banner(
@@ -65,7 +75,8 @@ async def upload_banner(
     FechaInicio: str = Form(None),
     FechaFin: str = Form(None),
     DuracionSeg: int = Form(None),
-    db: AsyncSession = Depends(get_db_usuarios)
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_cliente),
 ):
   
     # Calcula la ruta absoluta para static/banners, robusto ante cwd
@@ -81,14 +92,14 @@ async def upload_banner(
         Tipo = "video"
         max_size = 100 * 1024 * 1024  # 100 MB
     else:
-        return {"success": False, "message": f"Tipo de archivo no permitido: .{ext}"}, 400
+        raise HTTPException(status_code=400, detail=f"Tipo de archivo no permitido: .{ext}")
 
     # Validar tamaño máximo
     file.file.seek(0, 2)  # Ir al final
     file_size = file.file.tell()
     file.file.seek(0)
     if file_size > max_size:
-        return {"success": False, "message": f"El archivo excede el tamaño máximo permitido ({max_size // (1024*1024)} MB)."}, 400
+        raise HTTPException(status_code=400, detail=f"El archivo excede el tamaño máximo permitido ({max_size // (1024*1024)} MB).")
 
     # Evitar sobrescribir: renombrar si existe
     filename = file.filename
@@ -103,7 +114,7 @@ async def upload_banner(
             shutil.copyfileobj(file.file, buffer)
         print(f"Se ha guardado correctamente en la ruta: {file_location}")
     except Exception as e:
-        return {"success": False, "message": f"Error al guardar el archivo: {str(e)}"}, 500
+        raise HTTPException(status_code=500, detail=f"Error al guardar el archivo: {str(e)}")
 
     # Guardar metadatos en la base de datos
     url = f"/static/banners/{filename}"
@@ -128,7 +139,7 @@ async def upload_banner(
         # Si falla la BD, elimina el archivo subido
         if os.path.exists(file_location):
             os.remove(file_location)
-        return {"success": False, "message": f"Error al guardar metadatos en la base de datos: {str(e)}"}, 500
+        raise HTTPException(status_code=500, detail=f"Error al guardar metadatos en la base de datos: {str(e)}")
 
     # Replicar archivo al backend-api y guardar el ID remoto
     id_remoto = None
@@ -149,9 +160,16 @@ async def upload_banner(
         print("Replicación al backend-api finalizada")
         id_remoto = resp.get("id") if resp else None
     except Exception as e:
-        return {"success": False, "message": f"Error al replicar archivo al backend-api: {str(e)}"}, 500
+        raise HTTPException(status_code=500, detail=f"Error al replicar archivo al backend-api: {str(e)}")
 
-
+    user_id = current_user.get("user_id")
+    if user_id is not None:
+        await registrar_accion(
+            db,
+            user_id,
+            "SUBIDA_MULTIMEDIA",
+            f"Archivo subido: {filename}, IdPublicidad={nuevo_banner.IdPublicidad}",
+        )
 
     return {
         "success": True,
@@ -169,16 +187,20 @@ async def upload_banner(
         }
     }
 @router.delete("/banners/{id}")
-async def eliminar_banner(id: int = Path(..., description="ID del banner a eliminar"), db: AsyncSession = Depends(get_db_usuarios)):
+async def eliminar_banner(
+    id: int = Path(..., description="ID del banner a eliminar"),
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_cliente),
+):
     try:
         banner = await db.get(Publicidad, id)
         if not banner:
-            return {"success": False, "message": "Banner no encontrado."}, 404
+            raise HTTPException(status_code=404, detail="Banner no encontrado.")
+        descripcion_audit = f"Banner eliminado: IdPublicidad={banner.IdPublicidad}, Titulo={banner.Titulo or ''}"
         # Eliminar archivo físico si existe
         if banner.Url:
             filename = os.path.basename(banner.Url)
             file_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "static", "banners", filename))
-            file_path = os.path.join("static", "banners", filename)
             if os.path.exists(file_path):
                 os.remove(file_path)
         # Intentar borrar remotamente en backend-api usando el IdPublicidad como IdPublicidadRemoto
@@ -189,13 +211,16 @@ async def eliminar_banner(id: int = Path(..., description="ID del banner a elimi
             if not remote_result.get("success", False):
                 raise Exception(f"No se pudo borrar remotamente: {remote_result.get('message', 'Sin mensaje')}")
         except Exception as e:
-            return {"success": False, "message": f"Error al borrar remotamente: {str(e)}"}, 500
+            raise HTTPException(status_code=500, detail=f"Error al borrar remotamente: {str(e)}")
 
         # Si el borrado remoto fue exitoso o no hay ID remoto, borrar localmente
         await db.delete(banner)
         await db.commit()
+        user_id = current_user.get("user_id")
+        if user_id is not None:
+            await registrar_accion(db, user_id, "BORRADO_MULTIMEDIA", descripcion_audit)
         return {"success": True, "message": "Banner eliminado correctamente."}
     except Exception as e:
-        return {"success": False, "message": f"Error al eliminar banner: {str(e)}"}, 500
+        raise HTTPException(status_code=500, detail=f"Error al eliminar banner: {str(e)}")
 
 

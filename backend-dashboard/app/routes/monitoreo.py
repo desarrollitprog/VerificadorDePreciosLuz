@@ -1,22 +1,5 @@
 from app.dependencies import get_current_admin
-@router.get("/alertas")
-async def obtener_alertas(
-    db: AsyncSession = Depends(get_db_usuarios),
-    current_user: dict = Depends(get_current_admin),
-):
-    stmt = select(ServidorSecundario)
-    result = await db.execute(stmt)
-    servidores = result.scalars().all()
-    alertas = []
-    for s in servidores:
-        if s.almacenamiento_total and s.almacenamiento_usado:
-            porcentaje = (s.almacenamiento_usado / s.almacenamiento_total) * 100
-            if porcentaje > 90:
-                alertas.append({
-                    "nombre_servidor": s.nombre,
-                    "mensaje": f"Advertencia: el servidor '{s.nombre}' está al {porcentaje:.1f}% de capacidad."
-                })
-    return alertas
+
 """
 Rutas de monitoreo: heartbeat de servidores secundarios y estado.
 """
@@ -151,3 +134,22 @@ async def status(
         })
 
     return {"success": True, "servidores": lista}
+
+@router.get("/alertas")
+async def obtener_alertas(
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_admin),
+):
+    stmt = select(ServidorSecundario)
+    result = await db.execute(stmt)
+    servidores = result.scalars().all()
+    alertas = []
+    for s in servidores:
+        if s.almacenamiento_total and s.almacenamiento_usado:
+            porcentaje = (s.almacenamiento_usado / s.almacenamiento_total) * 100
+            if porcentaje > 90:
+                alertas.append({
+                    "nombre_servidor": s.nombre,
+                    "mensaje": f"Advertencia: el servidor '{s.nombre}' está al {porcentaje:.1f}% de capacidad."
+                })
+    return alertas

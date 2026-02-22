@@ -19,7 +19,7 @@ async def listar_productos(
     result = await db.execute(stmt)
     productos = result.scalars().all()
 
-    from app.services.precio_service import armar_respuesta, buscar_tasa_impuesto
+    # Lógica de armar_respuesta y buscar_tasa_impuesto debe estar en main.py o aquí directamente
     responses = []
     for p in productos:
         # Consultas asíncronas para precio y oferta

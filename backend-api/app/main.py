@@ -27,8 +27,14 @@ if os.path.isdir(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 
-# Endpoint para consultar el estado de los dispositivos
 
+# Variables globales para monitoreo de dispositivos
+DEVICE_LAST_SEEN: dict[str, dict[str, object]] = {}
+DEVICE_LOCK = asyncio.Lock()
+DISCONNECT_THRESHOLD = timedelta(seconds=420)  # Considerar desconectado si no se ve en 10 minutos y 20 segundos
+CHECK_INTERVAL_SECONDS = 10
+
+# Endpoint para consultar el estado de los dispositivos
 @app.get("/devices/status")
 async def get_devices_status():
     async with DEVICE_LOCK:
@@ -41,11 +47,6 @@ async def get_devices_status():
             for device_id, info in DEVICE_LAST_SEEN.items()
         }
     return JSONResponse(content=status)
-
-DEVICE_LAST_SEEN: dict[str, dict[str, object]] = {}
-DEVICE_LOCK = asyncio.Lock()
-DISCONNECT_THRESHOLD = timedelta(seconds=420)  # Considerar desconectado si no se ve en 10 minutos y 20 segundos
-CHECK_INTERVAL_SECONDS = 10
 
 
 @app.get("/ping")

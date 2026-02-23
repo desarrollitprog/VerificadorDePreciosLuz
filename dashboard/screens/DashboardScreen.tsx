@@ -1,7 +1,10 @@
 
 import React, { useEffect, useState } from 'react';
 import { Search, Filter, UploadCloud, MoreVertical, Play, Eye, Trash, Film, HardDrive, TrendingUp, Plus } from 'lucide-react';
+
 import { getVideos, uploadMedia, deleteVideo } from '../services/videoService';
+import { getServersStatus } from '../services/monitoreoService';
+import ServerCard from '../components/monitoreo/ServerCard';
 
 export const DashboardScreen: React.FC = () => {
   const [preview, setPreview] = useState<{url: string, tipo: string, titulo: string} | null>(null);
@@ -13,6 +16,30 @@ export const DashboardScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Monitoreo de servidores
+  const [servidores, setServidores] = useState<any[]>([]);
+  const [loadingMonitoreo, setLoadingMonitoreo] = useState(true);
+  const [errorMonitoreo, setErrorMonitoreo] = useState<string | null>(null);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    const fetchStatus = async () => {
+      setLoadingMonitoreo(true);
+      setErrorMonitoreo(null);
+      try {
+        const data = await getServersStatus();
+        setServidores(data);
+      } catch {
+        setErrorMonitoreo('Error al conectar con el servicio de monitoreo');
+      } finally {
+        setLoadingMonitoreo(false);
+      }
+    };
+    fetchStatus();
+    interval = setInterval(fetchStatus, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     async function fetchVideos() {
@@ -56,6 +83,35 @@ export const DashboardScreen: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto flex flex-col gap-8">
+      {/* Monitoreo de Servidores */}
+      <div>
+        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-3">Estado de Servidores</h3>
+        {errorMonitoreo && (
+          <div className="mb-4 p-3 rounded-lg bg-red-100 text-red-700 border border-red-300 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700">
+            {errorMonitoreo}
+          </div>
+        )}
+        {loadingMonitoreo ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="animate-pulse bg-slate-100 dark:bg-slate-800 h-28 rounded-xl" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {servidores.map((srv: any) => (
+              <ServerCard
+                key={srv.id || srv.nombre}
+                nombre={srv.nombre}
+                ip={srv.ip}
+                online={srv.online}
+                porcentaje_uso={srv.porcentaje_uso}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Title & Search */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>

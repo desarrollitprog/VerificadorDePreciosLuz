@@ -1,10 +1,14 @@
 #!/bin/sh
 python app/create_tables_async.py
-# Eliminar carpeta si existe con el nombre del log y crear archivo vacío
-if [ -d "/app/heartbeat_errors.log" ]; then
-	rm -rf /app/heartbeat_errors.log
+LOG_PATH="/app/heartbeat_errors.log"
+# Si existe como carpeta, eliminarla
+if [ -d "$LOG_PATH" ]; then
+	rm -rf "$LOG_PATH"
 fi
-touch /app/heartbeat_errors.log
+# Si existe como archivo, dejarlo; si no, crearlo vacío
+if [ ! -f "$LOG_PATH" ]; then
+	touch "$LOG_PATH"
+fi
 # Ejecutar heartbeat_client.py en segundo plano
 python heartbeat_client.py &
 # Iniciar la API principal

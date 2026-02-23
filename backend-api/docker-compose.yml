@@ -8,5 +8,4 @@ services:
       - "8000:8000"
     volumes:
       - ./static/banners:/code/static/banners
-      - ./heartbeat_errors.log:/app/heartbeat_errors.log
     restart: always

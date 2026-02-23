@@ -3,7 +3,7 @@ import { LoginScreen } from './screens/LoginScreen';
 import { DashboardScreen } from './screens/DashboardScreen';
 import { VideoListScreen } from './screens/VideoListScreen';
 import { Screen } from './types';
-import { Sidebar } from './components/Sidebar';
+import Sidebar from './components/Sidebar';
 import { Header } from './components/Header';
 
 export default function App() {

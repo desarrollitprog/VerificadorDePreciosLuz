@@ -60,9 +60,10 @@ export const VideoListScreen: React.FC = () => {
       setLoading(true);
       try {
         const data = await getVideos();
-        setVideos(data);
+        setVideos(Array.isArray(data) ? data : []);
       } catch (err: any) {
         setError('Error loading videos');
+        setVideos([]);
       } finally {
         setLoading(false);
       }

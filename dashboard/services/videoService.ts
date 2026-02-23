@@ -3,7 +3,7 @@ import api from '../services/axiosInstance';
 export async function getVideos() {
   const response = await api.get('/banners');
   // El backend retorna { success, message, banners: [ { ...metadatos... } ] }
-  if (response.data && response.data.success) {
+  if (response.data && response.data.success && Array.isArray(response.data.banners)) {
     return response.data.banners.map((item) => ({
       id: item.IdPublicidad,
       filename: item.Url ? item.Url.split('/').pop() : '',

@@ -1,41 +1,10 @@
-from fastapi import WebSocket, WebSocketDisconnect
-# WebSocket manager para tabletas
-class TabletWebSocketManager:
-    def __init__(self):
-        self.active_connections: list[WebSocket] = []
-
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.append(websocket)
-
-    def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
-
-    async def broadcast(self, message: dict):
-        for connection in self.active_connections:
-            try:
-                await connection.send_json(message)
-            except Exception:
-                pass
-
-tablet_ws_manager = TabletWebSocketManager()
-# Endpoint WebSocket para tabletas
-@app.websocket("/ws/tablet")
-async def websocket_tablet(websocket: WebSocket):
-    await tablet_ws_manager.connect(websocket)
-    try:
-        while True:
-            data = await websocket.receive_text()
-            # Puedes manejar mensajes entrantes si lo necesitas
-    except WebSocketDisconnect:
-        tablet_ws_manager.disconnect(websocket)
 from __future__ import annotations
 from datetime import datetime, timedelta
 from dateutil.parser import isoparse
 import asyncio
 import logging
 from fastapi.responses import JSONResponse
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect 
 from fastapi.staticfiles import StaticFiles
 import os
 from fastapi.middleware.gzip import GZipMiddleware
@@ -493,13 +462,42 @@ async def obtener_precio(
 SYNC_REQUIRED_NOW = False
 
 # Endpoint para sincronización forzada
-# Endpoint para sincronización forzada
 @app.post("/api/fuerza-sync")
 async def fuerza_sync():
     global SYNC_REQUIRED_NOW
     SYNC_REQUIRED_NOW = True
     await tablet_ws_manager.broadcast({"command": "WIPE_AND_RESYNC"})
     return {"success": True, "message": "Sincronización forzada marcada"}
+# WebSocket manager para tabletas
+class TabletWebSocketManager:
+    def __init__(self):
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: dict):
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except Exception:
+                pass
+
+tablet_ws_manager = TabletWebSocketManager()
+# Endpoint WebSocket para tabletas
+@app.websocket("/ws/tablet")
+async def websocket_tablet(websocket: WebSocket):
+    await tablet_ws_manager.connect(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            # Puedes manejar mensajes entrantes si lo necesitas
+    except WebSocketDisconnect:
+        tablet_ws_manager.disconnect(websocket)
 
 app.include_router(consultas)
 app.include_router(publicidad)

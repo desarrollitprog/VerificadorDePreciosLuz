@@ -47,8 +47,9 @@ export const DashboardScreen: React.FC = () => {
       setLoading(true);
       try {
         const data = await getVideos();
-        setVideos(data);
+        setVideos(Array.isArray(data) ? data : []);
       } catch (err: any) {
+        setVideos([]);
         setError('Error loading videos');
       } finally {
         setLoading(false);
@@ -212,7 +213,7 @@ export const DashboardScreen: React.FC = () => {
             </div>
           )}
           {/* El resto de videos, excluyendo el último */}
-          {Array.isArray(videos) && videos.slice(1).map((video) => (
+          {Array.isArray(videos) && Array.isArray(videos.slice(1)) && videos.slice(1).map((video) => (
             <div key={video.id} className="group relative bg-white dark:bg-[#1c2936] rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 hover:border-primary/50 transition-all hover:shadow-xl hover:shadow-slate-900/10 dark:hover:shadow-black/40 flex flex-col">
               {/* Thumbnail */}
               <div className="aspect-video bg-slate-800 relative overflow-hidden">

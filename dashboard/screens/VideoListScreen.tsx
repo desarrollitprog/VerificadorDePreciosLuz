@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getVideos, deleteVideo } from '../services/videoService';
+import { Video } from '../types';
 import { Search, Filter, ArrowUpDown, MoreHorizontal, FileVideo, AlertCircle, Clock, Edit2, Trash2, UploadCloud, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react';
 
 const StatusBadge = ({ status }: { status: string }) => {
@@ -42,8 +43,9 @@ const StatusIcon = ({ status }: { status: string }) => {
   }
 };
 
+
 export const VideoListScreen: React.FC = () => {
-  const [videos, setVideos] = useState([]);
+  const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');

@@ -8,11 +8,15 @@ export enum VideoStatus {
 export interface Video {
   id: string;
   filename: string;
+  url: string;
   thumbnail: string;
+  tipo: string;
+  titulo: string;
   duration: string;
   date: string;
   size: string;
   status: VideoStatus;
+  prioridad?: number;
   views?: number;
 }
 

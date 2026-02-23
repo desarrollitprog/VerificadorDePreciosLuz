@@ -1,23 +1,30 @@
 import api from '../services/axiosInstance';
+import { Video } from '../types';
 
-export async function getVideos() {
-  const response = await api.get('/banners');
-  // El backend retorna { success, message, banners: [ { ...metadatos... } ] }
-  if (response.data && response.data.success && Array.isArray(response.data.banners)) {
-    return response.data.banners.map((item) => ({
-      id: item.IdPublicidad,
-      filename: item.Url ? item.Url.split('/').pop() : '',
-      url: item.Url,
-      thumbnail: item.Tipo === 'image' ? item.Url : '',
-      tipo: item.Tipo,
-      titulo: item.Titulo,
-      size: '', // Si el backend lo provee, agregarlo
-      date: item.UpdatedAt || '',
-      duration: item.DuracionSeg || '',
-      prioridad: item.Prioridad,
-    }));
+export async function getVideos(): Promise<Video[]> {
+  try {
+    const response = await api.get('/banners');
+    const banners = response.data?.banners;
+    if (Array.isArray(banners)) {
+      return banners.map((item) => ({
+        id: item.IdPublicidad,
+        filename: item.Url ? item.Url.split('/').pop() : '',
+        url: item.Url,
+        thumbnail: item.Tipo === 'image' ? item.Url : '',
+        tipo: item.Tipo,
+        titulo: item.Titulo,
+        size: '', // Si el backend lo provee, agregarlo
+        date: item.UpdatedAt || '',
+        duration: item.DuracionSeg || '',
+        prioridad: item.Prioridad,
+        status: item.status || undefined,
+        views: item.views || undefined,
+      }));
+    }
+    return [];
+  } catch {
+    return [];
   }
-  return [];
 }
 
 export async function uploadMedia(file) {

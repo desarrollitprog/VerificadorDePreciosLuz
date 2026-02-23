@@ -20,6 +20,10 @@ COPY requirements.txt ./
 RUN pip install --upgrade pip
 RUN pip install --no-cache-dir --upgrade -r requirements.txt
 
+
+# Crear el directorio /app para logs y otros archivos
+RUN mkdir -p /app
+
 # Copiar el resto del código (no incluir .env en builds)
 COPY . .
 

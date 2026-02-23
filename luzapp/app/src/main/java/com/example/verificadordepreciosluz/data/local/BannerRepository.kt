@@ -56,7 +56,7 @@ class BannerRepository(
     }
 
     // Descarga un banner (imagen/video) y lo guarda en files/banners
-    private fun downloadBanner(item: BannerResponse): BannerCacheItem? {
+    public fun downloadBanner(item: BannerResponse): BannerCacheItem? {
         val absoluteUrl = if (item.url.startsWith("http")) item.url else baseUrl.trimEnd('/') + "/" + item.url.trimStart('/')
         val safeUrl = absoluteUrl.replace(" ", "%20")
         val ext = absoluteUrl.substringAfterLast('.', "")

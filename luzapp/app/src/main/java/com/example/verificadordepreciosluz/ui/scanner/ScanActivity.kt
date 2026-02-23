@@ -71,6 +71,12 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.isVisible
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
+import com.example.verificadordepreciosluz.data.local.ejecutarPurgaTotal
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
+import org.json.JSONObject
 
 @OptIn(ExperimentalGetImage::class)
 class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListener {
@@ -138,6 +144,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     // Declarar backupReady como propiedad de la clase, antes de cualquier uso
     private var backupReady: Boolean = false
 
+    private var tabletWebSocket: WebSocket? = null
+    private var wsClient: OkHttpClient? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityScanBinding.inflate(layoutInflater)
@@ -190,6 +199,10 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         applyImmersiveMode()
         hideKeyboard()
         excludeSystemGestures()
+
+        if (hasNetwork && backendBaseUrl != null && api != null) {
+            startTabletWebSocket()
+        }
     }
 
     // Implementación de métodos de la interfaz BackupProgressListener
@@ -1033,6 +1046,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         tone = null
         job.cancel()
         scope.cancel()
+        tabletWebSocket?.close(1000, "Activity destroyed")
+        wsClient?.dispatcher?.executorService?.shutdown()
     }
 
     override fun onPause() {
@@ -1063,5 +1078,58 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     // Implementar hideProgress antes de cualquier uso
     private fun hideProgress() {
         // Aquí puedes ocultar un ProgressBar o similar
+    }
+
+    // Método para manejar mensajes de WebSocket
+    private fun handleWebSocketMessage(message: String) {
+        // Ejemplo de parseo simple, ajustar según formato real
+        if (message == "WIPE_AND_RESYNC") {
+            val apiService = api ?: return
+            val baseUrl = backendBaseUrl ?: return
+            scope.launch {
+                ejecutarPurgaTotal(this@ScanActivity, apiService, baseUrl)
+            }
+        }
+        // ...otros comandos...
+    }
+
+    private fun startTabletWebSocket() {
+        val baseUrl = backendBaseUrl ?: return
+        val wsUrl = baseUrl.replace("http://", "ws://").replace("https://", "wss://") + "/ws/tablet"
+        wsClient = OkHttpClient()
+        val request = Request.Builder().url(wsUrl).build()
+        val wsListener = object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: okhttp3.Response) {
+                Log.i(TAG, "WebSocket abierto: $wsUrl")
+            }
+            override fun onMessage(webSocket: WebSocket, text: String) {
+                try {
+                    val message = JSONObject(text)
+                    val command = message.optString("command")
+                    if (command == "WIPE_AND_RESYNC") {
+                        // Seguridad: solo ejecuta si el comando es exacto
+                        scope.launch {
+                            ejecutarPurgaTotal(this@ScanActivity, api!!, baseUrl)
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error procesando mensaje WebSocket", e)
+                }
+            }
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: okhttp3.Response?) {
+                Log.e(TAG, "WebSocket error: ${t.message}")
+                reconnectTabletWebSocket()
+            }
+            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                Log.w(TAG, "WebSocket cerrado: $reason")
+                reconnectTabletWebSocket()
+            }
+        }
+        tabletWebSocket = wsClient!!.newWebSocket(request, wsListener)
+    }
+
+    private fun reconnectTabletWebSocket() {
+        // Espera 5 segundos y reconecta
+        uiHandler.postDelayed({ startTabletWebSocket() }, 5000)
     }
 }

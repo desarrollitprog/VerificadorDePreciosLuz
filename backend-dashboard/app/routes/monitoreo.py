@@ -1,20 +1,18 @@
-from app.dependencies import get_current_admin
 
 """
 Rutas de monitoreo: heartbeat de servidores secundarios y estado.
 """
 from datetime import datetime, timedelta, timezone
-
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends,Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.database import get_db_usuarios
-from app.dependencies import get_current_cliente, validar_api_key
+from app.dependencies import get_current_cliente, validar_api_key, get_current_admin
 from app.models.servidor_secundario import ServidorSecundario
 from app.services.notificacion_service import registrar_accion
-
+import asyncio
+import httpx
 router = APIRouter(tags=["monitoreo"])
 
 
@@ -153,3 +151,57 @@ async def obtener_alertas(
                     "mensaje": f"Advertencia: el servidor '{s.nombre}' está al {porcentaje:.1f}% de capacidad."
                 })
     return alertas
+
+#Sincronizacion manual de Banners
+@router.post("/monitoreo/sincronizar-fuerza")
+async def sincronizar_fuerza(
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_admin),
+    request: Request = None,
+):
+    """
+    Orquesta la sincronización forzada en todos los servidores secundarios online.
+    """
+    stmt = select(ServidorSecundario)
+    result = await db.execute(stmt)
+    servidores = result.scalars().all()
+
+    now = _utcnow()
+    umbral = now - timedelta(minutes=HEARTBEAT_OFFLINE_MINUTES)
+    online_servers = [
+        s for s in servidores
+        if s.ultimo_heartbeat and s.ultimo_heartbeat >= umbral
+    ]
+
+    async def send_force_sync(ip):
+        url = f"http://{ip}:8000/api/fuerza-sync"
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.post(url)
+                return resp.status_code == 200
+        except Exception:
+            return False
+
+    tasks = [send_force_sync(s.ip) for s in online_servers]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    success_count = sum(1 for r in results if r is True)
+    failed_count = len(online_servers) - success_count
+
+    await registrar_accion(
+        db,
+        current_user.get("id"),
+        "SINCRONIZACION_FORZADA",
+        f"Sincronización forzada ejecutada por usuario {current_user.get('nombre_usuario')}. Éxito: {success_count}, Fallo: {failed_count}"
+    )
+
+    return {
+        "success": True,
+        "total_online": len(online_servers),
+        "success_count": success_count,
+        "failed_count": failed_count,
+        "details": [
+            {"ip": s.ip, "nombre": s.nombre, "ok": results[i] is True}
+            for i, s in enumerate(online_servers)
+        ]
+    }

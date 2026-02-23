@@ -18,34 +18,41 @@ def replicar_archivo_al_api(
     Retorna la respuesta del API como dict.
     """
     if not os.path.isfile(file_path):
+        print(f"[DEBUG] Archivo no encontrado: {file_path}")
         raise FileNotFoundError(f"Archivo no encontrado: {file_path}")
 
     with open(file_path, "rb") as f:
         files = {"file": f}
-        # ...existing code...
-    data = {
-        "IdPublicidadRemoto": IdPublicidadRemoto,
-        "titulo": titulo,
-        "tipo": tipo,
-        "prioridad": prioridad,
-        "fecha_inicio": fecha_inicio,
-        "fecha_fin": fecha_fin,
-        "duracion_seg": duracion_seg
-    }
-    # Elimina campos None
-    data = {k: v for k, v in data.items() if v is not None}
+        data = {
+            "IdPublicidadRemoto": IdPublicidadRemoto,
+            "titulo": titulo,
+            "tipo": tipo,
+            "prioridad": prioridad,
+            "fecha_inicio": fecha_inicio,
+            "fecha_fin": fecha_fin,
+            "duracion_seg": duracion_seg
+        }
+        # Elimina campos None
+        data = {k: v for k, v in data.items() if v is not None}
 
-    # Concatenar endpoint de subida correcto
-    upload_url = api_url.rstrip('/') + '/replicar-archivo' if not api_url.rstrip('/').endswith('/replicar-archivo') else api_url
-    response = requests.post(
-        upload_url,
-        files=files,
-        data=data,
-        timeout=timeout
-    )
-    files["file"].close()
-    response.raise_for_status()
-    return response.json()
+        upload_url = api_url.rstrip('/') + '/replicar-archivo' if not api_url.rstrip('/').endswith('/replicar-archivo') else api_url
+        print(f"[DEBUG] Replicando archivo al backend-api: {upload_url}")
+        print(f"[DEBUG] Datos enviados: {data}")
+        try:
+            response = requests.post(
+                upload_url,
+                files=files,
+                data=data,
+                timeout=timeout
+            )
+            print(f"[DEBUG] Código de respuesta: {response.status_code}")
+            print(f"[DEBUG] Respuesta: {response.text}")
+            files["file"].close()
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            print(f"[ERROR] Error al replicar archivo: {str(e)}")
+            raise
 
 def Borrado_api(api_url: str, id_remoto: int, timeout: int = 30) -> dict:
     """

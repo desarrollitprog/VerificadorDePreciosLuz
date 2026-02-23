@@ -10,7 +10,7 @@ interface SidebarProps {
   onClose: () => void;
   onLogout: () => void;
 }
-
+const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, onClose, onLogout }) => {
   const [role, setRole] = useState<'ADMIN' | 'CLIENTE' | null>(null);
 
   useEffect(() => {
@@ -104,4 +104,5 @@ interface SidebarProps {
       </div>
     </aside>
   );
-};
+}
+export default Sidebar;

@@ -40,14 +40,6 @@ export const Header: React.FC<HeaderProps> = ({ currentScreen, onMenuClick }) =>
       </div>
 
       <div className="flex items-center gap-4">
-        <div className="hidden md:flex relative items-center">
-            <Search size={16} className="absolute left-3 text-slate-500" />
-            <input 
-                type="text" 
-                placeholder="Quick search..." 
-                className="bg-slate-100 dark:bg-[#1c2936] text-sm rounded-full pl-9 pr-4 py-1.5 w-48 border-none focus:ring-1 focus:ring-primary text-slate-900 dark:text-white placeholder:text-slate-500"
-            />
-        </div>
         <button
           onClick={toggleDark}
           className="p-2 rounded-full transition-colors text-slate-400 hover:text-yellow-400 hover:bg-slate-100 dark:hover:bg-slate-800"

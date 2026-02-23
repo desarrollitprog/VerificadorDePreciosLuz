@@ -85,34 +85,32 @@ const mockServers: ServerData[] = [
 
 export function ServerDashboard() {
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-slate-50 dark:bg-[#0d1117]">
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <ServerMonitorHeader />
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {mockServers.map(server => (
-              <ServerCard key={server.id} data={server} />
-            ))}
-          </div>
-
-          {/* Pagination */}
-          <div className="mt-8 flex justify-center pb-8">
-            <nav className="flex items-center gap-1">
-              <a className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#161b22] text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-[#21262d] transition-colors" href="#">
-                <ChevronLeft size={20} />
-              </a>
-              <a className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-white shadow-lg shadow-blue-500/30" href="#">1</a>
-              <a className="flex h-10 w-10 items-center justify-center rounded-lg border border-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#21262d] transition-colors" href="#">2</a>
-              <a className="flex h-10 w-10 items-center justify-center rounded-lg border border-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#21262d] transition-colors" href="#">3</a>
-              <span className="flex h-10 w-10 items-center justify-center text-slate-400">...</span>
-              <a className="flex h-10 w-10 items-center justify-center rounded-lg border border-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#21262d] transition-colors" href="#">12</a>
-              <a className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#161b22] text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-[#21262d] transition-colors" href="#">
-                <ChevronRight size={20} />
-              </a>
-            </nav>
-          </div>
+    <div className="flex flex-col min-w-0">
+      <ServerMonitorHeader />
+      <div className="p-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {mockServers.map(server => (
+            <ServerCard key={server.id} data={server} />
+          ))}
         </div>
-      </main>
+
+        {/* Pagination */}
+        <div className="mt-8 flex justify-center pb-8">
+          <nav className="flex items-center gap-1">
+            <a className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#161b22] text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-[#21262d] transition-colors" href="#">
+              <ChevronLeft size={20} />
+            </a>
+            <a className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-white shadow-lg shadow-blue-500/30" href="#">1</a>
+            <a className="flex h-10 w-10 items-center justify-center rounded-lg border border-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#21262d] transition-colors" href="#">2</a>
+            <a className="flex h-10 w-10 items-center justify-center rounded-lg border border-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#21262d] transition-colors" href="#">3</a>
+            <span className="flex h-10 w-10 items-center justify-center text-slate-400">...</span>
+            <a className="flex h-10 w-10 items-center justify-center rounded-lg border border-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#21262d] transition-colors" href="#">12</a>
+            <a className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#161b22] text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-[#21262d] transition-colors" href="#">
+              <ChevronRight size={20} />
+            </a>
+          </nav>
+        </div>
+      </div>
     </div>
   );
 }

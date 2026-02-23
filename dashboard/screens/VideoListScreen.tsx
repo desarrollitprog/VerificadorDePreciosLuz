@@ -209,7 +209,7 @@ export const VideoListScreen: React.FC = () => {
 
         {/* Table Body */}
         <div className="flex-1 overflow-y-auto">
-          {paginatedVideos.map((item) => (
+          {Array.isArray(paginatedVideos) && paginatedVideos.map((item) => (
             <div key={item.id} className="group grid grid-cols-12 gap-4 border-b border-slate-100 dark:border-[#324d67]/30 px-4 py-3 hover:bg-slate-50 dark:hover:bg-[#1f2b38] transition-colors items-center">
               <div className="col-span-1 flex items-center justify-center">
                 <input

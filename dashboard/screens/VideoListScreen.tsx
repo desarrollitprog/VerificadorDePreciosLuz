@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { getVideos, deleteVideo } from '../services/videoService';
 import { Video } from '../types';
 import { Search, Filter, ArrowUpDown, MoreHorizontal, FileVideo, AlertCircle, Clock, Edit2, Trash2, UploadCloud, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react';
+import axios from 'axios';
 
 const StatusBadge = ({ status }: { status: string }) => {
   switch (status) {
@@ -56,6 +57,8 @@ export const VideoListScreen: React.FC = () => {
   const [selected, setSelected] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const rowsPerPage = 10;
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchVideos() {
@@ -80,6 +83,23 @@ export const VideoListScreen: React.FC = () => {
       setVideos(videos.filter(v => v.id !== videoId));
     } catch (err: any) {
       setError('Error deleting video');
+    }
+  };
+
+  const handleForceSync = async () => {
+    setSyncLoading(true);
+    setSyncResult(null);
+    try {
+      const response = await axios.post('http://192.168.1.105:3000/monitoreo/sincronizar-fuerza');
+      if (response.data.success) {
+        setSyncResult('Sincronización forzada ejecutada correctamente.');
+      } else {
+        setSyncResult('Sincronización fallida.');
+      }
+    } catch (error) {
+      setSyncResult('Error al ejecutar la sincronización.');
+    } finally {
+      setSyncLoading(false);
     }
   };
 

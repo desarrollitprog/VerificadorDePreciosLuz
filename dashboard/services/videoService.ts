@@ -7,18 +7,18 @@ export async function getVideos(): Promise<Video[]> {
     const banners = response.data?.banners;
     if (Array.isArray(banners)) {
       return banners.map((item) => ({
-        id: item.IdPublicidad,
-        filename: item.Url ? item.Url.split('/').pop() : '',
-        url: item.Url,
-        thumbnail: item.Tipo === 'image' ? item.Url : '',
-        tipo: item.Tipo,
-        titulo: item.Titulo,
-        size: '', // Si el backend lo provee, agregarlo
-        date: item.UpdatedAt || '',
-        duration: item.DuracionSeg || '',
-        prioridad: item.Prioridad,
-        status: item.status || undefined,
-        views: item.views || undefined,
+        id: item.IdPublicidad ?? item.id ?? '',
+        filename: (item.Url ?? item.url ?? '').split('/').pop() || '',
+        url: item.Url ?? item.url ?? '',
+        thumbnail: (item.Tipo ?? item.tipo) === 'image' ? (item.Url ?? item.url ?? '') : '',
+        tipo: item.Tipo ?? item.tipo ?? '',
+        titulo: item.Titulo ?? item.titulo ?? '',
+        size: '', // No lo provee el backend
+        date: item.UpdatedAt ?? item.updated_at ?? '',
+        duration: item.DuracionSeg ?? item.duracion_seg ?? '',
+        prioridad: item.Prioridad ?? item.prioridad ?? 0,
+        status: item.status ?? undefined,
+        views: item.views ?? undefined,
       }));
     }
     return [];

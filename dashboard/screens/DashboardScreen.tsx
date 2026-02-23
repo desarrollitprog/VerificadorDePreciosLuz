@@ -30,8 +30,9 @@ export const DashboardScreen: React.FC = () => {
       setErrorMonitoreo(null);
       try {
         const data = await getServersStatus();
-        setServidores(data);
+        setServidores(Array.isArray(data) ? data : []);
       } catch {
+        setServidores([]);
         setErrorMonitoreo('Error al conectar con el servicio de monitoreo');
       } finally {
         setLoadingMonitoreo(false);
@@ -101,7 +102,7 @@ export const DashboardScreen: React.FC = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {servidores.map((srv: any) => (
+            {Array.isArray(servidores) && servidores.map((srv: any) => (
               <ServerCard
                 key={srv.id || srv.nombre}
                 nombre={srv.nombre}
@@ -186,7 +187,7 @@ export const DashboardScreen: React.FC = () => {
           <button className="text-sm text-primary font-medium hover:underline">View All</button>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {Array.isArray(videos) && videos.length > 0 && (
+          {Array.isArray(videos) && videos.length > 0 && videos[0] && (
             <div className="col-span-1">
               <div className="border-2 border-primary rounded-xl p-4 bg-white dark:bg-[#1c2936] shadow-lg">
                 <div className="text-xs text-primary font-bold mb-2">Last Uploaded</div>
@@ -213,7 +214,7 @@ export const DashboardScreen: React.FC = () => {
             </div>
           )}
           {/* El resto de videos, excluyendo el último */}
-          {Array.isArray(videos) && Array.isArray(videos.slice(1)) && videos.slice(1).map((video) => (
+          {Array.isArray(videos) && videos.length > 1 && videos.slice(1).map((video) => (
             <div key={video.id} className="group relative bg-white dark:bg-[#1c2936] rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 hover:border-primary/50 transition-all hover:shadow-xl hover:shadow-slate-900/10 dark:hover:shadow-black/40 flex flex-col">
               {/* Thumbnail */}
               <div className="aspect-video bg-slate-800 relative overflow-hidden">

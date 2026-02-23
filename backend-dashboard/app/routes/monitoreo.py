@@ -68,8 +68,8 @@ async def heartbeat(
     }
 
 
-# Umbral: sin heartbeat en los últimos 5 minutos = offline
-HEARTBEAT_OFFLINE_MINUTES = 5
+# Umbral: sin heartbeat en los últimos 8 minutos = offline
+HEARTBEAT_OFFLINE_MINUTES = 8
 
 
 @router.get("/status")

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bell, ChevronRight, Menu, Search } from 'lucide-react';
+import { Bell, ChevronRight, Menu, Search, Sun, Moon } from 'lucide-react';
 import { Screen } from '../types';
 
 interface HeaderProps {
@@ -7,13 +7,20 @@ interface HeaderProps {
   onMenuClick: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ currentScreen, onMenuClick }) => {
+export const Header: React.FC<HeaderProps> = ({ currentScreen, onMenuClick }) => { 
   const getBreadcrumb = () => {
     switch (currentScreen) {
       case 'dashboard': return 'My Videos';
       case 'list': return 'Video Library';
       default: return 'Dashboard';
     }
+  };
+
+  // Hook para alternar modo claro/oscuro
+  const [isDark, setIsDark] = React.useState(() => document.documentElement.classList.contains('dark'));
+  const toggleDark = () => {
+    document.documentElement.classList.toggle('dark');
+    setIsDark(document.documentElement.classList.contains('dark'));
   };
 
   return (
@@ -41,6 +48,13 @@ export const Header: React.FC<HeaderProps> = ({ currentScreen, onMenuClick }) =>
                 className="bg-slate-100 dark:bg-[#1c2936] text-sm rounded-full pl-9 pr-4 py-1.5 w-48 border-none focus:ring-1 focus:ring-primary text-slate-900 dark:text-white placeholder:text-slate-500"
             />
         </div>
+        <button
+          onClick={toggleDark}
+          className="p-2 rounded-full transition-colors text-slate-400 hover:text-yellow-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+          aria-label="Toggle dark mode"
+        >
+          {isDark ? <Sun size={20} /> : <Moon size={20} />}
+        </button>
         <button className="relative p-2 text-slate-400 hover:text-primary transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full">
           <Bell size={20} />
           <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500 border-2 border-white dark:border-[#111a22]"></span>

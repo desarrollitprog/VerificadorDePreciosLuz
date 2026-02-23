@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutGrid, Video, Settings, LogOut, X, Users } from 'lucide-react';
+import { LayoutGrid, Video, Settings, LogOut, X, Users, Server } from 'lucide-react';
 import { Screen } from '../types';
-import { getUserRole } from '../services/authService';
+import { getUserRole, getUserName } from '../services/authService';
 
 interface SidebarProps {
   currentScreen: Screen;
@@ -12,9 +12,10 @@ interface SidebarProps {
 }
 const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, onClose, onLogout }) => {
   const [role, setRole] = useState<'ADMIN' | 'CLIENTE' | null>(null);
-
+  const [userName, setUserName] = useState<string | null>(null);
   useEffect(() => {
     setRole(getUserRole());
+    setUserName(getUserName());
   }, []);
 
   return (
@@ -42,6 +43,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, on
       </div>
 
       <nav className="flex-1 px-4 flex flex-col gap-2 overflow-y-auto mt-2">
+
         <button 
           onClick={() => { onNavigate('dashboard'); onClose(); }}
           className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-colors w-full text-left
@@ -65,6 +67,21 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, on
           <Video size={20} />
           <span className="text-sm">Video Library</span>
         </button>
+
+        {/* Solo ADMIN puede ver la opción de Servidores */}
+        {role === 'ADMIN' && (
+          <button 
+            onClick={() => { onNavigate('servers'); onClose(); }}
+            className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-colors w-full text-left
+              ${currentScreen === 'servers' 
+                ? 'bg-primary/20 border border-primary/10 text-primary font-semibold' 
+                : 'text-slate-400 hover:bg-slate-800 hover:text-white font-medium'
+              }`}
+          >
+            <Server size={20} />
+            <span className="text-sm">Servidores</span>
+          </button>
+        )}
 
         <div className="my-2 border-t border-slate-800"></div>
 
@@ -94,8 +111,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, on
             style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuBEUz6eCO0dhVP82h4FJQMq3nDXkpWN6QwzsN01D_fyYhGKbQM9qqOmcsqPHx9EIdGnPlVwdFpwgAS_SO87H1Ke8OjEx2U0fD-wyyV5g4RfrJPvb040ei3nBFT1SNszFc5CNHDUJiS0HhXozHU43KDxrDvYd97-rOo42xrDJASbeCOj6aOHB097S6ZS0C850ANDh3MYlr8T497LsPMfs84ZG5XjzdjDJfhw-yRyeDdOyOPbc0If3ltz_W6hafyEFPVSm7bJsnF35Mgy')" }}
           ></div>
           <div className="flex flex-col flex-1 min-w-0">
-            <p className="text-white text-sm font-medium truncate group-hover:text-primary transition-colors">Jane Doe</p>
-            <p className="text-slate-500 text-xs truncate">Super Admin</p>
+            <p className="text-white text-sm font-medium truncate group-hover:text-primary transition-colors">{userName || 'Usuario'}</p>
+            <span className={`inline-block text-xs font-semibold rounded px-2 py-0.5 ${role === 'ADMIN' ? 'bg-green-700 text-white' : 'bg-blue-700 text-white'}`}>{role || 'Sin rol'}</span>
           </div>
           <button onClick={onLogout} className="text-slate-400 hover:text-red-400 transition-colors p-1 rounded-md hover:bg-slate-700/50">
             <LogOut size={18} />

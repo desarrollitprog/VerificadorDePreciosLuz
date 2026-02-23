@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { LoginScreen } from './screens/LoginScreen';
 import { DashboardScreen } from './screens/DashboardScreen';
 import { VideoListScreen } from './screens/VideoListScreen';
+
 import { Screen } from './types';
 import Sidebar from './components/Sidebar';
-import { Header } from './components/Header';
+import { Header } from './components/DashboardHeader';
+import { ServerDashboard } from './components/ServerDashboard';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('login');
@@ -20,6 +22,8 @@ export default function App() {
         return <DashboardScreen />;
       case 'list':
         return <VideoListScreen />;
+      case 'servers':
+        return <ServerDashboard />;
       default:
         return <LoginScreen onLogin={() => setCurrentScreen('dashboard')} />;
     }

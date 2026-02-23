@@ -47,13 +47,17 @@ def get_server_name() -> str:
 
 
 def get_ip_address() -> str:
-    """Obtiene una IP de la máquina para la LAN."""
+    """Obtiene la IP real de la red local (no docker, no loopback)."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        hostname = socket.gethostname()
-        ip = socket.gethostbyname(hostname)
-        return ip
+        # No necesita estar disponible, solo fuerza la selección de interfaz
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
     except Exception:
-        return "127.0.0.1"
+        ip = '127.0.0.1'
+    finally:
+        s.close()
+    return ip
 
 
 def get_disk_usage(path: str) -> tuple[int, int]:

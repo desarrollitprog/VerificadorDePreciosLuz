@@ -87,33 +87,7 @@ export const DashboardScreen: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto flex flex-col gap-8">
       {/* Monitoreo de Servidores */}
-      <div>
-        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-3">Estado de Servidores</h3>
-        {errorMonitoreo && (
-          <div className="mb-4 p-3 rounded-lg bg-red-100 text-red-700 border border-red-300 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700">
-            {errorMonitoreo}
-          </div>
-        )}
-        {loadingMonitoreo ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="animate-pulse bg-slate-100 dark:bg-slate-800 h-28 rounded-xl" />
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Array.isArray(servidores) && servidores.map((srv: any) => (
-              <ServerCard
-                key={srv.id || srv.nombre}
-                nombre={srv.nombre}
-                ip={srv.ip}
-                online={srv.online}
-                porcentaje_uso={srv.porcentaje_uso}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Bloque de monitoreo eliminado, debe ir en otra sección/menu */}
 
       {/* Title & Search */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -156,27 +130,27 @@ export const DashboardScreen: React.FC = () => {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white dark:bg-[#1c2936] p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between shadow-sm">
           <div>
             <p className="text-slate-500 text-xs font-medium uppercase tracking-wider">Total Videos</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">24</p>
+            <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
+              Local: {Array.isArray(videos) ? videos.length : 0}
+              {/* Remoto: aquí puedes mostrar la cantidad de videos remotos si tienes ese dato */}
+            </p>
           </div>
           <Film className="text-slate-400" size={32} />
         </div>
         <div className="bg-white dark:bg-[#1c2936] p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between shadow-sm">
           <div>
             <p className="text-slate-500 text-xs font-medium uppercase tracking-wider">Storage Used</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">12.4 GB</p>
+            <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
+              {/* Aquí debes mostrar el almacenamiento real del servidor secundario, por ejemplo: */}
+              {/* {servidores[0]?.almacenamiento || 'N/A'} */}
+              N/A
+            </p>
           </div>
           <HardDrive className="text-slate-400" size={32} />
-        </div>
-        <div className="bg-white dark:bg-[#1c2936] p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between shadow-sm">
-          <div>
-            <p className="text-slate-500 text-xs font-medium uppercase tracking-wider">Views (30d)</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">1,204</p>
-          </div>
-          <TrendingUp className="text-primary" size={32} />
         </div>
       </div>
 

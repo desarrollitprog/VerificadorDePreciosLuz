@@ -1,5 +1,6 @@
 import React from 'react';
-import { Bell, ChevronRight, Menu, Search, Sun, Moon } from 'lucide-react';
+import { ChevronRight, Menu, Search, Sun, Moon } from 'lucide-react';
+import { GeneralNotifications } from './GeneralNotifications';
 import { Screen } from '../types';
 
 interface HeaderProps {
@@ -47,10 +48,7 @@ export const Header: React.FC<HeaderProps> = ({ currentScreen, onMenuClick }) =>
         >
           {isDark ? <Sun size={20} /> : <Moon size={20} />}
         </button>
-        <button className="relative p-2 text-slate-400 hover:text-primary transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full">
-          <Bell size={20} />
-          <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500 border-2 border-white dark:border-[#111a22]"></span>
-        </button>
+        <GeneralNotifications />
       </div>
     </header>
   );

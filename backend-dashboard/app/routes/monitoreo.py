@@ -156,7 +156,7 @@ async def obtener_alertas(
 @router.post("/monitoreo/sincronizar-fuerza")
 async def sincronizar_fuerza(
     db: AsyncSession = Depends(get_db_usuarios),
-    current_user: dict = Depends(get_current_admin),
+    current_user: dict = Depends(get_current_cliente),
     request: Request = None,
 ):
     """

@@ -100,8 +100,8 @@ export const DashboardScreen: React.FC = () => {
     try {
       const response = await api.post(endpoint);
       if (response.data.success) {
-        setSyncResult('Sincronización forzada ejecutada correctamente.');
-        showNotification('Sincronización forzada ejecutada correctamente', 'success');
+        setSyncResult('Sincronización ejecutada correctamente.');
+        showNotification('Sincronización ejecutada correctamente', 'success');
       } else {
         setSyncResult('Sincronización fallida.');
         showNotification('Sincronización fallida', 'warning');
@@ -116,19 +116,6 @@ export const DashboardScreen: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto flex flex-col gap-8">
-      {/* Botón de sincronización forzada arriba de Video Library */}
-      <div className="flex items-center justify-end mb-4">
-        <button
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition disabled:opacity-50"
-          onClick={handleForceSync}
-          disabled={syncLoading}
-        >
-          {syncLoading ? 'Sincronizando...' : 'Sincronización Forzada'}
-        </button>
-      </div>
-      {syncResult && (
-        <div className="mb-4 text-green-600 font-semibold">{syncResult}</div>
-      )}
 
       {/* Monitoreo de Servidores */}
       {/* Bloque de monitoreo eliminado, debe ir en otra sección/menu */}
@@ -153,7 +140,7 @@ export const DashboardScreen: React.FC = () => {
             onClick={handleForceSync}
             disabled={syncLoading}
           >
-            {syncLoading ? 'Sincronizando...' : 'Sincronización Forzada'}
+            {syncLoading ? 'Sincronizando...' : 'Sincronizar'}
           </button>
         </div>
       </div>

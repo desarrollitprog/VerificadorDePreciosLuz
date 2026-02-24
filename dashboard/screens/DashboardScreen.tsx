@@ -1,6 +1,6 @@
-
 import React, { useEffect, useState } from 'react';
 import { Search, Filter, UploadCloud, MoreVertical, Play, Eye, Trash, Film, HardDrive, TrendingUp, Plus } from 'lucide-react';
+import axios from 'axios';
 
 import { getVideos, uploadMedia, deleteVideo } from '../services/videoService';
 import { Video } from '../types';
@@ -22,6 +22,9 @@ export const DashboardScreen: React.FC = () => {
   const [servidores, setServidores] = useState<any[]>([]);
   const [loadingMonitoreo, setLoadingMonitoreo] = useState(true);
   const [errorMonitoreo, setErrorMonitoreo] = useState<string | null>(null);
+
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -84,8 +87,39 @@ export const DashboardScreen: React.FC = () => {
     }
   };
 
+  const handleForceSync = async () => {
+    setSyncLoading(true);
+    setSyncResult(null);
+    try {
+      const response = await axios.post('http://192.168.1.105:3000/monitoreo/sincronizar-fuerza');
+      if (response.data.success) {
+        setSyncResult('Sincronización forzada ejecutada correctamente.');
+      } else {
+        setSyncResult('Sincronización fallida.');
+      }
+    } catch (error) {
+      setSyncResult('Error al ejecutar la sincronización.');
+    } finally {
+      setSyncLoading(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto flex flex-col gap-8">
+      {/* Botón de sincronización forzada arriba de Video Library */}
+      <div className="flex items-center justify-end mb-4">
+        <button
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition disabled:opacity-50"
+          onClick={handleForceSync}
+          disabled={syncLoading}
+        >
+          {syncLoading ? 'Sincronizando...' : 'Sincronización Forzada'}
+        </button>
+      </div>
+      {syncResult && (
+        <div className="mb-4 text-green-600 font-semibold">{syncResult}</div>
+      )}
+
       {/* Monitoreo de Servidores */}
       {/* Bloque de monitoreo eliminado, debe ir en otra sección/menu */}
 

@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { getVideos, deleteVideo } from '../services/videoService';
 import { Video } from '../types';
 import { Search, Filter, ArrowUpDown, MoreHorizontal, FileVideo, AlertCircle, Clock, Edit2, Trash2, UploadCloud, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react';
-import axios from 'axios';
 
 const StatusBadge = ({ status }: { status: string }) => {
   switch (status) {
@@ -57,8 +56,6 @@ export const VideoListScreen: React.FC = () => {
   const [selected, setSelected] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const rowsPerPage = 10;
-  const [syncLoading, setSyncLoading] = useState(false);
-  const [syncResult, setSyncResult] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchVideos() {
@@ -83,23 +80,6 @@ export const VideoListScreen: React.FC = () => {
       setVideos(videos.filter(v => v.id !== videoId));
     } catch (err: any) {
       setError('Error deleting video');
-    }
-  };
-
-  const handleForceSync = async () => {
-    setSyncLoading(true);
-    setSyncResult(null);
-    try {
-      const response = await axios.post('http://192.168.1.105:3000/monitoreo/sincronizar-fuerza');
-      if (response.data.success) {
-        setSyncResult('Sincronización forzada ejecutada correctamente.');
-      } else {
-        setSyncResult('Sincronización fallida.');
-      }
-    } catch (error) {
-      setSyncResult('Error al ejecutar la sincronización.');
-    } finally {
-      setSyncLoading(false);
     }
   };
 
@@ -148,13 +128,6 @@ export const VideoListScreen: React.FC = () => {
           <h2 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Video Library</h2>
           <p className="text-slate-500 mt-1 text-sm">Manage, upload, and organize your video content efficiently.</p>
         </div>
-        <button
-          className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-5 py-2.5 rounded-lg font-medium transition-all shadow-lg shadow-primary/20 active:scale-95"
-          onClick={() => window.location.href = '/dashboard'}
-        >
-          <UploadCloud size={20} />
-          <span>Quick Upload</span>
-        </button>
       </div>
 
       {/* Toolbar */}

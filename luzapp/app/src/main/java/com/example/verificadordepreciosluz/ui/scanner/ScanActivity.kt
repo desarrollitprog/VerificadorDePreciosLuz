@@ -1095,8 +1095,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
     private fun startTabletWebSocket() {
         val baseUrl = backendBaseUrl ?: return
-        val normalizedBaseUrl = baseUrl.trimEnd('/')
-        val wsUrl = normalizedBaseUrl.replace("http://", "ws://").replace("https://", "wss://") + "/ws/tablet"
+        val cleanBaseUrl = baseUrl.trimEnd('/')
+        val wsUrl = cleanBaseUrl.replace("http://", "ws://").replace("https://", "wss://") + "/ws/tablet"
         wsClient = OkHttpClient()
         val request = Request.Builder().url(wsUrl).build()
         val wsListener = object : WebSocketListener() {

@@ -111,7 +111,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private val bannerMaxAgeMs = (2.5 * 60 * 60 * 1000L).toLong()
     private var backendBaseUrl: String? = null
     private val standbyIdleMs = 20_000L
-    private var standbyItems: List<BannerCacheItem> = emptyList()
+    private var standbyItems: MutableList<BannerCacheItem> = mutableListOf()
     private var standbyIndex = 0
     private var standbyActive = false
     private var standbyTimerRunnable: Runnable? = null
@@ -525,7 +525,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
         Log.i(TAG, "Standby: cache cargado items=${cache.items.size}")
 
-        standbyItems = cache.items
+        standbyItems = cache.items.toMutableList() // <-- Siempre mutable
         standbyIndex = 0
         standbyActive = true
         binding.standbyOverlay.visibility = View.VISIBLE
@@ -535,19 +535,19 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     // Reproduce un item del carrusel (imagen o video)
     private fun playStandbyItem() {
         if (!standbyActive || standbyItems.isEmpty()) return
-        // Validar que el item actual existe antes de reproducir
-        var item = standbyItems[standbyIndex]
+        // Proteger el índice
+        if (standbyIndex >= standbyItems.size) standbyIndex = 0
+        val item = standbyItems[standbyIndex]
         val fileExists = java.io.File(item.localPath).exists()
         if (!fileExists) {
             Log.w(TAG, "Standby: archivo no existe, eliminando de la lista: ${item.localPath}")
-            // Eliminar el item de la lista y ajustar el índice
-            standbyItems = standbyItems.filterIndexed { idx, _ -> idx != standbyIndex }
+            standbyItems.removeAt(standbyIndex)
             if (standbyItems.isEmpty()) {
                 Log.e(TAG, "Standby: todos los archivos han sido eliminados. Deteniendo carrusel.")
                 stopStandbyCarousel()
                 return
             }
-            standbyIndex %= standbyItems.size
+            if (standbyIndex >= standbyItems.size) standbyIndex = 0
             playStandbyItem()
             return
         }
@@ -565,16 +565,14 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             }
             binding.standbyVideo.setOnErrorListener { _, what, extra ->
                 Log.w(TAG, "Standby: error video what=$what extra=$extra para ${item.localPath}")
-                // Si solo queda un item, detén el carrusel
                 if (standbyItems.size == 1) {
                     stopStandbyCarousel()
                 } else {
-                    // Elimina el item problemático y avanza
-                    standbyItems = standbyItems.filterIndexed { idx, _ -> idx != standbyIndex }
+                    standbyItems.removeAt(standbyIndex)
                     if (standbyItems.isEmpty()) {
                         stopStandbyCarousel()
                     } else {
-                        standbyIndex %= standbyItems.size
+                        if (standbyIndex >= standbyItems.size) standbyIndex = 0
                         playStandbyItem()
                     }
                 }

@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.models import Notificacion
 from app.database import get_db_usuarios
-from app.dependencies import get_current_admin
+from app.dependencies import get_current_cliente
 
 router = APIRouter()
 
@@ -12,7 +12,7 @@ async def listar_notificaciones(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db_usuarios),
-    current_user: dict = Depends(get_current_admin),
+    current_user: dict = Depends(get_current_cliente),
 ):
     stmt = (
         select(Notificacion)

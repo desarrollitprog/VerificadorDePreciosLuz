@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNotification } from '../components/useNotification';
 import { Search, Filter, UploadCloud, MoreVertical, Play, Eye, Trash, Film, HardDrive, TrendingUp, Plus } from 'lucide-react';
 import axios from 'axios';
 import api from '../services/axiosInstance';
@@ -8,6 +9,7 @@ import { getServersStatus } from '../services/monitoreoService';
 import ServerCard from '../components/monitoreo/ServerCard';
 
 export const DashboardScreen: React.FC = () => {
+    const showNotification = useNotification();
   const [preview, setPreview] = useState<{url: string, tipo: string, titulo: string} | null>(null);
   const handlePreview = (video: Video) => {
     setPreview({ url: video.url, tipo: video.tipo, titulo: video.titulo || video.filename });
@@ -70,8 +72,10 @@ export const DashboardScreen: React.FC = () => {
       await uploadMedia(event.target.files[0]);
       const data = await getVideos();
       setVideos(data);
+      showNotification('Archivo subido correctamente', 'success');
     } catch (err: any) {
       setError('Error uploading archivo');
+      showNotification('Error al subir archivo', 'error');
     } finally {
       setUploading(false);
     }
@@ -82,8 +86,10 @@ export const DashboardScreen: React.FC = () => {
     try {
       await deleteVideo(videoId);
       setVideos(videos.filter(v => v.id !== videoId));
+      showNotification('Archivo borrado correctamente', 'success');
     } catch (err: any) {
       setError('Error deleting video');
+      showNotification('Error al borrar archivo', 'error');
     }
   };
 
@@ -91,26 +97,18 @@ export const DashboardScreen: React.FC = () => {
     setSyncLoading(true);
     setSyncResult(null);
     const endpoint = '/monitoreo/sincronizar-fuerza';
-    console.log('[SYNC] Intentando sincronización forzada. Endpoint:', endpoint);
     try {
       const response = await api.post(endpoint);
-      console.log('[SYNC] Respuesta recibida:', response);
       if (response.data.success) {
         setSyncResult('Sincronización forzada ejecutada correctamente.');
-        console.log('[SYNC] Sincronización exitosa.');
+        showNotification('Sincronización forzada ejecutada correctamente', 'success');
       } else {
         setSyncResult('Sincronización fallida.');
-        console.warn('[SYNC] Sincronización fallida. Respuesta:', response.data);
+        showNotification('Sincronización fallida', 'warning');
       }
     } catch (error: any) {
       setSyncResult('Error al ejecutar la sincronización.');
-      if (error.response) {
-        console.error('[SYNC] Error de respuesta del backend:', error.response);
-      } else if (error.request) {
-        console.error('[SYNC] No se recibió respuesta del backend. Request:', error.request);
-      } else {
-        console.error('[SYNC] Error al configurar la petición:', error.message);
-      }
+      showNotification('Error al ejecutar la sincronización', 'error');
     } finally {
       setSyncLoading(false);
     }
@@ -150,8 +148,12 @@ export const DashboardScreen: React.FC = () => {
               placeholder="Search videos..."
             />
           </div>
-          <button className="p-2 bg-slate-100 dark:bg-[#1c2936] rounded-lg text-slate-500 hover:text-primary transition-colors">
-            <Filter size={20} />
+          <button
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition disabled:opacity-50"
+            onClick={handleForceSync}
+            disabled={syncLoading}
+          >
+            {syncLoading ? 'Sincronizando...' : 'Sincronización Forzada'}
           </button>
         </div>
       </div>

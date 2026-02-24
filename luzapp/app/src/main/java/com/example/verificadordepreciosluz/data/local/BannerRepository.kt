@@ -90,7 +90,7 @@ class BannerRepository(
     }
 
     // Guarda metadata local de banners
-    private fun saveMeta(meta: BannerCacheMeta) {
+    fun saveMeta(meta: BannerCacheMeta) {
         val metaFile = File(context.filesDir, FILE_META)
         metaFile.writer().use { writer ->
             gson.toJson(meta, writer)

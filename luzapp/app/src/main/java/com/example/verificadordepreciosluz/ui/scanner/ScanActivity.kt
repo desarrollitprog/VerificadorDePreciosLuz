@@ -535,14 +535,26 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     // Reproduce un item del carrusel (imagen o video)
     private fun playStandbyItem() {
         if (!standbyActive || standbyItems.isEmpty()) return
-        val item = standbyItems[standbyIndex]
+        // Validar que el item actual existe antes de reproducir
+        var item = standbyItems[standbyIndex]
         val fileExists = java.io.File(item.localPath).exists()
+        if (!fileExists) {
+            Log.w(TAG, "Standby: archivo no existe, eliminando de la lista: ${item.localPath}")
+            // Eliminar el item de la lista y ajustar el índice
+            standbyItems = standbyItems.filterIndexed { idx, _ -> idx != standbyIndex }
+            if (standbyItems.isEmpty()) {
+                Log.e(TAG, "Standby: todos los archivos han sido eliminados. Deteniendo carrusel.")
+                stopStandbyCarousel()
+                return
+            }
+            standbyIndex %= standbyItems.size
+            playStandbyItem()
+            return
+        }
         Log.i(TAG, "Standby: item idx=$standbyIndex tipo=${item.tipo} path=${item.localPath} exists=$fileExists")
-
         standbySlideRunnable?.let { uiHandler.removeCallbacks(it) }
         binding.standbyImage.visibility = View.GONE
         binding.standbyVideo.visibility = View.GONE
-
         if (item.tipo == "video") {
             binding.standbyVideo.visibility = View.VISIBLE
             binding.standbyVideo.setOnCompletionListener {
@@ -552,8 +564,20 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 mp.setVideoScalingMode(android.media.MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT)
             }
             binding.standbyVideo.setOnErrorListener { _, what, extra ->
-                Log.w(TAG, "Standby: error video what=$what extra=$extra")
-                nextStandbyItem()
+                Log.w(TAG, "Standby: error video what=$what extra=$extra para ${item.localPath}")
+                // Si solo queda un item, detén el carrusel
+                if (standbyItems.size == 1) {
+                    stopStandbyCarousel()
+                } else {
+                    // Elimina el item problemático y avanza
+                    standbyItems = standbyItems.filterIndexed { idx, _ -> idx != standbyIndex }
+                    if (standbyItems.isEmpty()) {
+                        stopStandbyCarousel()
+                    } else {
+                        standbyIndex %= standbyItems.size
+                        playStandbyItem()
+                    }
+                }
                 true
             }
             binding.standbyVideo.setVideoPath(item.localPath)
@@ -1094,39 +1118,81 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     }
 
     private fun startTabletWebSocket() {
-        val baseUrl = backendBaseUrl ?: return
+        Log.i(TAG, "[WebSocket] startTabletWebSocket() llamado")
+        val baseUrl = backendBaseUrl ?: run {
+            Log.e(TAG, "[WebSocket] backendBaseUrl es null, no se puede conectar")
+            return
+        }
         val cleanBaseUrl = baseUrl.trimEnd('/')
         val wsUrl = cleanBaseUrl.replace("http://", "ws://").replace("https://", "wss://") + "/ws/tablet"
-        wsClient = OkHttpClient()
-        val request = Request.Builder().url(wsUrl).build()
-        val wsListener = object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: okhttp3.Response) {
-                Log.i(TAG, "WebSocket abierto: $wsUrl")
-            }
-            override fun onMessage(webSocket: WebSocket, text: String) {
-                try {
-                    val message = JSONObject(text)
-                    val command = message.optString("command")
-                    if (command == "WIPE_AND_RESYNC") {
-                        // Seguridad: solo ejecuta si el comando es exacto
-                        scope.launch {
-                            ejecutarPurgaTotal(this@ScanActivity, api!!, baseUrl)
+        Log.i(TAG, "[WebSocket] Intentando conectar a: $wsUrl")
+        try {
+            wsClient = OkHttpClient()
+            val request = Request.Builder().url(wsUrl).build()
+            val wsListener = object : WebSocketListener() {
+                override fun onOpen(webSocket: WebSocket, response: okhttp3.Response) {
+                    Log.i(TAG, "[WebSocket] Conexión abierta: $wsUrl")
+                }
+                override fun onMessage(webSocket: WebSocket, text: String) {
+                    Log.i(TAG, "[WebSocket] Mensaje recibido (texto): $text")
+                    try {
+                        val message = org.json.JSONObject(text)
+                        val command = message.optString("command")
+                        if (command == "WIPE_AND_RESYNC") {
+                            Log.i(TAG, "[WebSocket] Comando WIPE_AND_RESYNC recibido. Ejecutando purga total...")
+                            scope.launch {
+                                ejecutarPurgaTotal(this@ScanActivity, api!!, baseUrl) {
+                                    uiHandler.post {
+                                        stopStandbyCarousel()
+                                        startStandbyCarousel()
+                                    }
+                                }
+                            }
+                        } else {
+                            Log.i(TAG, "[WebSocket] Comando recibido no reconocido: $command")
                         }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "[WebSocket] Error procesando mensaje WebSocket (texto)", e)
                     }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error procesando mensaje WebSocket", e)
+                }
+                override fun onMessage(webSocket: WebSocket, bytes: okio.ByteString) {
+                    Log.w(TAG, "[WebSocket] Mensaje recibido (binario): ${bytes.hex()}")
+                    try {
+                        val text = bytes.utf8()
+                        Log.w(TAG, "[WebSocket] Binario decodificado como texto: $text")
+                        // Intenta procesar como texto por si acaso
+                        val message = org.json.JSONObject(text)
+                        val command = message.optString("command")
+                        if (command == "WIPE_AND_RESYNC") {
+                            Log.i(TAG, "[WebSocket] Comando WIPE_AND_RESYNC recibido (binario). Ejecutando purga total...")
+                            scope.launch {
+                                ejecutarPurgaTotal(this@ScanActivity, api!!, baseUrl) {
+                                    uiHandler.post {
+                                        stopStandbyCarousel()
+                                        startStandbyCarousel()
+                                    }
+                                }
+                            }
+                        } else {
+                            Log.i(TAG, "[WebSocket] Comando recibido no reconocido (binario): $command")
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "[WebSocket] Error procesando mensaje WebSocket (binario)", e)
+                    }
+                }
+                override fun onFailure(webSocket: WebSocket, t: Throwable, response: okhttp3.Response?) {
+                    Log.e(TAG, "[WebSocket] Error de conexión: ${t.message}", t)
+                    reconnectTabletWebSocket()
+                }
+                override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                    Log.w(TAG, "[WebSocket] Conexión cerrada: $reason")
+                    reconnectTabletWebSocket()
                 }
             }
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: okhttp3.Response?) {
-                Log.e(TAG, "WebSocket error: ${t.message}")
-                reconnectTabletWebSocket()
-            }
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                Log.w(TAG, "WebSocket cerrado: $reason")
-                reconnectTabletWebSocket()
-            }
+            tabletWebSocket = wsClient!!.newWebSocket(request, wsListener)
+        } catch (e: Exception) {
+            Log.e(TAG, "[WebSocket] Excepción al crear WebSocket: ${e.message}", e)
         }
-        tabletWebSocket = wsClient!!.newWebSocket(request, wsListener)
     }
 
     private fun reconnectTabletWebSocket() {

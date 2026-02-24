@@ -90,15 +90,27 @@ export const DashboardScreen: React.FC = () => {
   const handleForceSync = async () => {
     setSyncLoading(true);
     setSyncResult(null);
+    const endpoint = '/monitoreo/sincronizar-fuerza';
+    console.log('[SYNC] Intentando sincronización forzada. Endpoint:', endpoint);
     try {
-      const response = await api.post('/monitoreo/sincronizar-fuerza');
+      const response = await api.post(endpoint);
+      console.log('[SYNC] Respuesta recibida:', response);
       if (response.data.success) {
         setSyncResult('Sincronización forzada ejecutada correctamente.');
+        console.log('[SYNC] Sincronización exitosa.');
       } else {
         setSyncResult('Sincronización fallida.');
+        console.warn('[SYNC] Sincronización fallida. Respuesta:', response.data);
       }
-    } catch (error) {
+    } catch (error: any) {
       setSyncResult('Error al ejecutar la sincronización.');
+      if (error.response) {
+        console.error('[SYNC] Error de respuesta del backend:', error.response);
+      } else if (error.request) {
+        console.error('[SYNC] No se recibió respuesta del backend. Request:', error.request);
+      } else {
+        console.error('[SYNC] Error al configurar la petición:', error.message);
+      }
     } finally {
       setSyncLoading(false);
     }

@@ -91,7 +91,7 @@ export const DashboardScreen: React.FC = () => {
     setSyncLoading(true);
     setSyncResult(null);
     try {
-      const response = await axios.post('http://192.168.1.105:3000/monitoreo/sincronizar-fuerza');
+      const response = await axios.post('http://192.168.1.105:8001/monitoreo/sincronizar-fuerza');
       if (response.data.success) {
         setSyncResult('Sincronización forzada ejecutada correctamente.');
       } else {

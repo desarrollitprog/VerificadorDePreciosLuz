@@ -541,7 +541,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         val fileExists = java.io.File(item.localPath).exists()
         if (!fileExists) {
             Log.w(TAG, "Standby: archivo no existe, eliminando de la lista: ${item.localPath}")
-            standbyItems.removeAt(standbyIndex)
+            if (standbyItems.isNotEmpty()) {
+                standbyItems.removeAt(standbyIndex)
+            }
             if (standbyItems.isEmpty()) {
                 Log.e(TAG, "Standby: todos los archivos han sido eliminados. Deteniendo carrusel.")
                 stopStandbyCarousel()
@@ -568,7 +570,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 if (standbyItems.size == 1) {
                     stopStandbyCarousel()
                 } else {
-                    standbyItems.removeAt(standbyIndex)
+                    if (standbyItems.isNotEmpty()) {
+                        standbyItems.removeAt(standbyIndex)
+                    }
                     if (standbyItems.isEmpty()) {
                         stopStandbyCarousel()
                     } else {

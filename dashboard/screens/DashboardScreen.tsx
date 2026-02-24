@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Search, Filter, UploadCloud, MoreVertical, Play, Eye, Trash, Film, HardDrive, TrendingUp, Plus } from 'lucide-react';
 import axios from 'axios';
-
+import api from '../services/axiosInstance';
 import { getVideos, uploadMedia, deleteVideo } from '../services/videoService';
 import { Video } from '../types';
 import { getServersStatus } from '../services/monitoreoService';

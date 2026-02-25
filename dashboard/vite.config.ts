@@ -10,12 +10,12 @@ export default defineConfig(({ mode }) => {
         host: '0.0.0.0',
         proxy: {
           '/api': {
-            target: 'http://192.168.1.105:8001/api',
+            target: 'http://192.168.0.105:8001/api',
             changeOrigin: true,
             secure: false,
           },
           '/static': {
-            target: 'http://192.168.1.105:8001',
+            target: 'http://192.168.0.105:8001',
             changeOrigin: true,
             secure: false,
           },

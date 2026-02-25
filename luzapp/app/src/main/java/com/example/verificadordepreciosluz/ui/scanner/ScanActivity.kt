@@ -243,8 +243,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             BackupIndexRepository(this@ScanActivity).ensureIndex(offlineBackup?.updatedAt)
         }
         if (offlineBackup == null) {
-            Toast.makeText(this, "Sin respaldo local. Conéctate para sincronizar", Toast.LENGTH_LONG).show()
-            binding.etMockCode.requestFocus()
+            showOutOfService()
+            return
         }
     }
 
@@ -779,15 +779,11 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             try {
                 val backup = offlineBackup ?: loadOfflineBackup()
                 if (backup == null) {
-                    uiHandler.post {
-                        showThrottledError("offline_no_backup", "Sin respaldo local")
-                    }
+                    uiHandler.post { showOutOfService() }
                     return@launch
                 }
                 if (isBackupStale(backup)) {
-                    uiHandler.post {
-                        showThrottledError("offline_stale", "Respaldo vencido (24h). Conéctate al servidor")
-                    }
+                    uiHandler.post { showOutOfService() }
                     return@launch
                 }
                 offlineBackup = backup
@@ -795,12 +791,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 val producto = indexRepo.lookupProductoOffline(code)
                     ?: BackupRepository(this@ScanActivity).lookupProductoOffline(code)
                 if (producto == null) {
-                    uiHandler.post {
-                        showThrottledError("offline_not_found", "Producto no encontrado")
-                    }
+                    uiHandler.post { showThrottledError("offline_not_found", "Producto no encontrado") }
                     return@launch
                 }
-
                 uiHandler.post {
                     feedbackSuccess()
                     showResult(producto)
@@ -1200,5 +1193,21 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private fun reconnectTabletWebSocket() {
         // Espera 5 segundos y reconecta
         uiHandler.postDelayed({ startTabletWebSocket() }, 5000)
+    }
+
+    private fun showOutOfService() {
+        runOnUiThread {
+            binding.resultOverlay.visibility = View.VISIBLE
+            binding.tvNombre.text = "Fuera de Servicio"
+            binding.tvPrecioActual.text = ""
+            binding.tvPrecioDolar.text = ""
+            binding.tvIva.text = ""
+            binding.tvOferta.visibility = View.GONE
+            binding.resultCard.setCardBackgroundColor(getColor(R.color.cardview_default_background))
+            binding.tvOfflineIndicator.visibility = View.VISIBLE
+            binding.tvOfflineUpdated.visibility = View.VISIBLE
+            binding.etMockCode.isEnabled = false
+            binding.btnMockScan.isEnabled = false
+        }
     }
 }

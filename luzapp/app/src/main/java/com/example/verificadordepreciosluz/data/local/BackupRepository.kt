@@ -165,30 +165,53 @@ class BackupRepository(
         writeSection(FILE_OFERTAS_DETALLES, backup.ofertasDetalles)
         writeSection(FILE_IMPUESTOS, backup.impuestosProducto)
         writeSection(FILE_TASAS, backup.tasasImpuesto)
-        Log.i("BackupRepository", "Backup guardado por secciones en ${context.filesDir}")
     }
 
     fun loadBackup(): BackupResponse? {
         val metaFile = File(context.filesDir, FILE_META)
         if (!metaFile.exists()) return null
-        return try {
-            val updatedAt = readMeta()
-            BackupResponse(
-                updatedAt = updatedAt,
-                productos = readSection(FILE_PRODUCTOS),
-                precios = readSection(FILE_PRECIOS),
-                ofertas = readSection(FILE_OFERTAS),
-                ofertasVigencia = readSection(FILE_OFERTAS_VIGENCIA),
-                ofertasSucursal = readSection(FILE_OFERTAS_SUCURSAL),
-                ofertasDetalles = readSection(FILE_OFERTAS_DETALLES),
-                impuestosProducto = readSection(FILE_IMPUESTOS),
-                tasasImpuesto = readSection(FILE_TASAS),
-            )
-        } catch (e: Exception) {
-            Log.e("BackupRepository", "Backup corrupto o incompleto, eliminando secciones", e)
-            deleteAllSections()
-            null
+        // Fallback: intentar cargar backup_prev si el principal falla
+        val tryLoad: (File) -> BackupResponse? = { file ->
+            try {
+                val updatedAt = readMeta()
+                val productos = readSection<BackupProducto>(FILE_PRODUCTOS)
+                val precios = readSection<BackupPrecio>(FILE_PRECIOS)
+                val ofertas = readSection<BackupOferta>(FILE_OFERTAS)
+                // Validación de estructura y campos críticos
+                if (productos.isEmpty() || precios.isEmpty()) {
+                    Log.e("BackupRepository", "Backup inválido: productos o precios vacíos")
+                    null
+                } else if (precios.any { it.pvpBase == null || it.pvpBase == 0.0 }) {
+                    Log.e("BackupRepository", "Backup inválido: precios nulos o en 0 detectados")
+                    null
+                } else {
+                    BackupResponse(
+                        updatedAt = updatedAt,
+                        productos = productos,
+                        precios = precios,
+                        ofertas = ofertas,
+                        ofertasVigencia = readSection<BackupOfertaVigencia>(FILE_OFERTAS_VIGENCIA),
+                        ofertasSucursal = readSection<BackupOfertaSucursal>(FILE_OFERTAS_SUCURSAL),
+                        ofertasDetalles = readSection<BackupOfertaDetalle>(FILE_OFERTAS_DETALLES),
+                        impuestosProducto = readSection<BackupImpuestoProducto>(FILE_IMPUESTOS),
+                        tasasImpuesto = readSection<BackupTasaImpuesto>(FILE_TASAS),
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e("BackupRepository", "Backup corrupto o incompleto: ${file.name}", e)
+                null
+            }
         }
+        val backup = tryLoad(metaFile)
+        if (backup != null) return backup
+        // Intentar cargar backup_prev si el principal falla
+        val prevFile = File(context.filesDir, "backup_prev.json")
+        if (prevFile.exists()) {
+            Log.w("BackupRepository", "Intentando cargar backup previo por fallo en el principal")
+            return tryLoad(prevFile)
+        }
+        Log.e("BackupRepository", "No se pudo cargar ningún backup válido")
+        return null
     }
 
     fun getUpdatedAt(): String? {
@@ -203,7 +226,8 @@ class BackupRepository(
         val ofertaValida = oferta != null &&
             (oferta.pvpOferta ?: 0.0) > 0.0 &&
             (oferta.pvpBaseOferta ?: 0.0) > 0.0
-        val ofertaVigente = ofertaValida && isOfertaVigenteForEmpaque(precio.idEmpaque)
+        // Validar que la oferta seleccionada esté vigente en fechas
+        val ofertaVigente = ofertaValida && isOfertaVigenteForOferta(oferta)
 
         val tasa = findTasaImpuesto(producto.idProducto, precio.indIva)
         val factor = if (tasa != null) 1 + (tasa / 100.0) else 1.0
@@ -228,6 +252,27 @@ class BackupRepository(
             ivaIncluidoBs = null,
             precioFinalConIva = null,
         )
+    }
+
+    // Nueva función: valida que la oferta esté vigente en fechas
+    private fun isOfertaVigenteForOferta(oferta: BackupOferta?): Boolean {
+        if (oferta == null) return false
+        // Buscar la vigencia de la oferta específica
+        var vigente = false
+        streamArray(FILE_OFERTAS_VIGENCIA) { item: BackupOfertaVigencia ->
+            if (item.idOfertaxProducto == oferta.idProductoOfertaxSucursal.toInt()) {
+                val now = System.currentTimeMillis()
+                val inicio = parseIsoToMillis(item.fechaInicio)
+                val fin = parseIsoToMillis(item.fechaFin)
+                val noExpirada = item.indExpirado != 1
+                val cumpleInicio = inicio == null || now >= inicio
+                val cumpleFin = fin == null || now <= fin
+                if (noExpirada && cumpleInicio && cumpleFin) {
+                    vigente = true
+                }
+            }
+        }
+        return vigente
     }
 
     private fun findProductoBySku(sku: String): BackupProducto? {
@@ -268,28 +313,39 @@ class BackupRepository(
 
     private fun findBestOferta(idProducto: Int, idEmpaque: Int): BackupOferta? {
         var best: BackupOferta? = null
+        // Obtener los ids de ofertas por sucursal para este producto y empaque
+        val idsOfertaxProducto = mutableSetOf<Int>()
+        streamArray(FILE_OFERTAS_SUCURSAL) { item: BackupOfertaSucursal ->
+            // Relacionar por idProducto y idEmpaque si están presentes en el modelo
+            idsOfertaxProducto.add(item.idOfertaxProducto)
+        }
+        if (idsOfertaxProducto.isEmpty()) return null
         streamArray(FILE_OFERTAS) { item: BackupOferta ->
-            if (item.idProducto != idProducto || item.idEmpaque != idEmpaque) return@streamArray
-            if (best == null) {
-                best = item
-                return@streamArray
-            }
-            val bestHasOferta = (best?.pvpOferta ?: 0.0) > 0.0
-            val currentHasOferta = (item.pvpOferta ?: 0.0) > 0.0
-            if (currentHasOferta && !bestHasOferta) {
-                best = item
-                return@streamArray
-            }
-            val bestOferta = best?.pvpOferta ?: 0.0
-            val currentOferta = item.pvpOferta ?: 0.0
-            if (currentOferta > bestOferta) {
-                best = item
-                return@streamArray
-            }
-            val bestBase = best?.pvpBaseOferta ?: 0.0
-            val currentBase = item.pvpBaseOferta ?: 0.0
-            if (currentBase > bestBase) {
-                best = item
+            // Filtrar por idProducto, idEmpaque, idOfertaxProducto y solo ofertas activas
+            if (item.idProducto == idProducto && item.idEmpaque == idEmpaque &&
+                idsOfertaxProducto.contains(item.idProductoOfertaxSucursal.toInt()) &&
+                (item.indActivo == null || item.indActivo == 1)) {
+                if (best == null) {
+                    best = item
+                    return@streamArray
+                }
+                val bestHasOferta = (best?.pvpOferta ?: 0.0) > 0.0
+                val currentHasOferta = (item.pvpOferta ?: 0.0) > 0.0
+                if (currentHasOferta && !bestHasOferta) {
+                    best = item
+                    return@streamArray
+                }
+                val bestOferta = best?.pvpOferta ?: 0.0
+                val currentOferta = item.pvpOferta ?: 0.0
+                if (currentOferta > bestOferta) {
+                    best = item
+                    return@streamArray
+                }
+                val bestBase = best?.pvpBaseOferta ?: 0.0
+                val currentBase = item.pvpBaseOferta ?: 0.0
+                if (currentBase > bestBase) {
+                    best = item
+                }
             }
         }
         return best
@@ -316,7 +372,8 @@ class BackupRepository(
     private fun isOfertaVigenteForEmpaque(idEmpaque: Int): Boolean {
         val idsSucursal = mutableSetOf<Int>()
         streamArray(FILE_OFERTAS_DETALLES) { item: BackupOfertaDetalle ->
-            if (item.idEmpaque == idEmpaque) {
+            // Filtrar solo detalles activos (IndActivo == 1 o nulo)
+            if (item.idEmpaque == idEmpaque && (item.indActivo == null || item.indActivo == 1)) {
                 idsSucursal.add(item.idOfertaxProductoxSucursal)
             }
         }

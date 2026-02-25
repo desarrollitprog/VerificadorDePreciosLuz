@@ -24,7 +24,13 @@ async def listar_notificaciones(
     notificaciones = result.scalars().all()
     return {
         "success": True,
-        "notificaciones": [n.__dict__ for n in notificaciones],
+        "notificaciones": [
+            {
+                **n.__dict__,
+                "nombre_usuario": n.usuario.nombre_usuario if n.usuario else None
+            }
+            for n in notificaciones
+        ],
         "limit": limit,
         "offset": offset,
         "count": len(notificaciones)

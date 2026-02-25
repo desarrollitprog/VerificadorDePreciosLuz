@@ -4,6 +4,7 @@ from sqlalchemy.future import select
 from app.models import Notificacion
 from app.database import get_db_usuarios
 from app.dependencies import get_current_cliente
+from sqlalchemy.orm import selectinload
 
 router = APIRouter()
 
@@ -16,6 +17,7 @@ async def listar_notificaciones(
 ):
     stmt = (
         select(Notificacion)
+        .options(selectinload(Notificacion.usuario))
         .order_by(Notificacion.fecha_creacion.desc())
         .offset(offset)
         .limit(limit)

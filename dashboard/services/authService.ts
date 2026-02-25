@@ -42,7 +42,7 @@ export function getUserName(): string | null {
         .join('')
     );
     const payload = JSON.parse(jsonPayload);
-    return payload.sub || null;
+    return payload.nombre || payload.sub || null;
   } catch {
     return null;
   }

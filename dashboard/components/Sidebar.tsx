@@ -110,7 +110,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, on
             <User size={28} className="text-blue-400" />
           </div>
           <div className="flex flex-col flex-1 min-w-0">
-            <p className="text-white text-sm font-medium truncate group-hover:text-primary transition-colors">{userName || 'Usuario'}</p>
+            <p className="text-white text-sm font-medium truncate group-hover:text-primary transition-colors">{'Usuario'}</p>
             <span className={`inline-block text-xs font-semibold rounded px-2 py-0.5 ${role === 'ADMIN' ? 'bg-red-700 text-white' : role === 'CLIENTE' ? 'bg-blue-700 text-white' : 'bg-slate-600 text-white'}`}>{userName || 'Sin nombre'}</span>
           </div>
           <button onClick={onLogout} className="text-slate-400 hover:text-red-400 transition-colors p-1 rounded-md hover:bg-slate-700/50">

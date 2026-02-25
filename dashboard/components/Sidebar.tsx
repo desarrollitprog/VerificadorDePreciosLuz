@@ -96,12 +96,12 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, on
           </button>
         )}
 
-        <button 
+        {/*<button 
           className="flex items-center gap-3 px-3 py-3 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors w-full text-left group"
         >
           <Settings size={20} className="group-hover:rotate-90 transition-transform duration-500" />
           <span className="text-sm font-medium">Configuración</span>
-        </button>
+        </button>*/}
       </nav>
 
       <div className="p-4 border-t border-slate-800 mt-auto">

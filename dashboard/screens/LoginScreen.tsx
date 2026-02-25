@@ -45,17 +45,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
             </div>
           </div>
           <h1 className="mb-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-            Video Manager Admin
+            VERIFICADOR DE PRECIOS LUZ
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Welcome back. Please enter your details.
+            BIENVENIDOS, POR FAVOR INGRESA TUS CREDENCIALES 
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-1.5">
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300" htmlFor="username">
-              Username
+              NOMBRE DE USUARIO
             </label>
             <div className="relative">
               <input
@@ -63,7 +63,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                 type="text"
                 required
                 className="block w-full rounded-lg border-slate-300 bg-slate-50 p-2.5 text-slate-900 placeholder:text-slate-400 focus:border-primary focus:ring-primary dark:border-slate-700 dark:bg-[#111a22] dark:text-white dark:placeholder:text-slate-500 sm:text-sm sm:leading-6 h-12 pl-10"
-                placeholder="Enter your username"
+                placeholder="INGRESA TU USUARIO"
                 value={username}
                 onChange={e => setUsername(e.target.value)}
               />
@@ -75,7 +75,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
 
           <div className="space-y-1.5">
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300" htmlFor="password">
-              Password
+              CONTRASEÑA
             </label>
             <div className="relative">
               <input
@@ -96,26 +96,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
               </button>
             </div>
           </div>
-
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <input
-                id="remember-me"
-                name="remember-me"
-                type="checkbox"
-                className="h-4 w-4 rounded border-slate-300 bg-slate-50 text-primary focus:ring-primary dark:border-slate-600 dark:bg-[#111a22] dark:ring-offset-slate-800"
-              />
-              <label className="ml-2 block text-sm text-slate-600 dark:text-slate-400" htmlFor="remember-me">
-                Remember for 30 days
-              </label>
-            </div>
-            <div className="text-sm">
+            {/*<div className="text-sm">
               <a href="#" className="font-medium text-primary hover:text-blue-500 transition-colors">
                 Forgot password?
               </a>
-            </div>
-          </div>
-
+            </div>*/}
           <div>
             <button
               type="submit"
@@ -125,24 +110,24 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
               <span className="absolute inset-y-0 left-0 flex items-center pl-3">
                 <Lock className="h-5 w-5 text-blue-200 group-hover:text-blue-100" />
               </span>
-              {loading ? 'Signing in...' : 'Sign in'}
+              {loading ? 'Ingresando...' : 'Ingresar'}
             </button>
           </div>
           {error && <div className="text-red-500 text-sm mt-2 text-center">{error}</div>}
         </form>
 
-        <div className="mt-6 border-t border-slate-200 pt-6 text-center dark:border-slate-700">
+        {/*<div className="mt-6 border-t border-slate-200 pt-6 text-center dark:border-slate-700">
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Don't have an account?{' '}
+            No Posee una Cuenta?{' '}
             <a href="#" className="font-medium text-primary hover:text-blue-500 hover:underline">
-              Contact Super Admin
+              Contacta a un Administrador
             </a>
           </p>
-        </div>
+        </div>*/}
       </div>
 
       <p className="mt-8 text-center text-xs text-slate-400 dark:text-slate-600">
-        © 2024 Video Manager Dashboard. All rights reserved.
+        © 2026 Verificador de Precios Luz. Todos los derechos reservados.
       </p>
     </div>
   );

@@ -11,9 +11,9 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({ currentScreen, onMenuClick }) => { 
   const getBreadcrumb = () => {
     switch (currentScreen) {
-      case 'dashboard': return 'My Videos';
-      case 'list': return 'Video Library';
-      default: return 'Dashboard';
+      case 'dashboard': return 'Mis Videos';
+      case 'list': return 'Biblioteca de Videos';
+      default: return 'Panel Principal';
     }
   };
 
@@ -34,7 +34,7 @@ export const Header: React.FC<HeaderProps> = ({ currentScreen, onMenuClick }) =>
           <Menu size={20} />
         </button>
         <div className="flex items-center gap-2 text-sm text-slate-500">
-          <span className="hover:text-primary transition-colors cursor-pointer">Dashboard</span>
+          <span className="hover:text-primary transition-colors cursor-pointer">Panel</span>
           <ChevronRight size={14} />
           <span className="text-slate-900 dark:text-white font-medium">{getBreadcrumb()}</span>
         </div>

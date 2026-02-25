@@ -16,6 +16,7 @@ export const DashboardScreen: React.FC = () => {
   };
   const closePreview = () => setPreview(null);
   const [videos, setVideos] = useState<Video[]>([]);
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +57,7 @@ export const DashboardScreen: React.FC = () => {
         setVideos(Array.isArray(data) ? data : []);
       } catch (err: any) {
         setVideos([]);
-        setError('Error loading videos');
+        setError('Error Cargando Videos');
       } finally {
         setLoading(false);
       }
@@ -116,15 +117,11 @@ export const DashboardScreen: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto flex flex-col gap-8">
-
-      {/* Monitoreo de Servidores */}
-      {/* Bloque de monitoreo eliminado, debe ir en otra sección/menu */}
-
       {/* Title & Search */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">Video Library</h2>
-          <p className="text-slate-500 mt-1">Manage, upload, and organize your video content.</p>
+          <h2 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">Mis Videos</h2>
+          <p className="text-slate-500 mt-1">ADMINISTRA TUS VIDEOS YA SEA SUBIR, ELIMINAR y SINCRONIZAR.</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative">
@@ -132,7 +129,9 @@ export const DashboardScreen: React.FC = () => {
             <input
               type="text"
               className="pl-10 pr-4 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-500 focus:ring-2 focus:ring-primary w-full sm:w-64 transition-all"
-              placeholder="Search videos..."
+              placeholder="Buscar Videos..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
             />
           </div>
           <button
@@ -152,14 +151,14 @@ export const DashboardScreen: React.FC = () => {
           <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
             <UploadCloud className="text-primary" size={28} />
           </div>
-          <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">Upload New Video</h3>
-          <p className="text-slate-500 text-sm max-w-sm mb-6">Drag & drop files here or click to browse. Supports MP4, MKV (Max 500MB)</p>
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">Sube Nuevo Contenido</h3>
+          <p className="text-slate-500 text-sm max-w-sm mb-6">Click Aqui para subir Videos o Imagenes (Tamaño maximo = 20MB)</p>
           <label className="px-6 py-2.5 bg-primary hover:bg-primary/90 text-white text-sm font-semibold rounded-lg shadow-lg shadow-primary/20 transition-all flex items-center gap-2 cursor-pointer">
             <Plus size={18} />
-            Select Files
+            Seleccionar Archivo
             <input type="file" accept="video/mp4,video/mkv,image/png,image/jpeg,image/jpg" className="hidden" onChange={handleUpload} />
           </label>
-          {uploading && <div className="mt-2 text-primary">Uploading...</div>}
+          {uploading && <div className="mt-2 text-primary">Subiendo...</div>}
           {error && <div className="mt-2 text-red-500">{error}</div>}
         </div>
       </div>
@@ -168,7 +167,7 @@ export const DashboardScreen: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white dark:bg-[#1c2936] p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between shadow-sm">
           <div>
-            <p className="text-slate-500 text-xs font-medium uppercase tracking-wider">Total Videos</p>
+            <p className="text-slate-500 text-xs font-medium uppercase tracking-wider">Videos Totales</p>
             <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
               Local: {Array.isArray(videos) ? videos.length : 0}
               {/* Remoto: aquí puedes mostrar la cantidad de videos remotos si tienes ese dato */}
@@ -176,34 +175,42 @@ export const DashboardScreen: React.FC = () => {
           </div>
           <Film className="text-slate-400" size={32} />
         </div>
-        <div className="bg-white dark:bg-[#1c2936] p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between shadow-sm">
+        {/*<div className="bg-white dark:bg-[#1c2936] p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between shadow-sm">
           <div>
-            <p className="text-slate-500 text-xs font-medium uppercase tracking-wider">Storage Used</p>
+            <p className="text-slate-500 text-xs font-medium uppercase tracking-wider">Almacenamiento usado</p>
             <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
               {/* Aquí debes mostrar el almacenamiento real del servidor secundario, por ejemplo: */}
-              {/* {servidores[0]?.almacenamiento || 'N/A'} */}
+              {/* {servidores[0]?.almacenamiento || 'N/A'} 
               N/A
             </p>
           </div>
           <HardDrive className="text-slate-400" size={32} />
-        </div>
+        </div>*/}
       </div>
 
       {/* Grid */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-slate-900 dark:text-white">Recent Uploads</h3>
-          <button className="text-sm text-primary font-medium hover:underline">View All</button>
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white">Contenido Subido Recientemente</h3>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {Array.isArray(videos) && videos.length > 0 && videos[0] && (
-            <div className="col-span-1">
-              <div className="border-2 border-primary rounded-xl p-4 bg-white dark:bg-[#1c2936] shadow-lg">
-                <div className="text-xs text-primary font-bold mb-2">Last Uploaded</div>
-                {/* Miniatura y datos del último video */}
-                <div className="aspect-video bg-slate-800 relative overflow-hidden mb-2 flex items-center justify-center">
-                  {videos[0].tipo === 'image' ? (
-                    <img src={videos[0].thumbnail} alt={videos[0].titulo || videos[0].filename} className="w-full h-full object-cover" />
+          {(() => {
+            // Filtrar videos por búsqueda
+            const filteredVideos = videos.filter(v => {
+              const searchLower = search.toLowerCase();
+              return (
+                v.titulo?.toLowerCase().includes(searchLower) ||
+                v.filename?.toLowerCase().includes(searchLower) ||
+                v.id?.toString().includes(searchLower)
+              );
+            });
+            // Renderizar tarjetas
+            return filteredVideos.length > 0 ? filteredVideos.map((video, idx) => (
+              <div key={video.id} className="group relative bg-white dark:bg-[#1c2936] rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 hover:border-primary/50 transition-all hover:shadow-xl hover:shadow-slate-900/10 dark:hover:shadow-black/40 flex flex-col">
+                {/* Thumbnail */}
+                <div className="aspect-video bg-slate-800 relative overflow-hidden">
+                  {video.tipo === 'image' ? (
+                    <img src={video.thumbnail} alt={video.titulo || video.filename} className="w-full h-full object-cover" />
                   ) : (
                     <div className="flex items-center justify-center w-full h-full">
                       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -212,81 +219,59 @@ export const DashboardScreen: React.FC = () => {
                       </svg>
                     </div>
                   )}
+                  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors"></div>
+                  {video.duration && video.tipo === 'video' && (
+                    <div className="absolute bottom-2 right-2 bg-black/70 text-white text-[10px] font-bold px-1.5 py-0.5 rounded backdrop-blur-sm">
+                      {video.duration} seg
+                    </div>
+                  )}
                 </div>
-                <div className="text-sm font-semibold text-slate-900 dark:text-white mb-1">
-                  {videos[0].titulo || videos[0].filename}
-                </div>
-                <div className="text-xs text-slate-500">
-                  Fecha subida: {videos[0].date ? new Date(videos[0].date).toLocaleString() : 'Fecha desconocida'}
-                </div>
-              </div>
-            </div>
-          )}
-          {/* El resto de videos, excluyendo el último */}
-          {Array.isArray(videos) && videos.length > 1 && videos.slice(1).map((video) => (
-            <div key={video.id} className="group relative bg-white dark:bg-[#1c2936] rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 hover:border-primary/50 transition-all hover:shadow-xl hover:shadow-slate-900/10 dark:hover:shadow-black/40 flex flex-col">
-              {/* Thumbnail */}
-              <div className="aspect-video bg-slate-800 relative overflow-hidden">
-                {video.tipo === 'image' ? (
-                  <img src={video.thumbnail} alt={video.titulo || video.filename} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="flex items-center justify-center w-full h-full">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <rect width="24" height="24" rx="6" fill="#1c2936" />
-                      <polygon points="9,7 17,12 9,17" fill="#fff" />
-                    </svg>
+                {/* Info */}
+                <div className="p-4 flex-1 flex flex-col">
+                  <div className="flex justify-between items-start gap-2 mb-2">
+                    <h4 className="text-slate-900 dark:text-white font-semibold text-sm leading-tight line-clamp-2" title={video.titulo || video.filename}>
+                      {video.titulo || video.filename}
+                    </h4>
+                    <button className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+                      <MoreVertical size={16} />
+                    </button>
                   </div>
-                )}
-                <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors"></div>
-                {video.duration && video.tipo === 'video' && (
-                  <div className="absolute bottom-2 right-2 bg-black/70 text-white text-[10px] font-bold px-1.5 py-0.5 rounded backdrop-blur-sm">
-                    {video.duration} seg
+                  <div className="flex items-center justify-between mt-auto pt-2">
+                    <span className="text-slate-500 text-xs">
+                      Fecha subida: {video.date ? new Date(video.date).toLocaleString() : 'Fecha desconocida'}
+                    </span>
                   </div>
-                )}
-              </div>
-              {/* Info */}
-              <div className="p-4 flex-1 flex flex-col">
-                <div className="flex justify-between items-start gap-2 mb-2">
-                  <h4 className="text-slate-900 dark:text-white font-semibold text-sm leading-tight line-clamp-2" title={video.titulo || video.filename}>
-                    {video.titulo || video.filename}
-                  </h4>
-                  <button className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
-                    <MoreVertical size={16} />
-                  </button>
-                </div>
-                <div className="flex items-center justify-between mt-auto pt-2">
-                  <span className="text-slate-500 text-xs">
-                    Fecha subida: {video.date ? new Date(video.date).toLocaleString() : 'Fecha desconocida'}
-                  </span>
-                </div>
-                {/* Action Buttons */}
-                <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100 dark:border-slate-700/50">
-                  <button className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-xs font-medium" onClick={() => handlePreview(video)}>
-                    <Eye size={14} />
-                    View
-                  </button>
-                        {/* Modal de vista previa */}
-                        {preview && (
-                          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-                            <div className="bg-white dark:bg-[#1c2936] rounded-lg shadow-lg p-6 max-w-lg w-full relative">
-                              <button onClick={closePreview} className="absolute top-2 right-2 text-slate-500 hover:text-red-500 text-xl font-bold">&times;</button>
-                              <div className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">{preview.titulo}</div>
-                              {preview.tipo === 'image' ? (
-                                <img src={preview.url} alt={preview.titulo} className="max-h-[60vh] w-auto mx-auto rounded" />
-                              ) : (
-                                <video src={preview.url} controls autoPlay className="max-h-[60vh] w-auto mx-auto rounded" />
-                              )}
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100 dark:border-slate-700/50">
+                    <button className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-xs font-medium" onClick={() => handlePreview(video)}>
+                      <Eye size={14} />
+                      Reproducir
+                    </button>
+                          {/* Modal de vista previa */}
+                          {preview && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+                              <div className="bg-white dark:bg-[#1c2936] rounded-lg shadow-lg p-6 max-w-lg w-full relative">
+                                <button onClick={closePreview} className="absolute top-2 right-2 text-slate-500 hover:text-red-500 text-xl font-bold">&times;</button>
+                                <div className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">{preview.titulo}</div>
+                                {preview.tipo === 'image' ? (
+                                  <img src={preview.url} alt={preview.titulo} className="max-h-[60vh] w-auto mx-auto rounded" />
+                                ) : (
+                                  <video src={preview.url} controls autoPlay className="max-h-[60vh] w-auto mx-auto rounded" />
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        )}
-                  <button className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors text-xs font-medium" onClick={() => handleDelete(video.id)}>
-                    <Trash size={14} />
-                    Borrar
-                  </button>
+                          )}
+                    <button className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors text-xs font-medium" onClick={() => handleDelete(video.id)}>
+                      <Trash size={14} />
+                      Borrar
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            )) : (
+              <div className="col-span-full text-center text-slate-500 py-8">No se encontraron videos.</div>
+            );
+          })()}
         </div>
       </div>
     </div>

@@ -64,7 +64,7 @@ export const VideoListScreen: React.FC = () => {
         const data = await getVideos();
         setVideos(Array.isArray(data) ? data : []);
       } catch (err: any) {
-        setError('Error loading videos');
+        setError('Error Cargando Videos');
         setVideos([]);
       } finally {
         setLoading(false);
@@ -79,7 +79,7 @@ export const VideoListScreen: React.FC = () => {
       await deleteVideo(videoId);
       setVideos(videos.filter(v => v.id !== videoId));
     } catch (err: any) {
-      setError('Error deleting video');
+      setError('Error Borrando Videos');
     }
   };
 
@@ -125,8 +125,8 @@ export const VideoListScreen: React.FC = () => {
           </div>
         )}
         <div>
-          <h2 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Video Library</h2>
-          <p className="text-slate-500 mt-1 text-sm">Manage, upload, and organize your video content efficiently.</p>
+          <h2 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">BIBLIOTECA DE VIDEOS</h2>
+          <p className="text-slate-500 mt-1 text-sm"> CHECKEA EL ESTATUS ACTUAL DE LOS VIDEOS O ELIMINA Y DESCARGA EL CONTENIDO</p>
         </div>
       </div>
 
@@ -139,7 +139,7 @@ export const VideoListScreen: React.FC = () => {
           <input
             type="text"
             className="block w-full rounded-lg bg-slate-50 dark:bg-[#0b1219] border-none py-2.5 pl-10 pr-3 text-sm text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-[#58728a] focus:ring-1 focus:ring-primary"
-            placeholder="Filter by filename, tag, or ID..."
+            placeholder="Coloca el Nombre del Archivo"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -152,8 +152,8 @@ export const VideoListScreen: React.FC = () => {
             onChange={e => setStatusFilter(e.target.value)}
           >
             <option value="">Estatus</option>
-            <option value="activo">Activo</option>
-            <option value="inactivo">Inactivo</option>
+            <option value="activo">Activos</option>
+            <option value="inactivo">Inactivos</option>
           </select>
           {/* Filtro de Fecha de subida */}
           <input
@@ -188,18 +188,18 @@ export const VideoListScreen: React.FC = () => {
             <input type="checkbox" className="rounded border-slate-300 dark:border-[#324d67] bg-white dark:bg-[#0b1219] text-primary focus:ring-primary focus:ring-offset-0" />
           </div>
           <div className="col-span-5 sm:col-span-4 flex items-center gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
-            Filename
+            Nombre del Archivo
             <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
           <div className="col-span-3 hidden sm:flex items-center gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
-            Date Uploaded
+            Fecha de Subida
             <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
           <div className="col-span-2 hidden md:flex items-center justify-end gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
-            Size
+            Tamaño
             <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
-          <div className="col-span-4 sm:col-span-3 md:col-span-2 flex items-center justify-center sm:justify-start">Status</div>
+          <div className="col-span-4 sm:col-span-3 md:col-span-2 flex items-center justify-center sm:justify-start">Estatus</div>
         </div>
 
         {/* Table Body */}
@@ -278,7 +278,7 @@ export const VideoListScreen: React.FC = () => {
 
         {/* Pagination Footer */}
         <div className="bg-slate-50 dark:bg-[#1f2b38] border-t border-slate-200 dark:border-[#324d67]/30 p-3 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500 dark:text-[#92adc9]">
-          <div className="flex items-center gap-2">
+          {/*<div className="flex items-center gap-2">
             <span>Rows per page:</span>
             <select
               className="bg-white dark:bg-[#0b1219] border border-slate-300 dark:border-[#324d67]/30 rounded px-2 py-1 text-slate-900 dark:text-white focus:ring-1 focus:ring-primary focus:border-primary outline-none"
@@ -287,8 +287,8 @@ export const VideoListScreen: React.FC = () => {
             >
               <option>10</option>
             </select>
-          </div>
-          <div className="flex items-center gap-6">
+          </div>*/}
+          {/*<div className="flex items-center gap-6">
             <span>{(page - 1) * rowsPerPage + 1}-{Math.min(page * rowsPerPage, totalRows)} of {totalRows}</span>
             <div className="flex items-center gap-1">
               <button
@@ -306,12 +306,12 @@ export const VideoListScreen: React.FC = () => {
                 <ChevronRight size={18} />
               </button>
             </div>
-          </div>
+          </div>*/}
         </div>
       </div>
       
       <div className="pb-4 text-xs text-slate-400 dark:text-[#58728a] text-center lg:text-right">
-         Video Management Pro © 2023
+        © 2026 Verificador de Precios Luz. Todos los derechos reservados.
       </div>
     </div>
   );

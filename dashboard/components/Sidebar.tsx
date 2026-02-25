@@ -33,7 +33,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, on
             <LayoutGrid size={24} />
           </div>
           <div className="flex flex-col">
-            <h1 className="text-white text-lg font-bold leading-tight">Video Admin</h1>
+            <h1 className="text-white text-lg font-bold leading-tight">Administrador de Videos</h1>
             <p className="text-slate-400 text-xs font-medium">v1.2.4</p>
           </div>
         </div>
@@ -53,7 +53,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, on
             }`}
         >
           <LayoutGrid size={20} />
-          <span className="text-sm">My Videos</span>
+          <span className="text-sm">Mis Videos</span>
         </button>
 
         <button 
@@ -65,7 +65,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, on
             }`}
         >
           <Video size={20} />
-          <span className="text-sm">Video Library</span>
+          <span className="text-sm">Biblioteca de Videos</span>
         </button>
 
         {/* Solo ADMIN puede ver la opción de Servidores */}
@@ -100,7 +100,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, on
           className="flex items-center gap-3 px-3 py-3 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors w-full text-left group"
         >
           <Settings size={20} className="group-hover:rotate-90 transition-transform duration-500" />
-          <span className="text-sm font-medium">Settings</span>
+          <span className="text-sm font-medium">Configuración</span>
         </button>
       </nav>
 

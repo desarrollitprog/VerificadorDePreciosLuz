@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutGrid, Video, Settings, LogOut, X, Users, Server } from 'lucide-react';
+import { LayoutGrid, Video, Settings, LogOut, X, Users, Server, User } from 'lucide-react';
 import { Screen } from '../types';
 import { getUserRole, getUserName } from '../services/authService';
 
@@ -106,13 +106,12 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, on
 
       <div className="p-4 border-t border-slate-800 mt-auto">
         <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer group">
-          <div 
-            className="h-10 w-10 rounded-full bg-cover bg-center border border-slate-600 shadow-sm"
-            style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuBEUz6eCO0dhVP82h4FJQMq3nDXkpWN6QwzsN01D_fyYhGKbQM9qqOmcsqPHx9EIdGnPlVwdFpwgAS_SO87H1Ke8OjEx2U0fD-wyyV5g4RfrJPvb040ei3nBFT1SNszFc5CNHDUJiS0HhXozHU43KDxrDvYd97-rOo42xrDJASbeCOj6aOHB097S6ZS0C850ANDh3MYlr8T497LsPMfs84ZG5XjzdjDJfhw-yRyeDdOyOPbc0If3ltz_W6hafyEFPVSm7bJsnF35Mgy')" }}
-          ></div>
+          <div className="h-10 w-10 flex items-center justify-center rounded-full bg-slate-700 border border-slate-600 shadow-sm">
+            <User size={28} className="text-blue-400" />
+          </div>
           <div className="flex flex-col flex-1 min-w-0">
             <p className="text-white text-sm font-medium truncate group-hover:text-primary transition-colors">{userName || 'Usuario'}</p>
-            <span className={`inline-block text-xs font-semibold rounded px-2 py-0.5 ${role === 'ADMIN' ? 'bg-green-700 text-white' : 'bg-blue-700 text-white'}`}>{role || 'Sin rol'}</span>
+            <span className={`inline-block text-xs font-semibold rounded px-2 py-0.5 ${role === 'ADMIN' ? 'bg-red-700 text-white' : role === 'CLIENTE' ? 'bg-blue-700 text-white' : 'bg-slate-600 text-white'}`}>{userName ? userName : 'Sin nombre'}</span>
           </div>
           <button onClick={onLogout} className="text-slate-400 hover:text-red-400 transition-colors p-1 rounded-md hover:bg-slate-700/50">
             <LogOut size={18} />

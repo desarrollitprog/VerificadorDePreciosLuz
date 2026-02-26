@@ -10,9 +10,13 @@ import com.google.gson.stream.JsonReader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Locale
-import java.util.TimeZone
+import org.threeten.bp.Instant
+import org.threeten.bp.LocalDate
+import org.threeten.bp.ZoneId
+import org.threeten.bp.ZoneOffset
+import org.threeten.bp.ZonedDateTime
+import org.threeten.bp.format.DateTimeFormatter
+import org.threeten.bp.format.DateTimeParseException
 
 class BackupIndexRepository(private val context: Context) {
     private val gson = Gson()
@@ -53,11 +57,14 @@ class BackupIndexRepository(private val context: Context) {
                     insertImpuestosProducto(db)
                     insertTasasImpuesto(db)
                     saveMeta(db, updatedAt)
-                    db.setTransactionSuccessful()
+                    // Mover el log aquí, antes de setTransactionSuccessful y endTransaction
                     Log.i(TAG, "Índice local actualizado")
+                    logOfertasVigenciaConFechas(db)
+                    db.setTransactionSuccessful()
                 } catch (e: Exception) {
                     Log.e(TAG, "Error reconstruyendo índice local", e)
                 } finally {
+                    // Elimina cualquier uso de la base de datos aquí
                     db.endTransaction()
                 }
             }
@@ -65,12 +72,73 @@ class BackupIndexRepository(private val context: Context) {
     }
 
     fun lookupProductoOffline(sku: String): ProductoResponse? {
+        logOfertasVigencia() // Log de vigencia cada vez que se escanea
         synchronized(dbLock) {
             dbHelper.readableDatabase.use { db ->
-                val producto = queryProducto(db, sku) ?: return null
-                val precio = queryBestPrecio(db, producto.idProducto) ?: return null
+                val producto = queryProducto(db, sku) ?: run {
+                    Log.i(TAG, "[DEPURACION] Producto no encontrado para sku=$sku")
+                    return null
+                }
+                val precio = queryBestPrecio(db, producto.idProducto) ?: run {
+                    Log.i(TAG, "[DEPURACION] Precio no encontrado para idProducto=${producto.idProducto}")
+                    return null
+                }
                 val oferta = queryBestOferta(db, producto.idProducto, precio.idEmpaque)
-                val ofertaVigente = oferta != null && isOfertaVigente(db, precio.idEmpaque)
+                // Log de fechas actuales y de la oferta
+                val now = System.currentTimeMillis()
+                val nowLegible = Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).toString()
+                var fechaInicioMs: Long? = null
+                var fechaFinMs: Long? = null
+                var vigenciaEncontrada = false
+                if (oferta != null) {
+                    // Buscar la vigencia de la oferta para este producto y empaque
+                    val vigenciaSql = """
+                        SELECT v.fechaInicioMs, v.fechaFinMs
+                        FROM ofertas o
+                        JOIN ofertas_sucursal s ON o.idProducto = s.idOfertaxProducto
+                        JOIN ofertas_detalles d ON s.idOfertaxProductoxSucursal = d.idOfertaxProductoxSucursal
+                        JOIN ofertas_vigencia v ON s.idOfertaxProducto = v.idOfertaxProducto
+                        WHERE o.idProducto = ?
+                          AND o.idEmpaque = ?
+                          AND d.idEmpaque = ?
+                          AND (d.indActivo IS NULL OR d.indActivo = 1)
+                          AND (v.indExpirado IS NULL OR v.indExpirado != 1)
+                        LIMIT 1
+                    """.trimIndent()
+                    db.rawQuery(vigenciaSql, arrayOf(producto.idProducto.toString(), precio.idEmpaque.toString(), precio.idEmpaque.toString())).use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            fechaInicioMs = if (cursor.isNull(0) || cursor.getLong(0) == 0L) null else cursor.getLong(0)
+                            fechaFinMs = if (cursor.isNull(1) || cursor.getLong(1) == 0L) null else cursor.getLong(1)
+                            vigenciaEncontrada = true
+                            val inicioLegible = fechaInicioMs?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toString() } ?: "null"
+                            val finLegible = fechaFinMs?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toString() } ?: "null"
+                            Log.i(TAG, "[DEPURACION] Vigencia oferta: fechaInicioMs=$fechaInicioMs ($inicioLegible), fechaFinMs=$fechaFinMs ($finLegible)")
+                            logVigenciaOferta(now, fechaInicioMs, fechaFinMs, producto.idProducto, oferta.pvpOferta, oferta.pvpBaseOferta)
+                        } else {
+                            Log.i(TAG, "[DEPURACION] Vigencia oferta: No se encontró vigencia para este producto y empaque")
+                            logVigenciaOferta(now, null, null, producto.idProducto, oferta.pvpOferta, oferta.pvpBaseOferta)
+                        }
+                    }
+                    Log.i(TAG, "[DEPURACION] Fecha actual dispositivo: $now ($nowLegible), oferta encontrada: pvpOferta=${oferta.pvpOferta}, pvpBaseOferta=${oferta.pvpBaseOferta}")
+                } else {
+                    Log.i(TAG, "[DEPURACION] Fecha actual dispositivo: $now ($nowLegible), oferta=null")
+                }
+                // Determinar vigencia usando fechas
+                val detalleVigente = queryDetalleOfertaVigente(db, producto.idProducto, precio.idEmpaque)
+                val ofertaValida = oferta != null &&
+                    (oferta.pvpOferta ?: 0.0) > 0.0 &&
+                    (oferta.pvpBaseOferta ?: 0.0) > 0.0
+                // Lógica corregida: ofertaVigente solo si hay vigencia encontrada, fechas válidas y la fecha actual está dentro del rango
+                val fechasValidas = !(fechaInicioMs == null && fechaFinMs == null)
+                val ofertaVigente = ofertaValida && detalleVigente && vigenciaEncontrada && fechasValidas && (
+                    // Solo inicio null: vigente hasta fechaFinMs
+                    (fechaInicioMs == null && fechaFinMs != null && now <= fechaFinMs) ||
+                    // Solo fin null: vigente desde fechaInicioMs
+                    (fechaInicioMs != null && fechaFinMs == null && now >= fechaInicioMs) ||
+                    // Ambos con valor: rango normal
+                    (fechaInicioMs != null && fechaFinMs != null && now >= fechaInicioMs && now <= fechaFinMs)
+                )
+                Log.i(TAG, "[DEPURACION] ofertaValida=$ofertaValida, detalleVigente=$detalleVigente, ofertaVigente=$ofertaVigente, fechaInicioMs=$fechaInicioMs, fechaFinMs=$fechaFinMs, now=$now")
                 val tasa = queryTasaImpuesto(db, producto.idProducto, precio.indIva)
                 val factor = if (tasa != null) 1 + (tasa / 100.0) else 1.0
 
@@ -79,6 +147,8 @@ class BackupIndexRepository(private val context: Context) {
                 val pvpConversion = if (rawConversion != null && rawConversion > 0.0) rawConversion else pvpBase
                 val pvpOferta = oferta?.pvpOferta?.times(factor)
                 val pvpBaseOferta = oferta?.pvpBaseOferta?.times(factor)
+
+                Log.i(TAG, "[DEPURACION] pvpBase=$pvpBase, pvpConversion=$pvpConversion, pvpOferta=$pvpOferta, pvpBaseOferta=$pvpBaseOferta")
 
                 return ProductoResponse(
                     idProducto = producto.idProducto,
@@ -96,6 +166,40 @@ class BackupIndexRepository(private val context: Context) {
                 )
             }
         }
+    }
+
+    // Nueva función: valida el detalle vigente igual que el backend
+    private fun queryDetalleOfertaVigente(db: android.database.sqlite.SQLiteDatabase, idProducto: Int, idEmpaque: Int): Boolean {
+        val now = System.currentTimeMillis()
+        val nowUtc = Instant.ofEpochMilli(now).atZone(ZoneOffset.UTC)
+        val nowLocal = Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault())
+        val sql = """
+            SELECT v.fechaInicioMs, v.fechaFinMs
+            FROM ofertas o
+            JOIN ofertas_sucursal s ON o.idProducto = s.idOfertaxProducto
+            JOIN ofertas_detalles d ON s.idOfertaxProductoxSucursal = d.idOfertaxProductoxSucursal
+            JOIN ofertas_vigencia v ON s.idOfertaxProducto = v.idOfertaxProducto
+            WHERE o.idProducto = ?
+              AND o.idEmpaque = ?
+              AND d.idEmpaque = ?
+              AND (d.indActivo IS NULL OR d.indActivo = 1)
+              AND (v.indExpirado IS NULL OR v.indExpirado != 1)
+        """.trimIndent()
+        db.rawQuery(sql, arrayOf(idProducto.toString(), idEmpaque.toString(), idEmpaque.toString())).use { cursor ->
+            while (cursor.moveToNext()) {
+                val inicio = cursor.getLong(0)
+                val fin = cursor.getLong(1)
+                val inicioUtc = Instant.ofEpochMilli(inicio).atZone(ZoneOffset.UTC)
+                val inicioLocal = Instant.ofEpochMilli(inicio).atZone(ZoneId.systemDefault())
+                val finUtc = Instant.ofEpochMilli(fin).atZone(ZoneOffset.UTC)
+                val finLocal = Instant.ofEpochMilli(fin).atZone(ZoneId.systemDefault())
+                val vigente = (inicio <= now) && (fin >= now)
+                // Log detallado de las fechas
+                Log.i(TAG, "[DEPURACION] now=$now (UTC=$nowUtc, Local=$nowLocal), inicio=$inicio (UTC=$inicioUtc, Local=$inicioLocal), fin=$fin (UTC=$finUtc, Local=$finLocal), vigente=$vigente")
+                if (vigente) return true
+            }
+        }
+        return false
     }
 
     private fun clearTables(db: android.database.sqlite.SQLiteDatabase) {
@@ -254,24 +358,6 @@ class BackupIndexRepository(private val context: Context) {
         }
     }
 
-    private fun isOfertaVigente(db: android.database.sqlite.SQLiteDatabase, idEmpaque: Int): Boolean {
-        val now = System.currentTimeMillis()
-        val sql = """
-            SELECT 1
-            FROM ofertas_vigencia v
-            JOIN ofertas_sucursal s ON v.idOfertaxProducto = s.idOfertaxProducto
-            JOIN ofertas_detalles d ON s.idOfertaxProductoxSucursal = d.idOfertaxProductoxSucursal
-            WHERE d.idEmpaque = ?
-              AND (v.indExpirado IS NULL OR v.indExpirado != 1)
-              AND (v.fechaInicioMs IS NULL OR v.fechaInicioMs <= ?)
-              AND (v.fechaFinMs IS NULL OR v.fechaFinMs >= ?)
-            LIMIT 1
-        """.trimIndent()
-        db.rawQuery(sql, arrayOf(idEmpaque.toString(), now.toString(), now.toString())).use { cursor ->
-            return cursor.moveToFirst()
-        }
-    }
-
     private fun queryTasaImpuesto(db: android.database.sqlite.SQLiteDatabase, idProducto: Int, indIva: Boolean?): Double? {
         if (indIva != true) return null
         val sql = """
@@ -289,14 +375,36 @@ class BackupIndexRepository(private val context: Context) {
 
     private fun parseIsoToMillis(value: String?): Long? {
         if (value.isNullOrBlank()) return null
-        val clean = value.replace("Z", "").substringBefore(".")
-        return try {
-            val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
-            sdf.timeZone = TimeZone.getTimeZone("UTC")
-            sdf.parse(clean)?.time
-        } catch (_: Exception) {
-            null
+        val formatters = listOf(
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSX"),
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssX"),
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS"),
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"),
+            DateTimeFormatter.ofPattern("yyyy-MM-dd")
+        )
+        for (formatter in formatters) {
+            try {
+                val result = when (formatter) {
+                    formatters[4] -> {
+                        // yyyy-MM-dd (solo fecha)
+                        val localDate = LocalDate.parse(value, formatter)
+                        localDate.atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
+                    }
+                    else -> {
+                        val zonedDateTime = ZonedDateTime.parse(value, formatter.withZone(ZoneId.of("UTC")))
+                        zonedDateTime.toInstant().toEpochMilli()
+                    }
+                }
+                Log.i(TAG, "[DEPURACION] Fecha parseada correctamente: $value -> $result")
+                return result
+            } catch (_: DateTimeParseException) {
+                Log.w(TAG, "[DEPURACION] Fallo parseando fecha: $value con formato "+formatter.toString())
+            } catch (e: Exception) {
+                Log.w(TAG, "Error inesperado al convertir la fecha: $value", e)
+            }
         }
+        Log.w(TAG, "No se pudo convertir la fecha: $value")
+        return null
     }
 
     private inline fun <reified T> streamArray(fileName: String, crossinline onItem: (T) -> Unit) {
@@ -349,6 +457,60 @@ class BackupIndexRepository(private val context: Context) {
         private const val FILE_IMPUESTOS = "backup_impuestos.json"
         private const val FILE_TASAS = "backup_tasas.json"
     }
+
+    fun logOfertasVigencia() {
+        synchronized(dbLock) {
+            dbHelper.readableDatabase.use { db ->
+                val sql = "SELECT idOfertaxProducto, indExpirado, fechaInicioMs, fechaFinMs FROM ofertas_vigencia"
+                db.rawQuery(sql, null).use { cursor ->
+                    Log.i(TAG, "--- Datos de ofertas_vigencia ---")
+                    while (cursor.moveToNext()) {
+                        val id = cursor.getInt(0)
+                        val expirado = cursor.getIntOrNull(1)
+                        val inicio = cursor.getLong(2)
+                        val fin = cursor.getLong(3)
+                        Log.i(TAG, "idOfertaxProducto=$id, indExpirado=$expirado, fechaInicioMs=$inicio, fechaFinMs=$fin")
+                    }
+                }
+            }
+        }
+    }
+
+    // Cambiar la firma para aceptar la base de datos abierta
+    fun logOfertasVigenciaConFechas(db: android.database.sqlite.SQLiteDatabase) {
+        val sql = "SELECT idOfertaxProducto, indExpirado, fechaInicioMs, fechaFinMs FROM ofertas_vigencia"
+        db.rawQuery(sql, null).use { cursor ->
+            Log.i(TAG, "--- Datos de ofertas_vigencia (con fechas legibles) ---")
+            while (cursor.moveToNext()) {
+                val id = cursor.getInt(0)
+                val expirado = cursor.getIntOrNull(1)
+                val inicio = cursor.getLong(2)
+                val fin = cursor.getLong(3)
+                val formatterLog = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.of("UTC"))
+                val inicioStr = if (inicio > 0) formatterLog.format(Instant.ofEpochMilli(inicio)) else "0"
+                val finStr = if (fin > 0) formatterLog.format(Instant.ofEpochMilli(fin)) else "0"
+                Log.i(TAG, "idOfertaxProducto=$id, indExpirado=$expirado, fechaInicioMs=$inicio ($inicioStr), fechaFinMs=$fin ($finStr)")
+            }
+        }
+    }
+
+    private fun logVigenciaOferta(
+        fechaActualMs: Long,
+        fechaInicioMs: Long?,
+        fechaFinMs: Long?,
+        productoId: Int? = null,
+        pvpOferta: Double? = null,
+        pvpBaseOferta: Double? = null
+    ) {
+        val zona = ZoneId.systemDefault()
+        val fechaActual = Instant.ofEpochMilli(fechaActualMs).atZone(zona)
+        val fechaInicio = fechaInicioMs?.let { Instant.ofEpochMilli(it).atZone(zona) }
+        val fechaFin = fechaFinMs?.let { Instant.ofEpochMilli(it).atZone(zona) }
+        Log.i(
+            TAG,
+            "[DEPURACION] Fecha actual dispositivo: $fechaActualMs ($fechaActual), fechaInicioMs: $fechaInicioMs ($fechaInicio), fechaFinMs: $fechaFinMs ($fechaFin), productoId: $productoId, pvpOferta: $pvpOferta, pvpBaseOferta: $pvpBaseOferta"
+        )
+    }
 }
 
 private fun Cursor.getDoubleOrNull(index: Int): Double? {
@@ -358,3 +520,6 @@ private fun Cursor.getDoubleOrNull(index: Int): Double? {
 private fun Cursor.getIntOrNull(index: Int): Int? {
     return if (isNull(index)) null else getInt(index)
 }
+
+// RECUERDA: Inicializa ThreeTenABP en tu Application o Activity principal:
+// AndroidThreeTen.init(context)

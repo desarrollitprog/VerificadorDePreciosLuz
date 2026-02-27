@@ -155,7 +155,7 @@
             android:text="@string/title_verify_price"
             android:textAlignment="center"
             android:textColor="@color/blanco"
-            android:textSize="24sp"
+            android:textSize="50sp"
             android:textStyle="bold" />
 
     </LinearLayout>
@@ -278,12 +278,13 @@
                         android:id="@+id/tvNombre"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:fontFamily="@font/rubik_semibold"
                         android:layout_marginBottom="10dp"
                         android:ellipsize="end"
                         android:gravity="center"
                         android:maxLines="2"
                         android:textColor="#555555"
-                        android:textSize="40sp"
+                        android:textSize="50sp"
                         android:textStyle="bold" />
 
                     <TextView
@@ -292,9 +293,10 @@
                         android:layout_height="wrap_content"
                         android:layout_marginBottom="4dp"
                         android:letterSpacing="0.1"
+                        android:fontFamily="@font/rubik_semibold"
                         android:text="@string/price_label"
                         android:textColor="#999999"
-                        android:textSize="15sp" />
+                        android:textSize="30sp" />
 
                     <LinearLayout
                         android:layout_width="wrap_content"
@@ -309,6 +311,7 @@
                             android:layout_marginEnd="4dp"
                             android:text="@string/currency_symbol"
                             android:textColor="@color/verde_luz"
+                            android:fontFamily="@font/rubik_semibold"
                             android:textSize="30sp"
                             android:textStyle="bold" />
 
@@ -317,7 +320,8 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:textColor="@color/verde_luz"
-                            android:textSize="150sp"
+                            android:fontFamily="@font/rubik_semibold"
+                            android:textSize="140sp"
                             android:textStyle="bold" />
 
                     </LinearLayout>
@@ -328,25 +332,125 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
                         android:textColor="@color/rojo_luz_logo"
-                        android:textSize="50sp" />
+                        android:fontFamily="@font/rubik_semibold"
+                        android:textSize="40sp" />
 
                     <TextView
                         android:id="@+id/tvIva"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:textColor="#F2F2F2"
-                        android:textSize="16sp" />
+                        android:fontFamily="@font/rubik_semibold"
+                        android:textColor="#555555"
+                        android:textSize="25sp" />
 
-                    <!--                    <TextView-->
-                    <!--                        android:id="@+id/tvCountdown"-->
-                    <!--                        android:layout_width="wrap_content"-->
-                    <!--                        android:layout_height="wrap_content"-->
-                    <!--                        android:layout_marginTop="6dp"-->
-                    <!--                        android:text="@string/label_countdown"-->
-                    <!--                        android:textColor="#F2F2F2"-->
-                    <!--                        android:textSize="16sp" />-->
+                </LinearLayout>
 
+                <!-- CONTENEDOR DE OFERTA: todos los elementos de oferta en un LinearLayout vertical -->
+                <LinearLayout
+                    android:id="@+id/ofertaGroup"
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:padding="16dp"
+                    android:background="@color/oferta_yellow"
+                    android:visibility="gone"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintStart_toStartOf="@id/divider"
+                    app:layout_constraintEnd_toEndOf="parent">
+
+                    <TextView
+                        android:id="@+id/tvFestivalPrecios"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="4dp"
+                        android:background="@drawable/bg_festival_label"
+                        android:fontFamily="@font/rubik_semibold"
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="4dp"
+                        android:text="@string/festival_de"
+                        android:textAllCaps="true"
+                        android:textColor="@color/blanco"
+                        android:textSize="40sp"
+                        android:textStyle="bold|italic" />
+
+                    <TextView
+                        android:id="@+id/tvPrecios"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="4dp"
+                        android:fontFamily="@font/rubik_semibold"
+                        android:background="@drawable/bg_festival_label"
+                        android:text="@string/precios"
+                        android:textAllCaps="true"
+                        android:textColor="@color/blanco"
+                        android:textSize="40sp"
+                        android:textStyle="bold|italic" />
+
+                    <View
+                        android:layout_width="45dp"
+                        android:layout_height="2dp"
+                        android:layout_marginTop="4dp"
+                        android:layout_marginBottom="8dp"
+                        android:background="@color/oferta_text_black" />
+
+                    <TextView
+                        android:id="@+id/tvNombreOferta"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:layout_marginBottom="4dp"
+                        android:fontFamily="@font/rubik_semibold"
+                        android:gravity="center"
+                        android:textColor="@color/oferta_text_black"
+                        android:textSize="65sp"
+                        android:textStyle="bold|italic" />
+
+                    <TextView
+                        android:id="@+id/tvTotalRef"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:layout_marginBottom="4dp"
+                        android:fontFamily="@font/rubik_semibold"
+                        android:text="@string/total_ref"
+                        android:textColor="@color/oferta_text_black"
+                        android:textSize="25sp"
+                        android:textStyle="bold|italic" />
+
+                    <TextView
+                        android:id="@+id/tvPrecioOferta"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:layout_marginBottom="4dp"
+                        android:fontFamily="@font/rubik_semibold"
+                        android:textColor="@color/oferta_text_black"
+                        android:textSize="140sp"
+                        android:textStyle="bold|italic" />
+                    <TextView
+                        android:id="@+id/tvPrecioBsOferta"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:textColor="@color/oferta_text_black"
+                        android:textSize="40sp"
+                        android:textStyle="bold|italic"
+                        android:gravity="center"
+                        android:fontFamily="@font/rubik_semibold" />
+
+                    <TextView
+                        android:id="@+id/tvIvaOferta"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:fontFamily="@font/rubik_semibold"
+                        android:textStyle="bold|italic"
+                        android:text="@string/iva_incluido"
+                        android:textColor="@color/oferta_text_black"
+                        android:textSize="25sp" />
                 </LinearLayout>
 
             </androidx.constraintlayout.widget.ConstraintLayout>
@@ -360,7 +464,7 @@
             android:layout_margin="12dp"
             android:background="@drawable/bg_oferta"
             android:padding="8dp"
-            android:text="¡OFERTA!"
+            android:text="@string/oferta"
             android:textColor="@android:color/white"
             android:textStyle="bold"
             android:visibility="gone"

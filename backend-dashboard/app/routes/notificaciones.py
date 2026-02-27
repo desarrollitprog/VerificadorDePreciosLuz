@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.models import Notificacion
 from app.database import get_db_usuarios
 from app.dependencies import get_current_cliente
 from sqlalchemy.orm import selectinload
+from app.services.notificacion_service import registrar_accion
+from pydantic import BaseModel
 
 router = APIRouter()
 
@@ -37,3 +39,23 @@ async def listar_notificaciones(
         "offset": offset,
         "count": len(notificaciones)
     }
+# Modelo para la notificación de sincronización
+class SyncStatusBody(BaseModel):
+    device_id: str
+    status: str
+    reason: str = ""
+
+@router.post("/sync-status", status_code=status.HTTP_201_CREATED)
+async def sync_status(
+    body: SyncStatusBody,
+    db: AsyncSession = Depends(get_db_usuarios),
+):
+    # Registrar la notificación en la base de datos
+    descripcion = f"Dispositivo {body.device_id} falló sincronización: {body.reason}"
+    await registrar_accion(
+        db=db,
+        usuario_id=None,
+        tipo="SYNC_FAILED",
+        descripcion=descripcion,
+    )
+    return {"success": True, "message": "Notificación de sincronización registrada"}

@@ -929,24 +929,32 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         val precioUsd = producto.pvpOferta ?: producto.pvpConversion ?: 0.0
         binding.tvPrecioDolar.text = getString(R.string.price_usd_format, precioUsd)
 
-        if (producto.pvpOferta != null) {
-            // Oferta: fondo vinotinto y textos blancos
-            binding.resultCard.setCardBackgroundColor(getColor(R.color.oferta_background))
-            binding.tvOferta.visibility = View.VISIBLE
-            binding.tvPrecioDolar.setTextColor(getColor(R.color.blanco))
-            binding.tvPriceCurrency.setTextColor(getColor(R.color.blanco))
-            binding.tvPrecioActual.setTextColor(getColor(R.color.blanco))
-            binding.tvIva.setTextColor(getColor(R.color.blanco))
-//            binding.tvCountdown.setTextColor(getColor(R.color.blanco))
+        if (producto.pvpOferta != null && producto.pvpOferta > 0) {
+            // Mostrar diseño de oferta
+            binding.resultCard.setCardBackgroundColor(getColor(R.color.oferta_yellow))
+            binding.ofertaGroup.visibility = View.VISIBLE
+            binding.infoGroup.visibility = View.GONE
+            binding.tvResultTitle.visibility = View.GONE
+
+            // Setear datos de oferta
+            binding.tvNombreOferta.text = producto.nombre
+            binding.tvPrecioOferta.text = String.format(Locale.US, "$%.2f", producto.pvpOferta)
+            // Mostrar precio en bolívares en la oferta
+            val precioBs = producto.pvpBaseOferta ?: producto.pvpBase ?: 0.0
+            val symbols = DecimalFormatSymbols(Locale("es", "VE")).apply {
+                groupingSeparator = '.'
+                decimalSeparator = ','
+            }
+            val formatter = DecimalFormat("#,##0.##", symbols)
+            val precioBsFormateado = formatter.format(precioBs)
+            binding.tvPrecioBsOferta.text = "Bs $precioBsFormateado"
+            // Puedes agregar aquí lógica para IVA, total ref, etc.
         } else {
-            // Normal: fondo blanco y colores NEGROS para máximo contraste
+            // Mostrar diseño normal
             binding.resultCard.setCardBackgroundColor(getColor(R.color.cardview_default_background))
-            binding.tvOferta.visibility = View.GONE
-            binding.tvPrecioDolar.setTextColor(getColor(R.color.verde_luz))
-            binding.tvPriceCurrency.setTextColor(getColor(R.color.verde_luz))
-            binding.tvPrecioActual.setTextColor(getColor(R.color.rojo_luz_logo))
-            binding.tvIva.setTextColor(getColor(R.color.gris_suave))
-//            binding.tvCountdown.setTextColor(getColor(R.color.gris_suave))
+            binding.ofertaGroup.visibility = View.GONE
+            binding.infoGroup.visibility = View.VISIBLE
+            binding.tvResultTitle.visibility = View.VISIBLE
         }
 
         binding.resultOverlay.visibility = View.VISIBLE
@@ -1133,6 +1141,17 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                     try {
                         val message = org.json.JSONObject(text)
                         val command = message.optString("command")
+                        // Enviar confirmación de recepción
+                        try {
+                            val confirmMsg = org.json.JSONObject()
+                            confirmMsg.put("type", "CONFIRMATION")
+                            confirmMsg.put("command", command)
+                            confirmMsg.put("status", "RECEIVED")
+                            webSocket.send(confirmMsg.toString())
+                            Log.i(TAG, "[WebSocket] Confirmación enviada para comando: $command")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "[WebSocket] Error enviando confirmación", e)
+                        }
                         if (command == "WIPE_AND_RESYNC") {
                             Log.i(TAG, "[WebSocket] Comando WIPE_AND_RESYNC recibido. Ejecutando purga total...")
                             scope.launch {
@@ -1155,9 +1174,19 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                     try {
                         val text = bytes.utf8()
                         Log.w(TAG, "[WebSocket] Binario decodificado como texto: $text")
-                        // Intenta procesar como texto por si acaso
                         val message = org.json.JSONObject(text)
                         val command = message.optString("command")
+                        // Enviar confirmación de recepción
+                        try {
+                            val confirmMsg = org.json.JSONObject()
+                            confirmMsg.put("type", "CONFIRMATION")
+                            confirmMsg.put("command", command)
+                            confirmMsg.put("status", "RECEIVED")
+                            webSocket.send(confirmMsg.toString())
+                            Log.i(TAG, "[WebSocket] Confirmación enviada para comando (binario): $command")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "[WebSocket] Error enviando confirmación (binario)", e)
+                        }
                         if (command == "WIPE_AND_RESYNC") {
                             Log.i(TAG, "[WebSocket] Comando WIPE_AND_RESYNC recibido (binario). Ejecutando purga total...")
                             scope.launch {

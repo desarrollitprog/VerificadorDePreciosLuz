@@ -3,19 +3,25 @@ from datetime import datetime, timedelta
 from dateutil.parser import isoparse
 import asyncio
 import logging
+import httpx
 from fastapi.responses import JSONResponse
 from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect 
 from fastapi.staticfiles import StaticFiles
 import os
 from fastapi.middleware.gzip import GZipMiddleware
+from dotenv import load_dotenv
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from . import database, models, schemas
 from .routes import consultas, publicidad
 
+# Cargar variables de entorno desde .env
+load_dotenv()
+
 app = FastAPI(title="Verificador de Precios Luz - Backend")
 logger = logging.getLogger("uvicorn.error")
+
 
 # Comprimir respuestas grandes para reducir tiempo de descarga
 app.add_middleware(GZipMiddleware, minimum_size=1024)
@@ -457,6 +463,8 @@ async def obtener_precio(
     tasa_impuesto = await buscar_tasa_impuesto(db, db_erp, producto.IdProducto, precio)
 
     return armar_respuesta(producto, precio, oferta, detalle, tasa_impuesto)
+
+
 #Sincronizacion forzada
 # Estado global para sincronización forzada
 SYNC_REQUIRED_NOW = False
@@ -469,16 +477,37 @@ async def fuerza_sync():
     await tablet_ws_manager.broadcast({"command": "WIPE_AND_RESYNC"})
     return {"success": True, "message": "Sincronización forzada marcada"}
 # WebSocket manager para tabletas
+
+# --- Reintentos automáticos y mapeo device_id <-> WebSocket ---
+RETRY_LIMIT = 3
+RETRY_DELAY = 30  # segundos
+sync_retry_counters = {}  # device_id -> intentos
+
 class TabletWebSocketManager:
     def __init__(self):
         self.active_connections: list[WebSocket] = []
+        self.device_map: dict[str, WebSocket] = {}  # device_id -> WebSocket
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
+        # Esperar a recibir el primer mensaje de identificación
+        try:
+            data = await asyncio.wait_for(websocket.receive_text(), timeout=10)
+            import json
+            msg = json.loads(data)
+            device_id = msg.get("device_id")
+            if device_id:
+                self.device_map[device_id] = websocket
+        except Exception:
+            pass
         self.active_connections.append(websocket)
 
     def disconnect(self, websocket: WebSocket):
         self.active_connections.remove(websocket)
+        # Limpiar device_map si corresponde
+        for k, v in list(self.device_map.items()):
+            if v == websocket:
+                del self.device_map[k]
 
     async def broadcast(self, message: dict):
         for connection in self.active_connections:
@@ -487,15 +516,66 @@ class TabletWebSocketManager:
             except Exception:
                 pass
 
+    async def send_to_device(self, device_id: str, message: dict):
+        ws = self.device_map.get(device_id)
+        if ws:
+            try:
+                await ws.send_json(message)
+            except Exception:
+                pass
+
 tablet_ws_manager = TabletWebSocketManager()
+
 # Endpoint WebSocket para tabletas
 @app.websocket("/ws/tablet")
+async def notify_dashboard_sync_failure(device_id: str, reason: str = ""):
+    dashboard_url = os.getenv("DASHBOARD_URL")
+    if not dashboard_url:
+        logging.error("DASHBOARD_URL no está definida en el entorno. Agrega esta variable en tu archivo .env.")
+        return
+    notify_endpoint = f"{dashboard_url.rstrip('/')}/api/sync-status"
+    try:
+        async with httpx.AsyncClient() as client:
+            payload = {"device_id": device_id, "status": "FAILED", "reason": reason}
+            await client.post(notify_endpoint, json=payload, timeout=10)
+    except Exception as e:
+        logging.error(f"Error notificando a backend-dashboard: {e}")
+    # Lanzar reintentos automáticos en background
+    asyncio.create_task(retry_sync_with_device(device_id))
+
+# --- Reintentos automáticos de sincronización ---
+async def retry_sync_with_device(device_id: str):
+    count = sync_retry_counters.get(device_id, 0)
+    if count < RETRY_LIMIT:
+        sync_retry_counters[device_id] = count + 1
+        await asyncio.sleep(RETRY_DELAY)
+        # Reenviar comando de sincronización solo a ese dispositivo
+        await tablet_ws_manager.send_to_device(device_id, {"command": "WIPE_AND_RESYNC"})
+    else:
+        sync_retry_counters.pop(device_id, None)
+        logging.error(f"Dispositivo {device_id} falló sincronización tras {RETRY_LIMIT} reintentos.")
+
 async def websocket_tablet(websocket: WebSocket):
     await tablet_ws_manager.connect(websocket)
     try:
         while True:
             data = await websocket.receive_text()
-            # Puedes manejar mensajes entrantes si lo necesitas
+            # Manejo de confirmaciones de sincronización
+            try:
+                import json
+                msg = json.loads(data)
+                if (
+                    msg.get("type") == "CONFIRMATION"
+                    and msg.get("command") == "WIPE_AND_RESYNC"
+                ):
+                    device_id = msg.get("device_id", "unknown")
+                    status = msg.get("status", "")
+                    if status == "FAILED":
+                        reason = msg.get("reason", "")
+                        # Lanza la notificación y reintentos en background
+                        asyncio.create_task(notify_dashboard_sync_failure(device_id, reason))
+            except Exception as e:
+                logging.error(f"Error procesando mensaje de confirmación: {e}")
     except WebSocketDisconnect:
         tablet_ws_manager.disconnect(websocket)
 

@@ -22,5 +22,7 @@
     <!-- Colores adicionales -->
     <color name="oferta_background">#6B1010</color>
     <color name="cardview_default_background">#FFFFFF</color>
-
+    <color name="oferta_yellow">#FFE000</color>
+    <color name="oferta_text_black">#181818</color>
+    <color name="oferta_red">#E30613</color>
 </resources>

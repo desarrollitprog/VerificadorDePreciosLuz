@@ -1,11 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Bell } from 'lucide-react';
+import { Bell, AlertTriangle } from 'lucide-react';
+import { useNotification } from './useNotification';
 import { fetchNotificaciones, Notificacion } from '../services/notificacionesService';
 
 interface GeneralNotificationsProps {}
 
 export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
   const [open, setOpen] = useState(false);
+  const showNotification = useNotification();
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -14,10 +16,22 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
     if (open) {
       setLoading(true);
       fetchNotificaciones(10, 0)
-        .then((res) => setNotificaciones(res.notificaciones))
+        .then((res) => {
+          setNotificaciones(res.notificaciones);
+          // Mostrar toast para SYNC_FAILED
+          res.notificaciones
+            .filter((n) => n.tipo === 'SYNC_FAILED')
+            .forEach((n) => {
+              showNotification(
+                `Fallo de sincronización: ${n.descripcion}`,
+                'error',
+                7000
+              );
+            });
+        })
         .finally(() => setLoading(false));
     }
-  }, [open]);
+  }, [open, showNotification]);
 
   // Cerrar dropdown al hacer click fuera
   useEffect(() => {
@@ -53,13 +67,22 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
             ) : notificaciones.length === 0 ? (
               <div className="p-4 text-center text-slate-500">No hay notificaciones</div>
             ) : (
-              notificaciones.map((n) => (
-                <div key={n.id} className="px-4 py-3 border-b last:border-b-0 border-slate-100 dark:border-slate-800">
-                  <div className="text-xs text-slate-500 mb-1">{new Date(n.fecha_creacion).toLocaleString()}</div>
-                  <div className="text-sm font-medium text-slate-900 dark:text-white">{n.tipo}</div>
-                  <div className="text-sm text-slate-700 dark:text-slate-300">{n.descripcion}</div>
-                </div>
-              ))
+              notificaciones.map((n) => {
+                const isSyncFailed = n.tipo === 'SYNC_FAILED';
+                return (
+                  <div
+                    key={n.id}
+                    className={`px-4 py-3 border-b last:border-b-0 border-slate-100 dark:border-slate-800 ${isSyncFailed ? 'bg-red-50 dark:bg-red-900/30' : ''}`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="text-xs text-slate-500">{new Date(n.fecha_creacion).toLocaleString()}</div>
+                      {isSyncFailed && <AlertTriangle size={16} className="text-red-500" title="Fallo de sincronización" />}
+                    </div>
+                    <div className={`text-sm font-medium ${isSyncFailed ? 'text-red-700 dark:text-red-400' : 'text-slate-900 dark:text-white'}`}>{n.tipo}</div>
+                    <div className={`text-sm ${isSyncFailed ? 'text-red-800 dark:text-red-200' : 'text-slate-700 dark:text-slate-300'}`}>{n.descripcion}</div>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>

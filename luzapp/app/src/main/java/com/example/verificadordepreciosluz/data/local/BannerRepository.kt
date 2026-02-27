@@ -78,6 +78,24 @@ class BannerRepository(
             }
         }
 
+        // Verificación robusta tras descarga
+        if (!outFile.exists()) {
+            Log.w(TAG, "Archivo descargado no existe: ${outFile.absolutePath} (id=${item.id})")
+            return null
+        }
+        val fileSize = outFile.length()
+        if (fileSize == 0L) {
+            Log.w(TAG, "Archivo descargado tiene tamaño 0: ${outFile.absolutePath} (id=${item.id}) - Eliminando archivo")
+            outFile.delete()
+            return null
+        }
+        if (!outFile.canRead()) {
+            Log.w(TAG, "Archivo descargado no es legible: ${outFile.absolutePath} (id=${item.id}) - Eliminando archivo")
+            outFile.delete()
+            return null
+        }
+        Log.d(TAG, "Banner descargado OK: ${outFile.absolutePath} (id=${item.id}) size=${fileSize}")
+
         return BannerCacheItem(
             id = item.id,
             titulo = item.titulo,

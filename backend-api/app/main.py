@@ -527,7 +527,6 @@ class TabletWebSocketManager:
 tablet_ws_manager = TabletWebSocketManager()
 
 # Endpoint WebSocket para tabletas
-@app.websocket("/ws/tablet")
 async def notify_dashboard_sync_failure(device_id: str, reason: str = ""):
     dashboard_url = os.getenv("DASHBOARD_URL")
     if not dashboard_url:
@@ -555,6 +554,7 @@ async def retry_sync_with_device(device_id: str):
         sync_retry_counters.pop(device_id, None)
         logging.error(f"Dispositivo {device_id} falló sincronización tras {RETRY_LIMIT} reintentos.")
 
+@app.websocket("/ws/tablet")
 async def websocket_tablet(websocket: WebSocket):
     await tablet_ws_manager.connect(websocket)
     try:

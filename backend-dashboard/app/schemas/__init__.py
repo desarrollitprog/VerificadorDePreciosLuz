@@ -1,7 +1,7 @@
 """Schema package for dashboard API request/response models."""
 
 from .publicidad import PublicidadResponse, PublicidadCreate, PublicidadUpdate
-from .usuario import UsuarioResponse, UsuarioCreate, UsuarioUpdate
+from .usuario import UsuarioResponse, UsuarioCreate, UsuarioUpdate, UsuarioListResponse
 
 __all__ = [
     "PublicidadResponse",
@@ -9,5 +9,6 @@ __all__ = [
     "PublicidadUpdate",
     "UsuarioResponse",
     "UsuarioCreate",
-    "UsuarioUpdate"
+    "UsuarioUpdate",
+    "UsuarioListResponse"
 ]

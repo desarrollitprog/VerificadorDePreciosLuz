@@ -13,6 +13,8 @@ export const Header: React.FC<HeaderProps> = ({ currentScreen, onMenuClick }) =>
     switch (currentScreen) {
       case 'dashboard': return 'Mis Videos';
       case 'list': return 'Biblioteca de Videos';
+      case 'servers': return 'Servidores';
+      case 'users': return 'Gestión de Usuarios';
       default: return 'Panel Principal';
     }
   };

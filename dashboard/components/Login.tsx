@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { login, saveToken } from '../services/authService';
+import { loginStart } from '../services/authService';
 
-const Login: React.FC<{ onLoginSuccess: () => void }> = ({ onLoginSuccess }) => {
+const Login: React.FC<{ onLoginSuccess: () => void }> = () => {
   const [username, setUsername] = useState('');
+  const [correo, setCorreo] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -12,9 +13,8 @@ const Login: React.FC<{ onLoginSuccess: () => void }> = ({ onLoginSuccess }) => 
     setLoading(true);
     setError(null);
     try {
-      const data = await login(username, password);
-      saveToken(data.access_token);
-      onLoginSuccess();
+      await loginStart(username, correo, password);
+      setError('Este formulario es legacy. Usa la pantalla principal para completar 2FA.');
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -32,6 +32,14 @@ const Login: React.FC<{ onLoginSuccess: () => void }> = ({ onLoginSuccess }) => 
           className="px-4 py-2 rounded bg-background-dark border border-border-dark text-white focus:outline-none focus:ring-2 focus:ring-primary"
           value={username}
           onChange={e => setUsername(e.target.value)}
+          required
+        />
+        <input
+          type="email"
+          placeholder="Correo"
+          className="px-4 py-2 rounded bg-background-dark border border-border-dark text-white focus:outline-none focus:ring-2 focus:ring-primary"
+          value={correo}
+          onChange={e => setCorreo(e.target.value)}
           required
         />
         <input

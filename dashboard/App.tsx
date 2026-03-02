@@ -4,6 +4,7 @@ import { NotificationContainer } from './components/NotificationContainer';
 import { LoginScreen } from './screens/LoginScreen';
 import { DashboardScreen } from './screens/DashboardScreen';
 import { VideoListScreen } from './screens/VideoListScreen';
+import { UsersScreen } from './screens/UsersScreen';
 
 import { Screen } from './types';
 import Sidebar from './components/Sidebar';
@@ -26,6 +27,8 @@ export default function App() {
         return <VideoListScreen />;
       case 'servers':
         return <ServerDashboard />;
+      case 'users':
+        return <UsersScreen />;
       default:
         return <LoginScreen onLogin={() => setCurrentScreen('dashboard')} />;
     }

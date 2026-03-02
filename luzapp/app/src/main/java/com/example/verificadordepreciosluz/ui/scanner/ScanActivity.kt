@@ -179,6 +179,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             startOfflineModeOnLaunch()
         } else if (hasNetwork) {
             if (!configureBackend()) return
+            startPingMonitor()
             syncBackupOnStart()
             syncBannersOnStart()
         } else {

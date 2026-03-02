@@ -1,6 +1,7 @@
 from enum import Enum
+from datetime import datetime
 
-from sqlalchemy import Boolean, Column, Enum as SqlEnum, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Enum as SqlEnum, Integer, String
 from ..database import Base
 
 
@@ -14,8 +15,10 @@ class Usuario(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     nombre_usuario = Column(String(50), unique=True, nullable=False, index=True)
+    correo = Column(String(120), unique=True, nullable=False, index=True)
     contrasena_hash = Column(String(255), nullable=False)
     activo = Column(Boolean, default=True)
+    fecha_registro = Column(DateTime, nullable=False, default=datetime.utcnow)
     rol = Column(
         SqlEnum(RolUsuario, name="rol_usuario"),
         nullable=False,

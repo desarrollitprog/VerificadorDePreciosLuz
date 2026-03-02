@@ -20,4 +20,4 @@ export interface Video {
   views?: number;
 }
 
-export type Screen = 'login' | 'dashboard' | 'list' | 'servers';
+export type Screen = 'login' | 'dashboard' | 'list' | 'servers' | 'users';

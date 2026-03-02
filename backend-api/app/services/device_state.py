@@ -9,14 +9,14 @@ from redis.asyncio import Redis
 
 
 class DeviceStateStore:
-    def __init__(self, redis: Redis, heartbeat_ttl: int = 120):
+    def __init__(self, redis: Redis, heartbeat_ttl: int = 300):
         self.redis = redis
         self.heartbeat_ttl = heartbeat_ttl
 
     @classmethod
     async def create(cls) -> "DeviceStateStore":
         redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-        heartbeat_ttl = int(os.getenv("DEVICE_HEARTBEAT_TTL", "120"))
+        heartbeat_ttl = int(os.getenv("DEVICE_HEARTBEAT_TTL", "300"))
         redis = Redis.from_url(redis_url, decode_responses=True)
         await redis.ping()
         return cls(redis=redis, heartbeat_ttl=heartbeat_ttl)

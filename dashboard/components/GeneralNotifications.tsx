@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Bell, AlertTriangle } from 'lucide-react';
 import { useNotification } from './useNotification';
-import { fetchNotificaciones, Notificacion } from '../services/notificacionesService';
+import { fetchNotificaciones, markNotificacionesRead, Notificacion } from '../services/notificacionesService';
+import { toNotificationViewModel } from '../services/notificacionesPresentation';
 
 interface GeneralNotificationsProps {}
 
@@ -9,8 +10,10 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
   const [open, setOpen] = useState(false);
   const showNotification = useNotification();
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const shownSyncFailedIdsRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     if (open) {
@@ -18,16 +21,30 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
       fetchNotificaciones(10, 0)
         .then((res) => {
           setNotificaciones(res.notificaciones);
+          setUnreadCount(Number(res.unread_count || 0));
           // Mostrar toast para SYNC_FAILED
           res.notificaciones
             .filter((n) => n.tipo === 'SYNC_FAILED')
+            .filter((n) => !shownSyncFailedIdsRef.current.has(n.id))
             .forEach((n) => {
+              shownSyncFailedIdsRef.current.add(n.id);
               showNotification(
                 `Fallo de sincronización: ${n.descripcion}`,
                 'error',
                 7000
               );
             });
+
+          if ((res.unread_count || 0) > 0) {
+            markNotificacionesRead()
+              .then(() => {
+                setNotificaciones((prev) => prev.map((n) => ({ ...n, leida: true })));
+                setUnreadCount(0);
+              })
+              .catch(() => {
+                // no-op: mantener estado local actual si falla marcado
+              });
+          }
         })
         .finally(() => setLoading(false));
     }
@@ -54,7 +71,7 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
         aria-label="Ver notificaciones generales"
       >
         <Bell size={20} />
-        {notificaciones.length > 0 && (
+        {unreadCount > 0 && (
           <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500 border-2 border-white dark:border-[#111a22]"></span>
         )}
       </button>
@@ -68,18 +85,19 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
               <div className="p-4 text-center text-slate-500">No hay notificaciones</div>
             ) : (
               notificaciones.map((n) => {
-                const isSyncFailed = n.tipo === 'SYNC_FAILED';
+                const view = toNotificationViewModel(n);
+                const isError = view.severity === 'error';
                 return (
                   <div
                     key={n.id}
-                    className={`px-4 py-3 border-b last:border-b-0 border-slate-100 dark:border-slate-800 ${isSyncFailed ? 'bg-red-50 dark:bg-red-900/30' : ''}`}
+                    className={`px-4 py-3 border-b last:border-b-0 border-slate-100 dark:border-slate-800 ${isError ? 'bg-red-50 dark:bg-red-900/30' : ''}`}
                   >
                     <div className="flex items-center gap-2 mb-1">
                       <div className="text-xs text-slate-500">{new Date(n.fecha_creacion).toLocaleString()}</div>
-                      {isSyncFailed && <AlertTriangle size={16} className="text-red-500" title="Fallo de sincronización" />}
+                      {isError && <AlertTriangle size={16} className="text-red-500" title={view.title} />}
                     </div>
-                    <div className={`text-sm font-medium ${isSyncFailed ? 'text-red-700 dark:text-red-400' : 'text-slate-900 dark:text-white'}`}>{n.tipo}</div>
-                    <div className={`text-sm ${isSyncFailed ? 'text-red-800 dark:text-red-200' : 'text-slate-700 dark:text-slate-300'}`}>{n.descripcion}</div>
+                    <div className={`text-sm font-medium ${isError ? 'text-red-700 dark:text-red-400' : 'text-slate-900 dark:text-white'}`}>{view.title}</div>
+                    <div className={`text-sm ${isError ? 'text-red-800 dark:text-red-200' : 'text-slate-700 dark:text-slate-300'}`}>{view.message}</div>
                   </div>
                 );
               })

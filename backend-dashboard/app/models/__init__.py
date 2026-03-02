@@ -8,6 +8,7 @@ from .publicidad import Publicidad
 from .servidor_secundario import ServidorSecundario
 from .dispositivo import Dispositivo
 from .notificacion import Notificacion
+from .notificacion_leida import NotificacionLeida
 
 __all__ = [
     "Usuario",
@@ -16,4 +17,5 @@ __all__ = [
     "ServidorSecundario",
     "Dispositivo",
     "Notificacion",
+    "NotificacionLeida",
 ]

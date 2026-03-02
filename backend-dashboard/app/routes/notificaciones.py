@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from app.models import Notificacion
+from sqlalchemy import func
+from app.models import Notificacion, NotificacionLeida
 from app.database import get_db_usuarios
 from app.dependencies import get_current_cliente
 from sqlalchemy.orm import selectinload
@@ -17,6 +18,27 @@ async def listar_notificaciones(
     db: AsyncSession = Depends(get_db_usuarios),
     current_user: dict = Depends(get_current_cliente),
 ):
+    user_id = current_user.get("user_id") if current_user else None
+    if user_id is None:
+        return {
+            "success": False,
+            "notificaciones": [],
+            "limit": limit,
+            "offset": offset,
+            "count": 0,
+            "unread_count": 0,
+        }
+
+    read_count_stmt = select(func.count()).select_from(NotificacionLeida).where(NotificacionLeida.usuario_id == user_id)
+    read_count_result = await db.execute(read_count_stmt)
+    read_count = int(read_count_result.scalar() or 0)
+
+    total_count_stmt = select(func.count()).select_from(Notificacion)
+    total_count_result = await db.execute(total_count_stmt)
+    total_count = int(total_count_result.scalar() or 0)
+
+    unread_count = max(total_count - read_count, 0)
+
     stmt = (
         select(Notificacion)
         .options(selectinload(Notificacion.usuario))
@@ -26,18 +48,70 @@ async def listar_notificaciones(
     )
     result = await db.execute(stmt)
     notificaciones = result.scalars().all()
+
+    notification_ids = [n.id for n in notificaciones]
+    leidas_ids: set[int] = set()
+    if notification_ids:
+        read_stmt = select(NotificacionLeida.notificacion_id).where(
+            NotificacionLeida.usuario_id == user_id,
+            NotificacionLeida.notificacion_id.in_(notification_ids),
+        )
+        read_result = await db.execute(read_stmt)
+        leidas_ids = set(read_result.scalars().all())
+
     return {
         "success": True,
         "notificaciones": [
             {
                 **n.__dict__,
+                "leida": n.id in leidas_ids,
                 "nombre_usuario": n.usuario.nombre_usuario if n.usuario else None
             }
             for n in notificaciones
         ],
         "limit": limit,
         "offset": offset,
-        "count": len(notificaciones)
+        "count": len(notificaciones),
+        "unread_count": unread_count,
+    }
+
+
+@router.patch("/notificaciones/marcar-leidas")
+async def marcar_notificaciones_leidas(
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_cliente),
+):
+    user_id = current_user.get("user_id") if current_user else None
+    if user_id is None:
+        return {"success": False, "updated": 0}
+
+    all_ids_result = await db.execute(select(Notificacion.id))
+    all_ids = all_ids_result.scalars().all()
+
+    if not all_ids:
+        return {"success": True, "updated": 0}
+
+    read_ids_result = await db.execute(
+        select(NotificacionLeida.notificacion_id).where(
+            NotificacionLeida.usuario_id == user_id,
+            NotificacionLeida.notificacion_id.in_(all_ids),
+        )
+    )
+    read_ids = set(read_ids_result.scalars().all())
+
+    to_mark = [
+        NotificacionLeida(usuario_id=user_id, notificacion_id=notification_id)
+        for notification_id in all_ids
+        if notification_id not in read_ids
+    ]
+
+    if to_mark:
+        db.add_all(to_mark)
+    await db.commit()
+
+    return {
+        "success": True,
+        "updated": len(to_mark),
     }
 # Modelo para la notificación de sincronización
 class SyncStatusBody(BaseModel):

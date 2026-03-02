@@ -197,12 +197,12 @@ export const UsersScreen: React.FC = () => {
             <p className="text-slate-500 mt-1">Administra los accesos y roles de tu plataforma</p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative">
+          <div className="w-full grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[40%_25%_20%_15%] gap-3 items-center">
+            <div className="relative sm:col-span-2 xl:col-span-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
               <input
                 type="text"
-                className="pl-10 pr-4 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-500 focus:ring-2 focus:ring-primary w-full sm:w-64"
+                className="h-10 pl-10 pr-3 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-[13px] text-slate-900 dark:text-white placeholder-slate-500 focus:ring-2 focus:ring-primary w-full"
                 placeholder="Buscar por correo..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -217,7 +217,7 @@ export const UsersScreen: React.FC = () => {
               <select
                 value={rolFilter}
                 onChange={(e) => setRolFilter(e.target.value as UserRole | 'ALL')}
-                className="pl-9 pr-8 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white appearance-none"
+                className="w-full h-10 pl-9 pr-8 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-[13px] text-slate-900 dark:text-white appearance-none"
               >
                 <option value="ALL">Todos los roles</option>
                 <option value="ADMIN">Admin</option>
@@ -230,7 +230,7 @@ export const UsersScreen: React.FC = () => {
               <select
                 value={activoFilter}
                 onChange={(e) => setActivoFilter(e.target.value as ActiveFilter)}
-                className="px-3 pr-8 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white appearance-none"
+                className="w-full h-10 px-3 pr-8 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-[13px] text-slate-900 dark:text-white appearance-none"
               >
                 <option value="ALL">Todos</option>
                 <option value="true">Activos</option>
@@ -241,7 +241,7 @@ export const UsersScreen: React.FC = () => {
 
             <button
               onClick={openCreate}
-              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition"
+              className="w-full h-10 flex items-center justify-center gap-2 bg-blue-600 text-white px-3 rounded-lg text-[13px] font-semibold shadow hover:bg-blue-700 transition"
             >
               <Plus size={16} />
               Nuevo Usuario
@@ -255,35 +255,35 @@ export const UsersScreen: React.FC = () => {
           <table className="w-full text-left">
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-900/40 border-b border-slate-200 dark:border-slate-800">
-                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Usuario</th>
-                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Rol</th>
-                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Estado</th>
-                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Fecha Registro</th>
-                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Acciones</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Usuario</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Rol</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Estado</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Fecha Registro</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-10 text-center text-slate-500">Cargando usuarios...</td>
+                  <td colSpan={5} className="px-4 py-8 text-center text-slate-500 text-sm">Cargando usuarios...</td>
                 </tr>
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-10 text-center text-slate-500">No hay usuarios para mostrar.</td>
+                  <td colSpan={5} className="px-4 py-8 text-center text-slate-500 text-sm">No hay usuarios para mostrar.</td>
                 </tr>
               ) : (
                 users.map((user) => {
                   const roleLabel = user.rol === 'ADMIN' ? 'ADMIN' : 'CLIENTE';
                   return (
                     <tr key={user.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-3.5">
                         <div className="flex flex-col">
-                          <span className="font-bold text-slate-900 dark:text-white">{user.nombre_usuario}</span>
-                          <span className="text-xs text-slate-500 dark:text-slate-400">{user.correo}</span>
+                          <span className="font-bold text-[15px] leading-tight text-slate-900 dark:text-white">{user.nombre_usuario}</span>
+                          <span className="text-[12px] text-slate-500 dark:text-slate-400">{user.correo}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase ${
+                      <td className="px-4 py-3.5">
+                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold uppercase ${
                           roleLabel === 'ADMIN'
                             ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
                             : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
@@ -291,8 +291,8 @@ export const UsersScreen: React.FC = () => {
                           {roleLabel}
                         </span>
                       </td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${
+                      <td className="px-4 py-3.5">
+                        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold ${
                           user.activo
                             ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
                             : 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400'
@@ -301,18 +301,18 @@ export const UsersScreen: React.FC = () => {
                           {user.activo ? 'Activo' : 'Inactivo'}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">{new Date(user.fecha_registro).toLocaleDateString()}</td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex justify-end gap-2">
+                      <td className="px-4 py-3.5 text-[13px] text-slate-500 dark:text-slate-400">{new Date(user.fecha_registro).toLocaleDateString()}</td>
+                      <td className="px-4 py-3.5 text-right">
+                        <div className="flex justify-end gap-1.5">
                           <button
                             onClick={() => openEdit(user)}
-                            className="p-1.5 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                            className="p-1 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
                           >
                             <Edit2 className="size-4" />
                           </button>
                           <button
                             onClick={() => handleDelete(user)}
-                            className="p-1.5 text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                            className="p-1 text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
                           >
                             <Trash2 className="size-4" />
                           </button>
@@ -326,23 +326,23 @@ export const UsersScreen: React.FC = () => {
           </table>
         </div>
 
-        <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-sm text-slate-500 dark:text-slate-400">
+        <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-[13px] text-slate-500 dark:text-slate-400">
           <span>{summaryText}</span>
           <div className="flex items-center gap-2">
             <button
               disabled={page <= 1 || loading}
               onClick={() => fetchUsers(page - 1)}
-              className="px-3 py-1 border border-slate-200 dark:border-slate-700 rounded disabled:opacity-50"
+              className="px-2.5 py-1 border border-slate-200 dark:border-slate-700 rounded disabled:opacity-50"
             >
               Anterior
             </button>
-            <span className="px-3 py-1 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+            <span className="px-2.5 py-1 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
               {page}
             </span>
             <button
               disabled={page >= totalPages || loading}
               onClick={() => fetchUsers(page + 1)}
-              className="px-3 py-1 border border-slate-200 dark:border-slate-700 rounded disabled:opacity-50"
+              className="px-2.5 py-1 border border-slate-200 dark:border-slate-700 rounded disabled:opacity-50"
             >
               Siguiente
             </button>

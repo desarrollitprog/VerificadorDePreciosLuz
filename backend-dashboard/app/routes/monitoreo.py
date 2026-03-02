@@ -424,6 +424,7 @@ async def renombrar_dispositivo(
     stmt = select(Dispositivo).where(Dispositivo.codigo_kiosko == device_id)
     result = await db.execute(stmt)
     dispositivo = result.scalars().first()
+    result.close()
 
     if not dispositivo:
         raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
@@ -432,17 +433,19 @@ async def renombrar_dispositivo(
     dispositivo.nombre_amigable = nuevo_nombre if nuevo_nombre else None
 
     await db.commit()
-    await db.refresh(dispositivo)
 
     user_id = current_user.get("user_id") if current_user else None
     if user_id is not None:
         nombre_para_log = dispositivo.nombre_amigable or dispositivo.codigo_kiosko
-        await registrar_accion(
-            db,
-            user_id,
-            "RENOMBRAR_DISPOSITIVO",
-            f"Dispositivo {dispositivo.codigo_kiosko} renombrado a '{nombre_para_log}'",
-        )
+        try:
+            await registrar_accion(
+                db,
+                user_id,
+                "RENOMBRAR_DISPOSITIVO",
+                f"Dispositivo {dispositivo.codigo_kiosko} renombrado a '{nombre_para_log}'",
+            )
+        except Exception as e:
+            logger.warning("No se pudo registrar auditoría de rename para %s: %s", dispositivo.codigo_kiosko, e)
 
     return {
         "success": True,

@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNotification } from '../components/useNotification';
-import { Search, Filter, UploadCloud, MoreVertical, Play, Eye, Trash, Film, HardDrive, TrendingUp, Plus, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, UploadCloud, MoreVertical, Eye, Trash, Film, Plus } from 'lucide-react';
 import { getVideos, uploadMedia, deleteVideo } from '../services/videoService';
 import { Video } from '../types';
-import { getForceSyncJobStatus, getServersStatusWithDevices, renameDevice, ServerStatusDetail, startForceSyncJob } from '../services/monitoreoService';
-import ServerCard from '../components/monitoreo/ServerCard';
+import { getForceSyncJobStatus, startForceSyncJob } from '../services/monitoreoService';
 
 export const DashboardScreen: React.FC = () => {
     const showNotification = useNotification();
@@ -19,53 +18,7 @@ export const DashboardScreen: React.FC = () => {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Monitoreo de servidores
-  const [servidores, setServidores] = useState<ServerStatusDetail[]>([]);
-  const [expandedServerId, setExpandedServerId] = useState<string | null>(null);
-  const [loadingMonitoreo, setLoadingMonitoreo] = useState(true);
-  const [errorMonitoreo, setErrorMonitoreo] = useState<string | null>(null);
-
   const [syncLoading, setSyncLoading] = useState(false);
-  const [syncResult, setSyncResult] = useState<string | null>(null);
-
-  const fetchStatus = async () => {
-    setLoadingMonitoreo(true);
-    setErrorMonitoreo(null);
-    try {
-      const data = await getServersStatusWithDevices();
-      setServidores(Array.isArray(data) ? data : []);
-    } catch {
-      setServidores([]);
-      setErrorMonitoreo('Error al conectar con el servicio de monitoreo');
-    } finally {
-      setLoadingMonitoreo(false);
-    }
-  };
-
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    fetchStatus();
-    interval = setInterval(fetchStatus, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleRenameDevice = async (deviceId: string, currentName?: string | null) => {
-    const proposed = window.prompt(
-      'Nombre para el dispositivo (deja vacío para quitar alias):',
-      currentName ?? deviceId
-    );
-    if (proposed === null) return;
-
-    const normalized = proposed.trim();
-
-    try {
-      await renameDevice(deviceId, normalized.length > 0 ? normalized : null);
-      showNotification('Nombre de dispositivo actualizado', 'success');
-      await fetchStatus();
-    } catch {
-      showNotification('No se pudo actualizar el nombre del dispositivo', 'error');
-    }
-  };
 
   useEffect(() => {
     async function fetchVideos() {
@@ -114,16 +67,12 @@ export const DashboardScreen: React.FC = () => {
 
   const handleForceSync = async () => {
     setSyncLoading(true);
-    setSyncResult(null);
     try {
       const start = await startForceSyncJob();
       if (!start.success || !start.job_id) {
-        setSyncResult('No se pudo iniciar la sincronización.');
         showNotification('No se pudo iniciar la sincronización', 'error');
         return;
       }
-
-      setSyncResult(`Sincronización en curso (job ${start.job_id.slice(0, 8)}...)`);
 
       const maxPolls = 90;
       const pollDelayMs = 2000;
@@ -140,7 +89,6 @@ export const DashboardScreen: React.FC = () => {
       }
 
       if (!finalStatus) {
-        setSyncResult('Sincronización en progreso. Revisa el estado nuevamente en unos segundos.');
         showNotification('Sincronización en progreso', 'warning');
         return;
       }
@@ -149,14 +97,11 @@ export const DashboardScreen: React.FC = () => {
         const successCount = finalStatus.success_count ?? 0;
         const failedCount = finalStatus.failed_count ?? 0;
         const totalOnline = finalStatus.total_online ?? 0;
-        setSyncResult(`Sincronización completada. Servidores online: ${totalOnline}, éxito: ${successCount}, fallos: ${failedCount}.`);
         showNotification('Sincronización completada', failedCount > 0 ? 'warning' : 'success');
       } else {
-        setSyncResult(`Sincronización fallida: ${finalStatus.error || 'error desconocido'}`);
         showNotification('Sincronización fallida', 'error');
       }
     } catch (error: any) {
-      setSyncResult('Error al ejecutar la sincronización.');
       showNotification('Error al ejecutar la sincronización', 'error');
     } finally {
       setSyncLoading(false);
@@ -234,75 +179,6 @@ export const DashboardScreen: React.FC = () => {
           </div>
           <HardDrive className="text-slate-400" size={32} />
         </div>*/}
-      </div>
-
-      {/* Monitoreo de servidores + dispositivos */}
-      <div>
-        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Servidores y Dispositivos</h3>
-
-        {loadingMonitoreo ? (
-          <div className="text-slate-500">Cargando monitoreo...</div>
-        ) : errorMonitoreo ? (
-          <div className="text-red-500">{errorMonitoreo}</div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {servidores.map((s) => (
-              <div key={s.id} className="bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-800 p-4">
-                <ServerCard
-                  nombre={s.nombre}
-                  ip={s.ip}
-                  online={s.online}
-                  porcentaje_uso={s.porcentaje_uso}
-                />
-
-                <button
-                  className="mt-3 w-full text-sm flex items-center justify-between px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
-                  onClick={() => setExpandedServerId(expandedServerId === s.id ? null : s.id)}
-                >
-                  <span>
-                    Dispositivos ({s.dispositivos_online}/{s.dispositivos_total} online)
-                  </span>
-                  {expandedServerId === s.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                </button>
-
-                {expandedServerId === s.id && (
-                  <div className="mt-2 max-h-52 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-lg">
-                    {s.dispositivos.length === 0 ? (
-                      <div className="p-3 text-sm text-slate-500">Sin dispositivos reportados.</div>
-                    ) : (
-                      s.dispositivos.map((d) => (
-                        <div
-                          key={d.device_id}
-                          className="px-3 py-2 border-b last:border-b-0 border-slate-100 dark:border-slate-800 flex items-center justify-between"
-                        >
-                          <div className="text-sm">
-                            <div className="font-medium">{d.nombre_mostrado || d.device_id}</div>
-                            <div className="text-[11px] text-slate-500">ID: {d.device_id}</div>
-                            <button
-                              type="button"
-                              className="mt-1 text-[11px] text-blue-500 hover:text-blue-600"
-                              onClick={() => handleRenameDevice(d.device_id, d.nombre_amigable)}
-                            >
-                              Renombrar
-                            </button>
-                          </div>
-                          <div className="text-xs text-right">
-                            <div className={d.online ? 'text-green-600' : 'text-red-500'}>
-                              {d.online ? 'ONLINE' : 'OFFLINE'}
-                            </div>
-                            <div className="text-slate-500">
-                              {d.last_seen ? new Date(d.last_seen).toLocaleString() : 'Sin last_seen'}
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Grid */}

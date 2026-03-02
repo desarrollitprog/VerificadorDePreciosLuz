@@ -4,18 +4,21 @@ Rutas de monitoreo: heartbeat de servidores secundarios y estado.
 """
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from fastapi import APIRouter, Depends,Request
+import logging
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db_usuarios, AsyncSessionLocalUsuarios
 from app.dependencies import get_current_cliente, validar_api_key, get_current_admin
+from app.models.dispositivo import Dispositivo
 from app.models.servidor_secundario import ServidorSecundario
 from app.services.notificacion_service import registrar_accion
 import asyncio
 import uuid
 import httpx
 router = APIRouter(tags=["monitoreo"])
+logger = logging.getLogger("uvicorn.error")
 
 
 class HeartbeatBody(BaseModel):
@@ -23,6 +26,10 @@ class HeartbeatBody(BaseModel):
     ip: str
     almacenamiento_total: int
     almacenamiento_usado: int
+
+
+class DeviceRenameBody(BaseModel):
+    nombre_amigable: str | None = None
 
 
 def _utcnow() -> datetime:
@@ -58,8 +65,10 @@ async def _obtener_dispositivos_de_servidor(ip: str) -> list[dict[str, Any]]:
             )
 
         dispositivos.sort(key=lambda d: d["device_id"])
+        logger.info("status-detalle: %s reportó %s dispositivos", ip, len(dispositivos))
         return dispositivos
-    except Exception:
+    except Exception as e:
+        logger.warning("status-detalle: fallo consultando %s: %s", url, e)
         return []
 
 
@@ -74,19 +83,30 @@ async def heartbeat(
     Crea el servidor si no existe; si existe, actualiza IP, almacenamiento y ultimo_heartbeat.
     """
     now = _utcnow()
-    stmt = select(ServidorSecundario).where(ServidorSecundario.nombre == body.nombre_servidor)
-    result = await db.execute(stmt)
-    servidor = result.scalars().first()
+    nombre_servidor = (body.nombre_servidor or "").strip()
+    ip_servidor = (body.ip or "").strip()
+
+    # 1) Prioridad por IP (más estable que hostname en despliegues con contenedores)
+    stmt_ip = select(ServidorSecundario).where(ServidorSecundario.ip == ip_servidor).order_by(ServidorSecundario.id.asc())
+    result_ip = await db.execute(stmt_ip)
+    servidor = result_ip.scalars().first()
+
+    # 2) Fallback por nombre (compatibilidad hacia atrás)
+    if servidor is None:
+        stmt_nombre = select(ServidorSecundario).where(ServidorSecundario.nombre == nombre_servidor).order_by(ServidorSecundario.id.asc())
+        result_nombre = await db.execute(stmt_nombre)
+        servidor = result_nombre.scalars().first()
 
     if servidor:
-        servidor.ip = body.ip
+        servidor.nombre = nombre_servidor
+        servidor.ip = ip_servidor
         servidor.almacenamiento_total = body.almacenamiento_total
         servidor.almacenamiento_usado = body.almacenamiento_usado
         servidor.ultimo_heartbeat = now
     else:
         servidor = ServidorSecundario(
-            nombre=body.nombre_servidor,
-            ip=body.ip,
+            nombre=nombre_servidor,
+            ip=ip_servidor,
             almacenamiento_total=body.almacenamiento_total,
             almacenamiento_usado=body.almacenamiento_usado,
             ultimo_heartbeat=now,
@@ -299,12 +319,19 @@ async def status_detalle(
     """
     Devuelve servidores + dispositivos conectados (consultando /devices/status por IP).
     """
+    logger.info("status-detalle: solicitud recibida")
     now = _utcnow()
     umbral = now - timedelta(minutes=HEARTBEAT_OFFLINE_MINUTES)
 
     stmt = select(ServidorSecundario).order_by(ServidorSecundario.nombre)
     result = await db.execute(stmt)
     servidores = result.scalars().all()
+
+    dispositivos_result = await db.execute(select(Dispositivo))
+    dispositivos_db = dispositivos_result.scalars().all()
+    dispositivo_por_codigo: dict[str, Dispositivo] = {
+        d.codigo_kiosko: d for d in dispositivos_db
+    }
 
     lista = []
     for s in servidores:
@@ -313,7 +340,56 @@ async def status_detalle(
         usado = s.almacenamiento_usado or 0
         porcentaje_uso = (usado / total * 100) if total > 0 else 0.0
 
-        dispositivos = await _obtener_dispositivos_de_servidor(s.ip) if online else []
+        dispositivos_runtime = await _obtener_dispositivos_de_servidor(s.ip) if online else []
+        runtime_por_codigo = {d["device_id"]: d for d in dispositivos_runtime}
+
+        if online:
+            vistos = set(runtime_por_codigo.keys())
+
+            for codigo, info in runtime_por_codigo.items():
+                dispositivo = dispositivo_por_codigo.get(codigo)
+                if dispositivo is None:
+                    dispositivo = Dispositivo(
+                        codigo_kiosko=codigo,
+                        online=bool(info.get("online", False)),
+                        servidor_id=s.id,
+                    )
+                    db.add(dispositivo)
+                    dispositivo_por_codigo[codigo] = dispositivo
+                else:
+                    dispositivo.online = bool(info.get("online", False))
+                    dispositivo.servidor_id = s.id
+
+            for dispositivo in dispositivo_por_codigo.values():
+                if dispositivo.servidor_id == s.id and dispositivo.codigo_kiosko not in vistos:
+                    dispositivo.online = False
+        else:
+            for dispositivo in dispositivo_por_codigo.values():
+                if dispositivo.servidor_id == s.id:
+                    dispositivo.online = False
+
+        dispositivos: list[dict[str, Any]] = []
+        for dispositivo in dispositivo_por_codigo.values():
+            if dispositivo.servidor_id != s.id:
+                continue
+
+            runtime_info = runtime_por_codigo.get(dispositivo.codigo_kiosko, {})
+            is_online = bool(dispositivo.online) and online
+            nombre_amigable = dispositivo.nombre_amigable
+            nombre_mostrado = nombre_amigable if nombre_amigable else dispositivo.codigo_kiosko
+
+            dispositivos.append(
+                {
+                    "device_id": dispositivo.codigo_kiosko,
+                    "nombre_amigable": nombre_amigable,
+                    "nombre_mostrado": nombre_mostrado,
+                    "online": is_online,
+                    "last_seen": runtime_info.get("last_seen"),
+                    "server_id": runtime_info.get("server_id"),
+                }
+            )
+
+        dispositivos.sort(key=lambda d: (d["nombre_mostrado"] or "").lower())
         dispositivos_online = sum(1 for d in dispositivos if d.get("online"))
 
         lista.append(
@@ -332,7 +408,47 @@ async def status_detalle(
             }
         )
 
+    await db.commit()
+    logger.info("status-detalle: respuesta generada para %s servidores", len(lista))
+
     return {"success": True, "servidores": lista}
+
+
+@router.patch("/dispositivos/{device_id}/nombre")
+async def renombrar_dispositivo(
+    device_id: str,
+    body: DeviceRenameBody,
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_cliente),
+):
+    stmt = select(Dispositivo).where(Dispositivo.codigo_kiosko == device_id)
+    result = await db.execute(stmt)
+    dispositivo = result.scalars().first()
+
+    if not dispositivo:
+        raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
+
+    nuevo_nombre = (body.nombre_amigable or "").strip()
+    dispositivo.nombre_amigable = nuevo_nombre if nuevo_nombre else None
+
+    await db.commit()
+    await db.refresh(dispositivo)
+
+    user_id = current_user.get("user_id") if current_user else None
+    if user_id is not None:
+        nombre_para_log = dispositivo.nombre_amigable or dispositivo.codigo_kiosko
+        await registrar_accion(
+            db,
+            user_id,
+            "RENOMBRAR_DISPOSITIVO",
+            f"Dispositivo {dispositivo.codigo_kiosko} renombrado a '{nombre_para_log}'",
+        )
+
+    return {
+        "success": True,
+        "device_id": dispositivo.codigo_kiosko,
+        "nombre_amigable": dispositivo.nombre_amigable,
+    }
 
 @router.get("/alertas")
 async def obtener_alertas(

@@ -2,8 +2,11 @@ import api from './axiosInstance';
 
 export interface DeviceStatus {
   device_id: string;
+  nombre_amigable?: string | null;
+  nombre_mostrado?: string;
   online: boolean;
   last_seen: string | null;
+  server_id?: string | null;
 }
 
 export interface ServerStatus {
@@ -53,6 +56,12 @@ export interface ForceSyncJobStatus {
   error?: string;
 }
 
+export interface RenameDeviceResponse {
+  success: boolean;
+  device_id: string;
+  nombre_amigable: string | null;
+}
+
 function extractServers(data: any): any[] {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.servidores)) return data.servidores;
@@ -76,8 +85,24 @@ export async function getServersStatusWithDevices(): Promise<ServerStatusDetail[
     porcentaje_uso: Number(s.porcentaje_uso || 0),
     dispositivos_total: Number(s.dispositivos_total || 0),
     dispositivos_online: Number(s.dispositivos_online || 0),
-    dispositivos: Array.isArray(s.dispositivos) ? s.dispositivos : [],
+    dispositivos: Array.isArray(s.dispositivos)
+      ? s.dispositivos.map((d: any) => ({
+          device_id: String(d.device_id),
+          nombre_amigable: d.nombre_amigable ?? null,
+          nombre_mostrado: d.nombre_mostrado ?? String(d.device_id),
+          online: !!d.online,
+          last_seen: d.last_seen ?? null,
+          server_id: d.server_id ?? null,
+        }))
+      : [],
   }));
+}
+
+export async function renameDevice(deviceId: string, nombreAmigable: string | null): Promise<RenameDeviceResponse> {
+  const response = await api.patch(`/dispositivos/${encodeURIComponent(deviceId)}/nombre`, {
+    nombre_amigable: nombreAmigable,
+  });
+  return response.data as RenameDeviceResponse;
 }
 
 export async function startForceSyncJob(): Promise<ForceSyncJobStart> {

@@ -3,7 +3,7 @@ import { useNotification } from '../components/useNotification';
 import { Search, Filter, UploadCloud, MoreVertical, Play, Eye, Trash, Film, HardDrive, TrendingUp, Plus, ChevronDown, ChevronUp } from 'lucide-react';
 import { getVideos, uploadMedia, deleteVideo } from '../services/videoService';
 import { Video } from '../types';
-import { getForceSyncJobStatus, getServersStatusWithDevices, ServerStatusDetail, startForceSyncJob } from '../services/monitoreoService';
+import { getForceSyncJobStatus, getServersStatusWithDevices, renameDevice, ServerStatusDetail, startForceSyncJob } from '../services/monitoreoService';
 import ServerCard from '../components/monitoreo/ServerCard';
 
 export const DashboardScreen: React.FC = () => {
@@ -28,25 +28,44 @@ export const DashboardScreen: React.FC = () => {
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
 
+  const fetchStatus = async () => {
+    setLoadingMonitoreo(true);
+    setErrorMonitoreo(null);
+    try {
+      const data = await getServersStatusWithDevices();
+      setServidores(Array.isArray(data) ? data : []);
+    } catch {
+      setServidores([]);
+      setErrorMonitoreo('Error al conectar con el servicio de monitoreo');
+    } finally {
+      setLoadingMonitoreo(false);
+    }
+  };
+
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    const fetchStatus = async () => {
-      setLoadingMonitoreo(true);
-      setErrorMonitoreo(null);
-      try {
-        const data = await getServersStatusWithDevices();
-        setServidores(Array.isArray(data) ? data : []);
-      } catch {
-        setServidores([]);
-        setErrorMonitoreo('Error al conectar con el servicio de monitoreo');
-      } finally {
-        setLoadingMonitoreo(false);
-      }
-    };
     fetchStatus();
     interval = setInterval(fetchStatus, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  const handleRenameDevice = async (deviceId: string, currentName?: string | null) => {
+    const proposed = window.prompt(
+      'Nombre para el dispositivo (deja vacío para quitar alias):',
+      currentName ?? deviceId
+    );
+    if (proposed === null) return;
+
+    const normalized = proposed.trim();
+
+    try {
+      await renameDevice(deviceId, normalized.length > 0 ? normalized : null);
+      showNotification('Nombre de dispositivo actualizado', 'success');
+      await fetchStatus();
+    } catch {
+      showNotification('No se pudo actualizar el nombre del dispositivo', 'error');
+    }
+  };
 
   useEffect(() => {
     async function fetchVideos() {
@@ -256,7 +275,17 @@ export const DashboardScreen: React.FC = () => {
                           key={d.device_id}
                           className="px-3 py-2 border-b last:border-b-0 border-slate-100 dark:border-slate-800 flex items-center justify-between"
                         >
-                          <div className="text-sm font-medium">{d.device_id}</div>
+                          <div className="text-sm">
+                            <div className="font-medium">{d.nombre_mostrado || d.device_id}</div>
+                            <div className="text-[11px] text-slate-500">ID: {d.device_id}</div>
+                            <button
+                              type="button"
+                              className="mt-1 text-[11px] text-blue-500 hover:text-blue-600"
+                              onClick={() => handleRenameDevice(d.device_id, d.nombre_amigable)}
+                            >
+                              Renombrar
+                            </button>
+                          </div>
                           <div className="text-xs text-right">
                             <div className={d.online ? 'text-green-600' : 'text-red-500'}>
                               {d.online ? 'ONLINE' : 'OFFLINE'}

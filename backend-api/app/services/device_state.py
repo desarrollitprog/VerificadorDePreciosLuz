@@ -41,7 +41,6 @@ class DeviceStateStore:
                 "online": "1",
             },
         )
-        pipe.expire(key, self.heartbeat_ttl)
         await pipe.execute()
 
     async def mark_offline(self, device_id: str) -> None:
@@ -71,9 +70,10 @@ class DeviceStateStore:
 
             last_seen_epoch = int(row.get("last_seen_epoch", "0"))
             is_online_by_ttl = (now_epoch - last_seen_epoch) <= self.heartbeat_ttl
+            explicit_online = str(row.get("online", "1")) == "1"
 
             result[device_id] = {
-                "online": is_online_by_ttl,
+                "online": bool(is_online_by_ttl and explicit_online),
                 "last_seen": row.get("last_seen"),
                 "server_id": row.get("server_id") or None,
             }

@@ -9,6 +9,7 @@ class Dispositivo(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     codigo_kiosko = Column(String(100), unique=True, nullable=False, index=True)
+    nombre_amigable = Column(String(120), nullable=True)
     online = Column(Boolean, default=False, nullable=False)
 
     servidor_id = Column(

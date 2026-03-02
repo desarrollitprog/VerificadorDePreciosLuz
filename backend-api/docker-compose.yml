@@ -4,8 +4,17 @@ services:
     image: verificador-backend
     container_name: verificador-backend 
     env_file: .env
+    depends_on:
+      - redis
     ports:
       - "8000:8000"
     volumes:
       - ./static/banners:/code/static/banners
     restart: always
+
+  redis:
+    image: redis:7-alpine
+    container_name: verificador_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"

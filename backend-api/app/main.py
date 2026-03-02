@@ -4,7 +4,6 @@ from dateutil.parser import isoparse
 import asyncio
 import logging
 import httpx
-from fastapi.responses import JSONResponse
 from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect 
 from fastapi.staticfiles import StaticFiles
 import os
@@ -15,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from . import database, models, schemas
 from .routes import consultas, publicidad
+from .services import DeviceCommandBus, DeviceStateStore
 
 # Cargar variables de entorno desde .env
 load_dotenv()
@@ -34,54 +34,57 @@ if os.path.isdir(static_dir):
 
 
 
-# Variables globales para monitoreo de dispositivos
-DEVICE_LAST_SEEN: dict[str, dict[str, object]] = {}
-DEVICE_LOCK = asyncio.Lock()
-DISCONNECT_THRESHOLD = timedelta(seconds=420)  # Considerar desconectado si no se ve en 10 minutos y 20 segundos
-CHECK_INTERVAL_SECONDS = 10
+device_state_store: DeviceStateStore | None = None
+device_command_bus: DeviceCommandBus | None = None
+device_bus_listener_task: asyncio.Task | None = None
 
 # Endpoint para consultar el estado de los dispositivos
 @app.get("/devices/status")
 async def get_devices_status():
-    async with DEVICE_LOCK:
-        # Copia segura del estado actual
-        status = {
-            device_id: {
-                "online": info.get("online", False),
-                "last_seen": info.get("last_seen").isoformat() if info.get("last_seen") else None
-            }
-            for device_id, info in DEVICE_LAST_SEEN.items()
-        }
-    return JSONResponse(content=status)
+    if device_state_store is None:
+        raise HTTPException(status_code=503, detail="Estado de dispositivos no inicializado")
+    status = await device_state_store.get_all_status()
+    return status
 
 
 @app.get("/ping")
 async def ping(device_id: str | None = None):
-    if device_id:
-        async with DEVICE_LOCK:
-            DEVICE_LAST_SEEN[device_id] = {
-                "last_seen": datetime.now(),
-                "online": True,
-            }
+    if device_id and device_state_store is not None:
+        await device_state_store.upsert_heartbeat(device_id=device_id)
     return {"status": "Conexion Exitosa"}
 
 
 @app.on_event("startup")
 async def start_device_monitor():
-    asyncio.create_task(monitor_devices())
+    global device_state_store, device_command_bus, device_bus_listener_task
+    try:
+        device_state_store = await DeviceStateStore.create()
+        logger.info("DeviceStateStore inicializado con Redis")
+    except Exception as e:
+        logger.error("No se pudo inicializar DeviceStateStore: %s", e)
+
+    try:
+        device_command_bus = await DeviceCommandBus.create()
+        device_bus_listener_task = asyncio.create_task(_start_device_bus_listener())
+        logger.info("DeviceCommandBus inicializado con Redis pub/sub")
+    except Exception as e:
+        logger.error("No se pudo inicializar DeviceCommandBus: %s", e)
 
 
-async def monitor_devices():
-    while True:
-        await asyncio.sleep(CHECK_INTERVAL_SECONDS)
-        now = datetime.now()
-        async with DEVICE_LOCK:
-            for device_id, info in DEVICE_LAST_SEEN.items():
-                last_seen = info.get("last_seen")
-                online = info.get("online", True)
-                if last_seen and online and (now - last_seen) > DISCONNECT_THRESHOLD:
-                    info["online"] = False
-                    logger.warning("Dispositivo desconectado device_id=%s", device_id)
+@app.on_event("shutdown")
+async def shutdown_device_state_store():
+    global device_state_store, device_command_bus, device_bus_listener_task
+    if device_bus_listener_task is not None:
+        device_bus_listener_task.cancel()
+        device_bus_listener_task = None
+
+    if device_command_bus is not None:
+        await device_command_bus.close()
+        device_command_bus = None
+
+    if device_state_store is not None:
+        await device_state_store.close()
+        device_state_store = None
 
 
 # Paso 1: Buscar producto y precio base (async)
@@ -507,15 +510,20 @@ class TabletWebSocketManager:
             device_id = msg.get("device_id")
             if device_id:
                 self.device_map[device_id] = websocket
+                if device_state_store is not None:
+                    await device_state_store.upsert_heartbeat(device_id=device_id)
         except Exception:
             pass
         self.active_connections.append(websocket)
 
     def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
         # Limpiar device_map si corresponde
         for k, v in list(self.device_map.items()):
             if v == websocket:
+                if device_state_store is not None:
+                    asyncio.create_task(device_state_store.mark_offline(k))
                 del self.device_map[k]
 
     async def broadcast(self, message: dict):
@@ -568,9 +576,68 @@ class TabletWebSocketManager:
 tablet_ws_manager = TabletWebSocketManager()
 
 
+async def _apply_sync_confirmation(device_id: str, status: str, reason: str = ""):
+    ack_key = f"device:{device_id}"
+    normalized_status = str(status or "").upper()
+
+    sync_ack_payloads[ack_key] = {
+        "device_id": device_id,
+        "status": normalized_status,
+        "reason": reason,
+    }
+
+    waiter = sync_ack_waiters.get(ack_key)
+    if waiter:
+        waiter.set()
+
+    if normalized_status == "FAILED":
+        asyncio.create_task(notify_dashboard_sync_failure(device_id or "unknown", reason))
+
+
+async def _on_bus_command(device_id: str, command: str, payload: dict):
+    if not device_id or not command:
+        return
+    if command == "WIPE_AND_RESYNC":
+        await tablet_ws_manager.send_to_device(device_id, {"command": "WIPE_AND_RESYNC"})
+
+
+async def _on_bus_confirmation(device_id: str, command: str, status: str, reason: str):
+    if not device_id:
+        return
+    if command != "WIPE_AND_RESYNC":
+        return
+    await _apply_sync_confirmation(device_id=device_id, status=status, reason=reason)
+
+
+async def _start_device_bus_listener():
+    if device_command_bus is None:
+        return
+    try:
+        await device_command_bus.subscribe_forever(
+            on_command=_on_bus_command,
+            on_confirmation=_on_bus_confirmation,
+        )
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        logger.error("Error en listener de DeviceCommandBus: %s", e)
+
+
 async def orchestrate_forced_sync_sequential() -> dict:
-    targets = tablet_ws_manager.get_connected_targets()
-    if not targets:
+    device_ids: list[str] = []
+
+    if device_state_store is not None:
+        try:
+            status_map = await device_state_store.get_all_status()
+            device_ids = sorted([device_id for device_id, info in status_map.items() if info.get("online")])
+        except Exception as e:
+            logger.error("Error leyendo estado compartido de dispositivos: %s", e)
+
+    if not device_ids:
+        # Fallback local si no hay estado compartido disponible
+        device_ids = sorted([device_id for device_id, _ in tablet_ws_manager.get_connected_targets() if device_id])
+
+    if not device_ids:
         return {
             "total": 0,
             "sent": 0,
@@ -583,13 +650,27 @@ async def orchestrate_forced_sync_sequential() -> dict:
     confirmed = 0
     details = []
 
-    for device_id, websocket in targets:
-        ack_key = tablet_ws_manager.ack_key(websocket, device_id)
+    for device_id in device_ids:
+        ack_key = f"device:{device_id}"
         waiter = asyncio.Event()
         sync_ack_waiters[ack_key] = waiter
         sync_ack_payloads.pop(ack_key, None)
 
-        send_ok = await tablet_ws_manager.send_to_websocket(websocket, {"command": "WIPE_AND_RESYNC"})
+        send_ok = False
+        try:
+            if device_command_bus is not None:
+                await device_command_bus.publish_command(
+                    device_id=device_id,
+                    command="WIPE_AND_RESYNC",
+                    payload={},
+                )
+                send_ok = True
+            else:
+                await tablet_ws_manager.send_to_device(device_id, {"command": "WIPE_AND_RESYNC"})
+                send_ok = True
+        except Exception:
+            send_ok = False
+
         if not send_ok:
             sync_ack_waiters.pop(ack_key, None)
             details.append(
@@ -634,9 +715,9 @@ async def orchestrate_forced_sync_sequential() -> dict:
         finally:
             sync_ack_waiters.pop(ack_key, None)
 
-    failed = len(targets) - confirmed
+    failed = len(device_ids) - confirmed
     return {
-        "total": len(targets),
+        "total": len(device_ids),
         "sent": sent,
         "confirmed": confirmed,
         "failed": failed,
@@ -651,20 +732,22 @@ async def process_sync_confirmation(websocket: WebSocket, msg: dict):
     status = str(msg.get("status", "")).upper()
     reason = msg.get("reason", "")
     device_id = msg.get("device_id") or tablet_ws_manager.get_device_id(websocket)
-    ack_key = tablet_ws_manager.ack_key(websocket, device_id)
+    if not device_id:
+        return
 
-    sync_ack_payloads[ack_key] = {
-        "device_id": device_id,
-        "status": status,
-        "reason": reason,
-    }
+    if device_command_bus is not None:
+        try:
+            await device_command_bus.publish_confirmation(
+                device_id=device_id,
+                command="WIPE_AND_RESYNC",
+                status=status,
+                reason=reason,
+            )
+            return
+        except Exception as e:
+            logging.error("Error publicando confirmación en bus: %s", e)
 
-    waiter = sync_ack_waiters.get(ack_key)
-    if waiter:
-        waiter.set()
-
-    if status == "FAILED":
-        asyncio.create_task(notify_dashboard_sync_failure(device_id or "unknown", reason))
+    await _apply_sync_confirmation(device_id=device_id, status=status, reason=reason)
 
 # Endpoint WebSocket para tabletas
 async def notify_dashboard_sync_failure(device_id: str, reason: str = ""):
@@ -689,7 +772,17 @@ async def retry_sync_with_device(device_id: str):
         sync_retry_counters[device_id] = count + 1
         await asyncio.sleep(RETRY_DELAY)
         # Reenviar comando de sincronización solo a ese dispositivo
-        await tablet_ws_manager.send_to_device(device_id, {"command": "WIPE_AND_RESYNC"})
+        try:
+            if device_command_bus is not None:
+                await device_command_bus.publish_command(
+                    device_id=device_id,
+                    command="WIPE_AND_RESYNC",
+                    payload={},
+                )
+            else:
+                await tablet_ws_manager.send_to_device(device_id, {"command": "WIPE_AND_RESYNC"})
+        except Exception as e:
+            logging.error("Error reenviando sincronización a %s: %s", device_id, e)
     else:
         sync_retry_counters.pop(device_id, None)
         logging.error(f"Dispositivo {device_id} falló sincronización tras {RETRY_LIMIT} reintentos.")
@@ -703,6 +796,9 @@ async def websocket_tablet(websocket: WebSocket):
             try:
                 import json
                 msg = json.loads(data)
+                device_id = msg.get("device_id") or tablet_ws_manager.get_device_id(websocket)
+                if device_id and device_state_store is not None:
+                    await device_state_store.upsert_heartbeat(device_id=device_id)
                 await process_sync_confirmation(websocket, msg)
             except Exception as e:
                 logging.error(f"Error procesando mensaje de confirmación: {e}")

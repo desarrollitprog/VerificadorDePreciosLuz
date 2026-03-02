@@ -8,10 +8,12 @@ from fastapi import APIRouter, Depends,Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.database import get_db_usuarios
+from app.database import get_db_usuarios, AsyncSessionLocalUsuarios
 from app.dependencies import get_current_cliente, validar_api_key, get_current_admin
 from app.models.servidor_secundario import ServidorSecundario
 from app.services.notificacion_service import registrar_accion
+import asyncio
+import uuid
 import httpx
 router = APIRouter(tags=["monitoreo"])
 
@@ -51,6 +53,7 @@ async def _obtener_dispositivos_de_servidor(ip: str) -> list[dict[str, Any]]:
                     "device_id": str(device_id),
                     "online": bool(info.get("online", False)),
                     "last_seen": info.get("last_seen"),
+                    "server_id": info.get("server_id"),
                 }
             )
 
@@ -101,6 +104,127 @@ async def heartbeat(
 
 # Umbral: sin heartbeat en los últimos 8 minutos = offline
 HEARTBEAT_OFFLINE_MINUTES = 8
+FORCE_SYNC_TIMEOUT_SECONDS = 120
+
+SYNC_JOBS: dict[str, dict[str, Any]] = {}
+SYNC_JOBS_LOCK = asyncio.Lock()
+
+
+async def _set_job_state(job_id: str, **fields: Any) -> None:
+    async with SYNC_JOBS_LOCK:
+        existing = SYNC_JOBS.get(job_id, {})
+        existing.update(fields)
+        existing["updated_at"] = _utcnow().isoformat()
+        SYNC_JOBS[job_id] = existing
+
+
+async def _get_job_state(job_id: str) -> dict[str, Any] | None:
+    async with SYNC_JOBS_LOCK:
+        job = SYNC_JOBS.get(job_id)
+        return dict(job) if job else None
+
+
+async def _execute_force_sync_job(job_id: str, user_id: int | None, username: str | None) -> None:
+    await _set_job_state(job_id, status="RUNNING")
+    try:
+        async with AsyncSessionLocalUsuarios() as db:
+            stmt = select(ServidorSecundario)
+            result = await db.execute(stmt)
+            servidores = result.scalars().all()
+
+            now = _utcnow()
+            umbral = now - timedelta(minutes=HEARTBEAT_OFFLINE_MINUTES)
+            online_servers = [
+                s for s in servidores
+                if s.ultimo_heartbeat and s.ultimo_heartbeat >= umbral
+            ]
+
+            async def send_force_sync(ip: str) -> dict[str, Any]:
+                url = f"http://{ip}:8000/api/fuerza-sync"
+                try:
+                    async with httpx.AsyncClient(timeout=FORCE_SYNC_TIMEOUT_SECONDS) as client:
+                        resp = await client.post(url)
+                        payload = {}
+                        try:
+                            payload = resp.json()
+                        except Exception:
+                            payload = {}
+
+                        ok = resp.status_code == 200 and bool(payload.get("success", True))
+                        return {
+                            "ok": ok,
+                            "status_code": resp.status_code,
+                            "backend_result": payload,
+                            "reason": payload.get("message") if isinstance(payload, dict) else None,
+                        }
+                except Exception as e:
+                    return {
+                        "ok": False,
+                        "status_code": None,
+                        "backend_result": {},
+                        "reason": str(e),
+                    }
+
+            results = []
+            for server in online_servers:
+                result_item = await send_force_sync(server.ip)
+                results.append(result_item)
+
+            success_count = sum(1 for r in results if r.get("ok") is True)
+            failed_count = len(online_servers) - success_count
+
+            details = []
+            for i, server in enumerate(online_servers):
+                result_item = results[i]
+                backend_result = result_item.get("backend_result") or {}
+                details.append(
+                    {
+                        "ip": server.ip,
+                        "nombre": server.nombre,
+                        "ok": result_item.get("ok") is True,
+                        "status_code": result_item.get("status_code"),
+                        "reason": result_item.get("reason"),
+                        "sync_total": backend_result.get("total"),
+                        "sync_sent": backend_result.get("sent"),
+                        "sync_confirmed": backend_result.get("confirmed"),
+                        "sync_failed": backend_result.get("failed"),
+                        "sync_details": backend_result.get("details", []),
+                    }
+                )
+
+            failed_servers = [d for d in details if not d["ok"]]
+            resumen_fallos = ", ".join(
+                f"{d['nombre']}({d['reason'] or 'sin motivo'})" for d in failed_servers[:5]
+            )
+
+            if user_id is not None:
+                await registrar_accion(
+                    db,
+                    user_id,
+                    "SINCRONIZACION_FORZADA",
+                    (
+                        f"Sincronización forzada ejecutada por usuario {username}. "
+                        f"Servidores online: {len(online_servers)}, éxito: {success_count}, fallo: {failed_count}. "
+                        f"Fallos: {resumen_fallos if resumen_fallos else 'ninguno'}"
+                    )
+                )
+
+            await _set_job_state(
+                job_id,
+                status="COMPLETED",
+                success=True,
+                total_online=len(online_servers),
+                success_count=success_count,
+                failed_count=failed_count,
+                details=details,
+            )
+    except Exception as e:
+        await _set_job_state(
+            job_id,
+            status="FAILED",
+            success=False,
+            error=str(e),
+        )
 
 
 @router.get("/status")
@@ -237,50 +361,48 @@ async def sincronizar_fuerza(
     request: Request = None,
 ):
     """
-    Orquesta la sincronización forzada en todos los servidores secundarios online.
+    Inicia la sincronización forzada en background y retorna un job_id para polling.
     """
-    stmt = select(ServidorSecundario)
-    result = await db.execute(stmt)
-    servidores = result.scalars().all()
+    job_id = str(uuid.uuid4())
+    await _set_job_state(
+        job_id,
+        status="QUEUED",
+        success=None,
+        created_at=_utcnow().isoformat(),
+        requested_by=current_user.get("nombre_usuario"),
+    )
 
-    now = _utcnow()
-    umbral = now - timedelta(minutes=HEARTBEAT_OFFLINE_MINUTES)
-    online_servers = [
-        s for s in servidores
-        if s.ultimo_heartbeat and s.ultimo_heartbeat >= umbral
-    ]
-
-    async def send_force_sync(ip):
-        url = f"http://{ip}:8000/api/fuerza-sync"
-        try:
-            async with httpx.AsyncClient(timeout=5) as client:
-                resp = await client.post(url)
-                return resp.status_code == 200
-        except Exception:
-            return False
-
-    results = []
-    for server in online_servers:
-        result = await send_force_sync(server.ip)
-        results.append(result)
-
-    success_count = sum(1 for r in results if r is True)
-    failed_count = len(online_servers) - success_count
-
-    await registrar_accion(
-        db,
-        current_user.get("user_id"),
-        "SINCRONIZACION_FORZADA",
-        f"Sincronización forzada ejecutada por usuario {current_user.get('nombre_usuario')}. Éxito: {success_count}, Fallo: {failed_count}"
+    asyncio.create_task(
+        _execute_force_sync_job(
+            job_id=job_id,
+            user_id=current_user.get("user_id"),
+            username=current_user.get("nombre_usuario"),
+        )
     )
 
     return {
         "success": True,
-        "total_online": len(online_servers),
-        "success_count": success_count,
-        "failed_count": failed_count,
-        "details": [
-            {"ip": s.ip, "nombre": s.nombre, "ok": results[i] is True}
-            for i, s in enumerate(online_servers)
-        ]
+        "message": "Sincronización en ejecución",
+        "job_id": job_id,
+        "status": "QUEUED",
+    }
+
+
+@router.get("/monitoreo/sincronizar-fuerza/{job_id}")
+async def obtener_estado_sincronizacion(
+    job_id: str,
+    current_user: dict = Depends(get_current_cliente),
+):
+    job = await _get_job_state(job_id)
+    if not job:
+        return {
+            "success": False,
+            "message": "Job no encontrado",
+            "job_id": job_id,
+        }
+
+    return {
+        "success": True,
+        "job_id": job_id,
+        **job,
     }

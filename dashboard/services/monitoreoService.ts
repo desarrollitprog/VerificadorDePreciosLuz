@@ -35,6 +35,24 @@ export interface AuditoriaItem {
   fecha_creacion: string;
 }
 
+export interface ForceSyncJobStart {
+  success: boolean;
+  message?: string;
+  job_id: string;
+  status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+}
+
+export interface ForceSyncJobStatus {
+  success: boolean;
+  job_id: string;
+  status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  total_online?: number;
+  success_count?: number;
+  failed_count?: number;
+  details?: any[];
+  error?: string;
+}
+
 function extractServers(data: any): any[] {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.servidores)) return data.servidores;
@@ -60,6 +78,16 @@ export async function getServersStatusWithDevices(): Promise<ServerStatusDetail[
     dispositivos_online: Number(s.dispositivos_online || 0),
     dispositivos: Array.isArray(s.dispositivos) ? s.dispositivos : [],
   }));
+}
+
+export async function startForceSyncJob(): Promise<ForceSyncJobStart> {
+  const response = await api.post('/monitoreo/sincronizar-fuerza');
+  return response.data as ForceSyncJobStart;
+}
+
+export async function getForceSyncJobStatus(jobId: string): Promise<ForceSyncJobStatus> {
+  const response = await api.get(`/monitoreo/sincronizar-fuerza/${jobId}`);
+  return response.data as ForceSyncJobStatus;
 }
 
 export async function getAlertasCriticas(): Promise<AlertaCritica[]> {

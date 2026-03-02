@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNotification } from '../components/useNotification';
 import { Search, Filter, UploadCloud, MoreVertical, Play, Eye, Trash, Film, HardDrive, TrendingUp, Plus, ChevronDown, ChevronUp } from 'lucide-react';
-import axios from 'axios';
-import api from '../services/axiosInstance';
 import { getVideos, uploadMedia, deleteVideo } from '../services/videoService';
 import { Video } from '../types';
-import { getServersStatusWithDevices, ServerStatusDetail } from '../services/monitoreoService';
+import { getForceSyncJobStatus, getServersStatusWithDevices, ServerStatusDetail, startForceSyncJob } from '../services/monitoreoService';
 import ServerCard from '../components/monitoreo/ServerCard';
 
 export const DashboardScreen: React.FC = () => {
@@ -98,15 +96,45 @@ export const DashboardScreen: React.FC = () => {
   const handleForceSync = async () => {
     setSyncLoading(true);
     setSyncResult(null);
-    const endpoint = '/monitoreo/sincronizar-fuerza';
     try {
-      const response = await api.post(endpoint);
-      if (response.data.success) {
-        setSyncResult('Sincronización ejecutada correctamente.');
-        showNotification('Sincronización ejecutada correctamente', 'success');
+      const start = await startForceSyncJob();
+      if (!start.success || !start.job_id) {
+        setSyncResult('No se pudo iniciar la sincronización.');
+        showNotification('No se pudo iniciar la sincronización', 'error');
+        return;
+      }
+
+      setSyncResult(`Sincronización en curso (job ${start.job_id.slice(0, 8)}...)`);
+
+      const maxPolls = 90;
+      const pollDelayMs = 2000;
+      let finalStatus: any = null;
+
+      for (let i = 0; i < maxPolls; i++) {
+        await new Promise((resolve) => setTimeout(resolve, pollDelayMs));
+        const status = await getForceSyncJobStatus(start.job_id);
+
+        if (status.status === 'COMPLETED' || status.status === 'FAILED') {
+          finalStatus = status;
+          break;
+        }
+      }
+
+      if (!finalStatus) {
+        setSyncResult('Sincronización en progreso. Revisa el estado nuevamente en unos segundos.');
+        showNotification('Sincronización en progreso', 'warning');
+        return;
+      }
+
+      if (finalStatus.status === 'COMPLETED') {
+        const successCount = finalStatus.success_count ?? 0;
+        const failedCount = finalStatus.failed_count ?? 0;
+        const totalOnline = finalStatus.total_online ?? 0;
+        setSyncResult(`Sincronización completada. Servidores online: ${totalOnline}, éxito: ${successCount}, fallos: ${failedCount}.`);
+        showNotification('Sincronización completada', failedCount > 0 ? 'warning' : 'success');
       } else {
-        setSyncResult('Sincronización fallida.');
-        showNotification('Sincronización fallida', 'warning');
+        setSyncResult(`Sincronización fallida: ${finalStatus.error || 'error desconocido'}`);
+        showNotification('Sincronización fallida', 'error');
       }
     } catch (error: any) {
       setSyncResult('Error al ejecutar la sincronización.');

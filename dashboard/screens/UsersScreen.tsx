@@ -197,8 +197,8 @@ export const UsersScreen: React.FC = () => {
             <p className="text-slate-500 mt-1">Administra los accesos y roles de tu plataforma</p>
           </div>
 
-          <div className="w-full grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[40%_25%_20%_15%] gap-3 items-center">
-            <div className="relative sm:col-span-2 xl:col-span-1">
+          <div className="w-full grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-12 gap-3 items-center">
+            <div className="relative sm:col-span-2 xl:col-span-5">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
               <input
                 type="text"
@@ -212,7 +212,7 @@ export const UsersScreen: React.FC = () => {
               />
             </div>
 
-            <div className="relative">
+            <div className="relative xl:col-span-3">
               <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <select
                 value={rolFilter}
@@ -226,7 +226,7 @@ export const UsersScreen: React.FC = () => {
               <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={16} />
             </div>
 
-            <div className="relative">
+            <div className="relative xl:col-span-2">
               <select
                 value={activoFilter}
                 onChange={(e) => setActivoFilter(e.target.value as ActiveFilter)}
@@ -241,7 +241,7 @@ export const UsersScreen: React.FC = () => {
 
             <button
               onClick={openCreate}
-              className="w-full h-10 flex items-center justify-center gap-2 bg-blue-600 text-white px-3 rounded-lg text-[13px] font-semibold shadow hover:bg-blue-700 transition"
+              className="w-full h-10 xl:col-span-2 flex items-center justify-center gap-2 bg-blue-600 text-white px-3 rounded-lg text-[13px] font-semibold shadow hover:bg-blue-700 transition"
             >
               <Plus size={16} />
               Nuevo Usuario

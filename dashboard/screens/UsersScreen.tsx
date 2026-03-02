@@ -36,6 +36,31 @@ const defaultForm: FormState = {
   activo: true,
 };
 
+function getErrorMessage(error: any, fallback: string): string {
+  const detail = error?.response?.data?.detail;
+
+  if (typeof detail === 'string' && detail.trim()) {
+    return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item: any) => {
+        if (!item) return null;
+        if (typeof item === 'string') return item;
+        if (typeof item?.msg === 'string') return item.msg;
+        return null;
+      })
+      .filter(Boolean);
+
+    if (messages.length > 0) {
+      return messages.join(' | ');
+    }
+  }
+
+  return fallback;
+}
+
 function deriveDisplayName(email: string): string {
   const [local] = (email || '').split('@');
   if (!local) return email;
@@ -82,8 +107,7 @@ export const UsersScreen: React.FC = () => {
       setTotalPages(Math.max(1, Number(result.total_pages || 1)));
       setPage(Number(result.page || targetPage));
     } catch (error: any) {
-      const detail = error?.response?.data?.detail;
-      showNotification(detail || 'No se pudo cargar la lista de usuarios', 'error');
+      showNotification(getErrorMessage(error, 'No se pudo cargar la lista de usuarios'), 'error');
     } finally {
       setLoading(false);
     }
@@ -145,8 +169,7 @@ export const UsersScreen: React.FC = () => {
       closeModal();
       await fetchUsers(page);
     } catch (error: any) {
-      const detail = error?.response?.data?.detail;
-      showNotification(detail || 'No se pudo guardar el usuario', 'error');
+      showNotification(getErrorMessage(error, 'No se pudo guardar el usuario'), 'error');
     } finally {
       setSaving(false);
     }
@@ -161,8 +184,7 @@ export const UsersScreen: React.FC = () => {
       showNotification('Usuario eliminado', 'success');
       await fetchUsers(page);
     } catch (error: any) {
-      const detail = error?.response?.data?.detail;
-      showNotification(detail || 'No se pudo eliminar el usuario', 'error');
+      showNotification(getErrorMessage(error, 'No se pudo eliminar el usuario'), 'error');
     }
   };
 

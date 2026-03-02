@@ -218,12 +218,13 @@ async def _execute_force_sync_job(job_id: str, user_id: int | None, username: st
             )
 
             if user_id is not None:
+                actor_name = (username or "").strip() or "Sistema"
                 await registrar_accion(
                     db,
                     user_id,
                     "SINCRONIZACION_FORZADA",
                     (
-                        f"Sincronización forzada ejecutada por usuario {username}. "
+                        f"Sincronización forzada ejecutada por usuario {actor_name}. "
                         f"Servidores online: {len(online_servers)}, éxito: {success_count}, fallo: {failed_count}. "
                         f"Fallos: {resumen_fallos if resumen_fallos else 'ninguno'}"
                     )
@@ -482,20 +483,22 @@ async def sincronizar_fuerza(
     """
     Inicia la sincronización forzada en background y retorna un job_id para polling.
     """
+    actor_name = (current_user.get("nombre_usuario") or current_user.get("usuario") or "Sistema")
+
     job_id = str(uuid.uuid4())
     await _set_job_state(
         job_id,
         status="QUEUED",
         success=None,
         created_at=_utcnow().isoformat(),
-        requested_by=current_user.get("nombre_usuario"),
+        requested_by=actor_name,
     )
 
     asyncio.create_task(
         _execute_force_sync_job(
             job_id=job_id,
             user_id=current_user.get("user_id"),
-            username=current_user.get("nombre_usuario"),
+            username=actor_name,
         )
     )
 

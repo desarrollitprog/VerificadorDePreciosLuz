@@ -6,6 +6,33 @@ import { toNotificationViewModel } from '../services/notificacionesPresentation'
 
 interface GeneralNotificationsProps {}
 
+function getRelativeTimeLabel(dateIso: string): string {
+  const now = Date.now();
+  const then = new Date(dateIso).getTime();
+  const diffSeconds = Math.max(0, Math.floor((now - then) / 1000));
+
+  if (diffSeconds < 60) return 'hace segundos';
+  const minutes = Math.floor(diffSeconds / 60);
+  if (minutes < 60) return `hace ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `hace ${hours} h`;
+  const days = Math.floor(hours / 24);
+  return `hace ${days} d`;
+}
+
+function getBadgeBySeverity(severity: 'error' | 'warning' | 'info' | 'success') {
+  if (severity === 'error') {
+    return { label: 'Error', classes: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' };
+  }
+  if (severity === 'warning') {
+    return { label: 'Alerta', classes: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' };
+  }
+  if (severity === 'success') {
+    return { label: 'OK', classes: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' };
+  }
+  return { label: 'Info', classes: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' };
+}
+
 export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
   const [open, setOpen] = useState(false);
   const showNotification = useNotification();
@@ -87,17 +114,24 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
               notificaciones.map((n) => {
                 const view = toNotificationViewModel(n);
                 const isError = view.severity === 'error';
+                const badge = getBadgeBySeverity(view.severity);
+                const exactTime = new Date(n.fecha_creacion).toLocaleString();
+                const relativeTime = getRelativeTimeLabel(n.fecha_creacion);
                 return (
                   <div
                     key={n.id}
                     className={`px-4 py-3 border-b last:border-b-0 border-slate-100 dark:border-slate-800 ${isError ? 'bg-red-50 dark:bg-red-900/30' : ''}`}
                   >
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className="text-xs text-slate-500">{new Date(n.fecha_creacion).toLocaleString()}</div>
+                    <div className="flex items-center gap-2 mb-1 justify-between">
+                      <div className="text-xs text-slate-500" title={exactTime}>{relativeTime} · {exactTime}</div>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${badge.classes}`}>{badge.label}</span>
                       {isError && <AlertTriangle size={16} className="text-red-500" title={view.title} />}
                     </div>
                     <div className={`text-sm font-medium ${isError ? 'text-red-700 dark:text-red-400' : 'text-slate-900 dark:text-white'}`}>{view.title}</div>
                     <div className={`text-sm ${isError ? 'text-red-800 dark:text-red-200' : 'text-slate-700 dark:text-slate-300'}`}>{view.message}</div>
+                    {view.detail && view.detail !== view.message && (
+                      <div className="text-xs text-slate-500 mt-1">Detalle técnico: {view.detail}</div>
+                    )}
                   </div>
                 );
               })

@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useNotification } from '../components/useNotification';
-import { Search, Filter, UploadCloud, MoreVertical, Play, Eye, Trash, Film, HardDrive, TrendingUp, Plus } from 'lucide-react';
+import { Search, Filter, UploadCloud, MoreVertical, Play, Eye, Trash, Film, HardDrive, TrendingUp, Plus, ChevronDown, ChevronUp } from 'lucide-react';
 import axios from 'axios';
 import api from '../services/axiosInstance';
 import { getVideos, uploadMedia, deleteVideo } from '../services/videoService';
 import { Video } from '../types';
-import { getServersStatus } from '../services/monitoreoService';
+import { getServersStatusWithDevices, ServerStatusDetail } from '../services/monitoreoService';
 import ServerCard from '../components/monitoreo/ServerCard';
 
 export const DashboardScreen: React.FC = () => {
@@ -22,7 +22,8 @@ export const DashboardScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   // Monitoreo de servidores
-  const [servidores, setServidores] = useState<any[]>([]);
+  const [servidores, setServidores] = useState<ServerStatusDetail[]>([]);
+  const [expandedServerId, setExpandedServerId] = useState<string | null>(null);
   const [loadingMonitoreo, setLoadingMonitoreo] = useState(true);
   const [errorMonitoreo, setErrorMonitoreo] = useState<string | null>(null);
 
@@ -35,7 +36,7 @@ export const DashboardScreen: React.FC = () => {
       setLoadingMonitoreo(true);
       setErrorMonitoreo(null);
       try {
-        const data = await getServersStatus();
+        const data = await getServersStatusWithDevices();
         setServidores(Array.isArray(data) ? data : []);
       } catch {
         setServidores([]);
@@ -186,6 +187,65 @@ export const DashboardScreen: React.FC = () => {
           </div>
           <HardDrive className="text-slate-400" size={32} />
         </div>*/}
+      </div>
+
+      {/* Monitoreo de servidores + dispositivos */}
+      <div>
+        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Servidores y Dispositivos</h3>
+
+        {loadingMonitoreo ? (
+          <div className="text-slate-500">Cargando monitoreo...</div>
+        ) : errorMonitoreo ? (
+          <div className="text-red-500">{errorMonitoreo}</div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {servidores.map((s) => (
+              <div key={s.id} className="bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-800 p-4">
+                <ServerCard
+                  nombre={s.nombre}
+                  ip={s.ip}
+                  online={s.online}
+                  porcentaje_uso={s.porcentaje_uso}
+                />
+
+                <button
+                  className="mt-3 w-full text-sm flex items-center justify-between px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+                  onClick={() => setExpandedServerId(expandedServerId === s.id ? null : s.id)}
+                >
+                  <span>
+                    Dispositivos ({s.dispositivos_online}/{s.dispositivos_total} online)
+                  </span>
+                  {expandedServerId === s.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </button>
+
+                {expandedServerId === s.id && (
+                  <div className="mt-2 max-h-52 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-lg">
+                    {s.dispositivos.length === 0 ? (
+                      <div className="p-3 text-sm text-slate-500">Sin dispositivos reportados.</div>
+                    ) : (
+                      s.dispositivos.map((d) => (
+                        <div
+                          key={d.device_id}
+                          className="px-3 py-2 border-b last:border-b-0 border-slate-100 dark:border-slate-800 flex items-center justify-between"
+                        >
+                          <div className="text-sm font-medium">{d.device_id}</div>
+                          <div className="text-xs text-right">
+                            <div className={d.online ? 'text-green-600' : 'text-red-500'}>
+                              {d.online ? 'ONLINE' : 'OFFLINE'}
+                            </div>
+                            <div className="text-slate-500">
+                              {d.last_seen ? new Date(d.last_seen).toLocaleString() : 'Sin last_seen'}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Grid */}

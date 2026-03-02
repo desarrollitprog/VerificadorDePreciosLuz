@@ -1135,6 +1135,15 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             val wsListener = object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: okhttp3.Response) {
                     Log.i(TAG, "[WebSocket] Conexión abierta: $wsUrl")
+                    try {
+                        val identifyMsg = org.json.JSONObject()
+                        identifyMsg.put("type", "IDENTIFY")
+                        identifyMsg.put("device_id", deviceId)
+                        webSocket.send(identifyMsg.toString())
+                        Log.i(TAG, "[WebSocket] Identificación enviada: device_id=$deviceId")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "[WebSocket] Error enviando identificación", e)
+                    }
                 }
                 override fun onMessage(webSocket: WebSocket, text: String) {
                     Log.i(TAG, "[WebSocket] Mensaje recibido (texto): $text")
@@ -1143,11 +1152,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                         val command = message.optString("command")
                         // Enviar confirmación de recepción
                         try {
-                            val confirmMsg = org.json.JSONObject()
-                            confirmMsg.put("type", "CONFIRMATION")
-                            confirmMsg.put("command", command)
-                            confirmMsg.put("status", "RECEIVED")
-                            webSocket.send(confirmMsg.toString())
+                            sendSyncConfirmation(webSocket, command, "RECEIVED")
                             Log.i(TAG, "[WebSocket] Confirmación enviada para comando: $command")
                         } catch (e: Exception) {
                             Log.e(TAG, "[WebSocket] Error enviando confirmación", e)
@@ -1155,11 +1160,23 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                         if (command == "WIPE_AND_RESYNC") {
                             Log.i(TAG, "[WebSocket] Comando WIPE_AND_RESYNC recibido. Ejecutando purga total...")
                             scope.launch {
-                                ejecutarPurgaTotal(this@ScanActivity, api!!, baseUrl) {
+                                val apiService = api
+                                if (apiService == null) {
+                                    sendSyncConfirmation(webSocket, command, "FAILED", "ApiService no inicializado")
+                                    return@launch
+                                }
+
+                                val purgeResult = ejecutarPurgaTotal(this@ScanActivity, apiService, baseUrl) {
                                     uiHandler.post {
                                         stopStandbyCarousel()
                                         startStandbyCarousel()
                                     }
+                                }
+
+                                if (purgeResult.success) {
+                                    sendSyncConfirmation(webSocket, command, "SUCCESS")
+                                } else {
+                                    sendSyncConfirmation(webSocket, command, "FAILED", purgeResult.reason ?: "Purga fallida")
                                 }
                             }
                         } else {
@@ -1178,11 +1195,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                         val command = message.optString("command")
                         // Enviar confirmación de recepción
                         try {
-                            val confirmMsg = org.json.JSONObject()
-                            confirmMsg.put("type", "CONFIRMATION")
-                            confirmMsg.put("command", command)
-                            confirmMsg.put("status", "RECEIVED")
-                            webSocket.send(confirmMsg.toString())
+                            sendSyncConfirmation(webSocket, command, "RECEIVED")
                             Log.i(TAG, "[WebSocket] Confirmación enviada para comando (binario): $command")
                         } catch (e: Exception) {
                             Log.e(TAG, "[WebSocket] Error enviando confirmación (binario)", e)
@@ -1190,11 +1203,23 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                         if (command == "WIPE_AND_RESYNC") {
                             Log.i(TAG, "[WebSocket] Comando WIPE_AND_RESYNC recibido (binario). Ejecutando purga total...")
                             scope.launch {
-                                ejecutarPurgaTotal(this@ScanActivity, api!!, baseUrl) {
+                                val apiService = api
+                                if (apiService == null) {
+                                    sendSyncConfirmation(webSocket, command, "FAILED", "ApiService no inicializado")
+                                    return@launch
+                                }
+
+                                val purgeResult = ejecutarPurgaTotal(this@ScanActivity, apiService, baseUrl) {
                                     uiHandler.post {
                                         stopStandbyCarousel()
                                         startStandbyCarousel()
                                     }
+                                }
+
+                                if (purgeResult.success) {
+                                    sendSyncConfirmation(webSocket, command, "SUCCESS")
+                                } else {
+                                    sendSyncConfirmation(webSocket, command, "FAILED", purgeResult.reason ?: "Purga fallida")
                                 }
                             }
                         } else {
@@ -1222,6 +1247,28 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private fun reconnectTabletWebSocket() {
         // Espera 5 segundos y reconecta
         uiHandler.postDelayed({ startTabletWebSocket() }, 5000)
+    }
+
+    private fun sendSyncConfirmation(
+        webSocket: WebSocket,
+        command: String,
+        status: String,
+        reason: String? = null,
+    ) {
+        try {
+            val confirmMsg = org.json.JSONObject()
+            confirmMsg.put("type", "CONFIRMATION")
+            confirmMsg.put("command", command)
+            confirmMsg.put("device_id", deviceId)
+            confirmMsg.put("status", status)
+            if (!reason.isNullOrBlank()) {
+                confirmMsg.put("reason", reason)
+            }
+            webSocket.send(confirmMsg.toString())
+            Log.i(TAG, "[WebSocket] Confirmación enviada: status=$status command=$command")
+        } catch (e: Exception) {
+            Log.e(TAG, "[WebSocket] Error enviando confirmación status=$status command=$command", e)
+        }
     }
 
     private fun showOutOfService() {

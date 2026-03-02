@@ -13,7 +13,9 @@ def hashear_contrasena(password):
     return pwd_context.hash(password)
 
 # JWT
-SECRET_KEY = os.getenv("SECRET_KEY", "Pit12345*")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("Falta la variable de entorno SECRET_KEY")
 ALGORITHM = "HS256"
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 60

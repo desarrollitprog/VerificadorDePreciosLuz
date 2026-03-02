@@ -3,6 +3,7 @@
 Rutas de monitoreo: heartbeat de servidores secundarios y estado.
 """
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from fastapi import APIRouter, Depends,Request
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -11,7 +12,6 @@ from app.database import get_db_usuarios
 from app.dependencies import get_current_cliente, validar_api_key, get_current_admin
 from app.models.servidor_secundario import ServidorSecundario
 from app.services.notificacion_service import registrar_accion
-import asyncio
 import httpx
 router = APIRouter(tags=["monitoreo"])
 
@@ -25,6 +25,39 @@ class HeartbeatBody(BaseModel):
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+async def _obtener_dispositivos_de_servidor(ip: str) -> list[dict[str, Any]]:
+    """
+    Consulta al backend-api del servidor secundario:
+    GET http://{ip}:8000/devices/status
+    """
+    url = f"http://{ip}:8000/devices/status"
+    try:
+        async with httpx.AsyncClient(timeout=4) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            payload = resp.json()
+
+        if not isinstance(payload, dict):
+            return []
+
+        dispositivos: list[dict[str, Any]] = []
+        for device_id, info in payload.items():
+            if not isinstance(info, dict):
+                continue
+            dispositivos.append(
+                {
+                    "device_id": str(device_id),
+                    "online": bool(info.get("online", False)),
+                    "last_seen": info.get("last_seen"),
+                }
+            )
+
+        dispositivos.sort(key=lambda d: d["device_id"])
+        return dispositivos
+    except Exception:
+        return []
 
 
 @router.post("/heartbeat")
@@ -89,7 +122,7 @@ async def status(
     servidores = result.scalars().all()
 
     lista = []
-    usuario_id = current_user.get("id") if current_user else None
+    usuario_id = current_user.get("user_id") if current_user else None
     espacio_critico_umbral = 0.95  # 95% de uso
 
     for s in servidores:
@@ -130,6 +163,50 @@ async def status(
             "online": online,
             "porcentaje_uso": round(porcentaje_uso, 2),
         })
+
+    return {"success": True, "servidores": lista}
+
+
+@router.get("/status-detalle")
+async def status_detalle(
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_cliente),
+):
+    """
+    Devuelve servidores + dispositivos conectados (consultando /devices/status por IP).
+    """
+    now = _utcnow()
+    umbral = now - timedelta(minutes=HEARTBEAT_OFFLINE_MINUTES)
+
+    stmt = select(ServidorSecundario).order_by(ServidorSecundario.nombre)
+    result = await db.execute(stmt)
+    servidores = result.scalars().all()
+
+    lista = []
+    for s in servidores:
+        online = s.ultimo_heartbeat is not None and s.ultimo_heartbeat >= umbral
+        total = s.almacenamiento_total or 0
+        usado = s.almacenamiento_usado or 0
+        porcentaje_uso = (usado / total * 100) if total > 0 else 0.0
+
+        dispositivos = await _obtener_dispositivos_de_servidor(s.ip) if online else []
+        dispositivos_online = sum(1 for d in dispositivos if d.get("online"))
+
+        lista.append(
+            {
+                "id": s.id,
+                "nombre": s.nombre,
+                "ip": s.ip,
+                "almacenamiento_total": total,
+                "almacenamiento_usado": usado,
+                "ultimo_heartbeat": s.ultimo_heartbeat.isoformat() if s.ultimo_heartbeat else None,
+                "online": online,
+                "porcentaje_uso": round(porcentaje_uso, 2),
+                "dispositivos_total": len(dispositivos),
+                "dispositivos_online": dispositivos_online,
+                "dispositivos": dispositivos,
+            }
+        )
 
     return {"success": True, "servidores": lista}
 
@@ -182,15 +259,17 @@ async def sincronizar_fuerza(
         except Exception:
             return False
 
-    tasks = [send_force_sync(s.ip) for s in online_servers]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    results = []
+    for server in online_servers:
+        result = await send_force_sync(server.ip)
+        results.append(result)
 
     success_count = sum(1 for r in results if r is True)
     failed_count = len(online_servers) - success_count
 
     await registrar_accion(
         db,
-        current_user.get("id"),
+        current_user.get("user_id"),
         "SINCRONIZACION_FORZADA",
         f"Sincronización forzada ejecutada por usuario {current_user.get('nombre_usuario')}. Éxito: {success_count}, Fallo: {failed_count}"
     )

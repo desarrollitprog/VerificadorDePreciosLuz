@@ -1,12 +1,25 @@
 import api from './axiosInstance';
 
+export interface DeviceStatus {
+  device_id: string;
+  online: boolean;
+  last_seen: string | null;
+}
+
 export interface ServerStatus {
   id: string;
   nombre: string;
+  ip: string;
   online: boolean;
   almacenamiento_total: number;
   almacenamiento_usado: number;
   porcentaje_uso: number;
+}
+
+export interface ServerStatusDetail extends ServerStatus {
+  dispositivos_total: number;
+  dispositivos_online: number;
+  dispositivos: DeviceStatus[];
 }
 
 export interface AlertaCritica {
@@ -22,9 +35,31 @@ export interface AuditoriaItem {
   fecha_creacion: string;
 }
 
+function extractServers(data: any): any[] {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.servidores)) return data.servidores;
+  return [];
+}
+
 export async function getServersStatus(): Promise<ServerStatus[]> {
   const response = await api.get('/status');
-  return response.data as ServerStatus[];
+  return extractServers(response.data) as ServerStatus[];
+}
+
+export async function getServersStatusWithDevices(): Promise<ServerStatusDetail[]> {
+  const response = await api.get('/status-detalle');
+  return extractServers(response.data).map((s: any) => ({
+    id: String(s.id),
+    nombre: s.nombre,
+    ip: s.ip,
+    online: !!s.online,
+    almacenamiento_total: Number(s.almacenamiento_total || 0),
+    almacenamiento_usado: Number(s.almacenamiento_usado || 0),
+    porcentaje_uso: Number(s.porcentaje_uso || 0),
+    dispositivos_total: Number(s.dispositivos_total || 0),
+    dispositivos_online: Number(s.dispositivos_online || 0),
+    dispositivos: Array.isArray(s.dispositivos) ? s.dispositivos : [],
+  }));
 }
 
 export async function getAlertasCriticas(): Promise<AlertaCritica[]> {

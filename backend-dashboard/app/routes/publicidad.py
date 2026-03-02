@@ -146,7 +146,7 @@ async def upload_banner(
     try:
         api_url = os.getenv("BACKEND_API_URL", "http://192.168.1.109:8000/api")
         print(f"Replicando archivo al backend-api: {file_location} -> {api_url}")
-        resp = replicar_archivo_al_api(
+        resp = await replicar_archivo_al_api(
                 api_url=api_url,
                 file_path=file_location,
                 IdPublicidadRemoto=nuevo_banner.IdPublicidad,
@@ -207,7 +207,7 @@ async def eliminar_banner(
         try:
             api_url = os.getenv("BACKEND_API_URL", "http://192.168.1.109:8000/api")
             remote_id = banner.IdPublicidad
-            remote_result = Borrado_api(api_url, remote_id)
+            remote_result = await Borrado_api(api_url, remote_id)
             if not remote_result.get("success", False):
                 raise Exception(f"No se pudo borrar remotamente: {remote_result.get('message', 'Sin mensaje')}")
         except Exception as e:

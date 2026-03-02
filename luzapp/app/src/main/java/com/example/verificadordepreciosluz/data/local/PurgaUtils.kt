@@ -8,8 +8,13 @@ import com.example.verificadordepreciosluz.data.network.BannerResponse
 import com.example.verificadordepreciosluz.data.local.BannerRepository
 import android.util.Log
 
-suspend fun ejecutarPurgaTotal(context: android.content.Context, api: ApiService, baseUrl: String, onPurgeComplete: (() -> Unit)? = null) {
-    withContext(Dispatchers.IO) {
+data class PurgaResult(
+    val success: Boolean,
+    val reason: String? = null,
+)
+
+suspend fun ejecutarPurgaTotal(context: android.content.Context, api: ApiService, baseUrl: String, onPurgeComplete: (() -> Unit)? = null): PurgaResult {
+    return withContext(Dispatchers.IO) {
         try {
             Log.d("PurgaTotal", "Iniciando purga total...")
             // Paso 1: Borrado de archivos locales
@@ -33,7 +38,10 @@ suspend fun ejecutarPurgaTotal(context: android.content.Context, api: ApiService
             }
             if (banners.size > 100) {
                 Log.e("PurgaTotal", "Demasiados banners en el manifiesto (${banners.size}), abortando por seguridad.")
-                return@withContext
+                return@withContext PurgaResult(
+                    success = false,
+                    reason = "Demasiados banners en manifiesto (${banners.size})",
+                )
             }
 
             // Paso 3: Descargar todos los archivos del manifiesto
@@ -70,8 +78,13 @@ suspend fun ejecutarPurgaTotal(context: android.content.Context, api: ApiService
                 withContext(Dispatchers.Main) { it() }
             }
             Log.d("PurgaTotal", "Purga total finalizada")
+            return@withContext PurgaResult(success = true)
         } catch (e: Exception) {
             Log.e("PurgaTotal", "Error fatal en purga: ${e.message}", e)
+            return@withContext PurgaResult(
+                success = false,
+                reason = e.message ?: "Error fatal en purga",
+            )
         }
     }
 }

@@ -1,7 +1,7 @@
-import requests
+import httpx
 import os
 
-def replicar_archivo_al_api(
+async def replicar_archivo_al_api(
     api_url: str,
     file_path: str,
     IdPublicidadRemoto: int = None,
@@ -21,8 +21,7 @@ def replicar_archivo_al_api(
         print(f"[DEBUG] Archivo no encontrado: {file_path}")
         raise FileNotFoundError(f"Archivo no encontrado: {file_path}")
 
-    with open(file_path, "rb") as f:
-        files = {"file": f}
+    with open(file_path, "rb") as file_handle:
         data = {
             "IdPublicidadRemoto": IdPublicidadRemoto,
             "titulo": titulo,
@@ -30,37 +29,35 @@ def replicar_archivo_al_api(
             "prioridad": prioridad,
             "fecha_inicio": fecha_inicio,
             "fecha_fin": fecha_fin,
-            "duracion_seg": duracion_seg
+            "duracion_seg": duracion_seg,
         }
-        # Elimina campos None
         data = {k: v for k, v in data.items() if v is not None}
 
         upload_url = api_url.rstrip('/') + '/replicar-archivo' if not api_url.rstrip('/').endswith('/replicar-archivo') else api_url
         print(f"[DEBUG] Replicando archivo al backend-api: {upload_url}")
         print(f"[DEBUG] Datos enviados: {data}")
         try:
-            response = requests.post(
-                upload_url,
-                files=files,
-                data=data,
-                timeout=timeout
-            )
+            files = {
+                "file": (os.path.basename(file_path), file_handle, "application/octet-stream")
+            }
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.post(upload_url, files=files, data=data)
             print(f"[DEBUG] Código de respuesta: {response.status_code}")
             print(f"[DEBUG] Respuesta: {response.text}")
-            files["file"].close()
             response.raise_for_status()
             return response.json()
         except Exception as e:
             print(f"[ERROR] Error al replicar archivo: {str(e)}")
             raise
 
-def Borrado_api(api_url: str, id_remoto: int, timeout: int = 30) -> dict:
+async def Borrado_api(api_url: str, id_remoto: int, timeout: int = 30) -> dict:
     """
     Envía una petición DELETE al backend-api para eliminar un banner remoto por IdPublicidadRemoto.
     Retorna la respuesta del API como dict.
     """
     url = f"{api_url.rstrip('/')}/banners/remoto/{id_remoto}"
-    response = requests.delete(url, timeout=timeout)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.delete(url)
     try:
         return response.json()
     except Exception:

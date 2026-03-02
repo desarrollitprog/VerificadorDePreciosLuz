@@ -474,14 +474,23 @@ SYNC_REQUIRED_NOW = False
 async def fuerza_sync():
     global SYNC_REQUIRED_NOW
     SYNC_REQUIRED_NOW = True
-    await tablet_ws_manager.broadcast({"command": "WIPE_AND_RESYNC"})
-    return {"success": True, "message": "Sincronización forzada marcada"}
+    async with SYNC_SEQUENCE_LOCK:
+        result = await orchestrate_forced_sync_sequential()
+    return {
+        "success": True,
+        "message": "Sincronización forzada secuencial ejecutada",
+        **result,
+    }
 # WebSocket manager para tabletas
 
 # --- Reintentos automáticos y mapeo device_id <-> WebSocket ---
 RETRY_LIMIT = 3
 RETRY_DELAY = 30  # segundos
 sync_retry_counters = {}  # device_id -> intentos
+SYNC_ACK_TIMEOUT = 20  # segundos para esperar confirmación de recepción
+SYNC_SEQUENCE_LOCK = asyncio.Lock()
+sync_ack_waiters: dict[str, asyncio.Event] = {}
+sync_ack_payloads: dict[str, dict] = {}
 
 class TabletWebSocketManager:
     def __init__(self):
@@ -524,7 +533,138 @@ class TabletWebSocketManager:
             except Exception:
                 pass
 
+    async def send_to_websocket(self, websocket: WebSocket, message: dict) -> bool:
+        try:
+            await websocket.send_json(message)
+            return True
+        except Exception:
+            return False
+
+    def get_device_id(self, websocket: WebSocket) -> str | None:
+        for device_id, ws in self.device_map.items():
+            if ws == websocket:
+                return device_id
+        return None
+
+    def get_connected_targets(self) -> list[tuple[str | None, WebSocket]]:
+        targets: list[tuple[str | None, WebSocket]] = []
+        mapped_sockets = set(self.device_map.values())
+
+        for device_id, ws in self.device_map.items():
+            targets.append((device_id, ws))
+
+        for ws in self.active_connections:
+            if ws not in mapped_sockets:
+                targets.append((None, ws))
+
+        return targets
+
+    def ack_key(self, websocket: WebSocket, device_id: str | None = None) -> str:
+        resolved_device = device_id or self.get_device_id(websocket)
+        if resolved_device:
+            return f"device:{resolved_device}"
+        return f"ws:{id(websocket)}"
+
 tablet_ws_manager = TabletWebSocketManager()
+
+
+async def orchestrate_forced_sync_sequential() -> dict:
+    targets = tablet_ws_manager.get_connected_targets()
+    if not targets:
+        return {
+            "total": 0,
+            "sent": 0,
+            "confirmed": 0,
+            "failed": 0,
+            "details": [],
+        }
+
+    sent = 0
+    confirmed = 0
+    details = []
+
+    for device_id, websocket in targets:
+        ack_key = tablet_ws_manager.ack_key(websocket, device_id)
+        waiter = asyncio.Event()
+        sync_ack_waiters[ack_key] = waiter
+        sync_ack_payloads.pop(ack_key, None)
+
+        send_ok = await tablet_ws_manager.send_to_websocket(websocket, {"command": "WIPE_AND_RESYNC"})
+        if not send_ok:
+            sync_ack_waiters.pop(ack_key, None)
+            details.append(
+                {
+                    "device_id": device_id,
+                    "ack_key": ack_key,
+                    "ok": False,
+                    "status": "SEND_FAILED",
+                    "reason": "No se pudo enviar comando por WebSocket",
+                }
+            )
+            continue
+
+        sent += 1
+
+        try:
+            await asyncio.wait_for(waiter.wait(), timeout=SYNC_ACK_TIMEOUT)
+            ack = sync_ack_payloads.pop(ack_key, {})
+            status = str(ack.get("status", "")).upper()
+            ok = status in ("RECEIVED", "SUCCESS", "DONE")
+            if ok:
+                confirmed += 1
+            details.append(
+                {
+                    "device_id": ack.get("device_id") or device_id,
+                    "ack_key": ack_key,
+                    "ok": ok,
+                    "status": status or "UNKNOWN",
+                    "reason": ack.get("reason", ""),
+                }
+            )
+        except asyncio.TimeoutError:
+            details.append(
+                {
+                    "device_id": device_id,
+                    "ack_key": ack_key,
+                    "ok": False,
+                    "status": "TIMEOUT",
+                    "reason": f"Sin confirmación en {SYNC_ACK_TIMEOUT}s",
+                }
+            )
+        finally:
+            sync_ack_waiters.pop(ack_key, None)
+
+    failed = len(targets) - confirmed
+    return {
+        "total": len(targets),
+        "sent": sent,
+        "confirmed": confirmed,
+        "failed": failed,
+        "details": details,
+    }
+
+
+async def process_sync_confirmation(websocket: WebSocket, msg: dict):
+    if msg.get("type") != "CONFIRMATION" or msg.get("command") != "WIPE_AND_RESYNC":
+        return
+
+    status = str(msg.get("status", "")).upper()
+    reason = msg.get("reason", "")
+    device_id = msg.get("device_id") or tablet_ws_manager.get_device_id(websocket)
+    ack_key = tablet_ws_manager.ack_key(websocket, device_id)
+
+    sync_ack_payloads[ack_key] = {
+        "device_id": device_id,
+        "status": status,
+        "reason": reason,
+    }
+
+    waiter = sync_ack_waiters.get(ack_key)
+    if waiter:
+        waiter.set()
+
+    if status == "FAILED":
+        asyncio.create_task(notify_dashboard_sync_failure(device_id or "unknown", reason))
 
 # Endpoint WebSocket para tabletas
 async def notify_dashboard_sync_failure(device_id: str, reason: str = ""):
@@ -560,20 +700,10 @@ async def websocket_tablet(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_text()
-            # Manejo de confirmaciones de sincronización
             try:
                 import json
                 msg = json.loads(data)
-                if (
-                    msg.get("type") == "CONFIRMATION"
-                    and msg.get("command") == "WIPE_AND_RESYNC"
-                ):
-                    device_id = msg.get("device_id", "unknown")
-                    status = msg.get("status", "")
-                    if status == "FAILED":
-                        reason = msg.get("reason", "")
-                        # Lanza la notificación y reintentos en background
-                        asyncio.create_task(notify_dashboard_sync_failure(device_id, reason))
+                await process_sync_confirmation(websocket, msg)
             except Exception as e:
                 logging.error(f"Error procesando mensaje de confirmación: {e}")
     except WebSocketDisconnect:

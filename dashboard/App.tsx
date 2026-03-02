@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NotificationProvider } from './components/NotificationContext';
 import { NotificationContainer } from './components/NotificationContainer';
 import { LoginScreen } from './screens/LoginScreen';
@@ -10,12 +10,40 @@ import { Screen } from './types';
 import Sidebar from './components/Sidebar';
 import { Header } from './components/DashboardHeader';
 import { ServerDashboard } from './components/ServerDashboard';
+import { getTokenExpiryMs, hasValidToken, logout } from './services/authService';
 
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState<Screen>('login');
+  const [currentScreen, setCurrentScreen] = useState<Screen>(() => (hasValidToken() ? 'dashboard' : 'login'));
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
+
+  useEffect(() => {
+    if (currentScreen === 'login') {
+      return;
+    }
+
+    const expiryMs = getTokenExpiryMs();
+    if (!expiryMs) {
+      logout();
+      setCurrentScreen('login');
+      return;
+    }
+
+    const delay = expiryMs - Date.now();
+    if (delay <= 0) {
+      logout();
+      setCurrentScreen('login');
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      logout();
+      setCurrentScreen('login');
+    }, delay);
+
+    return () => window.clearTimeout(timeout);
+  }, [currentScreen]);
 
   const renderScreen = () => {
     switch (currentScreen) {
@@ -45,7 +73,10 @@ export default function App() {
             onNavigate={setCurrentScreen} 
             isOpen={isSidebarOpen}
             onClose={() => setIsSidebarOpen(false)}
-            onLogout={() => setCurrentScreen('login')}
+            onLogout={() => {
+              logout();
+              setCurrentScreen('login');
+            }}
           />
           <main className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative transition-all duration-300">
             <Header 

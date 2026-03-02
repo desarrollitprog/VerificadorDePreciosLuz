@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-import { getToken } from './authService';
+import { getToken, logout } from './authService';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
@@ -36,8 +36,16 @@ api.interceptors.response.use(
   },
   (error) => {
     const url = error?.config?.url as string | undefined;
+    const status = error?.response?.status;
+
+    if (status === 401) {
+      logout();
+      if (typeof window !== 'undefined' && window.location.pathname !== '/') {
+        window.location.reload();
+      }
+    }
+
     if (url?.includes('/status-detalle')) {
-      const status = error?.response?.status;
       const detail = error?.response?.data;
       console.error('[API] Error status-detalle', { status, url, detail });
     }

@@ -18,7 +18,7 @@ if not SECRET_KEY:
     raise RuntimeError("Falta la variable de entorno SECRET_KEY")
 ALGORITHM = "HS256"
 
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 
 def crear_token_jwt(
     data: dict,

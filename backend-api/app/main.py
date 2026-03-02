@@ -672,6 +672,8 @@ async def orchestrate_forced_sync_sequential() -> dict:
             send_ok = False
 
         if not send_ok:
+            reason = "No se pudo enviar comando por WebSocket"
+            asyncio.create_task(notify_dashboard_sync_failure(device_id, reason))
             sync_ack_waiters.pop(ack_key, None)
             details.append(
                 {
@@ -679,7 +681,7 @@ async def orchestrate_forced_sync_sequential() -> dict:
                     "ack_key": ack_key,
                     "ok": False,
                     "status": "SEND_FAILED",
-                    "reason": "No se pudo enviar comando por WebSocket",
+                    "reason": reason,
                 }
             )
             continue
@@ -693,6 +695,9 @@ async def orchestrate_forced_sync_sequential() -> dict:
             ok = status in ("RECEIVED", "SUCCESS", "DONE")
             if ok:
                 confirmed += 1
+            else:
+                fail_reason = ack.get("reason", "") or f"Estado no exitoso: {status or 'UNKNOWN'}"
+                asyncio.create_task(notify_dashboard_sync_failure(device_id, fail_reason))
             details.append(
                 {
                     "device_id": ack.get("device_id") or device_id,
@@ -703,13 +708,15 @@ async def orchestrate_forced_sync_sequential() -> dict:
                 }
             )
         except asyncio.TimeoutError:
+            timeout_reason = f"Sin confirmación en {SYNC_ACK_TIMEOUT}s"
+            asyncio.create_task(notify_dashboard_sync_failure(device_id, timeout_reason))
             details.append(
                 {
                     "device_id": device_id,
                     "ack_key": ack_key,
                     "ok": False,
                     "status": "TIMEOUT",
-                    "reason": f"Sin confirmación en {SYNC_ACK_TIMEOUT}s",
+                    "reason": timeout_reason,
                 }
             )
         finally:

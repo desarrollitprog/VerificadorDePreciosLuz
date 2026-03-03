@@ -1,14 +1,13 @@
 import React from 'react';
-import { ChevronRight, Menu, Search, Sun, Moon } from 'lucide-react';
+import { Sun, Moon } from 'lucide-react';
 import { GeneralNotifications } from './GeneralNotifications';
 import { Screen } from '../types';
 
 interface HeaderProps {
   currentScreen: Screen;
-  onMenuClick: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ currentScreen, onMenuClick }) => { 
+export const Header: React.FC<HeaderProps> = ({ currentScreen }) => { 
   const getBreadcrumb = () => {
     switch (currentScreen) {
       case 'dashboard': return 'Mis Videos';
@@ -28,16 +27,8 @@ export const Header: React.FC<HeaderProps> = ({ currentScreen, onMenuClick }) =>
 
   return (
     <header className="h-16 flex items-center justify-between px-4 md:px-8 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111a22] z-20 shadow-sm">
-      <div className="flex items-center gap-4">
-        <button 
-          onClick={onMenuClick}
-          className="p-2 -ml-2 text-slate-500 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
-        >
-          <Menu size={20} />
-        </button>
-        <div className="flex items-center gap-2 text-sm text-slate-500">
-          <span className="hover:text-primary transition-colors cursor-pointer">Panel</span>
-          <ChevronRight size={14} />
+      <div className="flex items-center gap-2">
+        <div className="flex items-center text-sm text-slate-500">
           <span className="text-slate-900 dark:text-white font-medium">{getBreadcrumb()}</span>
         </div>
       </div>

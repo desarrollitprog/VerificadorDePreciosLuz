@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getVideos, deleteVideo, updateBannerEstado, updateBannerMetadata } from '../services/videoService';
 import { Video } from '../types';
-import { Search, Filter, ArrowUpDown, FileVideo, AlertCircle, Clock, Edit2, Trash2, Download, Power } from 'lucide-react';
+import { Search, ArrowUpDown, FileVideo, AlertCircle, Clock, Edit2, Trash2, Download, Power } from 'lucide-react';
 
 const StatusIcon = ({ status }: { status: string }) => {
   switch (status) {
@@ -236,30 +236,6 @@ export const VideoListScreen: React.FC = () => {
       </div>
 
       <div className="flex flex-col gap-3 bg-white dark:bg-[#16212b] p-2 rounded-xl border border-slate-200 dark:border-[#324d67]/30 shadow-sm">
-        {selected.length > 0 && (
-          <div className="flex items-center justify-between gap-2 px-1">
-            <span className="text-xs text-slate-500 dark:text-[#92adc9]">Seleccionados: {selected.length}</span>
-            <div className="flex items-center gap-2">
-              <button
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-slate-100 dark:bg-[#0b1219] text-slate-700 dark:text-[#92adc9] hover:bg-slate-200 dark:hover:bg-[#1f2b38] text-xs"
-                onClick={handleBulkDownload}
-                title="Descargar seleccionados"
-              >
-                <Download size={14} />
-                Descargar
-              </button>
-              <button
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-red-600 text-white hover:bg-red-700 text-xs"
-                onClick={() => setDeleteId('bulk')}
-                title="Borrar seleccionados"
-              >
-                <Trash2 size={14} />
-                Borrar
-              </button>
-            </div>
-          </div>
-        )}
-
         <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
         <div className="relative w-full sm:max-w-md">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -299,10 +275,6 @@ export const VideoListScreen: React.FC = () => {
             value={dateFilter}
             onChange={(e) => setDateFilter(e.target.value)}
           />
-          <button className="flex items-center gap-2 px-3 py-2.5 bg-slate-50 dark:bg-[#0b1219] hover:bg-slate-100 dark:hover:bg-[#1f2b38] text-slate-600 dark:text-[#92adc9] hover:text-slate-900 dark:hover:text-white rounded-lg transition-colors text-sm font-medium">
-            <Filter size={18} />
-            Filtrar
-          </button>
           <select
             className="rounded-lg px-3 py-2 bg-slate-50 dark:bg-[#0b1219] border-none text-sm text-slate-900 dark:text-white"
             value={typeFilter}
@@ -335,7 +307,7 @@ export const VideoListScreen: React.FC = () => {
               }}
             />
           </div>
-          <div className="col-span-5 sm:col-span-4 flex items-center gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
+          <div className="col-span-5 sm:col-span-4 md:col-span-3 flex items-center gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
             Nombre del Archivo
             <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
@@ -365,7 +337,7 @@ export const VideoListScreen: React.FC = () => {
                   }}
                 />
               </div>
-              <div className="col-span-5 sm:col-span-4 flex items-center gap-3 overflow-hidden">
+              <div className="col-span-5 sm:col-span-4 md:col-span-3 flex items-center gap-3 overflow-hidden">
                 <StatusIcon status={item.status} />
                 <div className="flex flex-col min-w-0">
                   <span className="text-sm font-medium text-slate-900 dark:text-white truncate" title={item.filename}>{item.filename}</span>
@@ -379,7 +351,7 @@ export const VideoListScreen: React.FC = () => {
                 <VigenciaBadge item={item} />
               </div>
 
-              <div className="col-span-3 sm:col-span-2 md:col-span-2 flex items-center justify-center gap-1">
+              <div className="col-span-3 sm:col-span-2 md:col-span-2 flex items-center justify-center gap-1 whitespace-nowrap">
                   <button
                     className="p-1.5 rounded text-blue-500 hover:text-blue-600 hover:bg-blue-500/10"
                     title="Editar vigencia"
@@ -417,7 +389,29 @@ export const VideoListScreen: React.FC = () => {
           ))}
         </div>
 
-        <div className="bg-slate-50 dark:bg-[#1f2b38] border-t border-slate-200 dark:border-[#324d67]/30 p-3 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500 dark:text-[#92adc9]" />
+        <div className="sticky bottom-0 z-10 bg-slate-50 dark:bg-[#1f2b38] border-t border-slate-200 dark:border-[#324d67]/30 p-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-[#92adc9]">
+          <span className="text-xs text-slate-500 dark:text-[#92adc9]">Seleccionados: {selected.length}</span>
+          <div className="flex items-center gap-2">
+            <button
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-slate-100 dark:bg-[#0b1219] text-slate-700 dark:text-[#92adc9] hover:bg-slate-200 dark:hover:bg-[#1f2b38] text-xs disabled:opacity-40 disabled:cursor-not-allowed"
+              onClick={handleBulkDownload}
+              title="Descargar seleccionados"
+              disabled={!selected.length}
+            >
+              <Download size={14} />
+              Descargar
+            </button>
+            <button
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-red-600 text-white hover:bg-red-700 text-xs disabled:opacity-40 disabled:cursor-not-allowed"
+              onClick={() => setDeleteId('bulk')}
+              title="Borrar seleccionados"
+              disabled={!selected.length}
+            >
+              <Trash2 size={14} />
+              Borrar
+            </button>
+          </div>
+        </div>
       </div>
 
       {deleteId && (

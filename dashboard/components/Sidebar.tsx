@@ -7,39 +7,88 @@ interface SidebarProps {
   currentScreen: Screen;
   onNavigate: (screen: Screen) => void;
   isOpen: boolean;
-  isCollapsed: boolean;
+  onToggle: () => void;
   onClose: () => void;
   onLogout: () => void;
 }
-const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, isCollapsed, onClose, onLogout }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, onToggle, onClose, onLogout }) => {
   const [role, setRole] = useState<'ADMIN' | 'CLIENTE' | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
-  const showLabels = !isCollapsed || isOpen;
   useEffect(() => {
     setRole(getUserRole());
     setUserName(getUserName());
   }, []);
 
   return (
-    <aside 
-      className={`
-        fixed lg:static inset-y-0 left-0 z-30
-        w-72 ${isCollapsed ? 'lg:w-20' : 'lg:w-72'} flex flex-col bg-[#111a22] border-r border-slate-800
-        transform transition-transform duration-300 ease-in-out
-        ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-      `}
-    >
-      <div className={`p-6 flex items-center ${showLabels ? 'justify-between' : 'justify-center'}`}>
+    <>
+      <aside className="fixed inset-y-0 left-0 z-30 w-14 bg-[#111a22] border-r border-slate-800 flex flex-col items-center py-4">
+        <button
+          onClick={onToggle}
+          className="bg-primary/20 flex items-center justify-center rounded-lg h-10 w-10 text-primary hover:bg-primary/30 transition-colors"
+          title="Abrir menú"
+        >
+          <LayoutGrid size={24} />
+        </button>
+
+        <nav className="mt-8 flex flex-col items-center gap-5 text-slate-400">
+          <button
+            onClick={() => { onNavigate('dashboard'); onClose(); }}
+            title="Mis Videos"
+            className={`p-2 rounded-md transition-colors ${currentScreen === 'dashboard' ? 'text-primary bg-primary/20' : 'hover:bg-slate-800 hover:text-white'}`}
+          >
+            <LayoutGrid size={20} />
+          </button>
+          <button
+            onClick={() => { onNavigate('list'); onClose(); }}
+            title="Biblioteca de Videos"
+            className={`p-2 rounded-md transition-colors ${currentScreen === 'list' ? 'text-primary bg-primary/20' : 'hover:bg-slate-800 hover:text-white'}`}
+          >
+            <Video size={20} />
+          </button>
+          {role === 'ADMIN' && (
+            <button
+              onClick={() => { onNavigate('servers'); onClose(); }}
+              title="Servidores"
+              className={`p-2 rounded-md transition-colors ${currentScreen === 'servers' ? 'text-primary bg-primary/20' : 'hover:bg-slate-800 hover:text-white'}`}
+            >
+              <Server size={20} />
+            </button>
+          )}
+          {role === 'ADMIN' && (
+            <button
+              onClick={() => { onNavigate('users'); onClose(); }}
+              title="Gestión de Usuarios"
+              className={`p-2 rounded-md transition-colors ${currentScreen === 'users' ? 'text-primary bg-primary/20' : 'hover:bg-slate-800 hover:text-white'}`}
+            >
+              <Users size={20} />
+            </button>
+          )}
+        </nav>
+
+        <button onClick={onLogout} className="mt-auto mb-3 text-slate-400 hover:text-red-400 transition-colors p-2 rounded-md hover:bg-slate-700/50" title="Salir">
+          <LogOut size={18} />
+        </button>
+      </aside>
+
+      <aside
+        className={`
+          fixed inset-y-0 left-14 z-30
+          w-56 flex flex-col bg-[#111a22] border-r border-slate-800
+          transform transition-transform duration-300 ease-in-out
+          ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+        `}
+      >
+      <div className="p-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="bg-primary/20 flex items-center justify-center rounded-lg h-10 w-10 text-primary">
             <LayoutGrid size={24} />
           </div>
-          <div className={`${showLabels ? 'flex' : 'hidden'} flex-col`}>
+          <div className="flex flex-col">
             <h1 className="text-white text-lg font-bold leading-tight">Administrador de Videos</h1>
             <p className="text-slate-400 text-xs font-medium">v1.2.4</p>
           </div>
         </div>
-        <button onClick={onClose} className="lg:hidden text-slate-400 hover:text-white">
+        <button onClick={onClose} className="text-slate-400 hover:text-white">
           <X size={24} />
         </button>
       </div>
@@ -49,27 +98,27 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, is
         <button 
           onClick={() => { onNavigate('dashboard'); onClose(); }}
           title="Mis Videos"
-          className={`flex items-center ${showLabels ? 'gap-3 px-3 justify-start' : 'justify-center px-2'} py-3 rounded-lg transition-colors w-full text-left
+          className={`flex items-center gap-3 px-3 justify-start py-3 rounded-lg transition-colors w-full text-left
             ${currentScreen === 'dashboard' 
               ? 'bg-primary/20 border border-primary/10 text-primary font-semibold' 
               : 'text-slate-400 hover:bg-slate-800 hover:text-white font-medium'
             }`}
         >
           <LayoutGrid size={20} />
-          {showLabels && <span className="text-sm">Mis Videos</span>}
+          <span className="text-sm">Mis Videos</span>
         </button>
 
         <button 
           onClick={() => { onNavigate('list'); onClose(); }}
           title="Biblioteca de Videos"
-          className={`flex items-center ${showLabels ? 'gap-3 px-3 justify-start' : 'justify-center px-2'} py-3 rounded-lg transition-colors w-full text-left
+          className={`flex items-center gap-3 px-3 justify-start py-3 rounded-lg transition-colors w-full text-left
             ${currentScreen === 'list' 
               ? 'bg-primary/20 border border-primary/10 text-primary font-semibold' 
               : 'text-slate-400 hover:bg-slate-800 hover:text-white font-medium'
             }`}
         >
           <Video size={20} />
-          {showLabels && <span className="text-sm">Biblioteca de Videos</span>}
+          <span className="text-sm">Biblioteca de Videos</span>
         </button>
 
         {/* Solo ADMIN puede ver la opción de Servidores */}
@@ -77,14 +126,14 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, is
           <button 
             onClick={() => { onNavigate('servers'); onClose(); }}
             title="Servidores"
-            className={`flex items-center ${showLabels ? 'gap-3 px-3 justify-start' : 'justify-center px-2'} py-3 rounded-lg transition-colors w-full text-left
+            className={`flex items-center gap-3 px-3 justify-start py-3 rounded-lg transition-colors w-full text-left
               ${currentScreen === 'servers' 
                 ? 'bg-primary/20 border border-primary/10 text-primary font-semibold' 
                 : 'text-slate-400 hover:bg-slate-800 hover:text-white font-medium'
               }`}
           >
             <Server size={20} />
-            {showLabels && <span className="text-sm">Servidores</span>}
+            <span className="text-sm">Servidores</span>
           </button>
         )}
 
@@ -94,11 +143,11 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, is
         {role === 'ADMIN' && (
           <button 
             title="Gestión de Usuarios"
-            className={`flex items-center ${showLabels ? 'gap-3 px-3 justify-start' : 'justify-center px-2'} py-3 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors w-full text-left group`}
+            className="flex items-center gap-3 px-3 justify-start py-3 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors w-full text-left group"
             onClick={() => { onNavigate('users'); onClose(); }}
           >
             <Users size={20} />
-            {showLabels && <span className="text-sm font-medium">Gestión de Usuarios</span>}
+            <span className="text-sm font-medium">Gestión de Usuarios</span>
           </button>
         )}
 
@@ -111,20 +160,21 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, is
       </nav>
 
       <div className="p-4 border-t border-slate-800 mt-auto">
-        <div className={`flex items-center ${showLabels ? 'gap-3' : 'justify-center'} p-2 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer group`}>
+        <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer group">
           <div className="h-10 w-10 flex items-center justify-center rounded-full bg-slate-700 border border-slate-600 shadow-sm">
             <User size={28} className="text-blue-400" />
           </div>
-          <div className={`${showLabels ? 'flex' : 'hidden'} flex-col flex-1 min-w-0`}>
+          <div className="flex flex-col flex-1 min-w-0">
             <p className="text-white text-sm font-medium truncate group-hover:text-primary transition-colors">{'Usuario'}</p>
             <span className={`inline-block text-xs font-semibold rounded px-2 py-0.5 ${role === 'ADMIN' ? 'bg-red-700 text-white' : role === 'CLIENTE' ? 'bg-blue-700 text-white' : 'bg-slate-600 text-white'}`}>{userName || 'Sin nombre'}</span>
           </div>
-          <button onClick={onLogout} className="text-slate-400 hover:text-red-400 transition-colors p-1 rounded-md hover:bg-slate-700/50">
+          <button onClick={onLogout} className="ml-3 text-slate-400 hover:text-red-400 transition-colors p-1 rounded-md hover:bg-slate-700/50">
             <LogOut size={18} />
           </button>
         </div>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
 export default Sidebar;

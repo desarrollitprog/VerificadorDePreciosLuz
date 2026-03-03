@@ -15,16 +15,8 @@ import { getTokenExpiryMs, hasValidToken, logout } from './services/authService'
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>(() => (hasValidToken() ? 'dashboard' : 'login'));
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return window.localStorage.getItem('sidebarCollapsed') === '1';
-  });
 
   const toggleSidebar = () => {
-    if (typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches) {
-      setIsSidebarCollapsed((prev) => !prev);
-      return;
-    }
     setIsSidebarOpen((prev) => !prev);
   };
 
@@ -55,11 +47,6 @@ export default function App() {
     return () => window.clearTimeout(timeout);
   }, [currentScreen]);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem('sidebarCollapsed', isSidebarCollapsed ? '1' : '0');
-  }, [isSidebarCollapsed]);
-
   const renderScreen = () => {
     switch (currentScreen) {
       case 'login':
@@ -87,26 +74,24 @@ export default function App() {
             currentScreen={currentScreen} 
             onNavigate={setCurrentScreen} 
             isOpen={isSidebarOpen}
-            isCollapsed={isSidebarCollapsed}
+            onToggle={toggleSidebar}
             onClose={() => setIsSidebarOpen(false)}
             onLogout={() => {
               logout();
               setCurrentScreen('login');
             }}
           />
-          <main className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative transition-all duration-300">
+          <main className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative transition-all duration-300 ml-14">
             <Header 
-              currentScreen={currentScreen} 
-              onMenuClick={toggleSidebar}
+              currentScreen={currentScreen}
             />
-            <div className={`flex-1 overflow-y-auto p-4 md:p-6 ${isSidebarCollapsed ? 'lg:p-5' : 'lg:p-8'} scroll-smooth`}>
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 scroll-smooth">
               {renderScreen()}
             </div>
           </main>
-          {/* Mobile Sidebar Overlay */}
           {isSidebarOpen && (
             <div 
-              className="fixed inset-0 bg-black/50 z-20 lg:hidden backdrop-blur-sm"
+              className="fixed inset-0 bg-black/50 z-20 backdrop-blur-sm"
               onClick={() => setIsSidebarOpen(false)}
             />
           )}

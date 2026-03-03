@@ -31,7 +31,7 @@ export const Header: React.FC<HeaderProps> = ({ currentScreen, onMenuClick }) =>
       <div className="flex items-center gap-4">
         <button 
           onClick={onMenuClick}
-          className="lg:hidden p-2 -ml-2 text-slate-500 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
+          className="p-2 -ml-2 text-slate-500 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
         >
           <Menu size={20} />
         </button>

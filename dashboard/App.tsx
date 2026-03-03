@@ -84,7 +84,7 @@ export default function App() {
           {!isSidebarOpen && (
             <button
               onClick={toggleSidebar}
-              className="fixed top-6 left-4 z-30 bg-primary/20 text-primary hover:bg-primary/30 transition-colors rounded-lg h-10 w-10 flex items-center justify-center"
+              className="fixed top-3 left-3 z-30 text-slate-400 hover:text-primary hover:bg-slate-800/70 transition-colors rounded-lg h-10 w-10 flex items-center justify-center"
               title="Abrir menú"
             >
               <LayoutGrid size={22} />

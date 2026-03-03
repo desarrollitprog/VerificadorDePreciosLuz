@@ -26,7 +26,7 @@ export const Header: React.FC<HeaderProps> = ({ currentScreen }) => {
   };
 
   return (
-    <header className="h-16 flex items-center justify-between px-4 md:px-8 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111a22] z-20 shadow-sm">
+    <header className="h-16 flex items-center justify-between pl-16 md:pl-20 pr-4 md:pr-8 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111a22] z-20 shadow-sm">
       <div className="flex items-center gap-2">
         <div className="flex items-center text-sm text-slate-500">
           <span className="text-slate-900 dark:text-white font-medium">{getBreadcrumb()}</span>

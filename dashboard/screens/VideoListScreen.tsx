@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getVideos, deleteVideo, updateBannerEstado, updateBannerMetadata } from '../services/videoService';
 import { Video } from '../types';
-import { Search, Filter, ArrowUpDown, FileVideo, AlertCircle, Clock, Edit2, Trash2 } from 'lucide-react';
+import { Search, Filter, ArrowUpDown, FileVideo, AlertCircle, Clock, Edit2, Trash2, Download, Power } from 'lucide-react';
 
 const StatusIcon = ({ status }: { status: string }) => {
   switch (status) {
@@ -54,6 +54,13 @@ const toInputDateTime = (iso?: string | null): string => {
 };
 
 const toIsoOrNull = (val: string): string | null => (val ? new Date(val).toISOString() : null);
+
+const formatDateDisplay = (value?: string): string => {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+};
 
 export const VideoListScreen: React.FC = () => {
   const [videos, setVideos] = useState<Video[]>([]);
@@ -179,6 +186,23 @@ export const VideoListScreen: React.FC = () => {
     setError(fail ? `Actualizados: ${ok}. Fallaron: ${fail}.` : null);
   };
 
+  const downloadVideoFile = (item: Video) => {
+    if (!item.url) return;
+    const link = document.createElement('a');
+    link.href = item.url;
+    link.download = item.filename || `video-${item.id}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleBulkDownload = () => {
+    const selectedItems = videos.filter((v) => selected.includes(v.id));
+    selectedItems.forEach((item, index) => {
+      window.setTimeout(() => downloadVideoFile(item), index * 120);
+    });
+  };
+
   let filteredVideos = videos.filter((v: Video) => {
     const searchMatch =
       search === '' ||
@@ -205,35 +229,38 @@ export const VideoListScreen: React.FC = () => {
   return (
     <div className="flex flex-col h-full gap-6">
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-        {selected.length > 0 && (
-          <div className="flex gap-2 mb-2">
-            <button
-              className="px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700"
-              onClick={() => handleBulkSetActivo(true)}
-            >
-              Activar seleccionados
-            </button>
-            <button
-              className="px-4 py-2 rounded bg-amber-600 text-white hover:bg-amber-700"
-              onClick={() => handleBulkSetActivo(false)}
-            >
-              Desactivar seleccionados
-            </button>
-            <button
-              className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700"
-              onClick={() => setDeleteId('bulk')}
-            >
-              Borrar seleccionados
-            </button>
-          </div>
-        )}
         <div>
           <h2 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">BIBLIOTECA DE VIDEOS</h2>
           <p className="text-slate-500 mt-1 text-sm">CHECKEA EL ESTATUS ACTUAL DE LOS VIDEOS O ELIMINA Y DESCARGA EL CONTENIDO</p>
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-white dark:bg-[#16212b] p-2 rounded-xl border border-slate-200 dark:border-[#324d67]/30 shadow-sm">
+      <div className="flex flex-col gap-3 bg-white dark:bg-[#16212b] p-2 rounded-xl border border-slate-200 dark:border-[#324d67]/30 shadow-sm">
+        {selected.length > 0 && (
+          <div className="flex items-center justify-between gap-2 px-1">
+            <span className="text-xs text-slate-500 dark:text-[#92adc9]">Seleccionados: {selected.length}</span>
+            <div className="flex items-center gap-2">
+              <button
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-slate-100 dark:bg-[#0b1219] text-slate-700 dark:text-[#92adc9] hover:bg-slate-200 dark:hover:bg-[#1f2b38] text-xs"
+                onClick={handleBulkDownload}
+                title="Descargar seleccionados"
+              >
+                <Download size={14} />
+                Descargar
+              </button>
+              <button
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-red-600 text-white hover:bg-red-700 text-xs"
+                onClick={() => setDeleteId('bulk')}
+                title="Borrar seleccionados"
+              >
+                <Trash2 size={14} />
+                Borrar
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
         <div className="relative w-full sm:max-w-md">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
             <Search className="text-slate-400" size={18} />
@@ -246,7 +273,7 @@ export const VideoListScreen: React.FC = () => {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="flex gap-2 w-full sm:w-auto items-center">
+        <div className="flex gap-2 w-full sm:w-auto items-center flex-wrap">
           <select
             className="rounded-lg px-3 py-2 bg-slate-50 dark:bg-[#0b1219] border-none text-sm text-slate-900 dark:text-white"
             value={statusFilter}
@@ -287,12 +314,26 @@ export const VideoListScreen: React.FC = () => {
             <option value="image">Foto</option>
           </select>
         </div>
+        </div>
       </div>
 
       <div className="flex-1 w-full overflow-hidden rounded-xl border border-slate-200 dark:border-[#324d67]/30 bg-white dark:bg-[#16212b] flex flex-col shadow-xl">
-        <div className="grid grid-cols-12 gap-4 border-b border-slate-200 dark:border-[#324d67]/50 bg-slate-50 dark:bg-[#1f2b38] px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-[#92adc9]">
+        <div className="grid grid-cols-12 gap-2 border-b border-slate-200 dark:border-[#324d67]/50 bg-slate-50 dark:bg-[#1f2b38] px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-[#92adc9]">
           <div className="col-span-1 flex items-center justify-center">
-            <input type="checkbox" className="rounded border-slate-300 dark:border-[#324d67] bg-white dark:bg-[#0b1219] text-primary focus:ring-primary focus:ring-offset-0" />
+            <input
+              type="checkbox"
+              className="rounded border-slate-300 dark:border-[#324d67] bg-white dark:bg-[#0b1219] text-primary focus:ring-primary focus:ring-offset-0"
+              checked={paginatedVideos.length > 0 && paginatedVideos.every((item) => selected.includes(item.id))}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  const ids = paginatedVideos.map((item) => item.id);
+                  setSelected((prev) => Array.from(new Set([...prev, ...ids])));
+                } else {
+                  const ids = new Set(paginatedVideos.map((item) => item.id));
+                  setSelected((prev) => prev.filter((id) => !ids.has(id)));
+                }
+              }}
+            />
           </div>
           <div className="col-span-5 sm:col-span-4 flex items-center gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
             Nombre del Archivo
@@ -302,16 +343,17 @@ export const VideoListScreen: React.FC = () => {
             Fecha de Subida
             <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
-          <div className="col-span-2 hidden md:flex items-center justify-end gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
+          <div className="col-span-1 hidden md:flex items-center justify-end gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
             Tamaño
             <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
-          <div className="col-span-4 sm:col-span-3 md:col-span-2 flex items-center justify-center sm:justify-start">Estatus</div>
+          <div className="col-span-3 sm:col-span-2 md:col-span-2 flex items-center justify-start">Estatus</div>
+          <div className="col-span-3 sm:col-span-2 md:col-span-2 flex items-center justify-center">Acciones</div>
         </div>
 
         <div className="flex-1 overflow-y-auto">
           {Array.isArray(paginatedVideos) && paginatedVideos.map((item) => (
-            <div key={item.id} className="group grid grid-cols-12 gap-4 border-b border-slate-100 dark:border-[#324d67]/30 px-4 py-3 hover:bg-slate-50 dark:hover:bg-[#1f2b38] transition-colors items-center">
+            <div key={item.id} className="group grid grid-cols-12 gap-2 border-b border-slate-100 dark:border-[#324d67]/30 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-[#1f2b38] transition-colors items-center">
               <div className="col-span-1 flex items-center justify-center">
                 <input
                   type="checkbox"
@@ -330,19 +372,27 @@ export const VideoListScreen: React.FC = () => {
                   <span className="text-xs text-slate-500 dark:text-[#58728a] truncate">ID: {item.id}</span>
                 </div>
               </div>
-              <div className="col-span-3 hidden sm:flex text-sm text-slate-600 dark:text-[#92adc9]">{item.date}</div>
-              <div className="col-span-2 hidden md:flex justify-end text-sm text-slate-600 dark:text-[#92adc9] font-mono">{item.size}</div>
-              <div className="col-span-4 sm:col-span-3 md:col-span-2 flex items-center justify-between sm:justify-start gap-2">
+              <div className="col-span-3 hidden sm:flex text-xs text-slate-600 dark:text-[#92adc9] truncate" title={item.date}>{formatDateDisplay(item.date)}</div>
+              <div className="col-span-1 hidden md:flex justify-end text-xs text-slate-600 dark:text-[#92adc9] font-mono">{item.size}</div>
+              <div className="col-span-3 sm:col-span-2 md:col-span-2 flex items-center gap-1.5 flex-wrap">
                 <OperativoBadge activo={item.activo} />
                 <VigenciaBadge item={item} />
+              </div>
 
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="col-span-3 sm:col-span-2 md:col-span-2 flex items-center justify-center gap-1">
                   <button
                     className="p-1.5 rounded text-blue-500 hover:text-blue-600 hover:bg-blue-500/10"
                     title="Editar vigencia"
                     onClick={() => openEditVigencia(item)}
                   >
                     <Edit2 size={16} />
+                  </button>
+                  <button
+                    className="p-1.5 rounded text-sky-500 hover:text-sky-600 hover:bg-sky-500/10"
+                    title="Descargar"
+                    onClick={() => downloadVideoFile(item)}
+                  >
+                    <Download size={16} />
                   </button>
                   <button
                     className={`p-1.5 rounded transition-colors ${
@@ -353,7 +403,7 @@ export const VideoListScreen: React.FC = () => {
                     title={item.activo ? 'Desactivar' : 'Activar'}
                     onClick={() => handleToggleActivo(item.id, !item.activo)}
                   >
-                    {item.activo ? 'Desactivar' : 'Activar'}
+                    <Power size={16} />
                   </button>
                   <button
                     className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-500/10 rounded transition-colors"
@@ -362,7 +412,6 @@ export const VideoListScreen: React.FC = () => {
                   >
                     <Trash2 size={16} />
                   </button>
-                </div>
               </div>
             </div>
           ))}

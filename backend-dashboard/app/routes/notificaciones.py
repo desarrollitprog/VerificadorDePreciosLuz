@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from app.models import Notificacion, NotificacionLeida
 from app.database import get_db_usuarios
 from app.dependencies import get_current_cliente
@@ -96,7 +97,6 @@ async def marcar_notificaciones_leidas(
     read_ids_result = await db.execute(
         select(NotificacionLeida.notificacion_id).where(
             NotificacionLeida.usuario_id == user_id,
-            NotificacionLeida.notificacion_id.in_(all_ids),
         )
     )
     read_ids = set(read_ids_result.scalars().all())
@@ -109,7 +109,16 @@ async def marcar_notificaciones_leidas(
 
     if to_mark:
         db.add_all(to_mark)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        # Si hubo solicitudes concurrentes, la restricción única puede dispararse;
+        # tratamos el endpoint como idempotente y devolvemos éxito.
+        return {
+            "success": True,
+            "updated": 0,
+        }
 
     return {
         "success": True,

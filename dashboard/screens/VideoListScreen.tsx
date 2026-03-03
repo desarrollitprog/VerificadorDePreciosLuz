@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getVideos, deleteVideo, updateBannerEstado, updateBannerMetadata } from '../services/videoService';
 import { Video } from '../types';
-import { Search, ArrowUpDown, FileVideo, AlertCircle, Clock, Edit2, Trash2, Download, Power } from 'lucide-react';
+import { Search, ArrowUpDown, FileVideo, AlertCircle, Clock, Edit2, Trash2, Download, Power, ListChecks } from 'lucide-react';
 
 const StatusIcon = ({ status }: { status: string }) => {
   switch (status) {
@@ -291,7 +291,7 @@ export const VideoListScreen: React.FC = () => {
 
       <div className="flex-1 w-full overflow-hidden rounded-xl border border-slate-200 dark:border-[#324d67]/30 bg-white dark:bg-[#16212b] flex flex-col shadow-xl">
         <div className="grid grid-cols-12 gap-2 border-b border-slate-200 dark:border-[#324d67]/50 bg-slate-50 dark:bg-[#1f2b38] px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-[#92adc9]">
-          <div className="col-span-1 flex items-center justify-center">
+          <div className="col-span-1 flex items-center justify-center gap-1" title="Seleccionar todo el contenido">
             <input
               type="checkbox"
               className="rounded border-slate-300 dark:border-[#324d67] bg-white dark:bg-[#0b1219] text-primary focus:ring-primary focus:ring-offset-0"
@@ -306,20 +306,29 @@ export const VideoListScreen: React.FC = () => {
                 }
               }}
             />
+            <ListChecks size={13} className="text-slate-400 dark:text-[#92adc9]" />
           </div>
-          <div className="col-span-5 sm:col-span-4 md:col-span-3 flex items-center gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
+          <div className="col-span-5 sm:col-span-4 md:col-span-3 lg:col-span-2 flex items-center gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
             Nombre del Archivo
             <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
-          <div className="col-span-3 hidden sm:flex items-center gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
+          <div className="col-span-3 hidden sm:flex md:col-span-2 items-center gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
             Fecha de Subida
             <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
-          <div className="col-span-1 hidden md:flex items-center justify-end gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
+          <div className="hidden lg:flex lg:col-span-2 items-center gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
+            Fecha Inicio
+            <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
+          <div className="hidden lg:flex lg:col-span-2 items-center gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
+            Fecha Fin
+            <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
+          <div className="col-span-1 hidden md:flex lg:hidden items-center justify-end gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
             Tamaño
             <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
-          <div className="col-span-3 sm:col-span-2 md:col-span-2 flex items-center justify-start">Estatus</div>
+          <div className="col-span-3 sm:col-span-2 md:col-span-2 lg:col-span-1 flex items-center justify-start">Estatus</div>
           <div className="col-span-3 sm:col-span-2 md:col-span-2 flex items-center justify-center">Acciones</div>
         </div>
 
@@ -337,16 +346,18 @@ export const VideoListScreen: React.FC = () => {
                   }}
                 />
               </div>
-              <div className="col-span-5 sm:col-span-4 md:col-span-3 flex items-center gap-3 overflow-hidden">
+              <div className="col-span-5 sm:col-span-4 md:col-span-3 lg:col-span-2 flex items-center gap-3 overflow-hidden">
                 <StatusIcon status={item.status} />
                 <div className="flex flex-col min-w-0">
                   <span className="text-sm font-medium text-slate-900 dark:text-white truncate" title={item.filename}>{item.filename}</span>
                   <span className="text-xs text-slate-500 dark:text-[#58728a] truncate">ID: {item.id}</span>
                 </div>
               </div>
-              <div className="col-span-3 hidden sm:flex text-xs text-slate-600 dark:text-[#92adc9] truncate" title={item.date}>{formatDateDisplay(item.date)}</div>
-              <div className="col-span-1 hidden md:flex justify-end text-xs text-slate-600 dark:text-[#92adc9] font-mono">{item.size}</div>
-              <div className="col-span-3 sm:col-span-2 md:col-span-2 flex items-center gap-1.5 flex-wrap">
+              <div className="col-span-3 hidden sm:flex md:col-span-2 text-xs text-slate-600 dark:text-[#92adc9] truncate" title={item.date}>{formatDateDisplay(item.date)}</div>
+              <div className="hidden lg:flex lg:col-span-2 text-xs text-slate-600 dark:text-[#92adc9] truncate" title={item.fechaInicio || undefined}>{formatDateDisplay(item.fechaInicio)}</div>
+              <div className="hidden lg:flex lg:col-span-2 text-xs text-slate-600 dark:text-[#92adc9] truncate" title={item.fechaFin || undefined}>{formatDateDisplay(item.fechaFin)}</div>
+              <div className="col-span-1 hidden md:flex lg:hidden justify-end text-xs text-slate-600 dark:text-[#92adc9] font-mono">{item.size}</div>
+              <div className="col-span-3 sm:col-span-2 md:col-span-2 lg:col-span-1 flex items-center gap-1.5 flex-wrap">
                 <OperativoBadge activo={item.activo} />
                 <VigenciaBadge item={item} />
               </div>

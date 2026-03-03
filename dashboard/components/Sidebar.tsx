@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutGrid, Video, Settings, LogOut, X, Users, Server, User } from 'lucide-react';
+import { LayoutGrid, Video, LogOut, X, Users, Server, User } from 'lucide-react';
 import { Screen } from '../types';
 import { getUserRole, getUserName } from '../services/authService';
 
@@ -27,7 +27,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, on
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
       `}
     >
-      <div className="p-6 flex items-center justify-between">
+      <div className="relative p-6 pr-14">
         <div className="flex items-center gap-3">
           <div className="bg-primary/20 flex items-center justify-center rounded-lg h-10 w-10 text-primary">
             <LayoutGrid size={24} />
@@ -37,8 +37,12 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, on
             <p className="text-slate-400 text-xs font-medium">v1.2.4</p>
           </div>
         </div>
-        <button onClick={onClose} className="text-slate-400 hover:text-white">
-          <X size={24} />
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-3 h-9 w-9 rounded-md flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+          title="Cerrar menú"
+        >
+          <X size={20} />
         </button>
       </div>
 

@@ -11,6 +11,7 @@ import Sidebar from './components/Sidebar';
 import { Header } from './components/DashboardHeader';
 import { ServerDashboard } from './components/ServerDashboard';
 import { getTokenExpiryMs, hasValidToken, logout } from './services/authService';
+import { LayoutGrid } from 'lucide-react';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>(() => (hasValidToken() ? 'dashboard' : 'login'));
@@ -74,14 +75,22 @@ export default function App() {
             currentScreen={currentScreen} 
             onNavigate={setCurrentScreen} 
             isOpen={isSidebarOpen}
-            onToggle={toggleSidebar}
             onClose={() => setIsSidebarOpen(false)}
             onLogout={() => {
               logout();
               setCurrentScreen('login');
             }}
           />
-          <main className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative transition-all duration-300 ml-14">
+          {!isSidebarOpen && (
+            <button
+              onClick={toggleSidebar}
+              className="fixed top-6 left-4 z-30 bg-primary/20 text-primary hover:bg-primary/30 transition-colors rounded-lg h-10 w-10 flex items-center justify-center"
+              title="Abrir menú"
+            >
+              <LayoutGrid size={22} />
+            </button>
+          )}
+          <main className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative transition-all duration-300">
             <Header 
               currentScreen={currentScreen}
             />

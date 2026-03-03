@@ -7,11 +7,10 @@ interface SidebarProps {
   currentScreen: Screen;
   onNavigate: (screen: Screen) => void;
   isOpen: boolean;
-  onToggle: () => void;
   onClose: () => void;
   onLogout: () => void;
 }
-const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, onToggle, onClose, onLogout }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, onClose, onLogout }) => {
   const [role, setRole] = useState<'ADMIN' | 'CLIENTE' | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
   useEffect(() => {
@@ -20,64 +19,14 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, on
   }, []);
 
   return (
-    <>
-      <aside className="fixed inset-y-0 left-0 z-30 w-14 bg-[#111a22] border-r border-slate-800 flex flex-col items-center py-4">
-        <button
-          onClick={onToggle}
-          className="bg-primary/20 flex items-center justify-center rounded-lg h-10 w-10 text-primary hover:bg-primary/30 transition-colors"
-          title="Abrir menú"
-        >
-          <LayoutGrid size={24} />
-        </button>
-
-        <nav className="mt-8 flex flex-col items-center gap-5 text-slate-400">
-          <button
-            onClick={() => { onNavigate('dashboard'); onClose(); }}
-            title="Mis Videos"
-            className={`p-2 rounded-md transition-colors ${currentScreen === 'dashboard' ? 'text-primary bg-primary/20' : 'hover:bg-slate-800 hover:text-white'}`}
-          >
-            <LayoutGrid size={20} />
-          </button>
-          <button
-            onClick={() => { onNavigate('list'); onClose(); }}
-            title="Biblioteca de Videos"
-            className={`p-2 rounded-md transition-colors ${currentScreen === 'list' ? 'text-primary bg-primary/20' : 'hover:bg-slate-800 hover:text-white'}`}
-          >
-            <Video size={20} />
-          </button>
-          {role === 'ADMIN' && (
-            <button
-              onClick={() => { onNavigate('servers'); onClose(); }}
-              title="Servidores"
-              className={`p-2 rounded-md transition-colors ${currentScreen === 'servers' ? 'text-primary bg-primary/20' : 'hover:bg-slate-800 hover:text-white'}`}
-            >
-              <Server size={20} />
-            </button>
-          )}
-          {role === 'ADMIN' && (
-            <button
-              onClick={() => { onNavigate('users'); onClose(); }}
-              title="Gestión de Usuarios"
-              className={`p-2 rounded-md transition-colors ${currentScreen === 'users' ? 'text-primary bg-primary/20' : 'hover:bg-slate-800 hover:text-white'}`}
-            >
-              <Users size={20} />
-            </button>
-          )}
-        </nav>
-
-        <button onClick={onLogout} className="mt-auto mb-3 text-slate-400 hover:text-red-400 transition-colors p-2 rounded-md hover:bg-slate-700/50" title="Salir">
-          <LogOut size={18} />
-        </button>
-      </aside>
-
-      <aside
-        className={`
-          fixed inset-y-0 left-14 z-30
-          w-56 flex flex-col bg-[#111a22] border-r border-slate-800
-          transform transition-transform duration-300 ease-in-out
-          ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-        `}
-      >
+    <aside
+      className={`
+        fixed inset-y-0 left-0 z-40
+        w-56 flex flex-col bg-[#111a22] border-r border-slate-800
+        transform transition-transform duration-300 ease-in-out
+        ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+      `}
+    >
       <div className="p-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="bg-primary/20 flex items-center justify-center rounded-lg h-10 w-10 text-primary">
@@ -173,8 +122,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, on
           </button>
         </div>
       </div>
-      </aside>
-    </>
+    </aside>
   );
 }
 export default Sidebar;

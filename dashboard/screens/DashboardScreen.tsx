@@ -154,7 +154,14 @@ export const DashboardScreen: React.FC = () => {
         const successCount = finalStatus.success_count ?? 0;
         const failedCount = finalStatus.failed_count ?? 0;
         const totalOnline = finalStatus.total_online ?? 0;
-        showNotification('Sincronización completada', failedCount > 0 ? 'warning' : 'success');
+        if (failedCount > 0) {
+          showNotification(
+            `Sincronización completada con fallos (${failedCount}/${totalOnline || successCount + failedCount}).`,
+            'error'
+          );
+        } else {
+          showNotification('Sincronización completada', 'success');
+        }
       } else {
         showNotification('Sincronización fallida', 'error');
       }

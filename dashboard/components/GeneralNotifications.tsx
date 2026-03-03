@@ -47,10 +47,19 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
       setLoading(true);
       fetchNotificaciones(10, 0)
         .then((res) => {
-          setNotificaciones(res.notificaciones);
+          const seenSyncFailedKeys = new Set<string>();
+          const normalized = (res.notificaciones || []).filter((n) => {
+            if (n.tipo !== 'SYNC_FAILED') return true;
+            const key = `${n.tipo}::${(n.descripcion || '').trim()}`;
+            if (seenSyncFailedKeys.has(key)) return false;
+            seenSyncFailedKeys.add(key);
+            return true;
+          });
+
+          setNotificaciones(normalized);
           setUnreadCount(Number(res.unread_count || 0));
           // Mostrar toast para SYNC_FAILED
-          res.notificaciones
+          normalized
             .filter((n) => n.tipo === 'SYNC_FAILED')
             .filter((n) => !shownSyncFailedIdsRef.current.has(n.id))
             .forEach((n) => {

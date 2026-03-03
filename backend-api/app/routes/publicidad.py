@@ -28,7 +28,7 @@ async def listar_banners(db: AsyncSession = Depends(get_db_publicidad)):
     result = await db.execute(
         select(Publicidad)
         .where(
-            Publicidad.activo.is_(True),
+            Publicidad.activo == True,
             or_(Publicidad.fecha_inicio.is_(None), Publicidad.fecha_inicio <= now),
             or_(Publicidad.fecha_fin.is_(None), Publicidad.fecha_fin >= now),
         )

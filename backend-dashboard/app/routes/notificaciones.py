@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -124,12 +126,36 @@ async def sync_status(
     body: SyncStatusBody,
     db: AsyncSession = Depends(get_db_usuarios),
 ):
-    # Registrar la notificación en la base de datos
-    descripcion = f"Dispositivo {body.device_id} falló sincronización: {body.reason}"
+    # Registrar la notificación en la base de datos (con deduplicación temporal)
+    reason = (body.reason or "").strip() or "sin detalle"
+    descripcion = f"Dispositivo {body.device_id} falló sincronización: {reason}"
+
+    dedupe_since = datetime.utcnow() - timedelta(seconds=120)
+    recent_stmt = (
+        select(Notificacion)
+        .where(
+            Notificacion.tipo == "SYNC_FAILED",
+            Notificacion.descripcion == descripcion,
+            Notificacion.fecha_creacion >= dedupe_since,
+        )
+        .order_by(Notificacion.fecha_creacion.desc())
+        .limit(1)
+    )
+    recent_result = await db.execute(recent_stmt)
+    existing = recent_result.scalars().first()
+
+    if existing:
+        return {
+            "success": True,
+            "message": "Notificación SYNC_FAILED ya registrada recientemente.",
+            "duplicated": True,
+            "id": existing.id,
+        }
+
     await registrar_accion(
         db=db,
         usuario_id=None,
         tipo="SYNC_FAILED",
         descripcion=descripcion,
     )
-    return {"success": True, "message": "Notificación de sincronización registrada"}
+    return {"success": True, "message": "Notificación de sincronización registrada", "duplicated": False}

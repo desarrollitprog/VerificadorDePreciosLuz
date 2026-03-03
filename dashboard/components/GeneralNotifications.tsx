@@ -134,7 +134,11 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
                     <div className="flex items-center gap-2 mb-1 justify-between">
                       <div className="text-xs text-slate-500" title={exactTime}>{relativeTime} · {exactTime}</div>
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${badge.classes}`}>{badge.label}</span>
-                      {isError && <AlertTriangle size={16} className="text-red-500" title={view.title} />}
+                      {isError && (
+                        <span title={view.title} className="inline-flex">
+                          <AlertTriangle size={16} className="text-red-500" />
+                        </span>
+                      )}
                     </div>
                     <div className={`text-sm font-medium ${isError ? 'text-red-700 dark:text-red-400' : 'text-slate-900 dark:text-white'}`}>{view.title}</div>
                     <div className={`text-sm ${isError ? 'text-red-800 dark:text-red-200' : 'text-slate-700 dark:text-slate-300'}`}>{view.message}</div>

@@ -6,7 +6,7 @@ import { Video } from '../types';
 import { getForceSyncJobStatus, startForceSyncJob } from '../services/monitoreoService';
 
 export const DashboardScreen: React.FC = () => {
-    const showNotification = useNotification();
+  const showNotification = useNotification();
   const [preview, setPreview] = useState<{url: string, tipo: string, titulo: string} | null>(null);
   const handlePreview = (video: Video) => {
     setPreview({ url: video.url, tipo: video.tipo, titulo: video.titulo || video.filename });
@@ -17,6 +17,12 @@ export const DashboardScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [uploadTitulo, setUploadTitulo] = useState('');
+  const [uploadFechaInicio, setUploadFechaInicio] = useState('');
+  const [uploadFechaFin, setUploadFechaFin] = useState('');
+  const [uploadActivo, setUploadActivo] = useState(true);
 
   const [syncLoading, setSyncLoading] = useState(false);
 
@@ -36,15 +42,66 @@ export const DashboardScreen: React.FC = () => {
     fetchVideos();
   }, []);
 
-  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const resetUploadModal = () => {
+    setSelectedFile(null);
+    setUploadTitulo('');
+    setUploadFechaInicio('');
+    setUploadFechaFin('');
+    setUploadActivo(true);
+    setIsUploadModalOpen(false);
+  };
+
+  const handleUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (!event.target.files?.length) return;
+    const file = event.target.files[0];
+    const maxSize = 20 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setError('El archivo excede el tamaño máximo permitido (20 MB).');
+      showNotification('El archivo excede el tamaño máximo permitido (20 MB)', 'warning');
+      event.target.value = '';
+      return;
+    }
+    const decoratedDefault = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' ').trim();
+    setSelectedFile(file);
+    setUploadTitulo(decoratedDefault || file.name);
+    setUploadFechaInicio('');
+    setUploadFechaFin('');
+    setUploadActivo(true);
+    setIsUploadModalOpen(true);
+    event.target.value = '';
+  };
+
+  const handleSubmitUpload = async () => {
+    if (!selectedFile) {
+      showNotification('Selecciona un archivo primero', 'warning');
+      return;
+    }
+    if (!uploadTitulo.trim()) {
+      showNotification('El título es obligatorio', 'warning');
+      return;
+    }
+
+    const fechaInicioIso = uploadFechaInicio ? new Date(uploadFechaInicio).toISOString() : null;
+    const fechaFinIso = uploadFechaFin ? new Date(uploadFechaFin).toISOString() : null;
+
+    if (fechaInicioIso && fechaFinIso && new Date(fechaInicioIso) > new Date(fechaFinIso)) {
+      showNotification('La fecha de inicio no puede ser mayor a la fecha fin', 'warning');
+      return;
+    }
+
     setUploading(true);
     setError(null);
     try {
-      await uploadMedia(event.target.files[0]);
+      await uploadMedia(selectedFile, {
+        titulo: uploadTitulo.trim(),
+        fechaInicio: fechaInicioIso,
+        fechaFin: fechaFinIso,
+        activo: uploadActivo,
+      });
       const data = await getVideos();
       setVideos(data);
       showNotification('Archivo subido correctamente', 'success');
+      resetUploadModal();
     } catch (err: any) {
       setError('Error uploading archivo');
       showNotification('Error al subir archivo', 'error');
@@ -267,6 +324,89 @@ export const DashboardScreen: React.FC = () => {
           })()}
         </div>
       </div>
+
+      {isUploadModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-lg bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl p-5">
+            <div className="flex items-start justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Datos del Archivo</h3>
+              <button
+                type="button"
+                className="text-slate-500 hover:text-red-500 text-xl leading-none"
+                onClick={resetUploadModal}
+                disabled={uploading}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Título</label>
+                <input
+                  type="text"
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
+                  value={uploadTitulo}
+                  onChange={(e) => setUploadTitulo(e.target.value)}
+                  placeholder="Ej: Promo principal - Sucursal Centro"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Fecha Inicio</label>
+                  <input
+                    type="datetime-local"
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
+                    value={uploadFechaInicio}
+                    onChange={(e) => setUploadFechaInicio(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Fecha Fin</label>
+                  <input
+                    type="datetime-local"
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
+                    value={uploadFechaFin}
+                    onChange={(e) => setUploadFechaFin(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Estado</label>
+                <select
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
+                  value={uploadActivo ? 'activo' : 'inactivo'}
+                  onChange={(e) => setUploadActivo(e.target.value === 'activo')}
+                >
+                  <option value="activo">Activo</option>
+                  <option value="inactivo">Inactivo</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={resetUploadModal}
+                disabled={uploading}
+                className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmitUpload}
+                disabled={uploading}
+                className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-semibold disabled:opacity-60"
+              >
+                {uploading ? 'Subiendo...' : 'Guardar y Subir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

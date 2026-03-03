@@ -16,6 +16,9 @@ export interface Video {
   date: string;
   size: string;
   status: VideoStatus;
+  activo?: boolean;
+  fechaInicio?: string | null;
+  fechaFin?: string | null;
   prioridad?: number;
   views?: number;
 }

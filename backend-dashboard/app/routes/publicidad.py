@@ -2,8 +2,9 @@ import os
 import shutil
 import uuid
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Path
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from ..models import Publicidad
@@ -11,10 +12,46 @@ from ..schemas import PublicidadResponse, PublicidadCreate
 from ..database import get_db_usuarios
 from ..dependencies import get_current_cliente
 from ..services.notificacion_service import registrar_accion
-from ..services.replicacion_service import replicar_archivo_al_api, Borrado_api
+from ..services.replicacion_service import replicar_archivo_al_api, Borrado_api, actualizar_estado_api, actualizar_metadata_api
 
 
 router = APIRouter()
+
+
+def _format_size_human(size_bytes: int) -> str:
+    if size_bytes <= 0:
+        return "0 B"
+    units = ["B", "KB", "MB", "GB", "TB"]
+    value = float(size_bytes)
+    unit_index = 0
+    while value >= 1024 and unit_index < len(units) - 1:
+        value /= 1024
+        unit_index += 1
+    if unit_index == 0:
+        return f"{int(value)} {units[unit_index]}"
+    return f"{value:.1f} {units[unit_index]}"
+
+
+def _resolve_banner_size(url: str | None) -> tuple[int, str]:
+    if not url:
+        return 0, "0 B"
+    file_path = os.path.normpath(
+        os.path.join(os.path.dirname(__file__), "..", "..", url.lstrip("/"))
+    )
+    if not os.path.isfile(file_path):
+        return 0, "0 B"
+    size_bytes = os.path.getsize(file_path)
+    return size_bytes, _format_size_human(size_bytes)
+
+
+class EstadoBannerBody(BaseModel):
+    activo: bool
+
+
+class BannerMetadataBody(BaseModel):
+    activo: Optional[bool] = None
+    fecha_inicio: Optional[datetime] = None
+    fecha_fin: Optional[datetime] = None
 
 
 @router.get("/banners")
@@ -25,10 +62,29 @@ async def listar_banners(
     try:
         result = await db.execute(select(Publicidad).order_by(Publicidad.Prioridad, Publicidad.IdPublicidad))
         banners = result.scalars().all()
+        banners_payload = []
+        for banner in banners:
+            size_bytes, size_human = _resolve_banner_size(banner.Url)
+            banners_payload.append(
+                {
+                    "IdPublicidad": banner.IdPublicidad,
+                    "Titulo": banner.Titulo,
+                    "Tipo": banner.Tipo,
+                    "Url": banner.Url,
+                    "Activo": banner.Activo,
+                    "Prioridad": banner.Prioridad,
+                    "FechaInicio": banner.FechaInicio.isoformat() if banner.FechaInicio else None,
+                    "FechaFin": banner.FechaFin.isoformat() if banner.FechaFin else None,
+                    "DuracionSeg": banner.DuracionSeg,
+                    "UpdatedAt": banner.UpdatedAt.isoformat() if banner.UpdatedAt else None,
+                    "size_bytes": size_bytes,
+                    "size_human": size_human,
+                }
+            )
         return {
             "success": True,
             "message": "Banners obtenidos correctamente.",
-            "banners": banners
+            "banners": banners_payload,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener banners: {str(e)}")
@@ -71,6 +127,7 @@ def listar_archivos_banners(current_user: dict = Depends(get_current_cliente)):
 async def upload_banner(
     file: UploadFile = File(...),
     Titulo: str = Form(None),
+    Activo: bool = Form(True),
     Prioridad: int = Form(0),
     FechaInicio: str = Form(None),
     FechaFin: str = Form(None),
@@ -87,10 +144,10 @@ async def upload_banner(
     allowed_videos = ["mp4", "webm", "mkv", "avi", "mov"]
     if ext in allowed_images:
         Tipo = "image"
-        max_size = 10 * 1024 * 1024  # 10 MB
+        max_size = 20 * 1024 * 1024  # 20 MB
     elif ext in allowed_videos:
         Tipo = "video"
-        max_size = 100 * 1024 * 1024  # 100 MB
+        max_size = 20 * 1024 * 1024  # 20 MB
     else:
         raise HTTPException(status_code=400, detail=f"Tipo de archivo no permitido: .{ext}")
 
@@ -121,11 +178,13 @@ async def upload_banner(
     try:
         FechaInicio_dt = datetime.fromisoformat(FechaInicio) if FechaInicio else None
         FechaFin_dt = datetime.fromisoformat(FechaFin) if FechaFin else None
+        if FechaInicio_dt and FechaFin_dt and FechaInicio_dt > FechaFin_dt:
+            raise HTTPException(status_code=400, detail="Rango inválido: FechaInicio no puede ser mayor que FechaFin.")
         nuevo_banner = Publicidad(
             Titulo=Titulo,
             Tipo=Tipo,
             Url=url,
-            Activo=True,
+            Activo=Activo,
             Prioridad=Prioridad,
             FechaInicio=FechaInicio_dt,
             FechaFin=FechaFin_dt,
@@ -135,6 +194,10 @@ async def upload_banner(
         await db.commit()
         await db.refresh(nuevo_banner)
         print(f"Se ha guardado correctamente en la base de datos: Id={nuevo_banner.IdPublicidad}, Titulo={nuevo_banner.Titulo}, Url={nuevo_banner.Url}")
+    except HTTPException:
+        if os.path.exists(file_location):
+            os.remove(file_location)
+        raise
     except Exception as e:
         # Si falla la BD, elimina el archivo subido
         if os.path.exists(file_location):
@@ -144,7 +207,7 @@ async def upload_banner(
     # Replicar archivo al backend-api y guardar el ID remoto
     id_remoto = None
     try:
-        api_url = os.getenv("BACKEND_API_URL", "http://192.168.1.109:8000/api")
+        api_url = os.getenv("BACKEND_API_URL")
         print(f"Replicando archivo al backend-api: {file_location} -> {api_url}")
         resp = await replicar_archivo_al_api(
                 api_url=api_url,
@@ -155,7 +218,8 @@ async def upload_banner(
                 prioridad=Prioridad,
                 fecha_inicio=FechaInicio,
                 fecha_fin=FechaFin,
-                duracion_seg=DuracionSeg
+                duracion_seg=DuracionSeg,
+                activo=Activo,
             )
         print("Replicación al backend-api finalizada")
         id_remoto = resp.get("id") if resp else None
@@ -205,7 +269,7 @@ async def eliminar_banner(
                 os.remove(file_path)
         # Intentar borrar remotamente en backend-api usando el IdPublicidad como IdPublicidadRemoto
         try:
-            api_url = os.getenv("BACKEND_API_URL", "http://192.168.1.109:8000/api")
+            api_url = os.getenv("BACKEND_API_URL")
             remote_id = banner.IdPublicidad
             remote_result = await Borrado_api(api_url, remote_id)
             if not remote_result.get("success", False):
@@ -222,5 +286,132 @@ async def eliminar_banner(
         return {"success": True, "message": "Banner eliminado correctamente."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al eliminar banner: {str(e)}")
+
+
+@router.patch("/banners/{id}/estado")
+async def cambiar_estado_banner(
+    id: int = Path(..., description="ID del banner"),
+    body: EstadoBannerBody = ...,
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_cliente),
+):
+    banner = await db.get(Publicidad, id)
+    if not banner:
+        raise HTTPException(status_code=404, detail="Banner no encontrado.")
+
+    estado_anterior = bool(banner.Activo)
+    banner.Activo = body.activo
+    await db.commit()
+    await db.refresh(banner)
+
+    # Replica estado al backend-api (si falla, revierte para evitar desalineación)
+    try:
+        api_url = os.getenv("BACKEND_API_URL")
+        remote_result = await actualizar_estado_api(
+            api_url=api_url,
+            id_remoto=banner.IdPublicidad,
+            activo=body.activo,
+        )
+        if not remote_result.get("success", False):
+            raise Exception(remote_result.get("message", "Error remoto sin detalle"))
+    except Exception as e:
+        banner.Activo = estado_anterior
+        await db.commit()
+        raise HTTPException(status_code=502, detail=f"No se pudo actualizar estado remoto: {str(e)}")
+
+    user_id = current_user.get("user_id") if current_user else None
+    if user_id is not None:
+        await registrar_accion(
+            db,
+            user_id,
+            "CAMBIO_ESTADO_MULTIMEDIA",
+            f"Banner IdPublicidad={banner.IdPublicidad} -> {'ACTIVO' if banner.Activo else 'INACTIVO'}",
+        )
+
+    return {
+        "success": True,
+        "message": "Estado actualizado correctamente.",
+        "banner": {
+            "IdPublicidad": banner.IdPublicidad,
+            "Activo": banner.Activo,
+        },
+    }
+
+
+@router.patch("/banners/{id}")
+async def actualizar_banner_metadata(
+    id: int = Path(..., description="ID del banner"),
+    body: BannerMetadataBody = ...,
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_cliente),
+):
+    """
+    Actualiza Activo, FechaInicio y FechaFin.
+    Validación: si ambas fechas existen, FechaInicio <= FechaFin.
+    Replica al backend-api por IdPublicidadRemoto.
+    """
+    banner = await db.get(Publicidad, id)
+    if not banner:
+        raise HTTPException(status_code=404, detail="Banner no encontrado.")
+
+    fecha_inicio = body.fecha_inicio
+    fecha_fin = body.fecha_fin
+
+    if fecha_inicio and fecha_fin and fecha_inicio > fecha_fin:
+        raise HTTPException(
+            status_code=400,
+            detail="Rango inválido: FechaInicio no puede ser mayor que FechaFin.",
+        )
+
+    prev_activo = banner.Activo
+    prev_inicio = banner.FechaInicio
+    prev_fin = banner.FechaFin
+
+    if body.activo is not None:
+        banner.Activo = body.activo
+    banner.FechaInicio = fecha_inicio
+    banner.FechaFin = fecha_fin
+
+    await db.commit()
+    await db.refresh(banner)
+
+    try:
+        api_url = os.getenv("BACKEND_API_URL")
+        remote_result = await actualizar_metadata_api(
+            api_url=api_url,
+            id_remoto=banner.IdPublicidad,
+            activo=banner.Activo,
+            fecha_inicio=banner.FechaInicio.isoformat() if banner.FechaInicio else None,
+            fecha_fin=banner.FechaFin.isoformat() if banner.FechaFin else None,
+        )
+        if not remote_result.get("success", False):
+            raise Exception(remote_result.get("message", "Error remoto sin detalle"))
+    except Exception as e:
+        banner.Activo = prev_activo
+        banner.FechaInicio = prev_inicio
+        banner.FechaFin = prev_fin
+        await db.commit()
+        raise HTTPException(status_code=502, detail=f"No se pudo actualizar remotamente: {str(e)}")
+
+    user_id = current_user.get("user_id") if current_user else None
+    if user_id is not None:
+        await registrar_accion(
+            db,
+            user_id,
+            "EDICION_VIGENCIA_MULTIMEDIA",
+            f"Banner IdPublicidad={banner.IdPublicidad}, Activo={banner.Activo}, "
+            f"FechaInicio={banner.FechaInicio}, FechaFin={banner.FechaFin}",
+        )
+
+    return {
+        "success": True,
+        "message": "Banner actualizado correctamente.",
+        "banner": {
+            "IdPublicidad": banner.IdPublicidad,
+            "Activo": banner.Activo,
+            "FechaInicio": banner.FechaInicio.isoformat() if banner.FechaInicio else None,
+            "FechaFin": banner.FechaFin.isoformat() if banner.FechaFin else None,
+        },
+    }
 
 

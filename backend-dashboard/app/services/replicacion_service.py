@@ -11,6 +11,7 @@ async def replicar_archivo_al_api(
     fecha_inicio: str = None,
     fecha_fin: str = None,
     duracion_seg: int = None,
+    activo: bool = True,
     timeout: int = 30
 ) -> dict:
     """
@@ -30,6 +31,7 @@ async def replicar_archivo_al_api(
             "fecha_inicio": fecha_inicio,
             "fecha_fin": fecha_fin,
             "duracion_seg": duracion_seg,
+            "activo": activo,
         }
         data = {k: v for k, v in data.items() if v is not None}
 
@@ -62,3 +64,50 @@ async def Borrado_api(api_url: str, id_remoto: int, timeout: int = 30) -> dict:
         return response.json()
     except Exception:
         return {"success": False, "message": f"Respuesta inválida del API: {response.text}"}
+
+
+async def actualizar_estado_api(api_url: str, id_remoto: int, activo: bool, timeout: int = 15) -> dict:
+    """
+    Actualiza Activo/Inactivo en backend-api usando IdPublicidadRemoto.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.patch(
+                f"{api_url}/banners/remoto/{id_remoto}/estado",
+                json={"activo": activo},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data if isinstance(data, dict) else {"success": True}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
+async def actualizar_metadata_api(
+    api_url: str,
+    id_remoto: int,
+    activo: bool | None = None,
+    fecha_inicio: str | None = None,
+    fecha_fin: str | None = None,
+    timeout: int = 15,
+) -> dict:
+    """
+    Actualiza metadatos (activo/fecha_inicio/fecha_fin) en backend-api por IdPublicidadRemoto.
+    """
+    payload: dict = {}
+    if activo is not None:
+        payload["activo"] = activo
+    payload["fecha_inicio"] = fecha_inicio
+    payload["fecha_fin"] = fecha_fin
+
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.patch(
+                f"{api_url.rstrip('/')}/banners/remoto/{id_remoto}",
+                json=payload,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data if isinstance(data, dict) else {"success": True}
+    except Exception as e:
+        return {"success": False, "message": str(e)}

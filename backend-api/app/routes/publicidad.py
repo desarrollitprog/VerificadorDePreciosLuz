@@ -1,20 +1,38 @@
 from fastapi import UploadFile, File, Form, APIRouter, HTTPException, status, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from ..database import get_db_publicidad
 import shutil
 from datetime import datetime
 import os
-from typing import List
+from typing import List, Optional
+from pydantic import BaseModel
 from ..schemas import PublicidadResponse
 from ..models.publicidad import Publicidad
 
 router = APIRouter()
 
+
+class EstadoRemotoBody(BaseModel):
+    activo: bool
+
+
+class BannerRemotoUpdateBody(BaseModel):
+    activo: Optional[bool] = None
+    fecha_inicio: Optional[datetime] = None
+    fecha_fin: Optional[datetime] = None
+
 @router.get("/banners", response_model=List[PublicidadResponse])
 async def listar_banners(db: AsyncSession = Depends(get_db_publicidad)):
+    now = datetime.utcnow()
     result = await db.execute(
-        select(Publicidad).order_by(Publicidad.prioridad, Publicidad.id)
+        select(Publicidad)
+        .where(
+            Publicidad.activo.is_(True),
+            or_(Publicidad.fecha_inicio.is_(None), Publicidad.fecha_inicio <= now),
+            or_(Publicidad.fecha_fin.is_(None), Publicidad.fecha_fin >= now),
+        )
+        .order_by(Publicidad.prioridad, Publicidad.id)
     )
     banners = result.scalars().all()
     return [PublicidadResponse.model_validate(banner.__dict__) for banner in banners]
@@ -25,6 +43,7 @@ async def replicar_archivo(
     IdPublicidadRemoto: int = Form(None),
     titulo: str = Form(None),
     tipo: str = Form(None),
+    activo: bool = Form(True),
     prioridad: int = Form(0),
     fecha_inicio: str = Form(None),
     fecha_fin: str = Form(None),
@@ -47,6 +66,13 @@ async def replicar_archivo(
     else:
         raise HTTPException(status_code=400, detail=f"Tipo de archivo no permitido: .{ext}")
 
+    max_size = 20 * 1024 * 1024  # 20 MB
+    file.file.seek(0, 2)
+    file_size = file.file.tell()
+    file.file.seek(0)
+    if file_size > max_size:
+        raise HTTPException(status_code=400, detail="El archivo excede el tamaño máximo permitido (20 MB).")
+
     filename = file.filename
     file_location = os.path.join(banners_dir, filename)
     if os.path.exists(file_location):
@@ -67,7 +93,7 @@ async def replicar_archivo(
             titulo=titulo,
             tipo=tipo or tipo_archivo,
             url=url,
-            activo=True,
+            activo=activo,
             prioridad=prioridad,
             fecha_inicio=fecha_inicio_dt,
             fecha_fin=fecha_fin_dt,
@@ -107,3 +133,67 @@ async def eliminar_banner_remoto(id_remoto: int, db: AsyncSession = Depends(get_
     await db.delete(banner)
     await db.commit()
     return {"success": True, "message": "Banner eliminado correctamente por IdPublicidadRemoto."}
+
+
+@router.patch("/banners/remoto/{id_remoto}/estado")
+async def actualizar_estado_remoto(
+    id_remoto: int,
+    body: EstadoRemotoBody,
+    db: AsyncSession = Depends(get_db_publicidad),
+):
+    result = await db.execute(
+        select(Publicidad).where(Publicidad.IdPublicidadRemoto == id_remoto)
+    )
+    banner = result.scalars().first()
+    if not banner:
+        raise HTTPException(status_code=404, detail="Banner no encontrado por IdPublicidadRemoto")
+
+    banner.activo = body.activo
+    await db.commit()
+    await db.refresh(banner)
+
+    return {
+        "success": True,
+        "message": "Estado remoto actualizado.",
+        "id": banner.id,
+        "IdPublicidadRemoto": banner.IdPublicidadRemoto,
+        "activo": banner.activo,
+    }
+
+
+@router.patch("/banners/remoto/{id_remoto}")
+async def actualizar_banner_remoto(
+    id_remoto: int,
+    body: BannerRemotoUpdateBody,
+    db: AsyncSession = Depends(get_db_publicidad),
+):
+    result = await db.execute(
+        select(Publicidad).where(Publicidad.IdPublicidadRemoto == id_remoto)
+    )
+    banner = result.scalars().first()
+    if not banner:
+        raise HTTPException(status_code=404, detail="Banner no encontrado por IdPublicidadRemoto")
+
+    if body.fecha_inicio and body.fecha_fin and body.fecha_inicio > body.fecha_fin:
+        raise HTTPException(
+            status_code=400,
+            detail="Rango inválido: fecha_inicio no puede ser mayor que fecha_fin.",
+        )
+
+    if body.activo is not None:
+        banner.activo = body.activo
+    banner.fecha_inicio = body.fecha_inicio
+    banner.fecha_fin = body.fecha_fin
+
+    await db.commit()
+    await db.refresh(banner)
+
+    return {
+        "success": True,
+        "message": "Banner remoto actualizado.",
+        "id": banner.id,
+        "IdPublicidadRemoto": banner.IdPublicidadRemoto,
+        "activo": banner.activo,
+        "fecha_inicio": banner.fecha_inicio.isoformat() if banner.fecha_inicio else None,
+        "fecha_fin": banner.fecha_fin.isoformat() if banner.fecha_fin else None,
+    }

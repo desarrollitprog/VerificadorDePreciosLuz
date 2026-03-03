@@ -22,7 +22,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, on
     <aside
       className={`
         fixed inset-y-0 left-0 z-40
-        w-56 flex flex-col bg-[#111a22] border-r border-slate-800
+        w-64 flex flex-col bg-[#111a22] border-r border-slate-800
         transform transition-transform duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
       `}

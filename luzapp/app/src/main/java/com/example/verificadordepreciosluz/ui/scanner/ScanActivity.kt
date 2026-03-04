@@ -117,6 +117,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private var standbyTimerRunnable: Runnable? = null
     private var standbySlideRunnable: Runnable? = null
     private var resultHideRunnable: Runnable? = null
+    private var currentStandbyBitmap: Bitmap? = null
     private val deviceId: String by lazy {
         Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
     }
@@ -558,6 +559,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         standbySlideRunnable?.let { uiHandler.removeCallbacks(it) }
         binding.standbyImage.visibility = View.GONE
         binding.standbyVideo.visibility = View.GONE
+        releaseStandbyBitmap()
         if (item.tipo == "video") {
             binding.standbyVideo.visibility = View.VISIBLE
             binding.standbyVideo.setOnCompletionListener {
@@ -587,14 +589,15 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             binding.standbyVideo.start()
         } else {
             binding.standbyImage.visibility = View.VISIBLE
-            val options = BitmapFactory.Options().apply {
-                inPreferredConfig = Bitmap.Config.ARGB_8888
-                inScaled = false
-            }
-            val bitmap = BitmapFactory.decodeFile(item.localPath, options)
+            val reqWidth = if (binding.standbyImage.width > 0) binding.standbyImage.width else resources.displayMetrics.widthPixels
+            val reqHeight = if (binding.standbyImage.height > 0) binding.standbyImage.height else resources.displayMetrics.heightPixels
+            val bitmap = decodeSampledBitmap(item.localPath, reqWidth, reqHeight)
             if (bitmap == null) {
                 Log.w(TAG, "Standby: bitmap nulo para ${item.localPath}")
+                nextStandbyItem()
+                return
             }
+            currentStandbyBitmap = bitmap
             binding.standbyImage.setImageBitmap(bitmap)
             val durationMs = ((item.duracionSeg ?: 10) * 1000L)
             standbySlideRunnable = Runnable { nextStandbyItem() }
@@ -616,8 +619,50 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         standbySlideRunnable?.let { uiHandler.removeCallbacks(it) }
         binding.standbyVideo.stopPlayback()
         binding.standbyOverlay.visibility = View.GONE
-        binding.standbyImage.setImageDrawable(null)
+        releaseStandbyBitmap()
         Log.d(TAG, "Standby: detenido")
+    }
+
+    private fun releaseStandbyBitmap() {
+        binding.standbyImage.setImageDrawable(null)
+        currentStandbyBitmap?.let {
+            if (!it.isRecycled) it.recycle()
+        }
+        currentStandbyBitmap = null
+    }
+
+    private fun decodeSampledBitmap(path: String, reqWidth: Int, reqHeight: Int): Bitmap? {
+        return try {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(path, bounds)
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+
+            val decodeOptions = BitmapFactory.Options().apply {
+                inPreferredConfig = Bitmap.Config.RGB_565
+                inDither = true
+                inScaled = false
+                inSampleSize = calculateInSampleSize(bounds.outWidth, bounds.outHeight, reqWidth, reqHeight)
+            }
+            BitmapFactory.decodeFile(path, decodeOptions)
+        } catch (oom: OutOfMemoryError) {
+            Log.e(TAG, "Standby: OOM decodificando imagen $path", oom)
+            null
+        } catch (e: Exception) {
+            Log.e(TAG, "Standby: error decodificando imagen $path", e)
+            null
+        }
+    }
+
+    private fun calculateInSampleSize(srcWidth: Int, srcHeight: Int, reqWidth: Int, reqHeight: Int): Int {
+        var inSampleSize = 1
+        if (srcHeight > reqHeight || srcWidth > reqWidth) {
+            var halfHeight = srcHeight / 2
+            var halfWidth = srcWidth / 2
+            while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
+                inSampleSize *= 2
+            }
+        }
+        return inSampleSize.coerceAtLeast(1)
     }
 
     // 2.1) Re-sincronizar respaldo local cuando vuelve la conexión

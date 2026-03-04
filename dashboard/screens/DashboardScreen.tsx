@@ -5,6 +5,37 @@ import { getVideos, uploadMedia, deleteVideo } from '../services/videoService';
 import { Video } from '../types';
 import { getForceSyncJobStatus, startForceSyncJob } from '../services/monitoreoService';
 
+type SyncServerProgress = {
+  nombre: string;
+  ip: string;
+  total: number;
+  confirmed: number;
+  failed: number;
+  progress: number;
+  ok?: boolean;
+  reason?: string;
+};
+
+const normalizeServerProgress = (details: any[] = []): SyncServerProgress[] => {
+  return details.map((detail) => {
+    const total = Number(detail.sync_total ?? 0);
+    const confirmed = Number(detail.sync_confirmed ?? 0);
+    const failed = Number(detail.sync_failed ?? 0);
+    const progress = total > 0 ? Math.min(100, Math.round((confirmed / total) * 100)) : 0;
+
+    return {
+      nombre: String(detail.nombre ?? detail.ip ?? 'Servidor'),
+      ip: String(detail.ip ?? ''),
+      total,
+      confirmed,
+      failed,
+      progress,
+      ok: detail.ok,
+      reason: detail.reason,
+    };
+  });
+};
+
 export const DashboardScreen: React.FC = () => {
   const showNotification = useNotification();
   const [preview, setPreview] = useState<{url: string, tipo: string, titulo: string} | null>(null);
@@ -25,6 +56,8 @@ export const DashboardScreen: React.FC = () => {
   const [uploadActivo, setUploadActivo] = useState(true);
 
   const [syncLoading, setSyncLoading] = useState(false);
+  const [syncServerProgress, setSyncServerProgress] = useState<SyncServerProgress[]>([]);
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchVideos() {
@@ -124,6 +157,7 @@ export const DashboardScreen: React.FC = () => {
 
   const handleForceSync = async () => {
     setSyncLoading(true);
+    setSyncServerProgress([]);
     try {
       const start = await startForceSyncJob();
       if (!start.success || !start.job_id) {
@@ -138,6 +172,7 @@ export const DashboardScreen: React.FC = () => {
       for (let i = 0; i < maxPolls; i++) {
         await new Promise((resolve) => setTimeout(resolve, pollDelayMs));
         const status = await getForceSyncJobStatus(start.job_id);
+        setSyncServerProgress(normalizeServerProgress(status.details || []));
 
         if (status.status === 'COMPLETED' || status.status === 'FAILED') {
           finalStatus = status;
@@ -149,6 +184,8 @@ export const DashboardScreen: React.FC = () => {
         showNotification('Sincronización en progreso', 'warning');
         return;
       }
+
+      setLastSyncAt(new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
 
       if (finalStatus.status === 'COMPLETED') {
         const successCount = finalStatus.success_count ?? 0;
@@ -232,17 +269,53 @@ export const DashboardScreen: React.FC = () => {
           </div>
           <Film className="text-slate-400" size={32} />
         </div>
-        {/*<div className="bg-white dark:bg-[#1c2936] p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between shadow-sm">
-          <div>
-            <p className="text-slate-500 text-xs font-medium uppercase tracking-wider">Almacenamiento usado</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-              {/* Aquí debes mostrar el almacenamiento real del servidor secundario, por ejemplo: */}
-              {/* {servidores[0]?.almacenamiento || 'N/A'} 
-              N/A
-            </p>
+        <div className="bg-white dark:bg-[#1c2936] p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-slate-500 text-xs font-medium uppercase tracking-wider">
+                Progreso de sincronización por servidor
+              </p>
+              {lastSyncAt && (
+                <p className="text-[11px] text-slate-500 mt-1">Última sync: {lastSyncAt}</p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setSyncServerProgress([]);
+                setLastSyncAt(null);
+              }}
+              className="text-xs px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
+              disabled={syncLoading || (syncServerProgress.length === 0 && !lastSyncAt)}
+            >
+              Limpiar resultado
+            </button>
           </div>
-          <HardDrive className="text-slate-400" size={32} />
-        </div>*/}
+
+          {syncServerProgress.length === 0 ? (
+            <p className="text-sm text-slate-500 mt-2">Sin sincronización activa.</p>
+          ) : (
+            <div className="mt-3 space-y-3">
+              {syncServerProgress.map((serverProgress) => (
+                <div key={`${serverProgress.ip}-${serverProgress.nombre}`}>
+                  <div className="flex justify-between text-xs mb-1 gap-2">
+                    <span className="truncate">{serverProgress.nombre} ({serverProgress.ip})</span>
+                    <span>
+                      {serverProgress.confirmed}/{serverProgress.total} ({serverProgress.progress}%)
+                    </span>
+                  </div>
+                  <div className="w-full h-2.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <div
+                      className={`h-2.5 ${serverProgress.failed > 0 ? 'bg-amber-500' : 'bg-primary'}`}
+                      style={{ width: `${serverProgress.progress}%` }}
+                    />
+                  </div>
+                  {serverProgress.reason ? <p className="text-[11px] text-red-500 mt-1">{serverProgress.reason}</p> : null}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Grid */}

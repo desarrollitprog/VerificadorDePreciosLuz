@@ -3,12 +3,12 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import func
+from sqlalchemy import and_, func
 from sqlalchemy.exc import IntegrityError
 from app.models import Notificacion, NotificacionLeida
+from app.models.usuario import Usuario
 from app.database import get_db_usuarios
 from app.dependencies import get_current_cliente
-from sqlalchemy.orm import selectinload
 from app.services.notificacion_service import registrar_accion
 from pydantic import BaseModel
 
@@ -32,25 +32,35 @@ async def listar_notificaciones(
             "unread_count": 0,
         }
 
-    read_count_stmt = select(func.count()).select_from(NotificacionLeida).where(NotificacionLeida.usuario_id == user_id)
-    read_count_result = await db.execute(read_count_stmt)
-    read_count = int(read_count_result.scalar() or 0)
-
-    total_count_stmt = select(func.count()).select_from(Notificacion)
-    total_count_result = await db.execute(total_count_stmt)
-    total_count = int(total_count_result.scalar() or 0)
-
-    unread_count = max(total_count - read_count, 0)
+    unread_count_stmt = (
+        select(func.count(Notificacion.id))
+        .select_from(Notificacion)
+        .outerjoin(
+            NotificacionLeida,
+            and_(
+                NotificacionLeida.notificacion_id == Notificacion.id,
+                NotificacionLeida.usuario_id == user_id,
+            ),
+        )
+        .where(NotificacionLeida.notificacion_id.is_(None))
+    )
+    unread_count_result = await db.execute(unread_count_stmt)
+    unread_count = int(unread_count_result.scalar() or 0)
 
     stmt = (
-        select(Notificacion)
-        .options(selectinload(Notificacion.usuario))
+        select(Notificacion, Usuario.nombre_usuario.label("nombre_usuario"))
+        .outerjoin(Usuario, Usuario.id == Notificacion.usuario_id)
         .order_by(Notificacion.fecha_creacion.desc())
         .offset(offset)
         .limit(limit)
     )
     result = await db.execute(stmt)
-    notificaciones = result.scalars().all()
+    rows = result.all()
+    notificaciones = [row[0] for row in rows]
+    nombres_por_id = {
+        row[0].id: row[1]
+        for row in rows
+    }
 
     notification_ids = [n.id for n in notificaciones]
     leidas_ids: set[int] = set()
@@ -68,7 +78,7 @@ async def listar_notificaciones(
             {
                 **n.__dict__,
                 "leida": n.id in leidas_ids,
-                "nombre_usuario": n.usuario.nombre_usuario if n.usuario else None
+                "nombre_usuario": nombres_por_id.get(n.id)
             }
             for n in notificaciones
         ],

@@ -304,36 +304,49 @@ export const DashboardScreen: React.FC = () => {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white dark:bg-[#1c2936] p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between shadow-sm">
-          <div className="min-w-0">
-            <p className="text-slate-500 text-xs font-medium uppercase tracking-wider">Videos Totales</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">Local: {Array.isArray(videos) ? videos.length : 0}</p>
-            <div className="mt-3">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                <span className="text-xs text-slate-500">Servidor secundario:</span>
-                <select
-                  className="text-xs rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2 py-1"
-                  value={selectedSecondaryServerId}
-                  onChange={(e) => setSelectedSecondaryServerId(e.target.value)}
-                  disabled={secondaryVideoCounts.length === 0}
-                >
-                  {secondaryVideoCounts.length === 0 ? (
-                    <option value="">Sin servidores conectados</option>
-                  ) : (
-                    secondaryVideoCounts.map((server) => (
-                      <option key={server.id} value={server.id}>
-                        {server.nombre} ({server.ip})
-                      </option>
-                    ))
-                  )}
-                </select>
+        <div className="bg-white dark:bg-[#1c2936] p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <p className="text-slate-500 text-xs font-medium uppercase tracking-wider">Videos Totales</p>
+                <div className="flex items-center gap-2 min-w-0 sm:max-w-[65%] w-full sm:w-auto">
+                  <span className="text-xs text-slate-500 whitespace-nowrap">Servidor secundario:</span>
+                  <select
+                    className="text-xs rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2 py-1 h-8 min-w-0 w-full sm:w-[240px]"
+                    value={selectedSecondaryServerId}
+                    onChange={(e) => setSelectedSecondaryServerId(e.target.value)}
+                    disabled={secondaryVideoCounts.length === 0}
+                  >
+                    {secondaryVideoCounts.length === 0 ? (
+                      <option value="">Sin servidores conectados</option>
+                    ) : (
+                      secondaryVideoCounts.map((server) => (
+                        <option key={server.id} value={server.id} title={`${server.nombre} (${server.ip})`}>
+                          {server.nombre} ({server.ip})
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
               </div>
-              <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 mt-2">
-                Secundario: {selectedSecondaryServer ? selectedSecondaryServer.videos_actuales : 0}
-              </p>
+
+              <div className="mt-3 rounded-lg border border-slate-200 dark:border-slate-700 divide-x divide-slate-200 dark:divide-slate-700 grid grid-cols-2">
+                <div className="px-3 py-2 text-center">
+                  <p className="text-[11px] uppercase tracking-wide text-slate-500">Local</p>
+                  <p className="text-2xl font-bold text-slate-900 dark:text-white leading-tight">
+                    {Array.isArray(videos) ? videos.length : 0}
+                  </p>
+                </div>
+                <div className="px-3 py-2 text-center">
+                  <p className="text-[11px] uppercase tracking-wide text-slate-500">Secundario</p>
+                  <p className="text-2xl font-bold text-slate-900 dark:text-white leading-tight">
+                    {selectedSecondaryServer ? selectedSecondaryServer.videos_actuales : 0}
+                  </p>
+                </div>
+              </div>
             </div>
+            <Film className="text-slate-400 shrink-0 mt-1" size={32} />
           </div>
-          <Film className="text-slate-400" size={32} />
         </div>
         <div className="bg-white dark:bg-[#1c2936] p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
           <div className="flex items-start justify-between gap-3">
@@ -401,7 +414,7 @@ export const DashboardScreen: React.FC = () => {
               );
             });
             // Renderizar tarjetas
-            return filteredVideos.length > 0 ? filteredVideos.map((video, idx) => (
+            return filteredVideos.length > 0 ? filteredVideos.map((video) => (
               <div key={video.id} className="group relative bg-white dark:bg-[#1c2936] rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 hover:border-primary/50 transition-all hover:shadow-xl hover:shadow-slate-900/10 dark:hover:shadow-black/40 flex flex-col">
                 {/* Thumbnail */}
                 <div className="aspect-video bg-slate-800 relative overflow-hidden">
@@ -443,20 +456,19 @@ export const DashboardScreen: React.FC = () => {
                       <Eye size={14} />
                       Reproducir
                     </button>
-                          {/* Modal de vista previa */}
-                          {preview && (
-                            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-                              <div className="bg-white dark:bg-[#1c2936] rounded-lg shadow-lg p-6 max-w-lg w-full relative">
-                                <button onClick={closePreview} className="absolute top-2 right-2 text-slate-500 hover:text-red-500 text-xl font-bold">&times;</button>
-                                <div className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">{preview.titulo}</div>
-                                {preview.tipo === 'image' ? (
-                                  <img src={preview.url} alt={preview.titulo} className="max-h-[60vh] w-auto mx-auto rounded" />
-                                ) : (
-                                  <video src={preview.url} controls autoPlay className="max-h-[60vh] w-auto mx-auto rounded" />
-                                )}
-                              </div>
-                            </div>
+                    {preview && (
+                      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+                        <div className="bg-white dark:bg-[#1c2936] rounded-lg shadow-lg p-6 max-w-lg w-full relative">
+                          <button onClick={closePreview} className="absolute top-2 right-2 text-slate-500 hover:text-red-500 text-xl font-bold">&times;</button>
+                          <div className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">{preview.titulo}</div>
+                          {preview.tipo === 'image' ? (
+                            <img src={preview.url} alt={preview.titulo} className="max-h-[60vh] w-auto mx-auto rounded" />
+                          ) : (
+                            <video src={preview.url} controls autoPlay className="max-h-[60vh] w-auto mx-auto rounded" />
                           )}
+                        </div>
+                      </div>
+                    )}
                     <button className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors text-xs font-medium" onClick={() => handleDelete(video.id)}>
                       <Trash size={14} />
                       Borrar

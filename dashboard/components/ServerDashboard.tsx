@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
+import { ChevronDown, ChevronUp, RefreshCw, X } from 'lucide-react';
 import ServerCard from './monitoreo/ServerCard';
 import { useNotification } from './useNotification';
 import {
@@ -9,12 +9,26 @@ import {
   ServerStatusDetail,
 } from '../services/monitoreoService';
 
+type RenameModalState =
+  | {
+      type: 'server';
+      server: ServerStatusDetail;
+    }
+  | {
+      type: 'device';
+      deviceId: string;
+      currentName?: string | null;
+    };
+
 export function ServerDashboard() {
   const showNotification = useNotification();
   const [servidores, setServidores] = useState<ServerStatusDetail[]>([]);
   const [expandedServerId, setExpandedServerId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [renameModal, setRenameModal] = useState<RenameModalState | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [renameSaving, setRenameSaving] = useState(false);
 
   const fetchStatus = async () => {
     setLoading(true);
@@ -37,29 +51,42 @@ export function ServerDashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleRenameDevice = async (deviceId: string, currentName?: string | null) => {
-    const proposed = window.prompt(
-      'Nombre para el dispositivo (deja vacío para quitar alias):',
-      currentName ?? deviceId
-    );
-    if (proposed === null) return;
-
-    const normalized = proposed.trim();
-    await renameDevice(deviceId, normalized.length > 0 ? normalized : null);
-    await fetchStatus();
+  const openRenameServerModal = (server: ServerStatusDetail) => {
+    setRenameModal({ type: 'server', server });
+    setRenameValue(server.nombre || server.ip || '');
   };
 
-  const handleRenameServer = async (server: ServerStatusDetail) => {
-    const proposed = window.prompt('Nombre para el servidor:', server.nombre || server.ip);
-    if (proposed === null) return;
+  const openRenameDeviceModal = (deviceId: string, currentName?: string | null) => {
+    setRenameModal({ type: 'device', deviceId, currentName });
+    setRenameValue(currentName ?? deviceId);
+  };
 
-    const normalized = proposed.trim();
-    if (!normalized) return;
+  const closeRenameModal = () => {
+    if (renameSaving) return;
+    setRenameModal(null);
+    setRenameValue('');
+  };
 
+  const submitRename = async () => {
+    if (!renameModal) return;
+    const normalized = renameValue.trim();
+
+    if (renameModal.type === 'server' && !normalized) {
+      showNotification('El nombre del servidor no puede estar vacío', 'warning');
+      return;
+    }
+
+    setRenameSaving(true);
     try {
-      await renameServer(server.id, normalized);
-      showNotification('Servidor renombrado correctamente', 'success');
+      if (renameModal.type === 'server') {
+        await renameServer(renameModal.server.id, normalized);
+        showNotification('Servidor renombrado correctamente', 'success');
+      } else {
+        await renameDevice(renameModal.deviceId, normalized.length > 0 ? normalized : null);
+        showNotification('Dispositivo renombrado correctamente', 'success');
+      }
       await fetchStatus();
+      closeRenameModal();
     } catch (error: any) {
       const detail = String(error?.response?.data?.detail || '');
       if (error?.response?.status === 409) {
@@ -70,7 +97,12 @@ export function ServerDashboard() {
         showNotification(detail, 'error');
         return;
       }
-      showNotification('No se pudo renombrar el servidor', 'error');
+      showNotification(
+        renameModal.type === 'server' ? 'No se pudo renombrar el servidor' : 'No se pudo renombrar el dispositivo',
+        'error'
+      );
+    } finally {
+      setRenameSaving(false);
     }
   };
 
@@ -101,7 +133,7 @@ export function ServerDashboard() {
               <div className="flex items-center justify-end mb-2">
                 <button
                   className="text-[11px] text-blue-500 hover:underline"
-                  onClick={() => handleRenameServer(s)}
+                  onClick={() => openRenameServerModal(s)}
                 >
                   Renombrar servidor
                 </button>
@@ -136,7 +168,7 @@ export function ServerDashboard() {
                           <div className="text-[11px] text-slate-500">ID: {d.device_id}</div>
                           <button
                             className="text-[11px] text-blue-500 hover:underline mt-1"
-                            onClick={() => handleRenameDevice(d.device_id, d.nombre_amigable)}
+                            onClick={() => openRenameDeviceModal(d.device_id, d.nombre_amigable)}
                           >
                             Renombrar
                           </button>
@@ -156,6 +188,63 @@ export function ServerDashboard() {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {renameModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                {renameModal.type === 'server' ? 'Renombrar Servidor' : 'Renombrar Dispositivo'}
+              </h3>
+              <button
+                onClick={closeRenameModal}
+                className="text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+                disabled={renameSaving}
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-bold text-slate-900 dark:text-slate-200">
+                  {renameModal.type === 'server' ? 'Nombre del servidor' : 'Nombre del dispositivo'}
+                </label>
+                <input
+                  type="text"
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  className="w-full h-10 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder={renameModal.type === 'server' ? 'Ej: Sede Centro' : 'Ej: Tablet Caja 1'}
+                  disabled={renameSaving}
+                />
+                {renameModal.type === 'device' ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Deja vacío para quitar alias del dispositivo.</p>
+                ) : null}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={closeRenameModal}
+                  className="px-4 h-10 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  disabled={renameSaving}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={submitRename}
+                  className="px-4 h-10 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
+                  disabled={renameSaving}
+                >
+                  {renameSaving ? 'Guardando...' : 'Guardar'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

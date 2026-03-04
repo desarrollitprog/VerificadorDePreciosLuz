@@ -22,7 +22,7 @@ def _build_async_connection_string(
 ) -> str:
     return (
         f"mssql+aioodbc://{user}:{password}@{server},{port}/{database}?"
-        f"driver={driver.replace(' ', '+')}&Encrypt=yes&TrustServerCertificate=yes"
+        f"driver={driver.replace(' ', '+')}&Encrypt=yes&TrustServerCertificate=yes&MARS_Connection=yes"
     )
 
 # Conexión a la base de datos de usuarios_dashboard

@@ -44,6 +44,7 @@ import com.example.verificadordepreciosluz.MainActivity
 import com.example.verificadordepreciosluz.BuildConfig
 import com.example.verificadordepreciosluz.data.network.ApiClient
 import com.example.verificadordepreciosluz.data.network.ApiService
+import com.example.verificadordepreciosluz.data.network.PlaybackStatusRequest
 import com.example.verificadordepreciosluz.data.network.ProductoResponse
 import com.example.verificadordepreciosluz.data.local.BackupRepository
 import com.example.verificadordepreciosluz.data.local.BackupResponse
@@ -72,6 +73,7 @@ import androidx.core.view.isVisible
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import com.example.verificadordepreciosluz.data.local.ejecutarPurgaTotal
+import java.io.File
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.WebSocket
@@ -97,6 +99,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private var analyzerPaused = false
     private var lastErrorKey: String? = null
     private var lastErrorAt = 0L
+    private var lastPlaybackReportKey: String? = null
+    private var lastPlaybackReportAt = 0L
     private var lastMockSubmitAt = 0L
     private var pendingMockText: String? = null
     private var mockIdleRunnable: Runnable? = null
@@ -543,6 +547,10 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         val fileExists = java.io.File(item.localPath).exists()
         if (!fileExists) {
             Log.w(TAG, "Standby: archivo no existe, eliminando de la lista: ${item.localPath}")
+            reportPlaybackFailure(
+                localPath = item.localPath,
+                reason = "Archivo no encontrado en almacenamiento local"
+            )
             if (standbyItems.isNotEmpty()) {
                 standbyItems.removeAt(standbyIndex)
             }
@@ -570,6 +578,10 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             }
             binding.standbyVideo.setOnErrorListener { _, what, extra ->
                 Log.w(TAG, "Standby: error video what=$what extra=$extra para ${item.localPath}")
+                reportPlaybackFailure(
+                    localPath = item.localPath,
+                    reason = "VideoView error what=$what extra=$extra"
+                )
                 if (standbyItems.size == 1) {
                     stopStandbyCarousel()
                 } else {
@@ -877,6 +889,33 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         backendBaseUrl = normalized
         api = ApiClient.create(normalized, BuildConfig.DEBUG)
         return true
+    }
+
+    private fun reportPlaybackFailure(localPath: String, reason: String) {
+        val service = api ?: return
+        val fileName = runCatching { File(localPath).name }.getOrDefault(localPath)
+        val reportKey = "playback_failed:$fileName:$reason"
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (reportKey == lastPlaybackReportKey && (now - lastPlaybackReportAt) < 15_000) {
+            return
+        }
+        lastPlaybackReportKey = reportKey
+        lastPlaybackReportAt = now
+
+        scope.launch {
+            try {
+                service.reportPlaybackStatus(
+                    PlaybackStatusRequest(
+                        deviceId = deviceId,
+                        videoName = fileName,
+                        reason = reason,
+                    )
+                )
+                Log.i(TAG, "Playback error report enviado: $fileName")
+            } catch (e: Exception) {
+                Log.w(TAG, "No se pudo reportar playback error al backend-api: ${e.message}")
+            }
+        }
     }
 
     private fun startPingMonitor() {

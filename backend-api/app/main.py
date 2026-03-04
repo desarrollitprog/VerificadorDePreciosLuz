@@ -13,6 +13,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Any, Awaitable, Callable, Optional
 import uuid
+from pydantic import BaseModel
 from . import database, models, schemas
 from .routes import consultas, publicidad
 from .services import DeviceCommandBus, DeviceStateStore
@@ -474,6 +475,40 @@ async def obtener_precio(
 SYNC_REQUIRED_NOW = False
 FORCE_SYNC_JOBS: dict[str, dict[str, Any]] = {}
 FORCE_SYNC_JOBS_LOCK = asyncio.Lock()
+PLAYBACK_FORWARD_DEDUPE_SECONDS = 60
+PLAYBACK_FORWARD_CACHE: dict[str, float] = {}
+PLAYBACK_FORWARD_LOCK = asyncio.Lock()
+
+
+class PlaybackStatusBody(BaseModel):
+    device_id: str
+    video_name: str
+    reason: str = ""
+
+
+def _playback_dedupe_key(device_id: str, video_name: str, reason: str) -> str:
+    return f"{(device_id or '').strip()}|{(video_name or '').strip()}|{(reason or '').strip()}"
+
+
+async def _should_forward_playback(device_id: str, video_name: str, reason: str) -> bool:
+    now = asyncio.get_running_loop().time()
+    key = _playback_dedupe_key(device_id, video_name, reason)
+
+    async with PLAYBACK_FORWARD_LOCK:
+        expired_keys = [
+            cache_key
+            for cache_key, ts in PLAYBACK_FORWARD_CACHE.items()
+            if (now - ts) >= PLAYBACK_FORWARD_DEDUPE_SECONDS
+        ]
+        for cache_key in expired_keys:
+            PLAYBACK_FORWARD_CACHE.pop(cache_key, None)
+
+        last_seen = PLAYBACK_FORWARD_CACHE.get(key)
+        if last_seen is not None and (now - last_seen) < PLAYBACK_FORWARD_DEDUPE_SECONDS:
+            return False
+
+        PLAYBACK_FORWARD_CACHE[key] = now
+        return True
 
 
 async def _set_force_sync_job_state(job_id: str, **fields: Any) -> None:
@@ -580,6 +615,32 @@ async def fuerza_sync_status(job_id: str):
         "error": job.get("error"),
         "updated_at": job.get("updated_at"),
         "created_at": job.get("created_at"),
+    }
+
+
+@app.post("/api/playback-status")
+async def playback_status(body: PlaybackStatusBody):
+    should_forward = await _should_forward_playback(
+        device_id=body.device_id,
+        video_name=body.video_name,
+        reason=body.reason,
+    )
+    if not should_forward:
+        return {
+            "success": True,
+            "message": "Notificación de playback deduplicada en backend-api",
+            "duplicated": True,
+        }
+
+    await notify_dashboard_playback_failure(
+        device_id=body.device_id,
+        video_name=body.video_name,
+        reason=body.reason,
+    )
+    return {
+        "success": True,
+        "message": "Notificación de playback reenviada al dashboard",
+        "duplicated": False,
     }
 # WebSocket manager para tabletas
 
@@ -902,6 +963,24 @@ async def notify_dashboard_sync_failure(device_id: str, reason: str = ""):
         logging.error(f"Error notificando a backend-dashboard: {e}")
     # Lanzar reintentos automáticos en background
     asyncio.create_task(retry_sync_with_device(device_id))
+
+
+async def notify_dashboard_playback_failure(device_id: str, video_name: str, reason: str = ""):
+    dashboard_url = os.getenv("DASHBOARD_URL")
+    if not dashboard_url:
+        logging.error("DASHBOARD_URL no está definida en el entorno. Agrega esta variable en tu archivo .env.")
+        return
+    notify_endpoint = f"{dashboard_url.rstrip('/')}/api/playback-status"
+    try:
+        async with httpx.AsyncClient() as client:
+            payload = {
+                "device_id": device_id,
+                "video_name": video_name,
+                "reason": reason,
+            }
+            await client.post(notify_endpoint, json=payload, timeout=10)
+    except Exception as e:
+        logging.error(f"Error notificando playback al backend-dashboard: {e}")
 
 # --- Reintentos automáticos de sincronización ---
 async def retry_sync_with_device(device_id: str):

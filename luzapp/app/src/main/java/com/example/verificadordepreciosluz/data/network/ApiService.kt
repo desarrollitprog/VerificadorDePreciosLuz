@@ -7,7 +7,9 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
 import java.util.concurrent.TimeUnit
@@ -42,6 +44,18 @@ data class BannerResponse(
     @SerializedName("updated_at") val updatedAt: String?
 )
 
+data class PlaybackStatusRequest(
+    @SerializedName("device_id") val deviceId: String,
+    @SerializedName("video_name") val videoName: String,
+    val reason: String
+)
+
+data class PlaybackStatusResponse(
+    val success: Boolean,
+    val message: String,
+    val duplicated: Boolean? = null
+)
+
 interface ApiService {
     @GET("ping")
     suspend fun ping(@Query("device_id") deviceId: String): PingResponse
@@ -66,6 +80,11 @@ interface ApiService {
         @Query("limit") limit: Int,
         @Query("updated_since") updatedSince: String? = null
     ): BackupResponse
+
+    @POST("api/playback-status")
+    suspend fun reportPlaybackStatus(
+        @Body body: PlaybackStatusRequest
+    ): PlaybackStatusResponse
 }
 
 object ApiClient {

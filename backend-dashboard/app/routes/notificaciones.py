@@ -130,6 +130,12 @@ class SyncStatusBody(BaseModel):
     status: str
     reason: str = ""
 
+
+class PlaybackStatusBody(BaseModel):
+    device_id: str
+    video_name: str
+    reason: str = ""
+
 @router.post("/sync-status", status_code=status.HTTP_201_CREATED)
 async def sync_status(
     body: SyncStatusBody,
@@ -168,3 +174,47 @@ async def sync_status(
         descripcion=descripcion,
     )
     return {"success": True, "message": "Notificación de sincronización registrada", "duplicated": False}
+
+
+@router.post("/playback-status", status_code=status.HTTP_201_CREATED)
+async def playback_status(
+    body: PlaybackStatusBody,
+    db: AsyncSession = Depends(get_db_usuarios),
+):
+    reason = (body.reason or "").strip() or "sin detalle"
+    video_name = (body.video_name or "").strip() or "(sin nombre)"
+    descripcion = f"Dispositivo {body.device_id} no pudo reproducir '{video_name}': {reason}"
+
+    dedupe_since = datetime.utcnow() - timedelta(seconds=120)
+    recent_stmt = (
+        select(Notificacion)
+        .where(
+            Notificacion.tipo == "PLAYBACK_FAILED",
+            Notificacion.descripcion == descripcion,
+            Notificacion.fecha_creacion >= dedupe_since,
+        )
+        .order_by(Notificacion.fecha_creacion.desc())
+        .limit(1)
+    )
+    recent_result = await db.execute(recent_stmt)
+    existing = recent_result.scalars().first()
+
+    if existing:
+        return {
+            "success": True,
+            "message": "Notificación PLAYBACK_FAILED ya registrada recientemente.",
+            "duplicated": True,
+            "id": existing.id,
+        }
+
+    await registrar_accion(
+        db=db,
+        usuario_id=None,
+        tipo="PLAYBACK_FAILED",
+        descripcion=descripcion,
+    )
+    return {
+        "success": True,
+        "message": "Notificación de error de reproducción registrada",
+        "duplicated": False,
+    }

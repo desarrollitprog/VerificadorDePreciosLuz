@@ -34,6 +34,13 @@ export function toNotificationViewModel(notificacion: Notificacion): Notificatio
         detail: descripcion || undefined,
         severity: 'error',
       };
+    case 'PLAYBACK_FAILED':
+      return {
+        title: 'Error de reproducción',
+        message: 'Un dispositivo no pudo reproducir un contenido.',
+        detail: descripcion || undefined,
+        severity: 'error',
+      };
     case 'SINCRONIZACION_FORZADA':
       return {
         title: 'Sincronización ejecutada',

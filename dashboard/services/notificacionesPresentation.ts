@@ -1,12 +1,18 @@
 import { Notificacion } from './notificacionesService';
 
 export type NotificationSeverity = 'error' | 'warning' | 'info' | 'success';
+export type NotificationActionBadge = 'carga' | 'eliminacion';
 
 export interface NotificationViewModel {
   title: string;
   message: string;
   detail?: string;
   severity: NotificationSeverity;
+  actionBadge?: NotificationActionBadge;
+}
+
+function firstNonEmpty(...values: Array<string | undefined>): string | undefined {
+  return values.map((value) => value?.trim()).find(Boolean);
 }
 
 function truncate(text: string, maxLen: number): string {
@@ -71,6 +77,40 @@ export function toNotificationViewModel(notificacion: Notificacion): Notificatio
         detail: descripcion || undefined,
         severity: 'success',
       };
+    case 'SUBIDA_MULTIMEDIA':
+    case 'SUBIDA MULTIMEDIA':
+      {
+        const fileMatch = descripcion.match(/Archivo\s+subido\s*[:=]\s*([^,;]+)/i);
+        const fallbackFileMatch = descripcion.match(/archivo\s+([^,;]+)\s+subid[oa]/i);
+        const idMatch = descripcion.match(/IdPublicidad\s*[:=]\s*(\d+)/i);
+        const fileName = firstNonEmpty(fileMatch?.[1], fallbackFileMatch?.[1]);
+        const pubId = idMatch?.[1];
+
+        return {
+          title: 'Multimedia subida',
+          message: fileName ? `Se subió ${fileName}` : (descripcion || 'Se subió un archivo multimedia.'),
+          detail: pubId ? `IdPublicidad: ${pubId}` : (descripcion || undefined),
+          severity: 'success',
+          actionBadge: 'carga',
+        };
+      }
+    case 'BORRADO_MULTIMEDIA':
+    case 'BORRADO MULTIMEDIA':
+      {
+        const idMatch = descripcion.match(/IdPublicidad\s*[:=]\s*(\d+)/i);
+        const titleMatch = descripcion.match(/T[ií]tulo\s*[:=]\s*([^,;]+)/i);
+        const fallbackTitleMatch = descripcion.match(/se\s+elimin[oó]\s+([^,;]+)/i);
+        const pubId = idMatch?.[1];
+        const title = firstNonEmpty(titleMatch?.[1], fallbackTitleMatch?.[1]);
+
+        return {
+          title: 'Multimedia eliminada',
+          message: title ? `Se eliminó ${title}` : (descripcion || 'Se eliminó un archivo multimedia.'),
+          detail: pubId ? `IdPublicidad: ${pubId}` : (descripcion || undefined),
+          severity: 'warning',
+          actionBadge: 'eliminacion',
+        };
+      }
     case 'CAMBIO_ESTADO_SERVIDOR':
       return {
         title: 'Cambio de estado del servidor',

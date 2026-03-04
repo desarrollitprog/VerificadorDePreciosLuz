@@ -33,6 +33,16 @@ function getBadgeBySeverity(severity: 'error' | 'warning' | 'info' | 'success') 
   return { label: 'Info', classes: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' };
 }
 
+function getBadgeByAction(actionBadge?: 'carga' | 'eliminacion') {
+  if (actionBadge === 'carga') {
+    return { label: 'Carga', classes: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' };
+  }
+  if (actionBadge === 'eliminacion') {
+    return { label: 'Eliminación', classes: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' };
+  }
+  return undefined;
+}
+
 export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
   const [open, setOpen] = useState(false);
   const showNotification = useNotification();
@@ -164,6 +174,7 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
                 const view = toNotificationViewModel(n);
                 const isError = view.severity === 'error';
                 const badge = getBadgeBySeverity(view.severity);
+                const actionBadge = getBadgeByAction(view.actionBadge);
                 const exactTime = new Date(n.fecha_creacion).toLocaleString();
                 const relativeTime = getRelativeTimeLabel(n.fecha_creacion);
                 return (
@@ -173,12 +184,17 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
                   >
                     <div className="flex items-center gap-2 mb-1 justify-between">
                       <div className="text-xs text-slate-500" title={exactTime}>{relativeTime} · {exactTime}</div>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${badge.classes}`}>{badge.label}</span>
-                      {isError && (
-                        <span title={view.title} className="inline-flex">
-                          <AlertTriangle size={16} className="text-red-500" />
-                        </span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {actionBadge && (
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${actionBadge.classes}`}>{actionBadge.label}</span>
+                        )}
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${badge.classes}`}>{badge.label}</span>
+                        {isError && (
+                          <span title={view.title} className="inline-flex">
+                            <AlertTriangle size={16} className="text-red-500" />
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className={`text-sm font-medium ${isError ? 'text-red-700 dark:text-red-400' : 'text-slate-900 dark:text-white'}`}>{view.title}</div>
                     <div className={`text-sm ${isError ? 'text-red-800 dark:text-red-200' : 'text-slate-700 dark:text-slate-300'}`}>{view.message}</div>

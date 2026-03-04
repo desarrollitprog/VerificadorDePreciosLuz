@@ -23,14 +23,24 @@ export interface MarkReadResponse {
   updated: number;
 }
 
-export async function fetchNotificaciones(limit = 10, offset = 0): Promise<NotificacionesResponse> {
+export interface DeleteReadResponse {
+  success: boolean;
+  deleted: number;
+}
+
+export async function fetchNotificaciones(limit = 10, offset = 0, soloNoLeidas = false): Promise<NotificacionesResponse> {
   const response = await api.get<NotificacionesResponse>(
-    `/notificaciones?limit=${limit}&offset=${offset}`
+    `/notificaciones?limit=${limit}&offset=${offset}&solo_no_leidas=${soloNoLeidas}`
   );
   return response.data;
 }
 
 export async function markNotificacionesRead(): Promise<MarkReadResponse> {
   const response = await api.patch<MarkReadResponse>('/notificaciones/marcar-leidas');
+  return response.data;
+}
+
+export async function deleteReadNotificaciones(): Promise<DeleteReadResponse> {
+  const response = await api.delete<DeleteReadResponse>('/notificaciones/leidas');
   return response.data;
 }

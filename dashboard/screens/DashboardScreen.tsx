@@ -305,10 +305,13 @@ export const DashboardScreen: React.FC = () => {
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white dark:bg-[#1c2936] p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
             <div className="min-w-0 flex-1">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <p className="text-slate-500 text-xs font-medium uppercase tracking-wider">Videos Totales</p>
+                <div className="flex items-center gap-2">
+                  <Film className="text-slate-400 shrink-0" size={20} />
+                  <p className="text-slate-500 text-sm font-semibold uppercase tracking-wider">Videos Totales</p>
+                </div>
                 <div className="flex items-center gap-2 min-w-0 sm:max-w-[65%] w-full sm:w-auto">
                   <span className="text-xs text-slate-500 whitespace-nowrap">Servidor secundario:</span>
                   <select
@@ -345,13 +348,12 @@ export const DashboardScreen: React.FC = () => {
                 </div>
               </div>
             </div>
-            <Film className="text-slate-400 shrink-0 mt-1" size={32} />
           </div>
         </div>
         <div className="bg-white dark:bg-[#1c2936] p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-slate-500 text-xs font-medium uppercase tracking-wider">
+              <p className="text-slate-500 text-sm font-semibold uppercase tracking-wider">
                 Progreso de sincronización por servidor
               </p>
               {lastSyncAt && (

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Bell, AlertTriangle } from 'lucide-react';
 import { useNotification } from './useNotification';
-import { fetchNotificaciones, markNotificacionesRead, Notificacion } from '../services/notificacionesService';
+import { deleteReadNotificaciones, fetchNotificaciones, markNotificacionesRead, Notificacion } from '../services/notificacionesService';
 import { toNotificationViewModel } from '../services/notificacionesPresentation';
 
 interface GeneralNotificationsProps {}
@@ -45,7 +45,7 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
   const loadNotifications = async (markAsRead: boolean) => {
     if (markAsRead) setLoading(true);
     try {
-      const res = await fetchNotificaciones(10, 0);
+      const res = await fetchNotificaciones(10, 0, false);
       const seenErrorKeys = new Set<string>();
       const normalized = (res.notificaciones || []).filter((n) => {
         const tipo = String(n.tipo || '').toUpperCase();
@@ -82,8 +82,22 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
             // no-op: mantener estado local actual si falla marcado
           });
       }
+
     } finally {
       if (markAsRead) setLoading(false);
+    }
+  };
+
+  const handleClearNotifications = async () => {
+    setLoading(true);
+    try {
+      const result = await deleteReadNotificaciones();
+      await loadNotifications(false);
+      showNotification(`Se eliminaron ${result.deleted} notificaciones leídas`, 'success', 3000);
+    } catch {
+      showNotification('No se pudieron limpiar las notificaciones', 'error', 4000);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -129,7 +143,17 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
       </button>
       {open && (
         <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-[#111a22] border border-slate-200 dark:border-slate-800 rounded-lg shadow-lg z-50">
-          <div className="p-4 border-b border-slate-200 dark:border-slate-800 font-semibold text-slate-900 dark:text-white">Notificaciones Generales</div>
+          <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
+            <div className="font-semibold text-slate-900 dark:text-white">Notificaciones Generales</div>
+            <button
+              type="button"
+              onClick={handleClearNotifications}
+              disabled={loading || notificaciones.filter((n) => n.leida).length === 0}
+              className="text-xs px-2.5 py-1.5 rounded-md border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
+            >
+              Eliminar leídas
+            </button>
+          </div>
           <div className="max-h-72 overflow-y-auto">
             {loading ? (
               <div className="p-4 text-center text-slate-500">Cargando...</div>

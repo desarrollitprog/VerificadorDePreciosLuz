@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import and_, func
+from sqlalchemy import and_, delete, func
 from sqlalchemy.exc import IntegrityError
 from app.models import Notificacion, NotificacionLeida
 from app.models.usuario import Usuario
@@ -18,6 +18,7 @@ router = APIRouter()
 async def listar_notificaciones(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    solo_no_leidas: bool = Query(False),
     db: AsyncSession = Depends(get_db_usuarios),
     current_user: dict = Depends(get_current_cliente),
 ):
@@ -54,6 +55,14 @@ async def listar_notificaciones(
         .offset(offset)
         .limit(limit)
     )
+    if solo_no_leidas:
+        stmt = stmt.outerjoin(
+            NotificacionLeida,
+            and_(
+                NotificacionLeida.notificacion_id == Notificacion.id,
+                NotificacionLeida.usuario_id == user_id,
+            ),
+        ).where(NotificacionLeida.notificacion_id.is_(None))
     result = await db.execute(stmt)
     rows = result.all()
     notificaciones = [row[0] for row in rows]
@@ -134,6 +143,35 @@ async def marcar_notificaciones_leidas(
         "success": True,
         "updated": len(to_mark),
     }
+
+
+@router.delete("/notificaciones/leidas")
+async def eliminar_notificaciones_leidas(
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_cliente),
+):
+    user_id = current_user.get("user_id") if current_user else None
+    if user_id is None:
+        return {"success": False, "deleted": 0}
+
+    read_ids_result = await db.execute(
+        select(NotificacionLeida.notificacion_id).where(NotificacionLeida.usuario_id == user_id)
+    )
+    read_ids = [int(v) for v in read_ids_result.scalars().all()]
+
+    if not read_ids:
+        return {"success": True, "deleted": 0}
+
+    delete_result = await db.execute(
+        delete(Notificacion).where(Notificacion.id.in_(read_ids))
+    )
+    await db.commit()
+
+    return {
+        "success": True,
+        "deleted": int(delete_result.rowcount or 0),
+    }
+
 # Modelo para la notificación de sincronización
 class SyncStatusBody(BaseModel):
     device_id: str

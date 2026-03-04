@@ -154,16 +154,20 @@ async def eliminar_notificaciones_leidas(
     if user_id is None:
         return {"success": False, "deleted": 0}
 
-    read_ids_result = await db.execute(
-        select(NotificacionLeida.notificacion_id).where(NotificacionLeida.usuario_id == user_id)
+    read_count_result = await db.execute(
+        select(func.count()).select_from(NotificacionLeida).where(NotificacionLeida.usuario_id == user_id)
     )
-    read_ids = [int(v) for v in read_ids_result.scalars().all()]
+    read_count = int(read_count_result.scalar() or 0)
 
-    if not read_ids:
+    if read_count == 0:
         return {"success": True, "deleted": 0}
 
+    read_ids_subquery = select(NotificacionLeida.notificacion_id).where(
+        NotificacionLeida.usuario_id == user_id
+    )
+
     delete_result = await db.execute(
-        delete(Notificacion).where(Notificacion.id.in_(read_ids))
+        delete(Notificacion).where(Notificacion.id.in_(read_ids_subquery))
     )
     await db.commit()
 

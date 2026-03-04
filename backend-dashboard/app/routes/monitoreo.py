@@ -125,6 +125,7 @@ async def heartbeat(
 # Umbral: sin heartbeat en los últimos 8 minutos = offline
 HEARTBEAT_OFFLINE_MINUTES = 8
 FORCE_SYNC_TIMEOUT_SECONDS = 120
+FORCE_SYNC_POLL_INTERVAL_SECONDS = 2
 
 SYNC_JOBS: dict[str, dict[str, Any]] = {}
 SYNC_JOBS_LOCK = asyncio.Lock()
@@ -159,24 +160,74 @@ async def _execute_force_sync_job(job_id: str, user_id: int | None, username: st
                 if s.ultimo_heartbeat and s.ultimo_heartbeat >= umbral
             ]
 
-            async def send_force_sync(ip: str) -> dict[str, Any]:
+            async def send_force_sync(ip: str, on_progress: Any = None) -> dict[str, Any]:
                 url = f"http://{ip}:8000/api/fuerza-sync"
                 try:
                     async with httpx.AsyncClient(timeout=FORCE_SYNC_TIMEOUT_SECONDS) as client:
-                        resp = await client.post(url)
-                        payload = {}
+                        resp = await client.post(url, params={"async_mode": "true"})
+                        payload: dict[str, Any] = {}
                         try:
                             payload = resp.json()
                         except Exception:
                             payload = {}
 
-                        ok = resp.status_code == 200 and bool(payload.get("success", True))
-                        return {
-                            "ok": ok,
-                            "status_code": resp.status_code,
-                            "backend_result": payload,
-                            "reason": payload.get("message") if isinstance(payload, dict) else None,
-                        }
+                        if resp.status_code != 200 or not bool(payload.get("success", True)):
+                            return {
+                                "ok": False,
+                                "status_code": resp.status_code,
+                                "backend_result": payload,
+                                "reason": payload.get("message") if isinstance(payload, dict) else "Error iniciando sync",
+                            }
+
+                        remote_job_id = payload.get("job_id") if isinstance(payload, dict) else None
+                        if not remote_job_id:
+                            ok = resp.status_code == 200 and bool(payload.get("success", True))
+                            return {
+                                "ok": ok,
+                                "status_code": resp.status_code,
+                                "backend_result": payload,
+                                "reason": payload.get("message") if isinstance(payload, dict) else None,
+                            }
+
+                        poll_url = f"http://{ip}:8000/api/fuerza-sync/{remote_job_id}"
+                        deadline = asyncio.get_running_loop().time() + FORCE_SYNC_TIMEOUT_SECONDS
+
+                        while True:
+                            if asyncio.get_running_loop().time() > deadline:
+                                return {
+                                    "ok": False,
+                                    "status_code": 504,
+                                    "backend_result": {
+                                        "total": 0,
+                                        "sent": 0,
+                                        "confirmed": 0,
+                                        "failed": 0,
+                                        "details": [],
+                                    },
+                                    "reason": "Timeout esperando progreso de sincronización",
+                                }
+
+                            poll_resp = await client.get(poll_url)
+                            poll_payload: dict[str, Any] = {}
+                            try:
+                                poll_payload = poll_resp.json()
+                            except Exception:
+                                poll_payload = {}
+
+                            if on_progress is not None and isinstance(poll_payload, dict):
+                                await on_progress(poll_payload)
+
+                            status = str(poll_payload.get("status", "")).upper()
+                            if status in ("COMPLETED", "FAILED"):
+                                ok = status == "COMPLETED" and bool(poll_payload.get("success", True))
+                                return {
+                                    "ok": ok,
+                                    "status_code": poll_resp.status_code,
+                                    "backend_result": poll_payload,
+                                    "reason": poll_payload.get("error") or poll_payload.get("message"),
+                                }
+
+                            await asyncio.sleep(FORCE_SYNC_POLL_INTERVAL_SECONDS)
                 except Exception as e:
                     return {
                         "ok": False,
@@ -185,31 +236,88 @@ async def _execute_force_sync_job(job_id: str, user_id: int | None, username: st
                         "reason": str(e),
                     }
 
-            results = []
+            success_count = 0
+            failed_count = 0
+            details: list[dict[str, Any]] = []
+
+            await _set_job_state(
+                job_id,
+                status="RUNNING",
+                success=True,
+                total_online=len(online_servers),
+                success_count=success_count,
+                failed_count=failed_count,
+                details=details,
+            )
+
             for server in online_servers:
-                result_item = await send_force_sync(server.ip)
-                results.append(result_item)
+                detail = {
+                    "ip": server.ip,
+                    "nombre": server.nombre,
+                    "ok": False,
+                    "status_code": None,
+                    "reason": "Sincronizando...",
+                    "sync_total": 0,
+                    "sync_sent": 0,
+                    "sync_confirmed": 0,
+                    "sync_failed": 0,
+                    "sync_details": [],
+                }
+                details.append(detail)
 
-            success_count = sum(1 for r in results if r.get("ok") is True)
-            failed_count = len(online_servers) - success_count
+                await _set_job_state(
+                    job_id,
+                    status="RUNNING",
+                    success=True,
+                    total_online=len(online_servers),
+                    success_count=success_count,
+                    failed_count=failed_count,
+                    details=details,
+                )
 
-            details = []
-            for i, server in enumerate(online_servers):
-                result_item = results[i]
+                async def on_server_progress(progress_payload: dict[str, Any]) -> None:
+                    detail["sync_total"] = progress_payload.get("total")
+                    detail["sync_sent"] = progress_payload.get("sent")
+                    detail["sync_confirmed"] = progress_payload.get("confirmed")
+                    detail["sync_failed"] = progress_payload.get("failed")
+                    detail["sync_details"] = progress_payload.get("details", [])
+                    if str(progress_payload.get("status", "")).upper() == "RUNNING":
+                        detail["reason"] = "Sincronizando..."
+
+                    await _set_job_state(
+                        job_id,
+                        status="RUNNING",
+                        success=True,
+                        total_online=len(online_servers),
+                        success_count=success_count,
+                        failed_count=failed_count,
+                        details=details,
+                    )
+
+                result_item = await send_force_sync(server.ip, on_progress=on_server_progress)
                 backend_result = result_item.get("backend_result") or {}
-                details.append(
-                    {
-                        "ip": server.ip,
-                        "nombre": server.nombre,
-                        "ok": result_item.get("ok") is True,
-                        "status_code": result_item.get("status_code"),
-                        "reason": result_item.get("reason"),
-                        "sync_total": backend_result.get("total"),
-                        "sync_sent": backend_result.get("sent"),
-                        "sync_confirmed": backend_result.get("confirmed"),
-                        "sync_failed": backend_result.get("failed"),
-                        "sync_details": backend_result.get("details", []),
-                    }
+                detail["ok"] = result_item.get("ok") is True
+                detail["status_code"] = result_item.get("status_code")
+                detail["reason"] = result_item.get("reason")
+                detail["sync_total"] = backend_result.get("total")
+                detail["sync_sent"] = backend_result.get("sent")
+                detail["sync_confirmed"] = backend_result.get("confirmed")
+                detail["sync_failed"] = backend_result.get("failed")
+                detail["sync_details"] = backend_result.get("details", [])
+
+                if detail["ok"]:
+                    success_count += 1
+                else:
+                    failed_count += 1
+
+                await _set_job_state(
+                    job_id,
+                    status="RUNNING",
+                    success=True,
+                    total_online=len(online_servers),
+                    success_count=success_count,
+                    failed_count=failed_count,
+                    details=details,
                 )
 
             failed_servers = [d for d in details if not d["ok"]]

@@ -11,7 +11,8 @@ from fastapi.middleware.gzip import GZipMiddleware
 from dotenv import load_dotenv
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
+from typing import Any, Awaitable, Callable, Optional
+import uuid
 from . import database, models, schemas
 from .routes import consultas, publicidad
 from .services import DeviceCommandBus, DeviceStateStore
@@ -471,18 +472,114 @@ async def obtener_precio(
 #Sincronizacion forzada
 # Estado global para sincronización forzada
 SYNC_REQUIRED_NOW = False
+FORCE_SYNC_JOBS: dict[str, dict[str, Any]] = {}
+FORCE_SYNC_JOBS_LOCK = asyncio.Lock()
+
+
+async def _set_force_sync_job_state(job_id: str, **fields: Any) -> None:
+    async with FORCE_SYNC_JOBS_LOCK:
+        job = FORCE_SYNC_JOBS.get(job_id, {})
+        job.update(fields)
+        job["updated_at"] = datetime.utcnow().isoformat() + "Z"
+        FORCE_SYNC_JOBS[job_id] = job
+
+
+async def _get_force_sync_job_state(job_id: str) -> dict[str, Any] | None:
+    async with FORCE_SYNC_JOBS_LOCK:
+        job = FORCE_SYNC_JOBS.get(job_id)
+        return dict(job) if job else None
+
+
+async def _run_force_sync_job(job_id: str) -> None:
+    try:
+        async with SYNC_SEQUENCE_LOCK:
+            await _set_force_sync_job_state(job_id, status="RUNNING", success=True)
+
+            async def _on_progress(progress: dict[str, Any]) -> None:
+                await _set_force_sync_job_state(
+                    job_id,
+                    status="RUNNING",
+                    success=True,
+                    total=progress.get("total", 0),
+                    sent=progress.get("sent", 0),
+                    confirmed=progress.get("confirmed", 0),
+                    failed=progress.get("failed", 0),
+                    details=progress.get("details", []),
+                )
+
+            result = await orchestrate_forced_sync_sequential(progress_hook=_on_progress)
+
+        await _set_force_sync_job_state(
+            job_id,
+            status="COMPLETED",
+            success=True,
+            total=result.get("total", 0),
+            sent=result.get("sent", 0),
+            confirmed=result.get("confirmed", 0),
+            failed=result.get("failed", 0),
+            details=result.get("details", []),
+        )
+    except Exception as e:
+        await _set_force_sync_job_state(
+            job_id,
+            status="FAILED",
+            success=False,
+            error=str(e),
+        )
 
 # Endpoint para sincronización forzada
 @app.post("/api/fuerza-sync")
-async def fuerza_sync():
+async def fuerza_sync(async_mode: bool = Query(False)):
     global SYNC_REQUIRED_NOW
     SYNC_REQUIRED_NOW = True
+
+    if async_mode:
+        job_id = uuid.uuid4().hex
+        await _set_force_sync_job_state(
+            job_id,
+            status="QUEUED",
+            success=True,
+            total=0,
+            sent=0,
+            confirmed=0,
+            failed=0,
+            details=[],
+            created_at=datetime.utcnow().isoformat() + "Z",
+        )
+        asyncio.create_task(_run_force_sync_job(job_id))
+        return {
+            "success": True,
+            "message": "Sincronización forzada en ejecución",
+            "job_id": job_id,
+            "status": "QUEUED",
+        }
+
     async with SYNC_SEQUENCE_LOCK:
         result = await orchestrate_forced_sync_sequential()
     return {
         "success": True,
         "message": "Sincronización forzada secuencial ejecutada",
         **result,
+    }
+
+
+@app.get("/api/fuerza-sync/{job_id}")
+async def fuerza_sync_status(job_id: str):
+    job = await _get_force_sync_job_state(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job de sincronización no encontrado")
+    return {
+        "success": bool(job.get("success", True)),
+        "job_id": job_id,
+        "status": job.get("status", "UNKNOWN"),
+        "total": int(job.get("total", 0)),
+        "sent": int(job.get("sent", 0)),
+        "confirmed": int(job.get("confirmed", 0)),
+        "failed": int(job.get("failed", 0)),
+        "details": job.get("details", []),
+        "error": job.get("error"),
+        "updated_at": job.get("updated_at"),
+        "created_at": job.get("created_at"),
     }
 # WebSocket manager para tabletas
 
@@ -623,7 +720,9 @@ async def _start_device_bus_listener():
         logger.error("Error en listener de DeviceCommandBus: %s", e)
 
 
-async def orchestrate_forced_sync_sequential() -> dict:
+async def orchestrate_forced_sync_sequential(
+    progress_hook: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+) -> dict:
     device_ids: list[str] = []
 
     if device_state_store is not None:
@@ -649,6 +748,17 @@ async def orchestrate_forced_sync_sequential() -> dict:
     sent = 0
     confirmed = 0
     details = []
+
+    if progress_hook:
+        await progress_hook(
+            {
+                "total": len(device_ids),
+                "sent": sent,
+                "confirmed": confirmed,
+                "failed": len(device_ids) - confirmed,
+                "details": list(details),
+            }
+        )
 
     for device_id in device_ids:
         ack_key = f"device:{device_id}"
@@ -684,6 +794,16 @@ async def orchestrate_forced_sync_sequential() -> dict:
                     "reason": reason,
                 }
             )
+            if progress_hook:
+                await progress_hook(
+                    {
+                        "total": len(device_ids),
+                        "sent": sent,
+                        "confirmed": confirmed,
+                        "failed": len(device_ids) - confirmed,
+                        "details": list(details),
+                    }
+                )
             continue
 
         sent += 1
@@ -721,6 +841,17 @@ async def orchestrate_forced_sync_sequential() -> dict:
             )
         finally:
             sync_ack_waiters.pop(ack_key, None)
+
+        if progress_hook:
+            await progress_hook(
+                {
+                    "total": len(device_ids),
+                    "sent": sent,
+                    "confirmed": confirmed,
+                    "failed": len(device_ids) - confirmed,
+                    "details": list(details),
+                }
+            )
 
     failed = len(device_ids) - confirmed
     return {

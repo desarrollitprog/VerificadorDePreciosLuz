@@ -22,7 +22,7 @@ services:
     env_file:
       - ./dashboard/.env.local
     ports:
-      - "80:80"
+      - "8088:80"
     depends_on:
       - dashboard-backend
 

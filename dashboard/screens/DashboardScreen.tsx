@@ -3,7 +3,11 @@ import { useNotification } from '../components/useNotification';
 import { Search, UploadCloud, MoreVertical, Eye, Trash, Film, Plus } from 'lucide-react';
 import { getVideos, uploadMedia, deleteVideo } from '../services/videoService';
 import { Video } from '../types';
-import { getForceSyncJobStatus, startForceSyncJob } from '../services/monitoreoService';
+import {
+  getForceSyncJobStatus,
+  getSecondaryServersVideoCounts,
+  startForceSyncJob,
+} from '../services/monitoreoService';
 
 type SyncServerProgress = {
   nombre: string;
@@ -14,6 +18,13 @@ type SyncServerProgress = {
   progress: number;
   ok?: boolean;
   reason?: string;
+};
+
+type SecondaryVideoCounter = {
+  id: string;
+  nombre: string;
+  ip: string;
+  videos_actuales: number;
 };
 
 const normalizeServerProgress = (details: any[] = []): SyncServerProgress[] => {
@@ -58,6 +69,8 @@ export const DashboardScreen: React.FC = () => {
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncServerProgress, setSyncServerProgress] = useState<SyncServerProgress[]>([]);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const [secondaryVideoCounts, setSecondaryVideoCounts] = useState<SecondaryVideoCounter[]>([]);
+  const [selectedSecondaryServerId, setSelectedSecondaryServerId] = useState<string>('');
 
   useEffect(() => {
     async function fetchVideos() {
@@ -74,6 +87,38 @@ export const DashboardScreen: React.FC = () => {
     }
     fetchVideos();
   }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadSecondaryVideoCounts = async () => {
+      try {
+        const data = await getSecondaryServersVideoCounts();
+        if (!mounted) return;
+
+        setSecondaryVideoCounts(data);
+        setSelectedSecondaryServerId((prev) => {
+          if (!data.length) return '';
+          const exists = data.some((server) => server.id === prev);
+          return exists ? prev : data[0].id;
+        });
+      } catch {
+        if (!mounted) return;
+        setSecondaryVideoCounts([]);
+        setSelectedSecondaryServerId('');
+      }
+    };
+
+    loadSecondaryVideoCounts();
+    const intervalId = setInterval(loadSecondaryVideoCounts, 30000);
+
+    return () => {
+      mounted = false;
+      clearInterval(intervalId);
+    };
+  }, []);
+
+  const selectedSecondaryServer = secondaryVideoCounts.find((server) => server.id === selectedSecondaryServerId) || null;
 
   const resetUploadModal = () => {
     setSelectedFile(null);
@@ -260,12 +305,33 @@ export const DashboardScreen: React.FC = () => {
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white dark:bg-[#1c2936] p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between shadow-sm">
-          <div>
+          <div className="min-w-0">
             <p className="text-slate-500 text-xs font-medium uppercase tracking-wider">Videos Totales</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-              Local: {Array.isArray(videos) ? videos.length : 0}
-              {/* Remoto: aquí puedes mostrar la cantidad de videos remotos si tienes ese dato */}
-            </p>
+            <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">Local: {Array.isArray(videos) ? videos.length : 0}</p>
+            <div className="mt-3">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <span className="text-xs text-slate-500">Servidor secundario:</span>
+                <select
+                  className="text-xs rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2 py-1"
+                  value={selectedSecondaryServerId}
+                  onChange={(e) => setSelectedSecondaryServerId(e.target.value)}
+                  disabled={secondaryVideoCounts.length === 0}
+                >
+                  {secondaryVideoCounts.length === 0 ? (
+                    <option value="">Sin servidores conectados</option>
+                  ) : (
+                    secondaryVideoCounts.map((server) => (
+                      <option key={server.id} value={server.id}>
+                        {server.nombre} ({server.ip})
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 mt-2">
+                Secundario: {selectedSecondaryServer ? selectedSecondaryServer.videos_actuales : 0}
+              </p>
+            </div>
           </div>
           <Film className="text-slate-400" size={32} />
         </div>

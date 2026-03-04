@@ -35,12 +35,28 @@ export function toNotificationViewModel(notificacion: Notificacion): Notificatio
         severity: 'error',
       };
     case 'PLAYBACK_FAILED':
-      return {
-        title: 'Error de reproducción',
-        message: 'Un dispositivo no pudo reproducir un contenido.',
-        detail: descripcion || undefined,
-        severity: 'error',
-      };
+      {
+        const text = String(descripcion || '').trim();
+        const deviceMatch = text.match(/^(.*?)\s+no pudo reproducir\s+/i);
+        const mediaMatch = text.match(/no pudo reproducir\s+['\"]([^'\"]+)['\"]/i);
+        const reasonMatch = text.match(/:\s*(.+)$/);
+        const deviceName = deviceMatch?.[1]?.trim();
+        const mediaName = mediaMatch?.[1]?.trim();
+        const reason = reasonMatch?.[1]?.trim();
+
+        const message = mediaName
+          ? `No se pudo reproducir ${mediaName}${deviceName ? ` en ${deviceName}` : ''}`
+          : 'Se detectó un fallo de reproducción en una tablet';
+
+        const detailParts = [reason, descripcion].filter(Boolean) as string[];
+
+        return {
+          severity: 'error',
+          title: 'Error de reproducción',
+          message,
+          detail: detailParts[0],
+        };
+      }
     case 'SINCRONIZACION_FORZADA':
       return {
         title: 'Sincronización ejecutada',

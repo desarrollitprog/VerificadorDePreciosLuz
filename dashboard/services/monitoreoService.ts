@@ -62,6 +62,20 @@ export interface RenameDeviceResponse {
   nombre_amigable: string | null;
 }
 
+export interface RenameServerResponse {
+  success: boolean;
+  server_id: number;
+  nombre: string;
+  ip: string;
+}
+
+export interface SecondaryServerVideoCount {
+  id: string;
+  nombre: string;
+  ip: string;
+  videos_actuales: number;
+}
+
 function extractServers(data: any): any[] {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.servidores)) return data.servidores;
@@ -103,6 +117,24 @@ export async function renameDevice(deviceId: string, nombreAmigable: string | nu
     nombre_amigable: nombreAmigable,
   });
   return response.data as RenameDeviceResponse;
+}
+
+export async function renameServer(serverId: string, nombre: string): Promise<RenameServerResponse> {
+  const response = await api.patch(`/servidores/${encodeURIComponent(serverId)}/nombre`, {
+    nombre,
+  });
+  return response.data as RenameServerResponse;
+}
+
+export async function getSecondaryServersVideoCounts(): Promise<SecondaryServerVideoCount[]> {
+  const response = await api.get('/monitoreo/servidores/videos-actuales');
+  const servers = Array.isArray(response.data?.servidores) ? response.data.servidores : [];
+  return servers.map((s: any) => ({
+    id: String(s.id),
+    nombre: String(s.nombre ?? s.ip ?? 'Servidor'),
+    ip: String(s.ip ?? ''),
+    videos_actuales: Number(s.videos_actuales ?? 0),
+  }));
 }
 
 export async function startForceSyncJob(): Promise<ForceSyncJobStart> {

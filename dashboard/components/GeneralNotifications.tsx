@@ -40,18 +40,19 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const shownSyncFailedIdsRef = useRef<Set<number>>(new Set());
+  const shownErrorNotificationIdsRef = useRef<Set<number>>(new Set());
 
   const loadNotifications = async (markAsRead: boolean) => {
     if (markAsRead) setLoading(true);
     try {
       const res = await fetchNotificaciones(10, 0);
-      const seenSyncFailedKeys = new Set<string>();
+      const seenErrorKeys = new Set<string>();
       const normalized = (res.notificaciones || []).filter((n) => {
-        if (n.tipo !== 'SYNC_FAILED') return true;
+        const tipo = String(n.tipo || '').toUpperCase();
+        if (tipo !== 'SYNC_FAILED' && tipo !== 'PLAYBACK_FAILED') return true;
         const key = `${n.tipo}::${(n.descripcion || '').trim()}`;
-        if (seenSyncFailedKeys.has(key)) return false;
-        seenSyncFailedKeys.add(key);
+        if (seenErrorKeys.has(key)) return false;
+        seenErrorKeys.add(key);
         return true;
       });
 
@@ -59,11 +60,16 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
       setUnreadCount(Number(res.unread_count || 0));
 
       normalized
-        .filter((n) => n.tipo === 'SYNC_FAILED')
-        .filter((n) => !shownSyncFailedIdsRef.current.has(n.id))
+        .filter((n) => {
+          const tipo = String(n.tipo || '').toUpperCase();
+          return tipo === 'SYNC_FAILED' || tipo === 'PLAYBACK_FAILED';
+        })
+        .filter((n) => !shownErrorNotificationIdsRef.current.has(n.id))
         .forEach((n) => {
-          shownSyncFailedIdsRef.current.add(n.id);
-          showNotification(`Fallo de sincronización: ${n.descripcion}`, 'error', 7000);
+          shownErrorNotificationIdsRef.current.add(n.id);
+          const tipo = String(n.tipo || '').toUpperCase();
+          const prefix = tipo === 'PLAYBACK_FAILED' ? 'Error de reproducción' : 'Fallo de sincronización';
+          showNotification(`${prefix}: ${n.descripcion}`, 'error', 7000);
         });
 
       if (markAsRead && (res.unread_count || 0) > 0) {

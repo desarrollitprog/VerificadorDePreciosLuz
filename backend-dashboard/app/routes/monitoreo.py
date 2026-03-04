@@ -7,7 +7,7 @@ from typing import Any
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db_usuarios, AsyncSessionLocalUsuarios
 from app.dependencies import get_current_cliente, validar_api_key, get_current_admin
@@ -30,6 +30,10 @@ class HeartbeatBody(BaseModel):
 
 class DeviceRenameBody(BaseModel):
     nombre_amigable: str | None = None
+
+
+class ServerRenameBody(BaseModel):
+    nombre: str
 
 
 def _utcnow() -> datetime:
@@ -72,6 +76,22 @@ async def _obtener_dispositivos_de_servidor(ip: str) -> list[dict[str, Any]]:
         return []
 
 
+async def _obtener_conteo_videos_servidor(ip: str) -> int:
+    url = f"http://{ip}:8000/banners"
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            payload = resp.json()
+
+        if isinstance(payload, list):
+            return len(payload)
+        return 0
+    except Exception as e:
+        logger.warning("videos-servidor: fallo consultando %s: %s", url, e)
+        return 0
+
+
 @router.post("/heartbeat")
 async def heartbeat(
     body: HeartbeatBody,
@@ -98,7 +118,8 @@ async def heartbeat(
         servidor = result_nombre.scalars().first()
 
     if servidor:
-        servidor.nombre = nombre_servidor
+        if not (servidor.nombre or "").strip():
+            servidor.nombre = nombre_servidor
         servidor.ip = ip_servidor
         servidor.almacenamiento_total = body.almacenamiento_total
         servidor.almacenamiento_usado = body.almacenamiento_usado
@@ -560,6 +581,94 @@ async def renombrar_dispositivo(
         "success": True,
         "device_id": dispositivo.codigo_kiosko,
         "nombre_amigable": dispositivo.nombre_amigable,
+    }
+
+
+@router.patch("/servidores/{server_id}/nombre")
+async def renombrar_servidor(
+    server_id: int,
+    body: ServerRenameBody,
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_cliente),
+):
+    nuevo_nombre = (body.nombre or "").strip()
+    if not nuevo_nombre:
+        raise HTTPException(status_code=400, detail="El nombre no puede estar vacío")
+
+    stmt_exists = select(ServidorSecundario).where(
+        func.lower(ServidorSecundario.nombre) == nuevo_nombre.lower(),
+        ServidorSecundario.id != server_id,
+    )
+    result_exists = await db.execute(stmt_exists)
+    existing = result_exists.scalars().first()
+    result_exists.close()
+    if existing:
+        raise HTTPException(status_code=409, detail="Ya existe un servidor con ese nombre")
+
+    stmt = select(ServidorSecundario).where(ServidorSecundario.id == server_id)
+    result = await db.execute(stmt)
+    servidor = result.scalars().first()
+    result.close()
+
+    if not servidor:
+        raise HTTPException(status_code=404, detail="Servidor no encontrado")
+
+    servidor.nombre = nuevo_nombre
+    await db.commit()
+
+    user_id = current_user.get("user_id") if current_user else None
+    if user_id is not None:
+        try:
+            await registrar_accion(
+                db,
+                user_id,
+                "RENOMBRAR_SERVIDOR",
+                f"Servidor {servidor.ip} renombrado a '{servidor.nombre}'",
+            )
+        except Exception as e:
+            logger.warning("No se pudo registrar auditoría de rename para servidor %s: %s", servidor.id, e)
+
+    return {
+        "success": True,
+        "server_id": servidor.id,
+        "nombre": servidor.nombre,
+        "ip": servidor.ip,
+    }
+
+
+@router.get("/monitoreo/servidores/videos-actuales")
+async def servidores_videos_actuales(
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_cliente),
+):
+    now = _utcnow()
+    umbral = now - timedelta(minutes=HEARTBEAT_OFFLINE_MINUTES)
+
+    stmt = select(ServidorSecundario).order_by(ServidorSecundario.nombre)
+    result = await db.execute(stmt)
+    servidores = result.scalars().all()
+
+    online_servers = [
+        s for s in servidores
+        if s.ultimo_heartbeat is not None and s.ultimo_heartbeat >= umbral
+    ]
+
+    conteos = await asyncio.gather(*[_obtener_conteo_videos_servidor(s.ip) for s in online_servers])
+
+    data = []
+    for server, count in zip(online_servers, conteos):
+        data.append(
+            {
+                "id": server.id,
+                "nombre": server.nombre,
+                "ip": server.ip,
+                "videos_actuales": int(count),
+            }
+        )
+
+    return {
+        "success": True,
+        "servidores": data,
     }
 
 @router.get("/alertas")

@@ -3,17 +3,17 @@ import { CheckCircle, XCircle, Info, AlertTriangle, X } from 'lucide-react';
 import { useNotificationContext } from './NotificationContext';
 
 const iconMap = {
-  success: <CheckCircle className="text-green-500" size={24} />,
+  success: <CheckCircle className="text-emerald-500" size={24} />,
   error: <XCircle className="text-red-500" size={24} />,
   info: <Info className="text-blue-500" size={24} />,
-  warning: <AlertTriangle className="text-yellow-500" size={24} />,
+  warning: <AlertTriangle className="text-amber-500" size={24} />,
 };
 
 const colorMap = {
-  success: 'bg-green-100 border-green-500',
+  success: 'bg-emerald-100 border-emerald-500',
   error: 'bg-red-100 border-red-500',
   info: 'bg-blue-100 border-blue-500',
-  warning: 'bg-yellow-100 border-yellow-500',
+  warning: 'bg-amber-100 border-amber-500',
 };
 
 export const NotificationContainer: React.FC = () => {

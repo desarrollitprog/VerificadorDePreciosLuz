@@ -42,47 +42,57 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const shownSyncFailedIdsRef = useRef<Set<number>>(new Set());
 
+  const loadNotifications = async (markAsRead: boolean) => {
+    if (markAsRead) setLoading(true);
+    try {
+      const res = await fetchNotificaciones(10, 0);
+      const seenSyncFailedKeys = new Set<string>();
+      const normalized = (res.notificaciones || []).filter((n) => {
+        if (n.tipo !== 'SYNC_FAILED') return true;
+        const key = `${n.tipo}::${(n.descripcion || '').trim()}`;
+        if (seenSyncFailedKeys.has(key)) return false;
+        seenSyncFailedKeys.add(key);
+        return true;
+      });
+
+      setNotificaciones(normalized);
+      setUnreadCount(Number(res.unread_count || 0));
+
+      normalized
+        .filter((n) => n.tipo === 'SYNC_FAILED')
+        .filter((n) => !shownSyncFailedIdsRef.current.has(n.id))
+        .forEach((n) => {
+          shownSyncFailedIdsRef.current.add(n.id);
+          showNotification(`Fallo de sincronización: ${n.descripcion}`, 'error', 7000);
+        });
+
+      if (markAsRead && (res.unread_count || 0) > 0) {
+        markNotificacionesRead()
+          .then(() => {
+            setNotificaciones((prev) => prev.map((n) => ({ ...n, leida: true })));
+            setUnreadCount(0);
+          })
+          .catch(() => {
+            // no-op: mantener estado local actual si falla marcado
+          });
+      }
+    } finally {
+      if (markAsRead) setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadNotifications(false);
+    const intervalId = window.setInterval(() => {
+      loadNotifications(false);
+    }, 10000);
+
+    return () => window.clearInterval(intervalId);
+  }, [showNotification]);
+
   useEffect(() => {
     if (open) {
-      setLoading(true);
-      fetchNotificaciones(10, 0)
-        .then((res) => {
-          const seenSyncFailedKeys = new Set<string>();
-          const normalized = (res.notificaciones || []).filter((n) => {
-            if (n.tipo !== 'SYNC_FAILED') return true;
-            const key = `${n.tipo}::${(n.descripcion || '').trim()}`;
-            if (seenSyncFailedKeys.has(key)) return false;
-            seenSyncFailedKeys.add(key);
-            return true;
-          });
-
-          setNotificaciones(normalized);
-          setUnreadCount(Number(res.unread_count || 0));
-          // Mostrar toast para SYNC_FAILED
-          normalized
-            .filter((n) => n.tipo === 'SYNC_FAILED')
-            .filter((n) => !shownSyncFailedIdsRef.current.has(n.id))
-            .forEach((n) => {
-              shownSyncFailedIdsRef.current.add(n.id);
-              showNotification(
-                `Fallo de sincronización: ${n.descripcion}`,
-                'error',
-                7000
-              );
-            });
-
-          if ((res.unread_count || 0) > 0) {
-            markNotificacionesRead()
-              .then(() => {
-                setNotificaciones((prev) => prev.map((n) => ({ ...n, leida: true })));
-                setUnreadCount(0);
-              })
-              .catch(() => {
-                // no-op: mantener estado local actual si falla marcado
-              });
-          }
-        })
-        .finally(() => setLoading(false));
+      loadNotifications(true);
     }
   }, [open, showNotification]);
 

@@ -48,15 +48,30 @@ def get_server_name() -> str:
 
 def get_ip_address() -> str:
     """Obtiene la IP real de la red local (no docker, no loopback)."""
+    # Permitir forzar la IP por variable de entorno
+    forced_ip = os.getenv("HEARTBEAT_SERVER_IP")
+    if forced_ip:
+        return forced_ip
+
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        # No necesita estar disponible, solo fuerza la selección de interfaz
         s.connect(('8.8.8.8', 80))
         ip = s.getsockname()[0]
     except Exception:
         ip = '127.0.0.1'
     finally:
         s.close()
+
+    # Filtrar IPs internas de Docker (172.16.0.0/12)
+    if ip.startswith("172."):
+        # Buscar otra IP LAN válida
+        import netifaces
+        for iface in netifaces.interfaces():
+            addrs = netifaces.ifaddresses(iface).get(netifaces.AF_INET, [])
+            for addr in addrs:
+                candidate = addr.get('addr')
+                if candidate and not candidate.startswith("172.") and not candidate.startswith("127."):
+                    return candidate
     return ip
 
 

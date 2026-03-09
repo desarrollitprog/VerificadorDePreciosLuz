@@ -8,7 +8,7 @@ export function logout() {
   localStorage.removeItem('token');
 }
 
-function decodeJwtPayload(token: string): Record<string, any> | null {
+export function decodeJwtPayload(token: string): Record<string, any> | null {
   try {
     const payloadBase64 = token.split('.')[1];
     if (!payloadBase64) return null;

@@ -137,7 +137,6 @@ export const DashboardScreen: React.FC = () => {
 
   const handleUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
       // ...existing code...
-      setUploadStatuses(Array(validFiles.length).fill('pending'));
       setUploadStatuses([]);
     if (!event.target.files?.length) return;
     const files = Array.from(event.target.files);
@@ -192,8 +191,7 @@ export const DashboardScreen: React.FC = () => {
     setUploading(true);
     setError(null);
     // Feedback por archivo
-    const statuses = Array(selectedFiles.length).fill('pending');
-    setUploadStatuses(statuses);
+    setUploadStatuses(Array(selectedFiles.length).fill('pending'));
     let allSuccess = true;
     for (let i = 0; i < selectedFiles.length; i++) {
       setUploadStatuses(prev => {

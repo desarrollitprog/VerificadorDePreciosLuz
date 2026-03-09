@@ -48,6 +48,10 @@ const normalizeServerProgress = (details: any[] = []): SyncServerProgress[] => {
 };
 
 export const DashboardScreen: React.FC = () => {
+    // Drag & drop states
+    const [dragActive, setDragActive] = useState(false);
+    // Feedback por archivo
+    const [uploadStatuses, setUploadStatuses] = useState<Array<'pending' | 'uploading' | 'success' | 'error'>>([]);
   const showNotification = useNotification();
   const [preview, setPreview] = useState<{url: string, tipo: string, titulo: string} | null>(null);
   const handlePreview = (video: Video) => {
@@ -59,12 +63,16 @@ export const DashboardScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  // Batch upload states
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [fileMetadatas, setFileMetadatas] = useState<Array<{
+    titulo: string;
+    fechaInicio: string;
+    fechaFin: string;
+    activo: boolean;
+  }>>([]);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [uploadTitulo, setUploadTitulo] = useState('');
-  const [uploadFechaInicio, setUploadFechaInicio] = useState('');
-  const [uploadFechaFin, setUploadFechaFin] = useState('');
-  const [uploadActivo, setUploadActivo] = useState(true);
+  const [currentEditIndex, setCurrentEditIndex] = useState<number | null>(null);
 
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncServerProgress, setSyncServerProgress] = useState<SyncServerProgress[]>([]);
@@ -121,71 +129,112 @@ export const DashboardScreen: React.FC = () => {
   const selectedSecondaryServer = secondaryVideoCounts.find((server) => server.id === selectedSecondaryServerId) || null;
 
   const resetUploadModal = () => {
-    setSelectedFile(null);
-    setUploadTitulo('');
-    setUploadFechaInicio('');
-    setUploadFechaFin('');
-    setUploadActivo(true);
+    setSelectedFiles([]);
+    setFileMetadatas([]);
     setIsUploadModalOpen(false);
+    setCurrentEditIndex(null);
   };
 
   const handleUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+      // ...existing code...
+      setUploadStatuses(Array(validFiles.length).fill('pending'));
+      setUploadStatuses([]);
     if (!event.target.files?.length) return;
-    const file = event.target.files[0];
+    const files = Array.from(event.target.files);
     const maxSize = 20 * 1024 * 1024;
-    if (file.size > maxSize) {
-      setError('El archivo excede el tamaño máximo permitido (20 MB).');
-      showNotification('El archivo excede el tamaño máximo permitido (20 MB)', 'warning');
-      event.target.value = '';
-      return;
+    const validFiles: File[] = [];
+    const metadatas: typeof fileMetadatas = [];
+    let rejected = 0;
+    files.forEach(file => {
+      if (file.size > maxSize) {
+        rejected++;
+        return;
+      }
+      const decoratedDefault = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' ').trim();
+      validFiles.push(file);
+      metadatas.push({
+        titulo: decoratedDefault || file.name,
+        fechaInicio: '',
+        fechaFin: '',
+        activo: true,
+      });
+    });
+    if (rejected > 0) {
+      setError(`Se rechazaron ${rejected} archivos por tamaño (max 20MB).`);
+      showNotification(`Se rechazaron ${rejected} archivos por tamaño (max 20MB)`, 'warning');
     }
-    const decoratedDefault = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' ').trim();
-    setSelectedFile(file);
-    setUploadTitulo(decoratedDefault || file.name);
-    setUploadFechaInicio('');
-    setUploadFechaFin('');
-    setUploadActivo(true);
+    if (validFiles.length === 0) return;
+    setSelectedFiles(validFiles);
+    setFileMetadatas(metadatas);
     setIsUploadModalOpen(true);
     event.target.value = '';
   };
 
   const handleSubmitUpload = async () => {
-    if (!selectedFile) {
-      showNotification('Selecciona un archivo primero', 'warning');
+    if (selectedFiles.length === 0) {
+      showNotification('Selecciona archivos primero', 'warning');
       return;
     }
-    if (!uploadTitulo.trim()) {
-      showNotification('El título es obligatorio', 'warning');
-      return;
+    // Validar metadatos
+    for (let i = 0; i < fileMetadatas.length; i++) {
+      const meta = fileMetadatas[i];
+      if (!meta.titulo.trim()) {
+        showNotification(`El título es obligatorio para el archivo #${i + 1}`, 'warning');
+        return;
+      }
+      const fechaInicioIso = meta.fechaInicio ? new Date(meta.fechaInicio).toISOString() : null;
+      const fechaFinIso = meta.fechaFin ? new Date(meta.fechaFin).toISOString() : null;
+      if (fechaInicioIso && fechaFinIso && new Date(fechaInicioIso) > new Date(fechaFinIso)) {
+        showNotification(`La fecha de inicio no puede ser mayor a la fecha fin para el archivo #${i + 1}`, 'warning');
+        return;
+      }
     }
-
-    const fechaInicioIso = uploadFechaInicio ? new Date(uploadFechaInicio).toISOString() : null;
-    const fechaFinIso = uploadFechaFin ? new Date(uploadFechaFin).toISOString() : null;
-
-    if (fechaInicioIso && fechaFinIso && new Date(fechaInicioIso) > new Date(fechaFinIso)) {
-      showNotification('La fecha de inicio no puede ser mayor a la fecha fin', 'warning');
-      return;
-    }
-
     setUploading(true);
     setError(null);
-    try {
-      await uploadMedia(selectedFile, {
-        titulo: uploadTitulo.trim(),
-        fechaInicio: fechaInicioIso,
-        fechaFin: fechaFinIso,
-        activo: uploadActivo,
+    // Feedback por archivo
+    const statuses = Array(selectedFiles.length).fill('pending');
+    setUploadStatuses(statuses);
+    let allSuccess = true;
+    for (let i = 0; i < selectedFiles.length; i++) {
+      setUploadStatuses(prev => {
+        const next = [...prev];
+        next[i] = 'uploading';
+        return next;
       });
+      try {
+        const formData = new FormData();
+        formData.append('archivos', selectedFiles[i]);
+        formData.append('metadatos', JSON.stringify([{
+          ...fileMetadatas[i],
+          fechaInicio: fileMetadatas[i].fechaInicio ? new Date(fileMetadatas[i].fechaInicio).toISOString() : null,
+          fechaFin: fileMetadatas[i].fechaFin ? new Date(fileMetadatas[i].fechaFin).toISOString() : null,
+        }]));
+        await uploadMedia(formData);
+        setUploadStatuses(prev => {
+          const next = [...prev];
+          next[i] = 'success';
+          return next;
+        });
+      } catch (err) {
+        setUploadStatuses(prev => {
+          const next = [...prev];
+          next[i] = 'error';
+          return next;
+        });
+        allSuccess = false;
+      }
+    }
+    try {
       const data = await getVideos();
       setVideos(data);
-      showNotification('Archivo subido correctamente', 'success');
+    } catch {}
+    if (allSuccess) {
+      showNotification('Todos los archivos subidos correctamente', 'success');
       resetUploadModal();
-    } catch (err: any) {
-      setError('Error uploading archivo');
-      showNotification('Error al subir archivo', 'error');
-    } finally {
-      setUploading(false);
+    } else {
+      showNotification('Algunos archivos fallaron al subir', 'error');
     }
+    setUploading(false);
   };
 
   const handleDelete = async (videoId: string) => {
@@ -284,18 +333,29 @@ export const DashboardScreen: React.FC = () => {
       </div>
 
       {/* Upload Area */}
-      <div className="relative group cursor-pointer">
+      <div
+        className={`relative group cursor-pointer ${dragActive ? 'ring-2 ring-primary' : ''}`}
+        onDragOver={e => { e.preventDefault(); setDragActive(true); }}
+        onDragLeave={e => { e.preventDefault(); setDragActive(false); }}
+        onDrop={e => {
+          e.preventDefault();
+          setDragActive(false);
+          const files = Array.from(e.dataTransfer.files);
+          const fakeEvent = { target: { files } } as any;
+          handleUpload(fakeEvent);
+        }}
+      >
         <div className="absolute inset-0 bg-primary/5 rounded-xl border-2 border-dashed border-primary/30 group-hover:border-primary/60 transition-colors pointer-events-none"></div>
         <div className="flex flex-col items-center justify-center py-12 px-4 text-center rounded-xl bg-slate-50/50 dark:bg-[#151f2b] transition-all group-hover:bg-slate-100 dark:group-hover:bg-[#1a2532]">
           <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
             <UploadCloud className="text-primary" size={28} />
           </div>
           <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">Sube Nuevo Contenido</h3>
-          <p className="text-slate-500 text-sm max-w-sm mb-6">Click Aqui para subir Videos o Imagenes (Tamaño maximo = 20MB)</p>
+          <p className="text-slate-500 text-sm max-w-sm mb-6">Click o arrastra aquí para subir Videos o Imagenes (Tamaño maximo = 20MB)</p>
           <label className="px-6 py-2.5 bg-primary hover:bg-primary/90 text-white text-sm font-semibold rounded-lg shadow-lg shadow-primary/20 transition-all flex items-center gap-2 cursor-pointer">
             <Plus size={18} />
-            Seleccionar Archivo
-            <input type="file" accept="video/mp4,video/mkv,image/png,image/jpeg,image/jpg" className="hidden" onChange={handleUpload} />
+            Seleccionar Archivos
+            <input type="file" accept="video/mp4,video/mkv,image/png,image/jpeg,image/jpg" className="hidden" multiple onChange={handleUpload} />
           </label>
           {uploading && <div className="mt-2 text-primary">Subiendo...</div>}
           {error && <div className="mt-2 text-red-500">{error}</div>}
@@ -487,9 +547,9 @@ export const DashboardScreen: React.FC = () => {
 
       {isUploadModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-          <div className="w-full max-w-lg bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl p-5">
+          <div className="w-full max-w-2xl bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl p-5">
             <div className="flex items-start justify-between mb-4">
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Datos del Archivo</h3>
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Datos de Archivos</h3>
               <button
                 type="button"
                 className="text-slate-500 hover:text-red-500 text-xl leading-none"
@@ -499,53 +559,96 @@ export const DashboardScreen: React.FC = () => {
                 ×
               </button>
             </div>
-
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Título</label>
-                <input
-                  type="text"
-                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
-                  value={uploadTitulo}
-                  onChange={(e) => setUploadTitulo(e.target.value)}
-                  placeholder="Ej: Promo principal - Sucursal Centro"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Fecha Inicio</label>
-                  <input
-                    type="datetime-local"
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
-                    value={uploadFechaInicio}
-                    onChange={(e) => setUploadFechaInicio(e.target.value)}
-                  />
+              {selectedFiles.map((file, idx) => (
+                <div key={file.name} className="border rounded-lg p-4 mb-2 bg-slate-50 dark:bg-[#17202b]">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="font-semibold text-slate-900 dark:text-white">{file.name}</span>
+                    <span className="text-xs text-slate-500">({Math.round(file.size / 1024)} KB)</span>
+                    {/* Previsualización */}
+                    {file.type.startsWith('image') && (
+                      <img
+                        src={URL.createObjectURL(file)}
+                        alt={file.name}
+                        className="h-12 w-12 object-cover rounded ml-2"
+                        style={{ display: 'inline-block' }}
+                      />
+                    )}
+                    {file.type.startsWith('video') && (
+                      <video
+                        src={URL.createObjectURL(file)}
+                        className="h-12 w-12 rounded ml-2"
+                        controls
+                        style={{ display: 'inline-block' }}
+                      />
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Título</label>
+                      <input
+                        type="text"
+                        className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
+                        value={fileMetadatas[idx]?.titulo || ''}
+                        onChange={e => {
+                          const newMetas = [...fileMetadatas];
+                          newMetas[idx].titulo = e.target.value;
+                          setFileMetadatas(newMetas);
+                        }}
+                        placeholder="Ej: Promo principal - Sucursal Centro"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Estado</label>
+                      <select
+                        className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
+                        value={fileMetadatas[idx]?.activo ? 'activo' : 'inactivo'}
+                        onChange={e => {
+                          const newMetas = [...fileMetadatas];
+                          newMetas[idx].activo = e.target.value === 'activo';
+                          setFileMetadatas(newMetas);
+                        }}
+                      >
+                        <option value="activo">Activo</option>
+                        <option value="inactivo">Inactivo</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Fecha Inicio</label>
+                      <input
+                        type="datetime-local"
+                        className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
+                        value={fileMetadatas[idx]?.fechaInicio || ''}
+                        onChange={e => {
+                          const newMetas = [...fileMetadatas];
+                          newMetas[idx].fechaInicio = e.target.value;
+                          setFileMetadatas(newMetas);
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Fecha Fin</label>
+                      <input
+                        type="datetime-local"
+                        className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
+                        value={fileMetadatas[idx]?.fechaFin || ''}
+                        onChange={e => {
+                          const newMetas = [...fileMetadatas];
+                          newMetas[idx].fechaFin = e.target.value;
+                          setFileMetadatas(newMetas);
+                        }}
+                      />
+                    </div>
+                  </div>
+                  {/* Feedback por archivo */}
+                  {uploadStatuses[idx] === 'uploading' && <div className="mt-2 text-primary">Subiendo...</div>}
+                  {uploadStatuses[idx] === 'success' && <div className="mt-2 text-green-600">Subido correctamente</div>}
+                  {uploadStatuses[idx] === 'error' && <div className="mt-2 text-red-500">Error al subir</div>}
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Fecha Fin</label>
-                  <input
-                    type="datetime-local"
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
-                    value={uploadFechaFin}
-                    onChange={(e) => setUploadFechaFin(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Estado</label>
-                <select
-                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
-                  value={uploadActivo ? 'activo' : 'inactivo'}
-                  onChange={(e) => setUploadActivo(e.target.value === 'activo')}
-                >
-                  <option value="activo">Activo</option>
-                  <option value="inactivo">Inactivo</option>
-                </select>
-              </div>
+              ))}
             </div>
-
             <div className="mt-6 flex justify-end gap-2">
               <button
                 type="button"

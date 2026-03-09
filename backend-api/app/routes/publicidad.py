@@ -115,6 +115,86 @@ async def replicar_archivo(
         "id": nuevo_banner.id
     }
 
+@router.post("/replicar-archivos")
+async def replicar_archivos_batch(
+    files: List[UploadFile] = File(...),
+    Titulos: List[str] = Form(...),
+    Activos: List[bool] = Form(...),
+    Prioridades: List[int] = Form(...),
+    FechasInicio: List[str] = Form(...),
+    FechasFin: List[str] = Form(...),
+    DuracionesSeg: List[int] = Form(...),
+    IdsPublicidadRemoto: List[int] = Form(...),
+    db: AsyncSession = Depends(get_db_publicidad)
+):
+    banners_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "static", "banners"))
+    os.makedirs(banners_dir, exist_ok=True)
+    resultados = []
+    for idx, file in enumerate(files):
+        ext = file.filename.lower().split('.')[-1]
+        allowed_images = ["jpg", "jpeg", "png", "gif", "bmp", "webp"]
+        allowed_videos = ["mp4", "webm", "mkv", "avi", "mov"]
+        if ext in allowed_images:
+            tipo_archivo = "image"
+        elif ext in allowed_videos:
+            tipo_archivo = "video"
+        else:
+            resultados.append({"filename": file.filename, "success": False, "error": f"Tipo de archivo no permitido: .{ext}"})
+            continue
+        max_size = 20 * 1024 * 1024
+        file.file.seek(0, 2)
+        file_size = file.file.tell()
+        file.file.seek(0)
+        if file_size > max_size:
+            resultados.append({"filename": file.filename, "success": False, "error": "El archivo excede el tamaño máximo permitido (20 MB)."})
+            continue
+        filename = file.filename
+        file_location = os.path.join(banners_dir, filename)
+        if os.path.exists(file_location):
+            filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{filename}"
+            file_location = os.path.join(banners_dir, filename)
+        try:
+            with open(file_location, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+        except Exception as e:
+            resultados.append({"filename": file.filename, "success": False, "error": f"Error al guardar archivo: {str(e)}"})
+            continue
+        url = f"/static/banners/{filename}"
+        try:
+            fecha_inicio_dt = datetime.fromisoformat(FechasInicio[idx]) if FechasInicio[idx] else None
+            fecha_fin_dt = datetime.fromisoformat(FechasFin[idx]) if FechasFin[idx] else None
+            nuevo_banner = Publicidad(
+                titulo=Titulos[idx],
+                tipo=tipo_archivo,
+                url=url,
+                activo=Activos[idx],
+                prioridad=Prioridades[idx],
+                fecha_inicio=fecha_inicio_dt,
+                fecha_fin=fecha_fin_dt,
+                duracion_seg=DuracionesSeg[idx],
+                IdPublicidadRemoto=IdsPublicidadRemoto[idx]
+            )
+            db.add(nuevo_banner)
+            await db.commit()
+            await db.refresh(nuevo_banner)
+            resultados.append({
+                "filename": filename,
+                "success": True,
+                "url": url,
+                "id": nuevo_banner.id,
+                "IdPublicidadRemoto": nuevo_banner.IdPublicidadRemoto
+            })
+        except Exception as e:
+            if os.path.exists(file_location):
+                os.remove(file_location)
+            resultados.append({"filename": file.filename, "success": False, "error": f"Error al guardar metadatos: {str(e)}"})
+            continue
+    return {
+        "resultados": resultados,
+        "success": any(r["success"] for r in resultados),
+        "message": f"Batch replicación finalizada. {sum(1 for r in resultados if r['success'])} archivos exitosos, {sum(1 for r in resultados if not r['success'])} errores."
+    }
+
 @router.delete("/banners/remoto/{id_remoto}")
 async def eliminar_banner_remoto(id_remoto: int, db: AsyncSession = Depends(get_db_publicidad)):
     from ..models.publicidad import Publicidad

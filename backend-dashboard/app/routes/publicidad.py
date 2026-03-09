@@ -4,6 +4,8 @@ import uuid
 from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Path
+from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -135,7 +137,6 @@ async def upload_banner(
     db: AsyncSession = Depends(get_db_usuarios),
     current_user: dict = Depends(get_current_cliente),
 ):
-  
     # Calcula la ruta absoluta para static/banners, robusto ante cwd
     banners_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "static", "banners"))
     os.makedirs(banners_dir, exist_ok=True)
@@ -287,7 +288,121 @@ async def eliminar_banner(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al eliminar banner: {str(e)}")
 
-
+# Endpoint batch para subir múltiples archivos y metadatos
+@router.post("/banners/upload-batch")
+async def upload_banners_batch(
+    files: List[UploadFile] = File(...),
+    Titulos: List[str] = Form(...),
+    Activos: List[bool] = Form(...),
+    Prioridades: List[int] = Form(...),
+    FechasInicio: List[str] = Form(...),
+    FechasFin: List[str] = Form(...),
+    DuracionesSeg: List[int] = Form(...),
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_cliente),
+):
+    banners_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "static", "banners"))
+    os.makedirs(banners_dir, exist_ok=True)
+    resultados = []
+    archivos_guardados = []
+    metadatos_guardados = []
+    errores = []
+    for idx, file in enumerate(files):
+        ext = file.filename.lower().split('.')[-1]
+        allowed_images = ["jpg", "jpeg", "png", "gif", "bmp", "webp"]
+        allowed_videos = ["mp4", "webm", "mkv", "avi", "mov"]
+        if ext in allowed_images:
+            Tipo = "image"
+            max_size = 20 * 1024 * 1024
+        elif ext in allowed_videos:
+            Tipo = "video"
+            max_size = 20 * 1024 * 1024
+        else:
+            errores.append({"filename": file.filename, "error": f"Tipo de archivo no permitido: .{ext}"})
+            continue
+        file.file.seek(0, 2)
+        file_size = file.file.tell()
+        file.file.seek(0)
+        if file_size > max_size:
+            errores.append({"filename": file.filename, "error": f"El archivo excede el tamaño máximo permitido ({max_size // (1024*1024)} MB)."})
+            continue
+        filename = file.filename
+        file_location = os.path.join(banners_dir, filename)
+        if os.path.exists(file_location):
+            unique_suffix = uuid.uuid4().hex[:8]
+            filename = f"{os.path.splitext(file.filename)[0]}_{unique_suffix}.{ext}"
+            file_location = os.path.join(banners_dir, filename)
+        try:
+            with open(file_location, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            url = f"/static/banners/{filename}"
+            FechaInicio_dt = datetime.fromisoformat(FechasInicio[idx]) if FechasInicio[idx] else None
+            FechaFin_dt = datetime.fromisoformat(FechasFin[idx]) if FechasFin[idx] else None
+            if FechaInicio_dt and FechaFin_dt and FechaInicio_dt > FechaFin_dt:
+                raise Exception("Rango inválido: FechaInicio no puede ser mayor que FechaFin.")
+            nuevo_banner = Publicidad(
+                Titulo=Titulos[idx],
+                Tipo=Tipo,
+                Url=url,
+                Activo=Activos[idx],
+                Prioridad=Prioridades[idx],
+                FechaInicio=FechaInicio_dt,
+                FechaFin=FechaFin_dt,
+                DuracionSeg=DuracionesSeg[idx]
+            )
+            db.add(nuevo_banner)
+            await db.commit()
+            await db.refresh(nuevo_banner)
+            archivos_guardados.append(file_location)
+            metadatos_guardados.append(nuevo_banner)
+            resultados.append({
+                "filename": filename,
+                "success": True,
+        replicacion_resultados = []
+        try:
+            api_url = os.getenv("BACKEND_API_URL")
+            if archivos_guardados:
+                from ..services.replicacion_service import replicar_archivos_batch_al_api
+                replicacion_resultados = await replicar_archivos_batch_al_api(
+                    api_url=api_url,
+                    file_paths=archivos_guardados,
+                    banners=metadatos_guardados
+                )
+        except Exception as e:
+            errores.append({"error": f"Error en replicación batch: {str(e)}"})
+        # Agregar feedback de replicación por archivo
+        for idx, r in enumerate(replicacion_resultados):
+            resultados[idx]["replicacion"] = r
+            errores.append({"filename": file.filename, "error": str(e)})
+            continue
+    # Replicación batch al backend-api
+    try:
+        api_url = os.getenv("BACKEND_API_URL")
+        if archivos_guardados:
+            from ..services.replicacion_service import replicar_archivos_batch_al_api
+            resp = await replicar_archivos_batch_al_api(
+                api_url=api_url,
+                file_paths=archivos_guardados,
+                banners=metadatos_guardados
+            )
+            # Puedes agregar feedback de replicación por archivo si lo deseas
+    except Exception as e:
+        errores.append({"error": f"Error en replicación batch: {str(e)}"})
+    user_id = current_user.get("user_id")
+    if user_id is not None:
+        await registrar_accion(
+            db,
+            user_id,
+            "SUBIDA_MULTIMEDIA_BATCH",
+            f"Archivos subidos: {[r['filename'] for r in resultados]}"
+        )
+    return JSONResponse(content={
+        "resultados": resultados,
+        "errores": errores,
+        "success": len(resultados) > 0,
+        "message": f"Batch upload finalizado. {len(resultados)} archivos exitosos, {len(errores)} errores."
+    })
+  
 @router.patch("/banners/{id}/estado")
 async def cambiar_estado_banner(
     id: int = Path(..., description="ID del banner"),

@@ -52,6 +52,33 @@ async def replicar_archivo_al_api(
             print(f"[ERROR] Error al replicar archivo: {str(e)}")
             raise
 
+async def replicar_archivos_batch_al_api(api_url: str, file_paths: list, banners: list, timeout: int = 30) -> list:
+    """
+    Replica múltiples archivos y metadatos al backend-api.
+    Retorna una lista de resultados por archivo.
+    """
+    resultados = []
+    for idx, file_path in enumerate(file_paths):
+        banner = banners[idx]
+        try:
+            resp = await replicar_archivo_al_api(
+                api_url=api_url,
+                file_path=file_path,
+                IdPublicidadRemoto=banner.IdPublicidad,
+                titulo=banner.Titulo,
+                tipo=banner.Tipo,
+                prioridad=banner.Prioridad,
+                fecha_inicio=banner.FechaInicio.isoformat() if banner.FechaInicio else None,
+                fecha_fin=banner.FechaFin.isoformat() if banner.FechaFin else None,
+                duracion_seg=banner.DuracionSeg,
+                activo=banner.Activo,
+                timeout=timeout
+            )
+            resultados.append({"filename": file_path, "success": True, "response": resp})
+        except Exception as e:
+            resultados.append({"filename": file_path, "success": False, "error": str(e)})
+    return resultados
+
 async def Borrado_api(api_url: str, id_remoto: int, timeout: int = 30) -> dict:
     """
     Envía una petición DELETE al backend-api para eliminar un banner remoto por IdPublicidadRemoto.

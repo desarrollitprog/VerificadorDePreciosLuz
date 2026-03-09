@@ -10,7 +10,7 @@ import { Screen } from './types';
 import Sidebar from './components/Sidebar';
 import { Header } from './components/DashboardHeader';
 import { ServerDashboard } from './components/ServerDashboard';
-import { getTokenExpiryMs, hasValidToken, logout } from './services/authService';
+import { getTokenExpiryMs, hasValidToken, logout } from './services/tokenUtils';
 import { LayoutGrid } from 'lucide-react';
 
 export default function App() {

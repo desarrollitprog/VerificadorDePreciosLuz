@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { LayoutGrid, Video, LogOut, X, Users, Server, User } from 'lucide-react';
 import { Screen } from '../types';
-import { getUserRole, getUserName } from '../services/authService';
+import { getUserRole, getUserName } from '../services/tokenUtils';
 
 interface SidebarProps {
   currentScreen: Screen;

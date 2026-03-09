@@ -76,13 +76,3 @@ export async function login(username: string, correo: string, contrasena: string
   }
   return challenge as unknown as LoginVerifyResponse;
 }
-
-export function getTokenExpiryMs(): number | null {
-  const token = getToken();
-  if (!token) return null;
-  const payload = decodeJwtPayload(token);
-  if (!payload || typeof payload.exp !== 'number') {
-    return null;
-  }
-  return payload.exp * 1000;
-}

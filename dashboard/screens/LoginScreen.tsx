@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { loginStart, resendTwoFactor, saveToken, verifyTwoFactor } from '../services/authService';
+import { loginStart, resendTwoFactor, verifyTwoFactor } from '../services/authService';
+import { saveToken } from '../services/tokenUtils';
 import { Lock, User, Eye, EyeOff, Video, Mail, ShieldCheck } from 'lucide-react';
 
 interface LoginScreenProps {

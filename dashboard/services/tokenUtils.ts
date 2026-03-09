@@ -68,3 +68,13 @@ export function getUserRole(): 'ADMIN' | 'CLIENTE' | null {
 export function saveToken(token: string): void {
   localStorage.setItem('token', token);
 }
+
+export function getTokenExpiryMs(): number | null {
+  const token = getToken();
+  if (!token) return null;
+  const payload = decodeJwtPayload(token);
+  if (!payload || typeof payload.exp !== 'number') {
+    return null;
+  }
+  return payload.exp * 1000;
+}

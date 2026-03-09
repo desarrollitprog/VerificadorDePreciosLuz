@@ -64,3 +64,7 @@ export function getUserRole(): 'ADMIN' | 'CLIENTE' | null {
   }
   return null;
 }
+
+export function saveToken(token: string): void {
+  localStorage.setItem('token', token);
+}

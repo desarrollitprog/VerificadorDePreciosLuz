@@ -1,6 +1,6 @@
 import api from './axiosInstance';
 import { getToken, logout, isTokenExpired, hasValidToken, getUserName, getUserRole } from './tokenUtils';
-import { decodeJwtPayload } from './tokenUtils';
+import { decodeJwtPayload, saveToken } from './tokenUtils';
 
 export interface LoginStartResponse {
   requires_2fa: boolean;
@@ -37,6 +37,8 @@ export async function loginStart(username: string, correo: string, contrasena: s
     throw new Error('Error de autenticación');
   }
 }
+
+export { saveToken };
 
 export async function verifyTwoFactor(tempToken: string, code: string): Promise<LoginVerifyResponse> {
   try {

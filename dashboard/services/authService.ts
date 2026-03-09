@@ -74,9 +74,6 @@ export async function login(username: string, correo: string, contrasena: string
   return challenge as unknown as LoginVerifyResponse;
 }
 
-  localStorage.setItem('token', token);
-}
-
 export function getTokenExpiryMs(): number | null {
   const token = getToken();
   if (!token) return null;

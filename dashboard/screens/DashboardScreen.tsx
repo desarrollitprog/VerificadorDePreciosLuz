@@ -200,14 +200,12 @@ export const DashboardScreen: React.FC = () => {
         return next;
       });
       try {
-        const formData = new FormData();
-        formData.append('archivos', selectedFiles[i]);
-        formData.append('metadatos', JSON.stringify([{
-          ...fileMetadatas[i],
+        await uploadMedia(selectedFiles[i], {
+          titulo: fileMetadatas[i].titulo,
           fechaInicio: fileMetadatas[i].fechaInicio ? new Date(fileMetadatas[i].fechaInicio).toISOString() : null,
           fechaFin: fileMetadatas[i].fechaFin ? new Date(fileMetadatas[i].fechaFin).toISOString() : null,
-        }]));
-        await uploadMedia(formData);
+          activo: fileMetadatas[i].activo
+        });
         setUploadStatuses(prev => {
           const next = [...prev];
           next[i] = 'success';

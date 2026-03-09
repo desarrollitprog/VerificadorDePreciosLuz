@@ -358,7 +358,11 @@ async def upload_banners_batch(
             resultados.append({
                 "filename": filename,
                 "success": True,
-        replicacion_resultados = []
+            })
+        except Exception as e:
+            errores.append({"filename": file.filename, "error": str(e)})
+            continue
+            replicacion_resultados = []
         try:
             api_url = os.getenv("BACKEND_API_URL")
             if archivos_guardados:

@@ -6,9 +6,16 @@ import { toNotificationViewModel } from '../services/notificacionesPresentation'
 
 interface GeneralNotificationsProps {}
 
+// Ajusta una fecha a UTC-4
+function toUtcMinus4(dateString: string | Date): Date {
+  const date = typeof dateString === 'string' ? new Date(dateString) : new Date(dateString.getTime());
+  date.setHours(date.getHours() - 4);
+  return date;
+}
+
 function getRelativeTimeLabel(dateIso: string): string {
   const now = Date.now();
-  const then = new Date(dateIso).getTime();
+  const then = toUtcMinus4(dateIso).getTime();
   const diffSeconds = Math.max(0, Math.floor((now - then) / 1000));
 
   if (diffSeconds < 60) return 'hace segundos';
@@ -189,7 +196,7 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
                   const isError = view.severity === 'error';
                   const badge = getBadgeBySeverity(view.severity);
                   const actionBadge = getBadgeByAction(view.actionBadge);
-                  const exactTime = new Date(n.fecha_creacion).toLocaleString();
+                  const exactTime = toUtcMinus4(n.fecha_creacion).toLocaleString();
                   const relativeTime = getRelativeTimeLabel(n.fecha_creacion);
                   const nombreUsuario = n.nombre_usuario || 'Desconocido';
                   return (

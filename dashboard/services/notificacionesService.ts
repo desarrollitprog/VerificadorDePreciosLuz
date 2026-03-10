@@ -3,6 +3,7 @@ import api from './axiosInstance';
 export interface Notificacion {
   id: number;
   usuario_id: number;
+  nombre_usuario?: string; // Nuevo campo opcional para el nombre
   tipo: string;
   descripcion: string;
   fecha_creacion: string;

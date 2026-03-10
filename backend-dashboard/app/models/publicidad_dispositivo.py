@@ -16,11 +16,13 @@ publicidad_dispositivo = Table(
 Publicidad.dispositivos = relationship(
     "Dispositivo",
     secondary=publicidad_dispositivo,
-    back_populates="publicidades"
+    back_populates="publicidades",
+    lazy="selectin"  # <--- CRUCIAL para evitar errores en FastAPI Async
 )
 
 Dispositivo.publicidades = relationship(
     "Publicidad",
     secondary=publicidad_dispositivo,
-    back_populates="dispositivos"
+    back_populates="dispositivos",
+    lazy="selectin"
 )

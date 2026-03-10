@@ -80,6 +80,9 @@ export const DashboardScreen: React.FC = () => {
   const [secondaryVideoCounts, setSecondaryVideoCounts] = useState<SecondaryVideoCounter[]>([]);
   const [selectedSecondaryServerId, setSelectedSecondaryServerId] = useState<string>('');
 
+  // Estado para vista compacta
+  const [expandedFiles, setExpandedFiles] = useState<boolean[]>([]);
+
   useEffect(() => {
     async function fetchVideos() {
       setLoading(true);
@@ -556,109 +559,110 @@ export const DashboardScreen: React.FC = () => {
               </button>
             </div>
             <div className="space-y-4">
-              {selectedFiles.map((file, idx) => {
-                const [expanded, setExpanded] = useState(false);
-                return (
-                  <div key={file.name} className="border rounded-lg p-4 mb-2 bg-slate-50 dark:bg-[#17202b]">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="font-semibold text-slate-900 dark:text-white">{file.name}</span>
-                      <span className="text-xs text-slate-500">({Math.round(file.size / 1024)} KB)</span>
-                      {file.type.startsWith('image') && (
-                        <img
-                          src={URL.createObjectURL(file)}
-                          alt={file.name}
-                          className="h-12 w-12 object-cover rounded ml-2"
-                        />
-                      )}
-                      {file.type.startsWith('video') && (
-                        <video
-                          src={URL.createObjectURL(file)}
-                          className="h-12 w-12 rounded ml-2"
-                          controls
-                        />
-                      )}
-                      <button
-                        type="button"
-                        className="ml-auto px-2 py-1 rounded bg-slate-200 dark:bg-slate-700 text-xs"
-                        onClick={() => setExpanded(e => !e)}
-                      >
-                        {expanded ? 'Ocultar detalles' : 'Ver detalles'}
-                      </button>
-                    </div>
-                    {expanded && (
-                      <div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {/* Título */}
-                          <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Título</label>
-                            <input
-                              type="text"
-                              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
-                              value={fileMetadatas[idx]?.titulo || ''}
-                              onChange={e => {
-                                const newMetas = [...fileMetadatas];
-                                newMetas[idx].titulo = e.target.value;
-                                setFileMetadatas(newMetas);
-                              }}
-                              placeholder="Ej: Promo principal - Sucursal Centro"
-                            />
-                          </div>
-                          {/* Estado */}
-                          <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Estado</label>
-                            <select
-                              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
-                              value={fileMetadatas[idx]?.activo ? 'activo' : 'inactivo'}
-                              onChange={e => {
-                                const newMetas = [...fileMetadatas];
-                                newMetas[idx].activo = e.target.value === 'activo';
-                                setFileMetadatas(newMetas);
-                              }}
-                            >
-                              <option value="activo">Activo</option>
-                              <option value="inactivo">Inactivo</option>
-                            </select>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-                          {/* Fecha Inicio */}
-                          <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Fecha Inicio</label>
-                            <input
-                              type="datetime-local"
-                              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
-                              value={fileMetadatas[idx]?.fechaInicio || ''}
-                              onChange={e => {
-                                const newMetas = [...fileMetadatas];
-                                newMetas[idx].fechaInicio = e.target.value;
-                                setFileMetadatas(newMetas);
-                              }}
-                            />
-                          </div>
-                          {/* Fecha Fin */}
-                          <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Fecha Fin</label>
-                            <input
-                              type="datetime-local"
-                              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
-                              value={fileMetadatas[idx]?.fechaFin || ''}
-                              onChange={e => {
-                                const newMetas = [...fileMetadatas];
-                                newMetas[idx].fechaFin = e.target.value;
-                                setFileMetadatas(newMetas);
-                              }}
-                            />
-                          </div>
-                        </div>
-                        {/* Feedback por archivo */}
-                        {uploadStatuses[idx] === 'uploading' && <div className="mt-2 text-primary">Subiendo...</div>}
-                        {uploadStatuses[idx] === 'success' && <div className="mt-2 text-green-600">Subido correctamente</div>}
-                        {uploadStatuses[idx] === 'error' && <div className="mt-2 text-red-500">Error al subir</div>}
-                      </div>
+              {selectedFiles.map((file, idx) => (
+                <div key={file.name} className="border rounded-lg p-4 mb-2 bg-slate-50 dark:bg-[#17202b]">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="font-semibold text-slate-900 dark:text-white">{file.name}</span>
+                    <span className="text-xs text-slate-500">({Math.round(file.size / 1024)} KB)</span>
+                    {file.type.startsWith('image') && (
+                      <img
+                        src={URL.createObjectURL(file)}
+                        alt={file.name}
+                        className="h-12 w-12 object-cover rounded ml-2"
+                      />
                     )}
+                    {file.type.startsWith('video') && (
+                      <video
+                        src={URL.createObjectURL(file)}
+                        className="h-12 w-12 rounded ml-2"
+                        controls
+                      />
+                    )}
+                    <button
+                      type="button"
+                      className="ml-auto px-2 py-1 rounded bg-slate-200 dark:bg-slate-700 text-xs"
+                      onClick={() => {
+                        const next = [...expandedFiles];
+                        next[idx] = !next[idx];
+                        setExpandedFiles(next);
+                      }}
+                    >
+                      {expandedFiles[idx] ? 'Ocultar detalles' : 'Ver detalles'}
+                    </button>
                   </div>
-                );
-              })}
+                  {expandedFiles[idx] && (
+                    <div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {/* Título */}
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Título</label>
+                          <input
+                            type="text"
+                            className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
+                            value={fileMetadatas[idx]?.titulo || ''}
+                            onChange={e => {
+                              const newMetas = [...fileMetadatas];
+                              newMetas[idx].titulo = e.target.value;
+                              setFileMetadatas(newMetas);
+                            }}
+                            placeholder="Ej: Promo principal - Sucursal Centro"
+                          />
+                        </div>
+                        {/* Estado */}
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Estado</label>
+                          <select
+                            className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
+                            value={fileMetadatas[idx]?.activo ? 'activo' : 'inactivo'}
+                            onChange={e => {
+                              const newMetas = [...fileMetadatas];
+                              newMetas[idx].activo = e.target.value === 'activo';
+                              setFileMetadatas(newMetas);
+                            }}
+                          >
+                            <option value="activo">Activo</option>
+                            <option value="inactivo">Inactivo</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                        {/* Fecha Inicio */}
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Fecha Inicio</label>
+                          <input
+                            type="datetime-local"
+                            className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
+                            value={fileMetadatas[idx]?.fechaInicio || ''}
+                            onChange={e => {
+                              const newMetas = [...fileMetadatas];
+                              newMetas[idx].fechaInicio = e.target.value;
+                              setFileMetadatas(newMetas);
+                            }}
+                          />
+                        </div>
+                        {/* Fecha Fin */}
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Fecha Fin</label>
+                          <input
+                            type="datetime-local"
+                            className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
+                            value={fileMetadatas[idx]?.fechaFin || ''}
+                            onChange={e => {
+                              const newMetas = [...fileMetadatas];
+                              newMetas[idx].fechaFin = e.target.value;
+                              setFileMetadatas(newMetas);
+                            }}
+                          />
+                        </div>
+                      </div>
+                      {/* Feedback por archivo */}
+                      {uploadStatuses[idx] === 'uploading' && <div className="mt-2 text-primary">Subiendo...</div>}
+                      {uploadStatuses[idx] === 'success' && <div className="mt-2 text-green-600">Subido correctamente</div>}
+                      {uploadStatuses[idx] === 'error' && <div className="mt-2 text-red-500">Error al subir</div>}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
             <div className="mt-6 flex justify-end gap-2">
               <button

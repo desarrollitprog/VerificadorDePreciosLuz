@@ -6,8 +6,8 @@ import { toNotificationViewModel } from '../services/notificacionesPresentation'
 
 interface GeneralNotificationsProps {}
 
-// Ajusta una fecha a UTC-4
-function toUtcMinus4(dateString: string | Date): Date {
+// Formatea una fecha a la hora de Caracas (UTC-4)
+function formatCaracasTime(dateString: string | Date): Date {
   const date = typeof dateString === 'string' ? new Date(dateString) : new Date(dateString.getTime());
   date.setHours(date.getHours() - 4);
   return date;
@@ -15,7 +15,7 @@ function toUtcMinus4(dateString: string | Date): Date {
 
 function getRelativeTimeLabel(dateIso: string): string {
   const now = Date.now();
-  const then = toUtcMinus4(dateIso).getTime();
+  const then = formatCaracasTime(dateIso).getTime();
   const diffSeconds = Math.max(0, Math.floor((now - then) / 1000));
 
   if (diffSeconds < 60) return 'hace segundos';
@@ -196,7 +196,7 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
                   const isError = view.severity === 'error';
                   const badge = getBadgeBySeverity(view.severity);
                   const actionBadge = getBadgeByAction(view.actionBadge);
-                  const exactTime = toUtcMinus4(n.fecha_creacion).toLocaleString();
+                  const exactTime = formatCaracasTime(n.fecha_creacion).toLocaleString();
                   const relativeTime = getRelativeTimeLabel(n.fecha_creacion);
                   const nombreUsuario = n.nombre_usuario || 'Desconocido';
                   return (
@@ -221,6 +221,7 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
                       <div className="text-xs text-primary font-semibold mb-1">Usuario: {nombreUsuario}</div>
                       <div className={`text-sm font-medium ${isError ? 'text-red-700 dark:text-red-400' : 'text-slate-900 dark:text-white'}`}>{view.title}</div>
                       <div className={`text-sm ${isError ? 'text-red-800 dark:text-red-200' : 'text-slate-700 dark:text-slate-300'}`}>{view.message}</div>
+                      {/* Mostrar detalle técnico solo si existe y es distinto del mensaje principal */}
                       {view.detail && view.detail !== view.message && (
                         <div className="text-xs text-slate-500 mt-1">Detalle técnico: {view.detail}</div>
                       )}

@@ -63,13 +63,19 @@ export function toNotificationViewModel(notificacion: Notificacion): Notificatio
           detail: detailParts[0],
         };
       }
-    case 'SINCRONIZACION_FORZADA':
+    case 'SINCRONIZACION_FORZADA': {
+      // Elimina la línea de "Fallos" si ya está resumida en éxito/fallo
+      let resumen = descripcion;
+      if (descripcion.includes('Fallos:')) {
+        resumen = descripcion.replace(/\.\s*Fallos:.*$/, '');
+      }
       return {
         title: 'Sincronización ejecutada',
         message: 'Se ejecutó una sincronización forzada desde el panel.',
-        detail: descripcion || undefined,
+        detail: resumen !== '' ? resumen : undefined,
         severity: 'info',
       };
+    }
     case 'RENOMBRAR_DISPOSITIVO':
       return {
         title: 'Dispositivo actualizado',
@@ -126,10 +132,16 @@ export function toNotificationViewModel(notificacion: Notificacion): Notificatio
         severity: 'warning',
       };
     default:
+      // Para otras notificaciones, solo mostrar detalle si la descripción es distinta al mensaje y no está vacía
+      const msg = truncate(descripcion || 'Hay una notificación nueva.', 110);
+      let detail: string | undefined = undefined;
+      if (descripcion && descripcion !== msg) {
+        detail = descripcion;
+      }
       return {
         title: humanizeTipo(tipo),
-        message: truncate(descripcion || 'Hay una notificación nueva.', 110),
-        detail: descripcion || undefined,
+        message: msg,
+        detail,
         severity: 'info',
       };
   }

@@ -55,11 +55,14 @@ const toInputDateTime = (iso?: string | null): string => {
 
 const toIsoOrNull = (val: string): string | null => (val ? new Date(val).toISOString() : null);
 
-const formatDateDisplay = (value?: string): string => {
+// Formatea una fecha a la hora de Caracas (UTC-4)
+const formatCaracasTime = (value?: string): string => {
   if (!value) return '-';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  // Ajustar a UTC-4
+  date.setHours(date.getHours() - 4);
+  return date.toLocaleString('es-VE', { timeZone: 'America/Caracas' });
 };
 
 export const VideoListScreen: React.FC = () => {
@@ -353,9 +356,9 @@ export const VideoListScreen: React.FC = () => {
                   <span className="text-xs text-slate-500 dark:text-[#58728a] truncate">ID: {item.id}</span>
                 </div>
               </div>
-              <div className="col-span-3 hidden sm:flex md:col-span-2 text-xs text-slate-600 dark:text-[#92adc9] truncate" title={item.date}>{formatDateDisplay(item.date)}</div>
-              <div className="hidden lg:flex lg:col-span-2 text-xs text-slate-600 dark:text-[#92adc9] truncate" title={item.fechaInicio || undefined}>{formatDateDisplay(item.fechaInicio)}</div>
-              <div className="hidden lg:flex lg:col-span-2 text-xs text-slate-600 dark:text-[#92adc9] truncate" title={item.fechaFin || undefined}>{formatDateDisplay(item.fechaFin)}</div>
+              <div className="col-span-3 hidden sm:flex md:col-span-2 text-xs text-slate-600 dark:text-[#92adc9] truncate" title={item.date}>{formatCaracasTime(item.date)}</div>
+              <div className="hidden lg:flex lg:col-span-2 text-xs text-slate-600 dark:text-[#92adc9] truncate" title={item.fechaInicio || undefined}>{formatCaracasTime(item.fechaInicio)}</div>
+              <div className="hidden lg:flex lg:col-span-2 text-xs text-slate-600 dark:text-[#92adc9] truncate" title={item.fechaFin || undefined}>{formatCaracasTime(item.fechaFin)}</div>
               <div className="col-span-1 hidden md:flex lg:hidden justify-end text-xs text-slate-600 dark:text-[#92adc9] font-mono">{item.size}</div>
               <div className="col-span-3 sm:col-span-2 md:col-span-2 lg:col-span-1 flex items-center gap-1.5 flex-wrap">
                 <OperativoBadge activo={item.activo} />

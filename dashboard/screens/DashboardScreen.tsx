@@ -10,11 +10,12 @@ import {
 } from '../services/monitoreoService';
 
 
-// Ajusta una fecha a UTC-4
-function toUtcMinus4(dateString: string | Date): Date {
+// Formatea una fecha a la hora de Caracas (UTC-4) sin depender de la hora local del sistema
+function formatCaracasTime(dateString: string | Date): string {
   const date = typeof dateString === 'string' ? new Date(dateString) : new Date(dateString.getTime());
+  // Ajustar a UTC-4
   date.setHours(date.getHours() - 4);
-  return date;
+  return date.toLocaleString('es-VE', { timeZone: 'America/Caracas' });
 }
 
 type SyncServerProgress = {
@@ -191,8 +192,8 @@ export const DashboardScreen: React.FC = () => {
         showNotification(`El título es obligatorio para el archivo #${i + 1}`, 'warning');
         return;
       }
-      const fechaInicioIso = meta.fechaInicio ? toUtcMinus4(meta.fechaInicio).toISOString() : null;
-      const fechaFinIso = meta.fechaFin ? toUtcMinus4(meta.fechaFin).toISOString() : null;
+      const fechaInicioIso = meta.fechaInicio ? new Date(formatCaracasTime(meta.fechaInicio)).toISOString() : null;
+      const fechaFinIso = meta.fechaFin ? new Date(formatCaracasTime(meta.fechaFin)).toISOString() : null;
       if (fechaInicioIso && fechaFinIso && new Date(fechaInicioIso) > new Date(fechaFinIso)) {
         showNotification(`La fecha de inicio no puede ser mayor a la fecha fin para el archivo #${i + 1}`, 'warning');
         return;
@@ -212,8 +213,8 @@ export const DashboardScreen: React.FC = () => {
       try {
         await uploadMedia(selectedFiles[i], {
           titulo: fileMetadatas[i].titulo,
-          fechaInicio: fileMetadatas[i].fechaInicio ? toUtcMinus4(fileMetadatas[i].fechaInicio).toISOString() : null,
-          fechaFin: fileMetadatas[i].fechaFin ? toUtcMinus4(fileMetadatas[i].fechaFin).toISOString() : null,
+          fechaInicio: fileMetadatas[i].fechaInicio ? new Date(formatCaracasTime(fileMetadatas[i].fechaInicio)).toISOString() : null,
+          fechaFin: fileMetadatas[i].fechaFin ? new Date(formatCaracasTime(fileMetadatas[i].fechaFin)).toISOString() : null,
           activo: fileMetadatas[i].activo
         });
         setUploadStatuses(prev => {
@@ -285,7 +286,7 @@ export const DashboardScreen: React.FC = () => {
         return;
       }
 
-      setLastSyncAt(toUtcMinus4(new Date()).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setLastSyncAt(formatCaracasTime(new Date()));
 
       if (finalStatus.status === 'COMPLETED') {
         const successCount = finalStatus.success_count ?? 0;
@@ -515,7 +516,7 @@ export const DashboardScreen: React.FC = () => {
                   </div>
                   <div className="flex items-center justify-between mt-auto pt-2">
                     <span className="text-slate-500 text-xs">
-                      Fecha subida: {video.date ? toUtcMinus4(video.date).toLocaleString() : 'Fecha desconocida'}
+                      Fecha subida: {video.date ? formatCaracasTime(video.date) : 'Fecha desconocida'}
                     </span>
                   </div>
                   {/* Action Buttons */}

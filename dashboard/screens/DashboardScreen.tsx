@@ -558,7 +558,7 @@ export const DashboardScreen: React.FC = () => {
                 ×
               </button>
             </div>
-            <div className="space-y-4">
+            <div className="space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar">
               {selectedFiles.map((file, idx) => (
                 <div key={file.name} className="border rounded-lg p-4 mb-2 bg-slate-50 dark:bg-[#17202b]">
                   <div className="flex items-center gap-2 mb-2">

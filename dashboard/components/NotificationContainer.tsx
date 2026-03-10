@@ -21,22 +21,47 @@ export const NotificationContainer: React.FC = () => {
 
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 items-end">
-      {notifications.map((n) => (
-        <div
-          key={n.id}
-          className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border ${colorMap[n.type]} animate-slide-fade-in`}
-        >
-          {iconMap[n.type]}
-          <span className="text-sm font-medium text-slate-900 flex-1">{n.message}</span>
-          <button
-            className="ml-2 text-slate-500 hover:text-slate-900"
-            onClick={() => removeNotification(n.id)}
-            aria-label="Cerrar notificación"
+      {notifications.map((n) => {
+        let title = '';
+        let description = '';
+        let icon = iconMap[n.type] || <Info className="text-blue-500" size={24} />;
+        let borderColor = colorMap[n.type] || 'border-blue-500';
+
+        // Personaliza el título y descripción según el tipo
+        switch (n.type) {
+          case 'success':
+            title = 'Operación exitosa';
+            description = 'La acción se realizó correctamente.';
+            break;
+          case 'error':
+            title = 'Error';
+            description = 'Ocurrió un error durante la operación.';
+            break;
+          case 'warning':
+            title = 'Advertencia';
+            description = 'Atención: se detectó una situación especial.';
+            break;
+          case 'info':
+          default:
+            title = 'Sincronización ejecutada';
+            description = 'Se ejecutó una sincronización forzada desde el panel.';
+            break;
+        }
+
+        return (
+          <div
+            key={n.id}
+            className={`flex flex-col px-4 py-3 rounded-lg shadow-lg border bg-slate-100 dark:bg-[#1c2936] ${borderColor} animate-slide-fade-in w-96`}
           >
-            <X size={18} />
-          </button>
-        </div>
-      ))}
+            <div className="flex items-center gap-3 mb-2">
+              {icon}
+              <span className="text-base font-bold text-slate-900 dark:text-white">{title}</span>
+            </div>
+            <div className="text-sm text-slate-700 dark:text-slate-200 mb-1">{description}</div>
+            <div className="text-xs text-slate-500 dark:text-slate-400">{n.message}</div>
+          </div>
+        );
+      })}
       <style>{`
         @keyframes slide-fade-in {
           0% { opacity: 0; transform: translateY(20px); }

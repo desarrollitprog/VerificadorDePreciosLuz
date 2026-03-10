@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getVideos, deleteVideo, updateBannerEstado, updateBannerMetadata } from '../services/videoService';
 import { Video } from '../types';
-import { Search, ArrowUpDown, FileVideo, AlertCircle, Clock, Edit2, Trash2, Download, Power, ListChecks } from 'lucide-react';
+import { Search, FileVideo, AlertCircle, Clock, Edit2, Trash2, Download, Power, ListChecks, ArrowUpDown } from 'lucide-react';
 
 const StatusIcon = ({ status }: { status: string }) => {
   switch (status) {
@@ -53,7 +53,14 @@ const toInputDateTime = (iso?: string | null): string => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-const toIsoOrNull = (val: string): string | null => (val ? new Date(val).toISOString() : null);
+const toIsoOrNull = (val: string): string | null => {
+  if (!val) return null;
+  // Si es formato local, agrega zona Caracas
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(val)) {
+    return val.includes('-04:00') ? val : `${val}:00-04:00`;
+  }
+  return new Date(val).toISOString();
+};
 
 // Formatea una fecha a la hora de Caracas (UTC-4)
 const formatCaracasTime = (value?: string): string => {
@@ -82,7 +89,7 @@ export const VideoListScreen: React.FC = () => {
     fechaFin: '',
   });
   const [page, setPage] = useState(1);
-  const rowsPerPage = 10;
+  const rowsPerPage = 8;
 
   useEffect(() => {
     async function fetchVideos() {
@@ -290,7 +297,7 @@ export const VideoListScreen: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-1 w-full overflow-hidden rounded-xl border border-slate-200 dark:border-[#324d67]/30 bg-white dark:bg-[#16212b] flex flex-col shadow-xl" style={{ minHeight: 500, maxHeight: 900, height: 'auto' }}>
+      <div className="flex-1 w-full rounded-xl border border-slate-200 dark:border-[#324d67]/30 bg-white dark:bg-[#16212b] flex flex-col shadow-xl overflow-hidden" style={{ minHeight: '600px', height: 'auto' }}>
         <div className="grid grid-cols-12 gap-2 border-b border-slate-200 dark:border-[#324d67]/50 bg-slate-50 dark:bg-[#1f2b38] px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-[#92adc9]">
           <div className="col-span-1 flex items-center justify-center gap-1" title="Seleccionar todo el contenido">
             <input
@@ -330,10 +337,8 @@ export const VideoListScreen: React.FC = () => {
             <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
           <div className="col-span-3 sm:col-span-2 md:col-span-2 lg:col-span-1 flex items-center justify-start">Estatus</div>
-          <div className="col-span-3 sm:col-span-2 md:col-span-2 flex items-center justify-center">Acciones</div>
         </div>
-
-        <div className="flex-1 overflow-y-auto">
+        <div>
           {Array.isArray(paginatedVideos) && paginatedVideos.map((item) => (
             <div key={item.id} className="group grid grid-cols-12 gap-2 border-b border-slate-100 dark:border-[#324d67]/30 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-[#1f2b38] transition-colors items-center">
               <div className="col-span-1 flex items-center justify-center">
@@ -362,48 +367,63 @@ export const VideoListScreen: React.FC = () => {
                 <OperativoBadge activo={item.activo} />
                 <VigenciaBadge item={item} />
               </div>
-
               <div className="col-span-3 sm:col-span-2 md:col-span-2 flex items-center justify-center gap-1 whitespace-nowrap">
-                  <button
-                    className="p-1.5 rounded text-blue-500 hover:text-blue-600 hover:bg-blue-500/10"
-                    title="Editar vigencia"
-                    onClick={() => openEditVigencia(item)}
-                  >
-                    <Edit2 size={16} />
-                  </button>
-                  <button
-                    className="p-1.5 rounded text-sky-500 hover:text-sky-600 hover:bg-sky-500/10"
-                    title="Descargar"
-                    onClick={() => downloadVideoFile(item)}
-                  >
-                    <Download size={16} />
-                  </button>
-                  <button
-                    className={`p-1.5 rounded transition-colors ${
-                      item.activo
-                        ? 'text-amber-500 hover:text-amber-600 hover:bg-amber-500/10'
-                        : 'text-emerald-500 hover:text-emerald-600 hover:bg-emerald-500/10'
-                    }`}
-                    title={item.activo ? 'Desactivar' : 'Activar'}
-                    onClick={() => handleToggleActivo(item.id, !item.activo)}
-                  >
-                    <Power size={16} />
-                  </button>
-                  <button
-                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-500/10 rounded transition-colors"
-                    title="Delete"
-                    onClick={() => setDeleteId(item.id)}
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                <button
+                  className="p-1.5 rounded text-blue-500 hover:text-blue-600 hover:bg-blue-500/10"
+                  title="Editar vigencia"
+                  onClick={() => openEditVigencia(item)}
+                >
+                  <Edit2 size={16} />
+                </button>
+                <button
+                  className="p-1.5 rounded text-sky-500 hover:text-sky-600 hover:bg-sky-500/10"
+                  title="Descargar"
+                  onClick={() => downloadVideoFile(item)}
+                >
+                  <Download size={16} />
+                </button>
+                <button
+                  className={`p-1.5 rounded transition-colors ${
+                    item.activo
+                      ? 'text-amber-500 hover:text-amber-600 hover:bg-amber-500/10'
+                      : 'text-emerald-500 hover:text-emerald-600 hover:bg-emerald-500/10'
+                  }`}
+                  title={item.activo ? 'Desactivar' : 'Activar'}
+                  onClick={() => handleToggleActivo(item.id, !item.activo)}
+                >
+                  <Power size={16} />
+                </button>
+                <button
+                  className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-500/10 rounded transition-colors"
+                  title="Delete"
+                  onClick={() => setDeleteId(item.id)}
+                >
+                  <Trash2 size={16} />
+                </button>
               </div>
             </div>
           ))}
+          {/* Si hay menos de 8 videos, rellena el espacio para que el footer quede fijo */}
+          {paginatedVideos.length < rowsPerPage && Array.from({ length: rowsPerPage - paginatedVideos.length }).map((_, idx) => (
+            <div key={`empty-row-${idx}`} className="grid grid-cols-12 gap-2 px-3 py-2.5" style={{ minHeight: '60px' }} />
+          ))}
         </div>
-
+        {/* Paginación sticky */}
         <div className="sticky bottom-0 z-10 bg-slate-50 dark:bg-[#1f2b38] border-t border-slate-200 dark:border-[#324d67]/30 p-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-[#92adc9]">
           <span className="text-xs text-slate-500 dark:text-[#92adc9]">Seleccionados: {selected.length}</span>
           <div className="flex items-center gap-2">
+            <button
+            className="px-3 py-1 rounded bg-slate-100 dark:bg-[#0b1219] text-slate-700 dark:text-[#92adc9] hover:bg-slate-200 dark:hover:bg-[#1f2b38] text-xs disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={() => setPage(page - 1)}
+            disabled={page <= 1}
+          >Anterior</button>
+          <span className="text-xs text-slate-500 dark:text-[#92adc9]">Página {page}</span>
+          <button
+            className="px-3 py-1 rounded bg-slate-100 dark:bg-[#0b1219] text-slate-700 dark:text-[#92adc9] hover:bg-slate-200 dark:hover:bg-[#1f2b38] text-xs disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={() => setPage(page + 1)}
+            disabled={page * rowsPerPage >= filteredVideos.length}
+          >Siguiente</button>
+
             <button
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-slate-100 dark:bg-[#0b1219] text-slate-700 dark:text-[#92adc9] hover:bg-slate-200 dark:hover:bg-[#1f2b38] text-xs disabled:opacity-40 disabled:cursor-not-allowed"
               onClick={handleBulkDownload}

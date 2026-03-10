@@ -51,6 +51,7 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const shownErrorNotificationIdsRef = useRef<Set<number>>(new Set());
+  const [search, setSearch] = useState("");
 
   const loadNotifications = async (markAsRead: boolean) => {
     if (markAsRead) setLoading(true);
@@ -153,16 +154,17 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
       </button>
       {open && (
         <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-[#111a22] border border-slate-200 dark:border-slate-800 rounded-lg shadow-lg z-50">
-          <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
+          <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center">
             <div className="font-semibold text-slate-900 dark:text-white">Notificaciones Generales</div>
-            <button
-              type="button"
-              onClick={handleClearNotifications}
-              disabled={loading || notificaciones.filter((n) => n.leida).length === 0}
-              className="text-xs px-2.5 py-1.5 rounded-md border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
-            >
-              Eliminar leídas
-            </button>
+          </div>
+          <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-800">
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar notificaciones..."
+              className="w-full px-2 py-1 rounded-md border border-slate-300 dark:border-slate-700 text-sm bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary"
+            />
           </div>
           <div className="max-h-72 overflow-y-auto">
             {loading ? (
@@ -170,43 +172,54 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
             ) : notificaciones.length === 0 ? (
               <div className="p-4 text-center text-slate-500">No hay notificaciones</div>
             ) : (
-              notificaciones.map((n) => {
-                const view = toNotificationViewModel(n);
-                const isError = view.severity === 'error';
-                const badge = getBadgeBySeverity(view.severity);
-                const actionBadge = getBadgeByAction(view.actionBadge);
-                const exactTime = new Date(n.fecha_creacion).toLocaleString();
-                const relativeTime = getRelativeTimeLabel(n.fecha_creacion);
-                // Extrae el nombre del usuario
-                const nombreUsuario = n.nombre_usuario || 'Desconocido';
-                return (
-                  <div
-                    key={n.id}
-                    className={`px-4 py-3 border-b last:border-b-0 border-slate-100 dark:border-slate-800 ${isError ? 'bg-red-50 dark:bg-red-900/30' : ''}`}
-                  >
-                    <div className="flex items-center gap-2 mb-1 justify-between">
-                      <div className="text-xs text-slate-500" title={exactTime}>{relativeTime} · {exactTime}</div>
-                      <div className="flex items-center gap-2">
-                        {actionBadge && (
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${actionBadge.classes}`}>{actionBadge.label}</span>
-                        )}
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${badge.classes}`}>{badge.label}</span>
-                        {isError && (
-                          <span title={view.title} className="inline-flex">
-                            <AlertTriangle size={16} className="text-red-500" />
-                          </span>
-                        )}
+              notificaciones
+                .filter(n => {
+                  const view = toNotificationViewModel(n);
+                  const nombreUsuario = n.nombre_usuario || 'Desconocido';
+                  const searchLower = search.toLowerCase();
+                  return (
+                    view.title.toLowerCase().includes(searchLower) ||
+                    view.message.toLowerCase().includes(searchLower) ||
+                    (view.detail && view.detail.toLowerCase().includes(searchLower)) ||
+                    nombreUsuario.toLowerCase().includes(searchLower)
+                  );
+                })
+                .map((n) => {
+                  const view = toNotificationViewModel(n);
+                  const isError = view.severity === 'error';
+                  const badge = getBadgeBySeverity(view.severity);
+                  const actionBadge = getBadgeByAction(view.actionBadge);
+                  const exactTime = new Date(n.fecha_creacion).toLocaleString();
+                  const relativeTime = getRelativeTimeLabel(n.fecha_creacion);
+                  const nombreUsuario = n.nombre_usuario || 'Desconocido';
+                  return (
+                    <div
+                      key={n.id}
+                      className={`px-4 py-3 border-b last:border-b-0 border-slate-100 dark:border-slate-800 ${isError ? 'bg-red-50 dark:bg-red-900/30' : ''}`}
+                    >
+                      <div className="flex items-center gap-2 mb-1 justify-between">
+                        <div className="text-xs text-slate-500" title={exactTime}>{relativeTime} · {exactTime}</div>
+                        <div className="flex items-center gap-2">
+                          {actionBadge && (
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${actionBadge.classes}`}>{actionBadge.label}</span>
+                          )}
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${badge.classes}`}>{badge.label}</span>
+                          {isError && (
+                            <span title={view.title} className="inline-flex">
+                              <AlertTriangle size={16} className="text-red-500" />
+                            </span>
+                          )}
+                        </div>
                       </div>
+                      <div className="text-xs text-primary font-semibold mb-1">Usuario: {nombreUsuario}</div>
+                      <div className={`text-sm font-medium ${isError ? 'text-red-700 dark:text-red-400' : 'text-slate-900 dark:text-white'}`}>{view.title}</div>
+                      <div className={`text-sm ${isError ? 'text-red-800 dark:text-red-200' : 'text-slate-700 dark:text-slate-300'}`}>{view.message}</div>
+                      {view.detail && view.detail !== view.message && (
+                        <div className="text-xs text-slate-500 mt-1">Detalle técnico: {view.detail}</div>
+                      )}
                     </div>
-                    <div className="text-xs text-primary font-semibold mb-1">Usuario: {nombreUsuario}</div>
-                    <div className={`text-sm font-medium ${isError ? 'text-red-700 dark:text-red-400' : 'text-slate-900 dark:text-white'}`}>{view.title}</div>
-                    <div className={`text-sm ${isError ? 'text-red-800 dark:text-red-200' : 'text-slate-700 dark:text-slate-300'}`}>{view.message}</div>
-                    {view.detail && view.detail !== view.message && (
-                      <div className="text-xs text-slate-500 mt-1">Detalle técnico: {view.detail}</div>
-                    )}
-                  </div>
-                );
-              })
+                  );
+                })
             )}
           </div>
         </div>

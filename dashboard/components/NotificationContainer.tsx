@@ -18,28 +18,10 @@ const colorMap = {
 
 export const NotificationContainer: React.FC = () => {
   const { notifications } = useNotificationContext();
-  const [search, setSearch] = React.useState('');
-
-  // Filtrar notificaciones por mensaje
-  const filteredNotifications = notifications.filter(n =>
-    n.message.toLowerCase().includes(search.toLowerCase())
-  );
 
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 items-end w-96">
-      <div className="mb-2 w-full">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          <input
-            type="text"
-            className="pl-10 pr-4 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-500 focus:ring-2 focus:ring-primary w-full transition-all"
-            placeholder="Buscar notificaciones..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </div>
-      </div>
-      {filteredNotifications.map((n) => (
+      {notifications.map((n) => (
         <div
           key={n.id}
           className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border ${colorMap[n.type]} animate-slide-fade-in`}

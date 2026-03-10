@@ -9,17 +9,7 @@ class Publicidad(Base):
     """
     __tablename__ = "Publicidad"
 
-        IdPublicidad = Column("IdPublicidad", Integer, primary_key=True, index=True)
-    from sqlalchemy import Table, ForeignKey
-    from sqlalchemy.orm import relationship
-
-    # Tabla de asociación para la relación many-to-many Publicidad <-> Dispositivo
-    publicidad_dispositivo = Table(
-        "publicidad_dispositivo",
-        Base.metadata,
-        Column("publicidad_id", Integer, ForeignKey("publicidad.IdPublicidad", ondelete="CASCADE"), primary_key=True),
-        Column("dispositivo_id", Integer, ForeignKey("dispositivos.id", ondelete="CASCADE"), primary_key=True),
-    )
+    IdPublicidad = Column("IdPublicidad", Integer, primary_key=True, index=True)
     Titulo = Column("Titulo", String(200), nullable=True)
     Tipo = Column("Tipo", String(10), nullable=False, default="image")
     Url = Column("Url", String(500), nullable=False)
@@ -29,6 +19,7 @@ class Publicidad(Base):
     FechaFin = Column("FechaFin", DateTime, nullable=True)
     DuracionSeg = Column("DuracionSeg", Integer, nullable=True)
     UpdatedAt = Column("UpdatedAt", DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+    
 
     def __repr__(self):
         return (

@@ -177,6 +177,8 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
                 const actionBadge = getBadgeByAction(view.actionBadge);
                 const exactTime = new Date(n.fecha_creacion).toLocaleString();
                 const relativeTime = getRelativeTimeLabel(n.fecha_creacion);
+                // Extrae el nombre del usuario
+                const nombreUsuario = n.nombre_usuario || 'Desconocido';
                 return (
                   <div
                     key={n.id}
@@ -196,6 +198,7 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
                         )}
                       </div>
                     </div>
+                    <div className="text-xs text-primary font-semibold mb-1">Usuario: {nombreUsuario}</div>
                     <div className={`text-sm font-medium ${isError ? 'text-red-700 dark:text-red-400' : 'text-slate-900 dark:text-white'}`}>{view.title}</div>
                     <div className={`text-sm ${isError ? 'text-red-800 dark:text-red-200' : 'text-slate-700 dark:text-slate-300'}`}>{view.message}</div>
                     {view.detail && view.detail !== view.message && (

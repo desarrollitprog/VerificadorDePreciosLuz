@@ -60,8 +60,6 @@ const formatCaracasTime = (value?: string): string => {
   if (!value) return '-';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  // Ajustar a UTC-4
-  date.setHours(date.getHours() - 4);
   return date.toLocaleString('es-VE', { timeZone: 'America/Caracas' });
 };
 

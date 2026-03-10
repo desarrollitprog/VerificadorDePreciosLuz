@@ -13,8 +13,6 @@ import {
 // Formatea una fecha a la hora de Caracas (UTC-4) sin depender de la hora local del sistema
 function formatCaracasTime(dateString: string | Date): string {
   const date = typeof dateString === 'string' ? new Date(dateString) : new Date(dateString.getTime());
-  // Ajustar a UTC-4
-  date.setHours(date.getHours() - 4);
   return date.toLocaleString('es-VE', { timeZone: 'America/Caracas' });
 }
 

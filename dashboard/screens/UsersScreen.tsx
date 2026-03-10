@@ -301,7 +301,7 @@ export const UsersScreen: React.FC = () => {
                           {user.activo ? 'Activo' : 'Inactivo'}
                         </span>
                       </td>
-                      <td className="px-4 py-3.5 text-[13px] text-slate-500 dark:text-slate-400">{user.fecha_registro ? new Date(user.fecha_registro).setHours(new Date(user.fecha_registro).getHours() - 4) && new Date(user.fecha_registro).toLocaleDateString('es-VE', { timeZone: 'America/Caracas' }) : '-'}</td>
+                      <td className="px-4 py-3.5 text-[13px] text-slate-500 dark:text-slate-400">{user.fecha_registro ? new Date(user.fecha_registro).toLocaleString('es-VE', { timeZone: 'America/Caracas' }) : '-'}</td>
                       <td className="px-4 py-3.5 text-right">
                         <div className="flex justify-end gap-1.5">
                           <button

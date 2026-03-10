@@ -9,13 +9,12 @@ interface GeneralNotificationsProps {}
 // Formatea una fecha a la hora de Caracas (UTC-4)
 function formatCaracasTime(dateString: string | Date): Date {
   const date = typeof dateString === 'string' ? new Date(dateString) : new Date(dateString.getTime());
-  date.setHours(date.getHours() - 4);
   return date;
 }
 
 function getRelativeTimeLabel(dateIso: string): string {
   const now = Date.now();
-  const then = formatCaracasTime(dateIso).getTime();
+  const then = new Date(dateIso).getTime();
   const diffSeconds = Math.max(0, Math.floor((now - then) / 1000));
 
   if (diffSeconds < 60) return 'hace segundos';
@@ -196,7 +195,7 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
                   const isError = view.severity === 'error';
                   const badge = getBadgeBySeverity(view.severity);
                   const actionBadge = getBadgeByAction(view.actionBadge);
-                  const exactTime = formatCaracasTime(n.fecha_creacion).toLocaleString();
+                  const exactTime = new Date(n.fecha_creacion).toLocaleString('es-VE', { timeZone: 'America/Caracas' });
                   const relativeTime = getRelativeTimeLabel(n.fecha_creacion);
                   const nombreUsuario = n.nombre_usuario || 'Desconocido';
                   return (

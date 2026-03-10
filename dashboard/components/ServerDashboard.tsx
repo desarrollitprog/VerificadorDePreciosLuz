@@ -178,7 +178,7 @@ export function ServerDashboard() {
                             {d.online ? 'ONLINE' : 'OFFLINE'}
                           </div>
                           <div className="text-slate-500">
-                            {d.last_seen ? (() => { const date = new Date(d.last_seen); date.setHours(date.getHours() - 4); return date.toLocaleString('es-VE', { timeZone: 'America/Caracas' }); })() : 'Sin last_seen'}
+                            {d.last_seen ? new Date(d.last_seen).toLocaleString('es-VE', { timeZone: 'America/Caracas' }) : 'Sin last_seen'}
                           </div>
                         </div>
                       </div>

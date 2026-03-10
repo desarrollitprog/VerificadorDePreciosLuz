@@ -195,7 +195,9 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
                   const isError = view.severity === 'error';
                   const badge = getBadgeBySeverity(view.severity);
                   const actionBadge = getBadgeByAction(view.actionBadge);
-                  const exactTime = new Date(n.fecha_creacion).toLocaleString('es-VE', { timeZone: 'America/Caracas' });
+                  // Interpretar fecha UTC correctamente y mostrar en horario de Caracas
+                  const utcDate = new Date(n.fecha_creacion.endsWith('Z') ? n.fecha_creacion : n.fecha_creacion + 'Z');
+                  const exactTime = utcDate.toLocaleString('es-VE', { timeZone: 'America/Caracas' });
                   const relativeTime = getRelativeTimeLabel(n.fecha_creacion);
                   const nombreUsuario = n.nombre_usuario || 'Desconocido';
                   return (

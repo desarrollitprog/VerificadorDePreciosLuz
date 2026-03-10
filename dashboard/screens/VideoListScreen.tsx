@@ -290,7 +290,7 @@ export const VideoListScreen: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-1 w-full overflow-hidden rounded-xl border border-slate-200 dark:border-[#324d67]/30 bg-white dark:bg-[#16212b] flex flex-col shadow-xl">
+      <div className="flex-1 w-full overflow-hidden rounded-xl border border-slate-200 dark:border-[#324d67]/30 bg-white dark:bg-[#16212b] flex flex-col shadow-xl" style={{ minHeight: 500, maxHeight: 900, height: 'auto' }}>
         <div className="grid grid-cols-12 gap-2 border-b border-slate-200 dark:border-[#324d67]/50 bg-slate-50 dark:bg-[#1f2b38] px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-[#92adc9]">
           <div className="col-span-1 flex items-center justify-center gap-1" title="Seleccionar todo el contenido">
             <input

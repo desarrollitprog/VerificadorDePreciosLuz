@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNotification } from '../components/useNotification';
 import { Search, UploadCloud, MoreVertical, Eye, Trash, Film, Plus } from 'lucide-react';
-import { getVideos, uploadMedia, deleteVideo } from '../services/videoService';
+import { getVideos, uploadMedia, deleteVideo, getBannerDevices, reassignBannerDevices } from '../services/videoService';
 import { Video } from '../types';
+
 import {
   getForceSyncJobStatus,
   getSecondaryServersVideoCounts,
@@ -55,41 +56,71 @@ const normalizeServerProgress = (details: any[] = []): SyncServerProgress[] => {
 };
 
 export const DashboardScreen: React.FC = () => {
-    // Drag & drop states
-    const [dragActive, setDragActive] = useState(false);
-    // Feedback por archivo
-    const [uploadStatuses, setUploadStatuses] = useState<Array<'pending' | 'uploading' | 'success' | 'error'>>([]);
-  const showNotification = useNotification();
-  const [preview, setPreview] = useState<{url: string, tipo: string, titulo: string} | null>(null);
-  const handlePreview = (video: Video) => {
-    setPreview({ url: video.url, tipo: video.tipo, titulo: video.titulo || video.filename });
-  };
-  const closePreview = () => setPreview(null);
-  const [videos, setVideos] = useState<Video[]>([]);
-  const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // Batch upload states
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [fileMetadatas, setFileMetadatas] = useState<Array<{
-    titulo: string;
-    fechaInicio: string;
-    fechaFin: string;
-    activo: boolean;
-  }>>([]);
-  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [currentEditIndex, setCurrentEditIndex] = useState<number | null>(null);
+          // Permitir abrir el modal con servidor/dispositivo preseleccionado
+        const openUploadModal = (serverId?: string, deviceId?: string) => {
+            if (serverId) setSelectedServerId(serverId);
+            if (deviceId) setSelectedDeviceIds([deviceId]);
+            setIsUploadModalOpen(true);
+          };
+            // Estado para selección de servidor y dispositivos en el modal de subida
+        const [selectedServerId, setSelectedServerId] = useState<string>('');
+        const [selectedDeviceIds, setSelectedDeviceIds] = useState<string[]>([]);
 
-  const [syncLoading, setSyncLoading] = useState(false);
-  const [syncServerProgress, setSyncServerProgress] = useState<SyncServerProgress[]>([]);
-  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
-  const [secondaryVideoCounts, setSecondaryVideoCounts] = useState<SecondaryVideoCounter[]>([]);
-  const [selectedSecondaryServerId, setSelectedSecondaryServerId] = useState<string>('');
+            // Drag & drop states
+        const [dragActive, setDragActive] = useState(false);
+          // Feedback por archivo
+        const [uploadStatuses, setUploadStatuses] = useState<Array<'pending' | 'uploading' | 'success' | 'error'>>([]);
+        const showNotification = useNotification();
+        const [preview, setPreview] = useState<{url: string, tipo: string, titulo: string} | null>(null);
+        const handlePreview = (video: Video) => {
+          setPreview({ url: video.url, tipo: video.tipo, titulo: video.titulo || video.filename });
+        };
+        const closePreview = () => setPreview(null);
+        const [videos, setVideos] = useState<Video[]>([]);
+        const [search, setSearch] = useState('');
+        const [loading, setLoading] = useState(true);
+        const [uploading, setUploading] = useState(false);
+        const [error, setError] = useState<string | null>(null);
+        // Batch upload states
+        const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+        const [fileMetadatas, setFileMetadatas] = useState<Array<{
+          titulo: string;
+          fechaInicio: string;
+          fechaFin: string;
+          activo: boolean;
+        }>>([]);
+        const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+        const [currentEditIndex, setCurrentEditIndex] = useState<number | null>(null);
 
-  // Estado para vista compacta
-  const [expandedFiles, setExpandedFiles] = useState<boolean[]>([]);
+        const [syncLoading, setSyncLoading] = useState(false);
+        const [syncServerProgress, setSyncServerProgress] = useState<SyncServerProgress[]>([]);
+        const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+        // Estado para servidores secundarios con dispositivos (de /status-detalle)
+        const [secondaryVideoCounts, setSecondaryVideoCounts] = useState<any[]>([]);
+        const [selectedSecondaryServerId, setSelectedSecondaryServerId] = useState<string>('');
 
+        // Estado para vista compacta
+        const [expandedFiles, setExpandedFiles] = useState<boolean[]>([]);
+      
+      // Obtener lista de dispositivos del servidor seleccionado
+      const devicesForSelectedServer = React.useMemo(() => {
+        const server = secondaryVideoCounts.find(s => s.id === selectedServerId);
+        // Adaptado: cada server tiene una propiedad 'dispositivos' (según /status-detalle)
+                return server && Array.isArray(server.dispositivos) ? server.dispositivos.map((d: any) => ({
+                  id: d.device_id,
+                  nombre: d.nombre_mostrado || d.nombre_amigable || d.device_id,
+                  online: d.online,
+                })) : [];
+              }, [selectedServerId, secondaryVideoCounts]);
+
+      // Cuando cambia el servidor seleccionado, seleccionar todos los dispositivos por defecto
+      useEffect(() => {
+        if (devicesForSelectedServer.length > 0) {
+          setSelectedDeviceIds(devicesForSelectedServer.map((d: any) => d.id));
+        } else {
+          setSelectedDeviceIds([]);
+        }
+      }, [selectedServerId, devicesForSelectedServer]);
   useEffect(() => {
     async function fetchVideos() {
       setLoading(true);
@@ -106,19 +137,21 @@ export const DashboardScreen: React.FC = () => {
     fetchVideos();
   }, []);
 
+  // Consumir /status-detalle para obtener servidores y dispositivos
   useEffect(() => {
     let mounted = true;
 
-    const loadSecondaryVideoCounts = async () => {
+    const loadSecondaryServersWithDevices = async () => {
       try {
-        const data = await getSecondaryServersVideoCounts();
+        // Llama al endpoint real de monitoreoService
+        const data = await (window as any).monitoreoService?.getSecondaryServersStatusDetalle?.() || await fetch('/api/monitoreo/status-detalle').then(r => r.json());
+        const servers = data?.servidores || [];
         if (!mounted) return;
-
-        setSecondaryVideoCounts(data);
+        setSecondaryVideoCounts(servers);
         setSelectedSecondaryServerId((prev) => {
-          if (!data.length) return '';
-          const exists = data.some((server) => server.id === prev);
-          return exists ? prev : data[0].id;
+          if (!servers.length) return '';
+          const exists = servers.some((server: any) => server.id === prev);
+          return exists ? prev : servers[0].id;
         });
       } catch {
         if (!mounted) return;
@@ -127,8 +160,8 @@ export const DashboardScreen: React.FC = () => {
       }
     };
 
-    loadSecondaryVideoCounts();
-    const intervalId = setInterval(loadSecondaryVideoCounts, 30000);
+    loadSecondaryServersWithDevices();
+    const intervalId = setInterval(loadSecondaryServersWithDevices, 30000);
 
     return () => {
       mounted = false;
@@ -174,6 +207,10 @@ export const DashboardScreen: React.FC = () => {
     if (validFiles.length === 0) return;
     setSelectedFiles(validFiles);
     setFileMetadatas(metadatas);
+    // Si ya hay un servidor seleccionado, mantenerlo; si no, seleccionar el primero disponible
+    if (!selectedServerId && secondaryVideoCounts.length > 0) {
+      setSelectedServerId(secondaryVideoCounts[0].id);
+    }
     setIsUploadModalOpen(true);
     event.target.value = '';
   };
@@ -202,6 +239,10 @@ export const DashboardScreen: React.FC = () => {
   const handleSubmitUpload = async () => {
     if (selectedFiles.length === 0) {
       showNotification('Selecciona archivos primero', 'warning');
+      return;
+    }
+    if (!selectedServerId || selectedDeviceIds.length === 0) {
+      showNotification('Selecciona al menos un servidor y un dispositivo destino', 'warning');
       return;
     }
     // Validar metadatos
@@ -236,7 +277,9 @@ export const DashboardScreen: React.FC = () => {
           titulo: fileMetadatas[i].titulo,
           fechaInicio: fechaInicioIso,
           fechaFin: fechaFinIso,
-          activo: fileMetadatas[i].activo
+          activo: fileMetadatas[i].activo,
+          DispositivoIds: selectedDeviceIds.map(id => Number(id)),
+          servidor: selectedServerId
         });
         setUploadStatuses(prev => {
           const next = [...prev];
@@ -328,6 +371,50 @@ export const DashboardScreen: React.FC = () => {
       showNotification('Error al ejecutar la sincronización', 'error');
     } finally {
       setSyncLoading(false);
+    }
+  };
+
+  const [bannerDevices, setBannerDevices] = useState<{ [bannerId: string]: any[] }>({});
+
+  useEffect(() => {
+    async function fetchDevices() {
+      const devicesMap: { [bannerId: string]: any[] } = {};
+      for (const video of videos) {
+        const dispositivos = await getBannerDevices(video.id);
+        devicesMap[video.id] = dispositivos;
+      }
+      setBannerDevices(devicesMap);
+    }
+    if (videos.length > 0) fetchDevices();
+  }, [videos]);
+
+  const [reassignModalOpen, setReassignModalOpen] = useState(false);
+  const [reassignBannerId, setReassignBannerId] = useState<string | null>(null);
+  const [reassignDeviceIds, setReassignDeviceIds] = useState<number[]>([]);
+  const [reassignLoading, setReassignLoading] = useState(false);
+
+  const openReassignModal = (bannerId: string, currentDeviceIds: any[]) => {
+    setReassignBannerId(bannerId);
+    setReassignDeviceIds(currentDeviceIds.map(id => Number(id)));
+    setReassignModalOpen(true);
+  };
+
+  const handleReassignDevices = async () => {
+    if (!reassignBannerId) return;
+    setReassignLoading(true);
+    try {
+      await reassignBannerDevices(reassignBannerId, reassignDeviceIds);
+      showNotification('Dispositivos reasignados correctamente', 'success');
+      setReassignModalOpen(false);
+      setReassignBannerId(null);
+      setReassignDeviceIds([]);
+      // Refrescar videos y dispositivos asignados
+      const data = await getVideos();
+      setVideos(data);
+    } catch {
+      showNotification('Error al reasignar dispositivos', 'error');
+    } finally {
+      setReassignLoading(false);
     }
   };
 
@@ -546,6 +633,10 @@ export const DashboardScreen: React.FC = () => {
                       <Eye size={14} />
                       Reproducir
                     </button>
+                    <button className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-blue-600 hover:bg-blue-100 transition-colors text-xs font-medium" onClick={() => openReassignModal(video.id, bannerDevices[video.id]?.map(d => d.id) || [])}>
+                      <Plus size={14} />
+                      Reasignar dispositivos
+                    </button>
                     {preview && (
                       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
                         <div className="bg-white dark:bg-[#1c2936] rounded-lg shadow-lg p-6 max-w-lg w-full relative">
@@ -563,6 +654,18 @@ export const DashboardScreen: React.FC = () => {
                       <Trash size={14} />
                       Borrar
                     </button>
+                  </div>
+                  {/* Dispositivos asignados */}
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {bannerDevices[video.id]?.length > 0 ? (
+                      bannerDevices[video.id].map(device => (
+                        <span key={device.id} className="bg-blue-100 text-blue-800 rounded px-2 py-0.5 text-xs" title={device.codigo || device.id}>
+                          {device.nombre || device.id}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-xs text-slate-400">Sin dispositivos asignados</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -586,6 +689,49 @@ export const DashboardScreen: React.FC = () => {
               >
                 ×
               </button>
+            </div>
+            {/* Selector de servidor y dispositivos */}
+            <div className="mb-4 flex flex-col sm:flex-row gap-4">
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Servidor destino</label>
+                <select
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
+                  value={selectedServerId}
+                  onChange={e => setSelectedServerId(e.target.value)}
+                  disabled={secondaryVideoCounts.length === 0}
+                >
+                  <option value="">Selecciona un servidor</option>
+                  {secondaryVideoCounts.map(server => (
+                    <option key={server.id} value={server.id}>{server.nombre} ({server.ip})</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Dispositivos destino</label>
+                <div className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white max-h-32 overflow-y-auto">
+                  {devicesForSelectedServer.length === 0 ? (
+                    <span className="text-xs text-slate-500">No hay dispositivos conectados</span>
+                  ) : (
+                    devicesForSelectedServer.map((device: any) => (
+                      <label key={device.id} className="flex items-center gap-2 mb-1 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="accent-primary"
+                          checked={selectedDeviceIds.includes(device.id)}
+                          onChange={e => {
+                            if (e.target.checked) {
+                              setSelectedDeviceIds(prev => [...prev, device.id]);
+                            } else {
+                              setSelectedDeviceIds(prev => prev.filter(id => id !== device.id));
+                            }
+                          }}
+                        />
+                        <span>{device.nombre || device.id}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
             <div className="space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar">
               {selectedFiles.map((file, idx) => (
@@ -709,6 +855,67 @@ export const DashboardScreen: React.FC = () => {
                 className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-semibold disabled:opacity-60"
               >
                 {uploading ? 'Subiendo...' : 'Guardar y Subir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {reassignModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-md bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl p-5">
+            <div className="flex items-start justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Reasignar dispositivos</h3>
+              <button
+                type="button"
+                className="text-slate-500 hover:text-red-500 text-xl leading-none"
+                onClick={() => setReassignModalOpen(false)}
+                disabled={reassignLoading}
+              >
+                ×
+              </button>
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Selecciona dispositivos</label>
+              <div className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white max-h-32 overflow-y-auto">
+                {devicesForSelectedServer.length === 0 ? (
+                  <span className="text-xs text-slate-500">No hay dispositivos conectados</span>
+                ) : (
+                  devicesForSelectedServer.map((device: any) => (
+                    <label key={device.id} className="flex items-center gap-2 mb-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="accent-primary"
+                        checked={reassignDeviceIds.includes(Number(device.id))}
+                        onChange={e => {
+                          if (e.target.checked) {
+                            setReassignDeviceIds(prev => [...prev, Number(device.id)]);
+                          } else {
+                            setReassignDeviceIds(prev => prev.filter(id => id !== Number(device.id)));
+                          }
+                        }}
+                      />
+                      <span>{device.nombre || device.id}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setReassignModalOpen(false)}
+                disabled={reassignLoading}
+                className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleReassignDevices}
+                disabled={reassignLoading || reassignDeviceIds.length === 0}
+                className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-semibold disabled:opacity-60"
+              >
+                {reassignLoading ? 'Guardando...' : 'Guardar'}
               </button>
             </div>
           </div>

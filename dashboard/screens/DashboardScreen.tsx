@@ -181,26 +181,22 @@ export const DashboardScreen: React.FC = () => {
   // Convierte fechas locales tipo 'dd/MM/yyyy hh:mm a. m.' a ISO
   function parseLocalDateString(str: string): string | null {
     // Si es formato ISO, retorna igual
-    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(str)) {
-      // Si ya tiene zona Caracas, retorna igual
-      return str.includes('-04:00') ? str : `${str}:00-04:00`;
-    }
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(str)) return str;
     // Si es formato 'dd/MM/yyyy hh:mm a. m.'
     const match = str.match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{1,2}):(\d{2}) (\d{1,2})\.(\w+)\.$/);
     if (match) {
       let [_, day, month, year, hour, minute, ampmHour, ampm] = match;
       hour = String(Number(hour));
       if (ampm.toLowerCase().startsWith('p')) hour = String(Number(hour) + 12);
-      return `${year}-${month}-${day}T${hour.padStart(2, '0')}:${minute.padStart(2, '0')}:00-04:00`;
+      return `${year}-${month}-${day}T${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
     }
     // Si es formato 'dd/MM/yyyy hh:mm', sin am/pm
     const match2 = str.match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{1,2}):(\d{2})/);
     if (match2) {
       let [_, day, month, year, hour, minute] = match2;
-      return `${year}-${month}-${day}T${hour.padStart(2, '0')}:${minute.padStart(2, '0')}:00-04:00`;
+      return `${year}-${month}-${day}T${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
     }
     return null;
-  }
   }
 
   const handleSubmitUpload = async () => {
@@ -215,18 +211,8 @@ export const DashboardScreen: React.FC = () => {
         showNotification(`El título es obligatorio para el archivo #${i + 1}`, 'warning');
         return;
       }
-      let fechaInicioIso = null;
-      let fechaFinIso = null;
-      if (meta.fechaInicio) {
-        const parsed = parseLocalDateString(meta.fechaInicio);
-        const d = parsed ? new Date(parsed) : new Date(meta.fechaInicio);
-        fechaInicioIso = Number.isNaN(d.getTime()) ? null : d.toISOString();
-      }
-      if (meta.fechaFin) {
-        const parsed = parseLocalDateString(meta.fechaFin);
-        const d = parsed ? new Date(parsed) : new Date(meta.fechaFin);
-        fechaFinIso = Number.isNaN(d.getTime()) ? null : d.toISOString();
-      }
+      let fechaInicioIso = meta.fechaInicio || null;
+      let fechaFinIso = meta.fechaFin || null;
       if (fechaInicioIso && fechaFinIso && new Date(fechaInicioIso) > new Date(fechaFinIso)) {
         showNotification(`La fecha de inicio no puede ser mayor a la fecha fin para el archivo #${i + 1}`, 'warning');
         return;
@@ -244,18 +230,8 @@ export const DashboardScreen: React.FC = () => {
         return next;
       });
       try {
-        let fechaInicioIso = null;
-        let fechaFinIso = null;
-        if (fileMetadatas[i].fechaInicio) {
-          const parsed = parseLocalDateString(fileMetadatas[i].fechaInicio);
-          const d = parsed ? new Date(parsed) : new Date(fileMetadatas[i].fechaInicio);
-          fechaInicioIso = Number.isNaN(d.getTime()) ? null : d.toISOString();
-        }
-        if (fileMetadatas[i].fechaFin) {
-          const parsed = parseLocalDateString(fileMetadatas[i].fechaFin);
-          const d = parsed ? new Date(parsed) : new Date(fileMetadatas[i].fechaFin);
-          fechaFinIso = Number.isNaN(d.getTime()) ? null : d.toISOString();
-        }
+        let fechaInicioIso = fileMetadatas[i].fechaInicio || null;
+        let fechaFinIso = fileMetadatas[i].fechaFin || null;
         await uploadMedia(selectedFiles[i], {
           titulo: fileMetadatas[i].titulo,
           fechaInicio: fechaInicioIso,

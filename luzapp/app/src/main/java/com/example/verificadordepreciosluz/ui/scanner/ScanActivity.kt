@@ -3,6 +3,9 @@
 package com.example.verificadordepreciosluz.ui.scanner
 
 import android.Manifest
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -110,15 +113,19 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private var connectivityManager: ConnectivityManager? = null
     private var offlineBackup: BackupResponse? = null
     private var backupReadyNotified = false
-    private val backupMaxAgeMs = (2.5 * 60 * 60 * 1000L).toLong()
+    private val backupMaxAgeMs = (12 * 60 * 60 * 1000L).toLong()
     private var cameraProvider: ProcessCameraProvider? = null
-    private val bannerMaxAgeMs = (2.5 * 60 * 60 * 1000L).toLong()
+    private val bannerMaxAgeMs = (12 * 60 * 60 * 1000L).toLong()
     private var backendBaseUrl: String? = null
     private val standbyIdleMs = 20_000L
     private var standbyItems: MutableList<BannerCacheItem> = mutableListOf()
     private var standbyIndex = 0
     private var standbyActive = false
     private var standbyTimerRunnable: Runnable? = null
+    private val KIOSK_EXIT_CODE = "ADMIN-CODE-125"
+    private var isKioskMode = false
+    private lateinit var dpm: DevicePolicyManager
+    private lateinit var adminComponent: ComponentName
     private var standbySlideRunnable: Runnable? = null
     private var resultHideRunnable: Runnable? = null
     private var currentStandbyBitmap: Bitmap? = null
@@ -173,6 +180,10 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         connectivityManager = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
         cameraExecutor = Executors.newSingleThreadExecutor()
         tone = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80)
+
+        // Inicializar Device Policy Manager para modo kiosco
+        dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        adminComponent = ComponentName(this, com.example.verificadordepreciosluz.ui.scanner.MyDeviceAdminReceiver::class.java)
 
         val forceOffline = intent.getBooleanExtra("force_offline_mode", false)
         val hasNetwork = NetworkUtils.isNetworkAvailable(this)
@@ -275,8 +286,19 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(editable: android.text.Editable?) {
                 val text = editable?.toString()?.trim().orEmpty()
+                
+                // Verificar si es el código de salida del modo kiosco
+                if (isKioskMode && text == KIOSK_EXIT_CODE) {
+                    Log.i(TAG, ">>> Código de salida detectado en TextWatcher! Desactivando modo kiosco...")
+                    disableKioskMode()
+                    isKioskMode = false
+                    Toast.makeText(this@ScanActivity, "Modo kiosco desactivado", Toast.LENGTH_SHORT).show()
+                    editable?.clear()
+                    return
+                }
+                
                 mockIdleRunnable?.let { uiHandler.removeCallbacks(it) }
-                pendingMockText = if (text.length == 8 || text.length == 12 || text.length == 13) text else null
+                pendingMockText = if (text.length >= 8) text else null
                 pendingMockText?.let { candidate ->
                     mockIdleRunnable = Runnable {
                         submitMockIfValid(candidate)
@@ -378,6 +400,19 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     }
 
     private fun maybeProcessCode(code: String) {
+        // Verificar si es el código de salida del modo kiosco
+        Log.d(TAG, "maybeProcessCode: code='$code', isKioskMode=$isKioskMode, KIOSK_EXIT_CODE='$KIOSK_EXIT_CODE', equals=${code == KIOSK_EXIT_CODE}")
+        
+        if (isKioskMode && code == KIOSK_EXIT_CODE) {
+            Log.i(TAG, ">>> Código de salida detectado! Desactivando modo kiosco...")
+            disableKioskMode()
+            isKioskMode = false
+            Toast.makeText(this, "Modo kiosco desactivado", Toast.LENGTH_SHORT).show()
+            // Limpiar el campo y no procesar más
+            binding.etMockCode.text?.clear()
+            return
+        }
+        
         val clean = sanitizeCode(code) ?: return
         // Debounce: evita spam si el mismo código se mantiene en cámara.
         val now = android.os.SystemClock.elapsedRealtime()
@@ -1169,6 +1204,18 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
     override fun onResume() {
         super.onResume()
+        
+        // Activar modo kiosco si es Device Owner (con pequeño delay para que la vista esté lista)
+        if (isDeviceOwner() && !isKioskMode) {
+            uiHandler.postDelayed({
+                if (!isKioskMode) {
+                    enableKioskMode()
+                    isKioskMode = true
+                    Log.i(TAG, "Modo kiosco activado en onResume (delayed)")
+                }
+            }, 500) // 500ms de delay
+        }
+        
         startCamera()
         binding.etMockCode.requestFocus()
     }
@@ -1369,6 +1416,64 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             binding.tvOfflineUpdated.visibility = View.VISIBLE
             binding.etMockCode.isEnabled = false
             binding.btnMockScan.isEnabled = false
+        }
+    }
+
+    // ========================
+    // Modo Kiosco (Lock Task)
+    // ========================
+
+    private fun isDeviceOwner(): Boolean {
+        return try {
+            dpm.isDeviceOwnerApp(packageName)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking device owner", e)
+            false
+        }
+    }
+
+    private fun enableKioskMode() {
+        Log.i(TAG, "Intentando activar modo kiosco...")
+        Log.i(TAG, "isDeviceOwner: ${isDeviceOwner()}")
+        
+        try {
+            // Intentar agregar la app a lock task packages si es device owner
+            if (isDeviceOwner()) {
+                try {
+                    dpm.setLockTaskPackages(adminComponent, arrayOf(packageName))
+                    Log.i(TAG, "Lock task packages configurados")
+                } catch (e: Exception) {
+                    Log.w(TAG, "No se pudieron configurar lock task packages: ${e.message}")
+                }
+            }
+            
+            val isPermitted = dpm.isLockTaskPermitted(packageName)
+            Log.i(TAG, "isLockTaskPermitted: $isPermitted")
+            
+            if (isPermitted) {
+                startLockTask()
+                Log.i(TAG, "Kiosk mode enabled - EXITO")
+            } else {
+                Log.w(TAG, "Lock task NO permitido - intentando forzar...")
+                // Intentar directamente por si acaso
+                try {
+                    startLockTask()
+                    Log.i(TAG, "Kiosk mode enabled - forzado")
+                } catch (e2: Exception) {
+                    Log.e(TAG, "Error forzado: ${e2.message}")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error enabling kiosk mode: ${e.message}", e)
+        }
+    }
+
+    private fun disableKioskMode() {
+        try {
+            stopLockTask()
+            Log.i(TAG, "Kiosk mode disabled")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error disabling kiosk mode", e)
         }
     }
 }

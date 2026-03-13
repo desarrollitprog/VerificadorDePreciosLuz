@@ -1,6 +1,3 @@
-# main.py para backend dashboard
-
-
 from fastapi import FastAPI, Request
 from app.routes import publicidad, auth, monitoreo, usuarios, notificaciones
 from fastapi.staticfiles import StaticFiles

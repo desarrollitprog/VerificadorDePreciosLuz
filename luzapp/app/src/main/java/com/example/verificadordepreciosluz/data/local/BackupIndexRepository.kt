@@ -2,26 +2,29 @@ package com.example.verificadordepreciosluz.data.local
 
 import android.content.ContentValues
 import android.content.Context
-import android.database.Cursor
 import android.util.Log
 import com.example.verificadordepreciosluz.data.network.ProductoResponse
 import com.google.gson.Gson
-import com.google.gson.stream.JsonReader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.File
-import org.threeten.bp.Instant
-import org.threeten.bp.LocalDate
-import org.threeten.bp.ZoneId
-import org.threeten.bp.ZoneOffset
-import org.threeten.bp.ZonedDateTime
-import org.threeten.bp.format.DateTimeFormatter
-import org.threeten.bp.format.DateTimeParseException
 
 class BackupIndexRepository(private val context: Context) {
     private val gson = Gson()
     private val dbHelper = BackupIndexDatabase(context)
     private val dbLock = Any()
+
+    private data class VigenciaInfo(
+        val idOfertaxProducto: Int,
+        val fechaInicioMs: Long?,
+        val fechaFinMs: Long?,
+        val indExpirado: Int?
+    )
+
+    private data class DetalleInfo(
+        val idOfertaxProductoxSucursal: Int,
+        val idOfertaxProducto: Int,
+        val idEmpaque: Int
+    )
 
     suspend fun ensureIndex(updatedAt: String?) {
         if (updatedAt.isNullOrBlank()) return
@@ -34,8 +37,14 @@ class BackupIndexRepository(private val context: Context) {
         synchronized(dbLock) {
             dbHelper.readableDatabase.use { db ->
                 db.rawQuery("SELECT value FROM meta WHERE `key`='updatedAt' LIMIT 1", null).use { cursor ->
-                    if (!cursor.moveToFirst()) return false
-                    return cursor.getString(0) == updatedAt
+                    if (!cursor.moveToFirst()) {
+                        Log.d(TAG, "[INDEX] No hay meta, índice no está actualizado")
+                        return false
+                    }
+                    val storedUpdatedAt = cursor.getString(0)
+                    val result = storedUpdatedAt == updatedAt
+                    Log.d(TAG, "[INDEX] updatedAt almacenado: $storedUpdatedAt, actualizado: $updatedAt, esActualizado: $result")
+                    return result
                 }
             }
         }
@@ -57,14 +66,10 @@ class BackupIndexRepository(private val context: Context) {
                     insertImpuestosProducto(db)
                     insertTasasImpuesto(db)
                     saveMeta(db, updatedAt)
-                    // Mover el log aquí, antes de setTransactionSuccessful y endTransaction
-                    Log.i(TAG, "Índice local actualizado")
-                    logOfertasVigenciaConFechas(db)
                     db.setTransactionSuccessful()
                 } catch (e: Exception) {
                     Log.e(TAG, "Error reconstruyendo índice local", e)
                 } finally {
-                    // Elimina cualquier uso de la base de datos aquí
                     db.endTransaction()
                 }
             }
@@ -72,73 +77,150 @@ class BackupIndexRepository(private val context: Context) {
     }
 
     fun lookupProductoOffline(sku: String): ProductoResponse? {
-        logOfertasVigencia() // Log de vigencia cada vez que se escanea
         synchronized(dbLock) {
             dbHelper.readableDatabase.use { db ->
-                val producto = queryProducto(db, sku) ?: run {
-                    Log.i(TAG, "[DEPURACION] Producto no encontrado para sku=$sku")
-                    return null
-                }
-                val precio = queryBestPrecio(db, producto.idProducto) ?: run {
-                    Log.i(TAG, "[DEPURACION] Precio no encontrado para idProducto=${producto.idProducto}")
-                    return null
-                }
-                val oferta = queryBestOferta(db, producto.idProducto, precio.idEmpaque)
-                // Log de fechas actuales y de la oferta
-                val now = System.currentTimeMillis()
-                val nowLegible = Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).toString()
-                var fechaInicioMs: Long? = null
-                var fechaFinMs: Long? = null
-                var vigenciaEncontrada = false
-                if (oferta != null) {
-                    // Buscar la vigencia de la oferta para este producto y empaque
-                    val vigenciaSql = """
-                        SELECT v.fechaInicioMs, v.fechaFinMs
-                        FROM ofertas o
-                        JOIN ofertas_sucursal s ON o.idProducto = s.idOfertaxProducto
-                        JOIN ofertas_detalles d ON s.idOfertaxProductoxSucursal = d.idOfertaxProductoxSucursal
-                        JOIN ofertas_vigencia v ON s.idOfertaxProducto = v.idOfertaxProducto
-                        WHERE o.idProducto = ?
-                          AND o.idEmpaque = ?
-                          AND d.idEmpaque = ?
-                          AND (d.indActivo IS NULL OR d.indActivo = 1)
-                          AND (v.indExpirado IS NULL OR v.indExpirado != 1)
-                        LIMIT 1
-                    """.trimIndent()
-                    db.rawQuery(vigenciaSql, arrayOf(producto.idProducto.toString(), precio.idEmpaque.toString(), precio.idEmpaque.toString())).use { cursor ->
+                // Log de conteos de tablas
+                val tableCounts = mutableMapOf<String, Int>()
+                listOf("productos", "precios", "ofertas", "ofertas_vigencia", "ofertas_sucursal", "ofertas_detalles").forEach { table ->
+                    db.rawQuery("SELECT COUNT(*) FROM $table", null).use { cursor ->
                         if (cursor.moveToFirst()) {
-                            fechaInicioMs = if (cursor.isNull(0) || cursor.getLong(0) == 0L) null else cursor.getLong(0)
-                            fechaFinMs = if (cursor.isNull(1) || cursor.getLong(1) == 0L) null else cursor.getLong(1)
-                            vigenciaEncontrada = true
-                            val inicioLegible = fechaInicioMs?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toString() } ?: "null"
-                            val finLegible = fechaFinMs?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toString() } ?: "null"
-                            Log.i(TAG, "[DEPURACION] Vigencia oferta: fechaInicioMs=$fechaInicioMs ($inicioLegible), fechaFinMs=$fechaFinMs ($finLegible)")
-                            logVigenciaOferta(now, fechaInicioMs, fechaFinMs, producto.idProducto, oferta.pvpOferta, oferta.pvpBaseOferta)
-                        } else {
-                            Log.i(TAG, "[DEPURACION] Vigencia oferta: No se encontró vigencia para este producto y empaque")
-                            logVigenciaOferta(now, null, null, producto.idProducto, oferta.pvpOferta, oferta.pvpBaseOferta)
+                            tableCounts[table] = cursor.getInt(0)
                         }
                     }
-                    Log.i(TAG, "[DEPURACION] Fecha actual dispositivo: $now ($nowLegible), oferta encontrada: pvpOferta=${oferta.pvpOferta}, pvpBaseOferta=${oferta.pvpBaseOferta}")
-                } else {
-                    Log.i(TAG, "[DEPURACION] Fecha actual dispositivo: $now ($nowLegible), oferta=null")
                 }
-                // Determinar vigencia usando fechas
-                val detalleVigente = queryDetalleOfertaVigente(db, producto.idProducto, precio.idEmpaque)
+                Log.d(TAG, "[OFFLINE] Conteo de tablas: $tableCounts")
+
+                val producto = queryProducto(db, sku) ?: run {
+                    Log.d(TAG, "[OFFLINE] Producto no encontrado para sku: $sku")
+                    return null
+                }
+                Log.d(TAG, "[OFFLINE] Producto encontrado: id=${producto.idProducto}, nombre=${producto.nombre}")
+
+                val precio = queryBestPrecio(db, producto.idProducto) ?: run {
+                    Log.d(TAG, "[OFFLINE] Precio no encontrado para idProducto: ${producto.idProducto}")
+                    return null
+                }
+                Log.d(TAG, "[OFFLINE] Precio encontrado: idEmpaque=${precio.idEmpaque}, pvpBase=${precio.pvpBase}")
+
+                val oferta = queryBestOferta(db, producto.idProducto, precio.idEmpaque)
+                Log.d(TAG, "[OFFLINE] Oferta encontrada: $oferta")
+
+                val now = System.currentTimeMillis()
+                Log.d(TAG, "[OFFLINE] Hora actual (ms): $now, fecha: ${java.util.Date(now)}")
+
+                var fechaInicioMs: Long? = null
+                var fechaFinMs: Long? = null
+
+                if (oferta != null) {
+                    val idProducto = producto.idProducto
+                    val idEmpaque = precio.idEmpaque
+                    Log.d(TAG, "[OFFLINE] Buscando vigencia para idProducto=$idProducto, idEmpaque=$idEmpaque, now=$now")
+                    
+                    // Paso 1: Buscar TODAS las ofertas vigentes en ofertas_vigencia
+                    val vigentesSql = """
+                        SELECT idOfertaxProducto, fechaInicioMs, fechaFinMs, indExpirado
+                        FROM ofertas_vigencia
+                        WHERE (indExpirado IS NULL OR indExpirado != 1)
+                          AND (fechaInicioMs IS NULL OR fechaInicioMs <= ?)
+                          AND (fechaFinMs IS NULL OR fechaFinMs >= ?)
+                    """.trimIndent()
+                    
+                    val idsVigente = mutableListOf<VigenciaInfo>()
+                    db.rawQuery(vigentesSql, arrayOf(now.toString(), now.toString())).use { cursor ->
+                        while (cursor.moveToNext()) {
+                            val idOp = cursor.getInt(0)
+                            val inicio = cursor.getLongOrNull(1)
+                            val fin = cursor.getLongOrNull(2)
+                            val exp = cursor.getIntOrNull(3)
+                            idsVigente.add(VigenciaInfo(idOp, inicio, fin, exp))
+                        }
+                    }
+                    Log.d(TAG, "[OFFLINE] Paso 1: ${idsVigente.size} ofertas vigentes encontradas")
+                    
+                    if (idsVigente.isNotEmpty()) {
+                        // Paso 2: Buscar en ofertas_sucursal - obtener IdOfertaxProductoxSucursal
+                        val placeholders2 = idsVigente.joinToString(",") { _ -> "?" }
+                        val idsArray2 = idsVigente.map { v -> v.idOfertaxProducto.toString() }.toTypedArray()
+                        
+                        val sucursalesSql = """
+                            SELECT idOfertaxProductoxSucursal, idOfertaxProducto
+                            FROM ofertas_sucursal
+                            WHERE idOfertaxProducto IN ($placeholders2)
+                        """.trimIndent()
+                        
+                        val idsSucursal = mutableListOf<Pair<Int, Int>>() // (idOfertaxProductoxSucursal, idOfertaxProducto)
+                        db.rawQuery(sucursalesSql, idsArray2).use { cursor ->
+                            while (cursor.moveToNext()) {
+                                val idOps = cursor.getInt(0)
+                                val idOp = cursor.getInt(1)
+                                idsSucursal.add(Pair(idOps, idOp))
+                            }
+                        }
+                        Log.d(TAG, "[OFFLINE] Paso 2: ${idsSucursal.size} registros en ofertas_sucursal")
+                        
+                        if (idsSucursal.isNotEmpty()) {
+                            // Paso 3: Buscar en ofertas_detalles - obtener idEmpaque disponibles
+                            val placeholders3 = idsSucursal.joinToString(",") { _ -> "?" }
+                            val idsArray3 = idsSucursal.map { it.first.toString() }.toTypedArray()
+                            
+                            val detallesSql = """
+                                SELECT idOfertaxProductoxSucursal, idEmpaque, indActivo
+                                FROM ofertas_detalles
+                                WHERE idOfertaxProductoxSucursal IN ($placeholders3)
+                                  AND (indActivo IS NULL OR indActivo = 1)
+                            """.trimIndent()
+                            
+                            val detallesEncontrados = mutableListOf<DetalleInfo>() // (idOfertaxProductoxSucursal, idOfertaxProducto, idEmpaque)
+                            db.rawQuery(detallesSql, idsArray3).use { cursor ->
+                                while (cursor.moveToNext()) {
+                                    val idOpsDet = cursor.getInt(0)
+                                    val idEmpDet = cursor.getInt(1)
+                                    val indAct = cursor.getIntOrNull(2)
+                                    // Buscar el idOfertaxProducto correspondiente
+                                    val match = idsSucursal.find { it.first == idOpsDet }
+                                    if (match != null && (indAct == null || indAct == 1)) {
+                                        detallesEncontrados.add(DetalleInfo(idOpsDet, match.second, idEmpDet))
+                                    }
+                                }
+                            }
+                            Log.d(TAG, "[OFFLINE] Paso 3: ${detallesEncontrados.size} detalles encontrados")
+                            
+                            // Paso 4: Verificar si el idEmpaque del producto coincide con alguno de los detalles
+                            val detalleMatch = detallesEncontrados.find { it.idEmpaque == idEmpaque }
+                            if (detalleMatch != null) {
+                                Log.d(TAG, "[OFFLINE] Paso 4: Coincidencia! idEmpaque=$idEmpaque, idOfertaxProducto=${detalleMatch.idOfertaxProducto}")
+                                
+                                // Buscar la vigencia correspondiente
+                                val vigenciaMatch = idsVigente.find { v -> v.idOfertaxProducto == detalleMatch.idOfertaxProducto }
+                                if (vigenciaMatch != null) {
+                                    fechaInicioMs = vigenciaMatch.fechaInicioMs
+                                    fechaFinMs = vigenciaMatch.fechaFinMs
+                                    Log.d(TAG, "[OFFLINE] Vigencia encontrada! fechaInicioMs=$fechaInicioMs, fechaFinMs=$fechaFinMs")
+                                }
+                            } else {
+                                Log.w(TAG, "[OFFLINE] Paso 4: No hay coincidencia de idEmpaque")
+                            }
+                        }
+                    }
+                    
+                    if (fechaInicioMs == null && fechaFinMs == null) {
+                        Log.w(TAG, "[OFFLINE] No se encontró vigencia después de los 4 pasos")
+                    }
+                } else {
+                    Log.d(TAG, "[OFFLINE] No hay oferta para este producto")
+                }
+
                 val ofertaValida = oferta != null &&
                     (oferta.pvpOferta ?: 0.0) > 0.0 &&
                     (oferta.pvpBaseOferta ?: 0.0) > 0.0
-                // Lógica corregida: ofertaVigente solo si hay vigencia encontrada, fechas válidas y la fecha actual está dentro del rango
-                val fechasValidas = !(fechaInicioMs == null && fechaFinMs == null)
-                val ofertaVigente = ofertaValida && detalleVigente && vigenciaEncontrada && fechasValidas && (
-                    // Solo inicio null: vigente hasta fechaFinMs
-                    (fechaInicioMs == null && fechaFinMs != null && now <= fechaFinMs) ||
-                    // Solo fin null: vigente desde fechaInicioMs
-                    (fechaInicioMs != null && fechaFinMs == null && now >= fechaInicioMs) ||
-                    // Ambos con valor: rango normal
-                    (fechaInicioMs != null && fechaFinMs != null && now >= fechaInicioMs && now <= fechaFinMs)
-                )
-                Log.i(TAG, "[DEPURACION] ofertaValida=$ofertaValida, detalleVigente=$detalleVigente, ofertaVigente=$ofertaVigente, fechaInicioMs=$fechaInicioMs, fechaFinMs=$fechaFinMs, now=$now")
+                Log.d(TAG, "[OFFLINE] ofertaValida: $ofertaValida")
+
+                val fechasValidas = fechaInicioMs != null || fechaFinMs != null
+                Log.d(TAG, "[OFFLINE] fechasValidas: $fechasValidas (fechaInicioMs=$fechaInicioMs, fechaFinMs=$fechaFinMs)")
+
+                val ofertaVigente = ofertaValida && fechasValidas && isWithinVigencia(now, fechaInicioMs, fechaFinMs)
+                Log.d(TAG, "[OFFLINE] ofertaVigente: $ofertaVigente")
+
                 val tasa = queryTasaImpuesto(db, producto.idProducto, precio.indIva)
                 val factor = if (tasa != null) 1 + (tasa / 100.0) else 1.0
 
@@ -147,8 +229,6 @@ class BackupIndexRepository(private val context: Context) {
                 val pvpConversion = if (rawConversion != null && rawConversion > 0.0) rawConversion else pvpBase
                 val pvpOferta = oferta?.pvpOferta?.times(factor)
                 val pvpBaseOferta = oferta?.pvpBaseOferta?.times(factor)
-
-                Log.i(TAG, "[DEPURACION] pvpBase=$pvpBase, pvpConversion=$pvpConversion, pvpOferta=$pvpOferta, pvpBaseOferta=$pvpBaseOferta")
 
                 return ProductoResponse(
                     idProducto = producto.idProducto,
@@ -168,38 +248,13 @@ class BackupIndexRepository(private val context: Context) {
         }
     }
 
-    // Nueva función: valida el detalle vigente igual que el backend
-    private fun queryDetalleOfertaVigente(db: android.database.sqlite.SQLiteDatabase, idProducto: Int, idEmpaque: Int): Boolean {
-        val now = System.currentTimeMillis()
-        val nowUtc = Instant.ofEpochMilli(now).atZone(ZoneOffset.UTC)
-        val nowLocal = Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault())
-        val sql = """
-            SELECT v.fechaInicioMs, v.fechaFinMs
-            FROM ofertas o
-            JOIN ofertas_sucursal s ON o.idProducto = s.idOfertaxProducto
-            JOIN ofertas_detalles d ON s.idOfertaxProductoxSucursal = d.idOfertaxProductoxSucursal
-            JOIN ofertas_vigencia v ON s.idOfertaxProducto = v.idOfertaxProducto
-            WHERE o.idProducto = ?
-              AND o.idEmpaque = ?
-              AND d.idEmpaque = ?
-              AND (d.indActivo IS NULL OR d.indActivo = 1)
-              AND (v.indExpirado IS NULL OR v.indExpirado != 1)
-        """.trimIndent()
-        db.rawQuery(sql, arrayOf(idProducto.toString(), idEmpaque.toString(), idEmpaque.toString())).use { cursor ->
-            while (cursor.moveToNext()) {
-                val inicio = cursor.getLong(0)
-                val fin = cursor.getLong(1)
-                val inicioUtc = Instant.ofEpochMilli(inicio).atZone(ZoneOffset.UTC)
-                val inicioLocal = Instant.ofEpochMilli(inicio).atZone(ZoneId.systemDefault())
-                val finUtc = Instant.ofEpochMilli(fin).atZone(ZoneOffset.UTC)
-                val finLocal = Instant.ofEpochMilli(fin).atZone(ZoneId.systemDefault())
-                val vigente = (inicio <= now) && (fin >= now)
-                // Log detallado de las fechas
-                Log.i(TAG, "[DEPURACION] now=$now (UTC=$nowUtc, Local=$nowLocal), inicio=$inicio (UTC=$inicioUtc, Local=$inicioLocal), fin=$fin (UTC=$finUtc, Local=$finLocal), vigente=$vigente")
-                if (vigente) return true
-            }
+    private fun isWithinVigencia(now: Long, fechaInicioMs: Long?, fechaFinMs: Long?): Boolean {
+        return when {
+            fechaInicioMs == null && fechaFinMs != null -> now <= fechaFinMs
+            fechaInicioMs != null && fechaFinMs == null -> now >= fechaInicioMs
+            fechaInicioMs != null && fechaFinMs != null -> now >= fechaInicioMs && now <= fechaFinMs
+            else -> false
         }
-        return false
     }
 
     private fun clearTables(db: android.database.sqlite.SQLiteDatabase) {
@@ -216,84 +271,97 @@ class BackupIndexRepository(private val context: Context) {
 
     private fun insertProductos(db: android.database.sqlite.SQLiteDatabase) {
         val stmt = db.compileStatement("INSERT OR REPLACE INTO productos (sku, idProducto, nombre) VALUES (?, ?, ?)")
-        streamArray(FILE_PRODUCTOS) { item: BackupProducto ->
+        BackupUtils.streamArray(context, FILE_PRODUCTOS) { item: BackupProducto ->
             stmt.bindString(1, item.sku)
             stmt.bindLong(2, item.idProducto.toLong())
             stmt.bindString(3, item.nombre)
             stmt.executeInsert()
+            stmt.clearBindings()
         }
     }
 
     private fun insertPrecios(db: android.database.sqlite.SQLiteDatabase) {
         val stmt = db.compileStatement("INSERT INTO precios (idProducto, idEmpaque, costoBase, pvpBase, pvpConversion, indIva) VALUES (?, ?, ?, ?, ?, ?)")
-        streamArray(FILE_PRECIOS) { item: BackupPrecio ->
+        BackupUtils.streamArray(context, FILE_PRECIOS) { item: BackupPrecio ->
             stmt.bindLong(1, item.idProducto.toLong())
             stmt.bindLong(2, item.idEmpaque.toLong())
-            bindDoubleOrNull(stmt, 3, item.costoBase)
-            bindDoubleOrNull(stmt, 4, item.pvpBase)
-            bindDoubleOrNull(stmt, 5, item.pvpConversion)
-            bindIntOrNull(stmt, 6, item.indIva?.let { if (it) 1 else 0 })
+            stmt.bindOrNull(3, item.costoBase)
+            stmt.bindOrNull(4, item.pvpBase)
+            stmt.bindOrNull(5, item.pvpConversion)
+            stmt.bindOrNull(6, item.indIva?.let { if (it) 1 else 0 })
             stmt.executeInsert()
+            stmt.clearBindings()
         }
     }
 
     private fun insertOfertas(db: android.database.sqlite.SQLiteDatabase) {
-        val stmt = db.compileStatement("INSERT INTO ofertas (idProducto, idEmpaque, pvpOferta, pvpBaseOferta) VALUES (?, ?, ?, ?)")
-        streamArray(FILE_OFERTAS) { item: BackupOferta ->
+        val stmt = db.compileStatement("INSERT INTO ofertas (idProducto, idEmpaque, pvpOferta, pvpBaseOferta, idProductoOfertaxSucursal) VALUES (?, ?, ?, ?, ?)")
+        BackupUtils.streamArray(context, FILE_OFERTAS) { item: BackupOferta ->
             stmt.bindLong(1, item.idProducto.toLong())
             stmt.bindLong(2, item.idEmpaque.toLong())
-            bindDoubleOrNull(stmt, 3, item.pvpOferta)
-            bindDoubleOrNull(stmt, 4, item.pvpBaseOferta)
+            stmt.bindOrNull(3, item.pvpOferta)
+            stmt.bindOrNull(4, item.pvpBaseOferta)
+            stmt.bindOrNull(5, item.idProductoOfertaxSucursal)
             stmt.executeInsert()
+            stmt.clearBindings()
         }
     }
 
     private fun insertOfertasVigencia(db: android.database.sqlite.SQLiteDatabase) {
         val stmt = db.compileStatement("INSERT INTO ofertas_vigencia (idOfertaxProducto, indExpirado, fechaInicioMs, fechaFinMs) VALUES (?, ?, ?, ?)")
-        streamArray(FILE_OFERTAS_VIGENCIA) { item: BackupOfertaVigencia ->
+        BackupUtils.streamArray(context, FILE_OFERTAS_VIGENCIA) { item: BackupOfertaVigencia ->
+            val fechaInicioMs = BackupUtils.parseIsoToMillis(item.fechaInicio)
+            val fechaFinMs = BackupUtils.parseIsoToMillis(item.fechaFin)
+            Log.d(TAG, "[INSERT] ofertas_vigencia idOfertaxProducto=${item.idOfertaxProducto}, fechaInicio=${item.fechaInicio} -> $fechaInicioMs, fechaFin=${item.fechaFin} -> $fechaFinMs")
+            
             stmt.bindLong(1, item.idOfertaxProducto.toLong())
-            bindIntOrNull(stmt, 2, item.indExpirado)
-            bindLongOrNull(stmt, 3, parseIsoToMillis(item.fechaInicio))
-            bindLongOrNull(stmt, 4, parseIsoToMillis(item.fechaFin))
+            stmt.bindOrNull(2, item.indExpirado)
+            stmt.bindOrNull(3, fechaInicioMs)
+            stmt.bindOrNull(4, fechaFinMs)
             stmt.executeInsert()
+            stmt.clearBindings()
         }
     }
 
     private fun insertOfertasSucursal(db: android.database.sqlite.SQLiteDatabase) {
         val stmt = db.compileStatement("INSERT INTO ofertas_sucursal (idOfertaxProductoxSucursal, idOfertaxProducto) VALUES (?, ?)")
-        streamArray(FILE_OFERTAS_SUCURSAL) { item: BackupOfertaSucursal ->
+        BackupUtils.streamArray(context, FILE_OFERTAS_SUCURSAL) { item: BackupOfertaSucursal ->
             stmt.bindLong(1, item.idOfertaxProductoxSucursal.toLong())
             stmt.bindLong(2, item.idOfertaxProducto.toLong())
             stmt.executeInsert()
+            stmt.clearBindings()
         }
     }
 
     private fun insertOfertasDetalles(db: android.database.sqlite.SQLiteDatabase) {
         val stmt = db.compileStatement("INSERT INTO ofertas_detalles (idEmpaque, idOfertaxProductoxSucursal, indActivo) VALUES (?, ?, ?)")
-        streamArray(FILE_OFERTAS_DETALLES) { item: BackupOfertaDetalle ->
+        BackupUtils.streamArray(context, FILE_OFERTAS_DETALLES) { item: BackupOfertaDetalle ->
             stmt.bindLong(1, item.idEmpaque.toLong())
             stmt.bindLong(2, item.idOfertaxProductoxSucursal.toLong())
-            bindIntOrNull(stmt, 3, item.indActivo)
+            stmt.bindOrNull(3, item.indActivo)
             stmt.executeInsert()
+            stmt.clearBindings()
         }
     }
 
     private fun insertImpuestosProducto(db: android.database.sqlite.SQLiteDatabase) {
         val stmt = db.compileStatement("INSERT INTO impuestos_producto (idProducto, idTasaImpuesto, indActivo) VALUES (?, ?, ?)")
-        streamArray(FILE_IMPUESTOS) { item: BackupImpuestoProducto ->
+        BackupUtils.streamArray(context, FILE_IMPUESTOS) { item: BackupImpuestoProducto ->
             stmt.bindLong(1, item.idProducto.toLong())
             stmt.bindLong(2, item.idTasaImpuesto.toLong())
-            bindIntOrNull(stmt, 3, item.indActivo)
+            stmt.bindOrNull(3, item.indActivo)
             stmt.executeInsert()
+            stmt.clearBindings()
         }
     }
 
     private fun insertTasasImpuesto(db: android.database.sqlite.SQLiteDatabase) {
         val stmt = db.compileStatement("INSERT OR REPLACE INTO tasas_impuesto (idTasaImpuesto, tasa) VALUES (?, ?)")
-        streamArray(FILE_TASAS) { item: BackupTasaImpuesto ->
+        BackupUtils.streamArray(context, FILE_TASAS) { item: BackupTasaImpuesto ->
             stmt.bindLong(1, item.idTasaImpuesto.toLong())
-            bindDoubleOrNull(stmt, 2, item.tasa)
+            stmt.bindOrNull(2, item.tasa)
             stmt.executeInsert()
+            stmt.clearBindings()
         }
     }
 
@@ -350,11 +418,16 @@ class BackupIndexRepository(private val context: Context) {
             LIMIT 1
         """.trimIndent()
         db.rawQuery(sql, arrayOf(idProducto.toString(), idEmpaque.toString())).use { cursor ->
-            if (!cursor.moveToFirst()) return null
-            return OfertaRow(
+            if (!cursor.moveToFirst()) {
+                Log.d(TAG, "[OFFLINE] No hay ofertas para idProducto=$idProducto, idEmpaque=$idEmpaque")
+                return null
+            }
+            val row = OfertaRow(
                 pvpOferta = cursor.getDoubleOrNull(0),
                 pvpBaseOferta = cursor.getDoubleOrNull(1)
             )
+            Log.d(TAG, "[OFFLINE] Oferta cruda: pvpOferta=${row.pvpOferta}, pvpBaseOferta=${row.pvpBaseOferta}")
+            return row
         }
     }
 
@@ -371,69 +444,6 @@ class BackupIndexRepository(private val context: Context) {
             if (!cursor.moveToFirst()) return null
             return cursor.getDoubleOrNull(0)
         }
-    }
-
-    private fun parseIsoToMillis(value: String?): Long? {
-        if (value.isNullOrBlank()) return null
-        val formatters = listOf(
-            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSX"),
-            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssX"),
-            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS"),
-            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"),
-            DateTimeFormatter.ofPattern("yyyy-MM-dd")
-        )
-        for (formatter in formatters) {
-            try {
-                val result = when (formatter) {
-                    formatters[4] -> {
-                        // yyyy-MM-dd (solo fecha)
-                        val localDate = LocalDate.parse(value, formatter)
-                        localDate.atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
-                    }
-                    else -> {
-                        val zonedDateTime = ZonedDateTime.parse(value, formatter.withZone(ZoneId.of("UTC")))
-                        zonedDateTime.toInstant().toEpochMilli()
-                    }
-                }
-                Log.i(TAG, "[DEPURACION] Fecha parseada correctamente: $value -> $result")
-                return result
-            } catch (_: DateTimeParseException) {
-                Log.w(TAG, "[DEPURACION] Fallo parseando fecha: $value con formato "+formatter.toString())
-            } catch (e: Exception) {
-                Log.w(TAG, "Error inesperado al convertir la fecha: $value", e)
-            }
-        }
-        Log.w(TAG, "No se pudo convertir la fecha: $value")
-        return null
-    }
-
-    private inline fun <reified T> streamArray(fileName: String, crossinline onItem: (T) -> Unit) {
-        val file = File(context.filesDir, fileName)
-        if (!file.exists()) return
-        file.reader().use { reader ->
-            val jsonReader = JsonReader(reader)
-            val adapter = gson.getAdapter(T::class.java)
-            jsonReader.beginArray()
-            while (jsonReader.hasNext()) {
-                val item = adapter.read(jsonReader)
-                if (item != null) {
-                    onItem(item)
-                }
-            }
-            jsonReader.endArray()
-        }
-    }
-
-    private fun bindDoubleOrNull(stmt: android.database.sqlite.SQLiteStatement, index: Int, value: Double?) {
-        if (value == null) stmt.bindNull(index) else stmt.bindDouble(index, value)
-    }
-
-    private fun bindLongOrNull(stmt: android.database.sqlite.SQLiteStatement, index: Int, value: Long?) {
-        if (value == null) stmt.bindNull(index) else stmt.bindLong(index, value)
-    }
-
-    private fun bindIntOrNull(stmt: android.database.sqlite.SQLiteStatement, index: Int, value: Int?) {
-        if (value == null) stmt.bindNull(index) else stmt.bindLong(index, value.toLong())
     }
 
     private data class ProductoRow(val idProducto: Int, val sku: String, val nombre: String)
@@ -457,69 +467,4 @@ class BackupIndexRepository(private val context: Context) {
         private const val FILE_IMPUESTOS = "backup_impuestos.json"
         private const val FILE_TASAS = "backup_tasas.json"
     }
-
-    fun logOfertasVigencia() {
-        synchronized(dbLock) {
-            dbHelper.readableDatabase.use { db ->
-                val sql = "SELECT idOfertaxProducto, indExpirado, fechaInicioMs, fechaFinMs FROM ofertas_vigencia"
-                db.rawQuery(sql, null).use { cursor ->
-                    Log.i(TAG, "--- Datos de ofertas_vigencia ---")
-                    while (cursor.moveToNext()) {
-                        val id = cursor.getInt(0)
-                        val expirado = cursor.getIntOrNull(1)
-                        val inicio = cursor.getLong(2)
-                        val fin = cursor.getLong(3)
-                        Log.i(TAG, "idOfertaxProducto=$id, indExpirado=$expirado, fechaInicioMs=$inicio, fechaFinMs=$fin")
-                    }
-                }
-            }
-        }
-    }
-
-    // Cambiar la firma para aceptar la base de datos abierta
-    fun logOfertasVigenciaConFechas(db: android.database.sqlite.SQLiteDatabase) {
-        val sql = "SELECT idOfertaxProducto, indExpirado, fechaInicioMs, fechaFinMs FROM ofertas_vigencia"
-        db.rawQuery(sql, null).use { cursor ->
-            Log.i(TAG, "--- Datos de ofertas_vigencia (con fechas legibles) ---")
-            while (cursor.moveToNext()) {
-                val id = cursor.getInt(0)
-                val expirado = cursor.getIntOrNull(1)
-                val inicio = cursor.getLong(2)
-                val fin = cursor.getLong(3)
-                val formatterLog = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.of("UTC"))
-                val inicioStr = if (inicio > 0) formatterLog.format(Instant.ofEpochMilli(inicio)) else "0"
-                val finStr = if (fin > 0) formatterLog.format(Instant.ofEpochMilli(fin)) else "0"
-                Log.i(TAG, "idOfertaxProducto=$id, indExpirado=$expirado, fechaInicioMs=$inicio ($inicioStr), fechaFinMs=$fin ($finStr)")
-            }
-        }
-    }
-
-    private fun logVigenciaOferta(
-        fechaActualMs: Long,
-        fechaInicioMs: Long?,
-        fechaFinMs: Long?,
-        productoId: Int? = null,
-        pvpOferta: Double? = null,
-        pvpBaseOferta: Double? = null
-    ) {
-        val zona = ZoneId.systemDefault()
-        val fechaActual = Instant.ofEpochMilli(fechaActualMs).atZone(zona)
-        val fechaInicio = fechaInicioMs?.let { Instant.ofEpochMilli(it).atZone(zona) }
-        val fechaFin = fechaFinMs?.let { Instant.ofEpochMilli(it).atZone(zona) }
-        Log.i(
-            TAG,
-            "[DEPURACION] Fecha actual dispositivo: $fechaActualMs ($fechaActual), fechaInicioMs: $fechaInicioMs ($fechaInicio), fechaFinMs: $fechaFinMs ($fechaFin), productoId: $productoId, pvpOferta: $pvpOferta, pvpBaseOferta: $pvpBaseOferta"
-        )
-    }
 }
-
-private fun Cursor.getDoubleOrNull(index: Int): Double? {
-    return if (isNull(index)) null else getDouble(index)
-}
-
-private fun Cursor.getIntOrNull(index: Int): Int? {
-    return if (isNull(index)) null else getInt(index)
-}
-
-// RECUERDA: Inicializa ThreeTenABP en tu Application o Activity principal:
-// AndroidThreeTen.init(context)

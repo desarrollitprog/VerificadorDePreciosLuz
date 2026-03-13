@@ -7,17 +7,26 @@ import com.example.verificadordepreciosluz.data.network.ProductoResponse
 import com.example.verificadordepreciosluz.util.SyncPrefs
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import com.google.gson.stream.JsonReader
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Locale
-import java.util.TimeZone
 
 class BackupRepository(
     private val context: Context,
     private val api: ApiService? = null,
 ) {
     private val gson = Gson()
+
+    companion object {
+        private const val TAG = "BackupRepository"
+        private const val FILE_META = "backup_meta.json"
+        private const val FILE_PRODUCTOS = "backup_productos.json"
+        private const val FILE_PRECIOS = "backup_precios.json"
+        private const val FILE_OFERTAS = "backup_ofertas.json"
+        private const val FILE_OFERTAS_VIGENCIA = "backup_ofertas_vigencia.json"
+        private const val FILE_OFERTAS_SUCURSAL = "backup_ofertas_sucursal.json"
+        private const val FILE_OFERTAS_DETALLES = "backup_ofertas_detalles.json"
+        private const val FILE_IMPUESTOS = "backup_impuestos.json"
+        private const val FILE_TASAS = "backup_tasas.json"
+    }
 
     interface BackupProgressListener {
         fun onProgress(section: String, offset: Int, received: Int, total: Int)
@@ -156,7 +165,6 @@ class BackupRepository(
     }
 
     fun saveBackup(backup: BackupResponse) {
-        writeMeta(backup.updatedAt)
         writeSection(FILE_PRODUCTOS, backup.productos)
         writeSection(FILE_PRECIOS, backup.precios)
         writeSection(FILE_OFERTAS, backup.ofertas)
@@ -165,6 +173,7 @@ class BackupRepository(
         writeSection(FILE_OFERTAS_DETALLES, backup.ofertasDetalles)
         writeSection(FILE_IMPUESTOS, backup.impuestosProducto)
         writeSection(FILE_TASAS, backup.tasasImpuesto)
+        writeMeta(backup.updatedAt)
     }
 
     fun loadBackup(): BackupResponse? {
@@ -257,13 +266,12 @@ class BackupRepository(
     // Nueva función: valida que la oferta esté vigente en fechas
     private fun isOfertaVigenteForOferta(oferta: BackupOferta?): Boolean {
         if (oferta == null) return false
-        // Buscar la vigencia de la oferta específica
         var vigente = false
-        streamArray(FILE_OFERTAS_VIGENCIA) { item: BackupOfertaVigencia ->
+        BackupUtils.streamArray(context, FILE_OFERTAS_VIGENCIA) { item: BackupOfertaVigencia ->
             if (item.idOfertaxProducto == oferta.idProductoOfertaxSucursal.toInt()) {
                 val now = System.currentTimeMillis()
-                val inicio = parseIsoToMillis(item.fechaInicio)
-                val fin = parseIsoToMillis(item.fechaFin)
+                val inicio = BackupUtils.parseIsoToMillis(item.fechaInicio)
+                val fin = BackupUtils.parseIsoToMillis(item.fechaFin)
                 val noExpirada = item.indExpirado != 1
                 val cumpleInicio = inicio == null || now >= inicio
                 val cumpleFin = fin == null || now <= fin
@@ -277,7 +285,7 @@ class BackupRepository(
 
     private fun findProductoBySku(sku: String): BackupProducto? {
         var found: BackupProducto? = null
-        streamArray(FILE_PRODUCTOS) { item: BackupProducto ->
+        BackupUtils.streamArray(context, FILE_PRODUCTOS) { item: BackupProducto ->
             if (found == null && item.sku == sku) {
                 found = item
             }
@@ -287,7 +295,7 @@ class BackupRepository(
 
     private fun findBestPrecio(idProducto: Int): BackupPrecio? {
         var best: BackupPrecio? = null
-        streamArray(FILE_PRECIOS) { item: BackupPrecio ->
+        BackupUtils.streamArray(context, FILE_PRECIOS) { item: BackupPrecio ->
             if (item.idProducto != idProducto) return@streamArray
             if ((item.costoBase ?: 0.0) <= 0.0 || (item.pvpBase ?: 0.0) <= 0.0) return@streamArray
             if (best == null) {
@@ -313,15 +321,12 @@ class BackupRepository(
 
     private fun findBestOferta(idProducto: Int, idEmpaque: Int): BackupOferta? {
         var best: BackupOferta? = null
-        // Obtener los ids de ofertas por sucursal para este producto y empaque
         val idsOfertaxProducto = mutableSetOf<Int>()
-        streamArray(FILE_OFERTAS_SUCURSAL) { item: BackupOfertaSucursal ->
-            // Relacionar por idProducto y idEmpaque si están presentes en el modelo
+        BackupUtils.streamArray(context, FILE_OFERTAS_SUCURSAL) { item: BackupOfertaSucursal ->
             idsOfertaxProducto.add(item.idOfertaxProducto)
         }
         if (idsOfertaxProducto.isEmpty()) return null
-        streamArray(FILE_OFERTAS) { item: BackupOferta ->
-            // Filtrar por idProducto, idEmpaque, idOfertaxProducto y solo ofertas activas
+        BackupUtils.streamArray(context, FILE_OFERTAS) { item: BackupOferta ->
             if (item.idProducto == idProducto && item.idEmpaque == idEmpaque &&
                 idsOfertaxProducto.contains(item.idProductoOfertaxSucursal.toInt()) &&
                 (item.indActivo == null || item.indActivo == 1)) {
@@ -354,14 +359,14 @@ class BackupRepository(
     private fun findTasaImpuesto(idProducto: Int, indIva: Boolean?): Double? {
         if (indIva != true) return null
         var idTasa: Int? = null
-        streamArray(FILE_IMPUESTOS) { item: BackupImpuestoProducto ->
+        BackupUtils.streamArray(context, FILE_IMPUESTOS) { item: BackupImpuestoProducto ->
             if (item.idProducto == idProducto && item.indActivo == 1) {
                 idTasa = item.idTasaImpuesto
             }
         }
         if (idTasa == null) return null
         var tasa: Double? = null
-        streamArray(FILE_TASAS) { item: BackupTasaImpuesto ->
+        BackupUtils.streamArray(context, FILE_TASAS) { item: BackupTasaImpuesto ->
             if (item.idTasaImpuesto == idTasa) {
                 tasa = item.tasa
             }
@@ -371,8 +376,7 @@ class BackupRepository(
 
     private fun isOfertaVigenteForEmpaque(idEmpaque: Int): Boolean {
         val idsSucursal = mutableSetOf<Int>()
-        streamArray(FILE_OFERTAS_DETALLES) { item: BackupOfertaDetalle ->
-            // Filtrar solo detalles activos (IndActivo == 1 o nulo)
+        BackupUtils.streamArray(context, FILE_OFERTAS_DETALLES) { item: BackupOfertaDetalle ->
             if (item.idEmpaque == idEmpaque && (item.indActivo == null || item.indActivo == 1)) {
                 idsSucursal.add(item.idOfertaxProductoxSucursal)
             }
@@ -380,7 +384,7 @@ class BackupRepository(
         if (idsSucursal.isEmpty()) return false
 
         val idsProducto = mutableSetOf<Int>()
-        streamArray(FILE_OFERTAS_SUCURSAL) { item: BackupOfertaSucursal ->
+        BackupUtils.streamArray(context, FILE_OFERTAS_SUCURSAL) { item: BackupOfertaSucursal ->
             if (idsSucursal.contains(item.idOfertaxProductoxSucursal)) {
                 idsProducto.add(item.idOfertaxProducto)
             }
@@ -389,10 +393,10 @@ class BackupRepository(
 
         val now = System.currentTimeMillis()
         var vigente = false
-        streamArray(FILE_OFERTAS_VIGENCIA) { item: BackupOfertaVigencia ->
+        BackupUtils.streamArray(context, FILE_OFERTAS_VIGENCIA) { item: BackupOfertaVigencia ->
             if (!idsProducto.contains(item.idOfertaxProducto)) return@streamArray
-            val inicio = parseIsoToMillis(item.fechaInicio)
-            val fin = parseIsoToMillis(item.fechaFin)
+            val inicio = BackupUtils.parseIsoToMillis(item.fechaInicio)
+            val fin = BackupUtils.parseIsoToMillis(item.fechaFin)
             val noExpirada = item.indExpirado != 1
             val cumpleInicio = inicio == null || now >= inicio
             val cumpleFin = fin == null || now <= fin
@@ -403,37 +407,18 @@ class BackupRepository(
         return vigente
     }
 
-    private fun parseIsoToMillis(value: String?): Long? {
-        if (value.isNullOrBlank()) return null
-        val clean = value.replace("Z", "").substringBefore(".")
-        return try {
-            val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
-            sdf.timeZone = TimeZone.getTimeZone("UTC")
-            sdf.parse(clean)?.time
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    private inline fun <reified T> streamArray(fileName: String, crossinline onItem: (T) -> Unit) {
+    private inline fun <reified T> readSection(fileName: String): List<T> {
         val file = File(context.filesDir, fileName)
-        if (!file.exists()) return
-        try {
+        if (!file.exists()) return emptyList()
+        return try {
             file.reader().use { reader ->
-                val jsonReader = JsonReader(reader)
-                val adapter = gson.getAdapter(T::class.java)
-                jsonReader.beginArray()
-                while (jsonReader.hasNext()) {
-                    val item = adapter.read(jsonReader)
-                    if (item != null) {
-                        onItem(item)
-                    }
-                }
-                jsonReader.endArray()
+                val type = object : TypeToken<List<T>>() {}.type
+                gson.fromJson(reader, type)
             }
         } catch (e: Exception) {
-            Log.e("BackupRepository", "Sección corrupta $fileName, eliminando archivo", e)
+            Log.e(TAG, "Sección corrupta $fileName", e)
             file.delete()
+            emptyList()
         }
     }
 
@@ -460,21 +445,6 @@ class BackupRepository(
     private fun <T> writeSection(fileName: String, data: List<T>) {
         writeJsonAtomic(fileName) { writer ->
             gson.toJson(data, writer)
-        }
-    }
-
-    private inline fun <reified T> readSection(fileName: String): List<T> {
-        val file = File(context.filesDir, fileName)
-        if (!file.exists()) return emptyList()
-        return try {
-            file.reader().use { reader ->
-                val type = object : TypeToken<List<T>>() {}.type
-                gson.fromJson(reader, type)
-            }
-        } catch (e: Exception) {
-            Log.e("BackupRepository", "Sección corrupta $fileName, eliminando archivo", e)
-            file.delete()
-            emptyList()
         }
     }
 
@@ -513,18 +483,6 @@ class BackupRepository(
         ).forEach { name ->
             File(context.filesDir, name).delete()
         }
-    }
-
-    companion object {
-        private const val FILE_META = "backup_meta.json"
-        private const val FILE_PRODUCTOS = "backup_productos.json"
-        private const val FILE_PRECIOS = "backup_precios.json"
-        private const val FILE_OFERTAS = "backup_ofertas.json"
-        private const val FILE_OFERTAS_VIGENCIA = "backup_ofertas_vigencia.json"
-        private const val FILE_OFERTAS_SUCURSAL = "backup_ofertas_sucursal.json"
-        private const val FILE_OFERTAS_DETALLES = "backup_ofertas_detalles.json"
-        private const val FILE_IMPUESTOS = "backup_impuestos.json"
-        private const val FILE_TASAS = "backup_tasas.json"
     }
 
     private data class BackupMeta(

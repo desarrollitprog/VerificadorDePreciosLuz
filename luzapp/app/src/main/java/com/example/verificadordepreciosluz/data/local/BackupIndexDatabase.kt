@@ -14,10 +14,12 @@ class BackupIndexDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME,
         db.rawQuery("PRAGMA busy_timeout=3000", null).close()
     }
     override fun onCreate(db: SQLiteDatabase) {
-        db.execSQL("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT)")
+        db.execSQL("CREATE TABLE meta (`key` TEXT PRIMARY KEY, value TEXT)")
         db.execSQL("CREATE TABLE productos (sku TEXT PRIMARY KEY, idProducto INTEGER, nombre TEXT)")
         db.execSQL("CREATE TABLE precios (idProducto INTEGER, idEmpaque INTEGER, costoBase REAL, pvpBase REAL, pvpConversion REAL, indIva INTEGER)")
-        db.execSQL("CREATE TABLE ofertas (idProducto INTEGER, idEmpaque INTEGER, pvpOferta REAL, pvpBaseOferta REAL)")
+        // Tabla ofertas con referencia a idOfertaxProducto para join con vigencia
+        db.execSQL("CREATE TABLE ofertas (idProducto INTEGER, idEmpaque INTEGER, pvpOferta REAL, pvpBaseOferta REAL, idProductoOfertaxSucursal INTEGER)")
+        // Tabla ofertas_vigencia con fechas de vigencia
         db.execSQL("CREATE TABLE ofertas_vigencia (idOfertaxProducto INTEGER, indExpirado INTEGER, fechaInicioMs INTEGER, fechaFinMs INTEGER)")
         db.execSQL("CREATE TABLE ofertas_sucursal (idOfertaxProductoxSucursal INTEGER, idOfertaxProducto INTEGER)")
         db.execSQL("CREATE TABLE ofertas_detalles (idEmpaque INTEGER, idOfertaxProductoxSucursal INTEGER, indActivo INTEGER)")
@@ -48,6 +50,6 @@ class BackupIndexDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME,
 
     companion object {
         private const val DB_NAME = "backup_index.db"
-        private const val DB_VERSION = 1
+        private const val DB_VERSION = 4
     }
 }

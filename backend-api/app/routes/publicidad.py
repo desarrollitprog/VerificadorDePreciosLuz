@@ -9,6 +9,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 from ..schemas import PublicidadResponse
 from ..models.publicidad import Publicidad
+from ..services.device_bus import DeviceCommandBus
 
 router = APIRouter()
 
@@ -48,6 +49,7 @@ async def replicar_archivo(
     fecha_inicio: str = Form(None),
     fecha_fin: str = Form(None),
     duracion_seg: int = Form(None),
+    DispositivoIds: List[int] = Form(...),
     db: AsyncSession = Depends(get_db_publicidad)
 ):
     """
@@ -103,6 +105,15 @@ async def replicar_archivo(
         db.add(nuevo_banner)
         await db.commit()
         await db.refresh(nuevo_banner)
+            # Enviar comando SYNC_BANNER solo a los dispositivos seleccionados
+        device_command_bus = await DeviceCommandBus.create()
+        for device_id in DispositivoIds:
+            await device_command_bus.publish_command(
+                    device_id=str(device_id),
+                    command="SYNC_BANNER",
+                    payload={"banner_id": nuevo_banner.id, "url": nuevo_banner.url}
+                )
+            await device_command_bus.close()
     except Exception as e:
         if os.path.exists(file_location):
             os.remove(file_location)

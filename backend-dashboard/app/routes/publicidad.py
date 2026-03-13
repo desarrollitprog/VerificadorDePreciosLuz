@@ -15,7 +15,7 @@ from ..database import get_db_usuarios
 from ..dependencies import get_current_cliente
 from ..services.notificacion_service import registrar_accion
 from ..services.replicacion_service import replicar_archivo_al_api, Borrado_api, actualizar_estado_api, actualizar_metadata_api
-
+from ..models.dispositivo import Dispositivo
 
 router = APIRouter()
 
@@ -134,6 +134,7 @@ async def upload_banner(
     FechaInicio: str = Form(None),
     FechaFin: str = Form(None),
     DuracionSeg: int = Form(None),
+    DispositivoIds: list[int] = Form(...),
     db: AsyncSession = Depends(get_db_usuarios),
     current_user: dict = Depends(get_current_cliente),
 ):
@@ -177,24 +178,29 @@ async def upload_banner(
     # Guardar metadatos en la base de datos
     url = f"/static/banners/{filename}"
     try:
-        FechaInicio_dt = datetime.fromisoformat(FechaInicio) if FechaInicio else None
-        FechaFin_dt = datetime.fromisoformat(FechaFin) if FechaFin else None
-        if FechaInicio_dt and FechaFin_dt and FechaInicio_dt > FechaFin_dt:
-            raise HTTPException(status_code=400, detail="Rango inválido: FechaInicio no puede ser mayor que FechaFin.")
-        nuevo_banner = Publicidad(
-            Titulo=Titulo,
-            Tipo=Tipo,
-            Url=url,
-            Activo=Activo,
-            Prioridad=Prioridad,
-            FechaInicio=FechaInicio_dt,
-            FechaFin=FechaFin_dt,
-            DuracionSeg=DuracionSeg
-        )
-        db.add(nuevo_banner)
-        await db.commit()
-        await db.refresh(nuevo_banner)
-        print(f"Se ha guardado correctamente en la base de datos: Id={nuevo_banner.IdPublicidad}, Titulo={nuevo_banner.Titulo}, Url={nuevo_banner.Url}")
+            FechaInicio_dt = datetime.fromisoformat(FechaInicio) if FechaInicio else None
+            FechaFin_dt = datetime.fromisoformat(FechaFin) if FechaFin else None
+            if FechaInicio_dt and FechaFin_dt and FechaInicio_dt > FechaFin_dt:
+                raise HTTPException(status_code=400, detail="Rango inválido: FechaInicio no puede ser mayor que FechaFin.")
+            nuevo_banner = Publicidad(
+                Titulo=Titulo,
+                Tipo=Tipo,
+                Url=url,
+                Activo=Activo,
+                Prioridad=Prioridad,
+                FechaInicio=FechaInicio_dt,
+                FechaFin=FechaFin_dt,
+                DuracionSeg=DuracionSeg
+            )
+            db.add(nuevo_banner)
+            await db.commit()
+            await db.refresh(nuevo_banner)
+            # Relacionar dispositivos
+            if DispositivoIds:
+                dispositivos = await db.execute(select(Dispositivo).where(Dispositivo.id.in_(DispositivoIds)))
+                nuevo_banner.dispositivos = dispositivos.scalars().all()
+                await db.commit()
+            print(f"Se ha guardado correctamente en la base de datos: Id={nuevo_banner.IdPublicidad}, Titulo={nuevo_banner.Titulo}, Url={nuevo_banner.Url}")
     except HTTPException:
         if os.path.exists(file_location):
             os.remove(file_location)
@@ -298,6 +304,7 @@ async def upload_banners_batch(
     FechasInicio: List[str] = Form(...),
     FechasFin: List[str] = Form(...),
     DuracionesSeg: List[int] = Form(...),
+    DispositivoIds: List[int] = Form(...),
     db: AsyncSession = Depends(get_db_usuarios),
     current_user: dict = Depends(get_current_cliente),
 ):
@@ -353,6 +360,11 @@ async def upload_banners_batch(
             db.add(nuevo_banner)
             await db.commit()
             await db.refresh(nuevo_banner)
+                # Relacionar dispositivos
+            if DispositivoIds:
+                dispositivos = await db.execute(select(Dispositivo).where(Dispositivo.id.in_(DispositivoIds)))
+                nuevo_banner.dispositivos = dispositivos.scalars().all()
+                await db.commit()
             archivos_guardados.append(file_location)
             metadatos_guardados.append(nuevo_banner)
             resultados.append({
@@ -532,5 +544,83 @@ async def actualizar_banner_metadata(
             "FechaFin": banner.FechaFin.isoformat() if banner.FechaFin else None,
         },
     }
+# Endpoint: consultar banners asignados a un dispositivo
+@router.get("/dispositivos/{id}/banners")
+async def obtener_banners_por_dispositivo(
+    id: int = Path(..., description="ID del dispositivo"),
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_cliente),
+):
+    dispositivo = await db.get(Dispositivo, id)
+    if not dispositivo:
+        raise HTTPException(status_code=404, detail="Dispositivo no encontrado.")
+    banners = dispositivo.publicidades
+    banners_payload = [
+        {
+            "IdPublicidad": b.IdPublicidad,
+            "Titulo": b.Titulo,
+            "Tipo": b.Tipo,
+            "Url": b.Url,
+            "Activo": b.Activo,
+            "Prioridad": b.Prioridad,
+            "FechaInicio": b.FechaInicio.isoformat() if b.FechaInicio else None,
+            "FechaFin": b.FechaFin.isoformat() if b.FechaFin else None,
+            "DuracionSeg": b.DuracionSeg,
+            "UpdatedAt": b.UpdatedAt.isoformat() if b.UpdatedAt else None,
+        }
+        for b in banners
+    ]
+    return {
+        "success": True,
+        "dispositivo_id": id,
+        "banners": banners_payload,
+    }
 
+# Endpoint: reasignar dispositivos a un banner ya subido
+class ReasignarDispositivosBody(BaseModel):
+    @router.get("/banners/{id}/dispositivos")
+    async def obtener_dispositivos_por_banner(
+        id: int = Path(..., description="ID del banner"),
+        db: AsyncSession = Depends(get_db_usuarios),
+        current_user: dict = Depends(get_current_cliente),
+    ):
+        banner = await db.get(Publicidad, id)
+        if not banner:
+            raise HTTPException(status_code=404, detail="Banner no encontrado.")
+        dispositivos = banner.dispositivos
+        dispositivos_payload = [
+            {
+                "id": d.id,
+                "nombre": getattr(d, "nombre", None),
+                "codigo": getattr(d, "codigo", None)
+            }
+            for d in dispositivos
+        ]
+        return {
+            "success": True,
+            "banner_id": id,
+            "dispositivos": dispositivos_payload,
+        }
+    dispositivo_ids: List[int]
+
+@router.patch("/banners/{id}/dispositivos")
+async def reasignar_dispositivos_banner(
+    id: int = Path(..., description="ID del banner"),
+    body: ReasignarDispositivosBody = ...,
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_cliente),
+):
+    banner = await db.get(Publicidad, id)
+    if not banner:
+        raise HTTPException(status_code=404, detail="Banner no encontrado.")
+    # Buscar dispositivos
+    dispositivos = await db.execute(select(Dispositivo).where(Dispositivo.id.in_(body.dispositivo_ids)))
+    banner.dispositivos = dispositivos.scalars().all()
+    await db.commit()
+    return {
+        "success": True,
+        "banner_id": id,
+        "dispositivo_ids": body.dispositivo_ids,
+        "message": "Dispositivos reasignados correctamente."
+    }
 

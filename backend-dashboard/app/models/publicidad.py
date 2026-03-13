@@ -19,6 +19,7 @@ class Publicidad(Base):
     FechaFin = Column("FechaFin", DateTime, nullable=True)
     DuracionSeg = Column("DuracionSeg", Integer, nullable=True)
     UpdatedAt = Column("UpdatedAt", DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+    
 
     def __repr__(self):
         return (

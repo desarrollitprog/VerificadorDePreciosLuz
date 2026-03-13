@@ -12,6 +12,8 @@ export interface UploadMediaPayload {
   fechaInicio?: string | null;
   fechaFin?: string | null;
   activo: boolean;
+  DispositivoIds: number[];
+  servidor?: string;
 }
 
 export async function getVideos(): Promise<Video[]> {
@@ -65,6 +67,12 @@ export async function uploadMedia(file: File, payload?: UploadMediaPayload) {
       formData.append('FechaFin', payload.fechaFin);
     }
     formData.append('Activo', String(payload.activo));
+    if (payload.DispositivoIds && Array.isArray(payload.DispositivoIds)) {
+      payload.DispositivoIds.forEach(id => formData.append('DispositivoIds', String(id)));
+    }
+    if (payload.servidor) {
+      formData.append('servidor', payload.servidor);
+    }
   }
   const response = await api.post('/banners/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
@@ -72,8 +80,25 @@ export async function uploadMedia(file: File, payload?: UploadMediaPayload) {
   return response.data;
 }
 
-
 export async function deleteVideo(videoId: string) {
   const response = await api.delete(`/banners/${videoId}`);
   return response.data;
+}
+
+export async function getBannerDevices(bannerId: string | number) {
+  try {
+    const response = await api.get(`/banners/${bannerId}/dispositivos`);
+    return response.data?.dispositivos || [];
+  } catch {
+    return [];
+  }
+}
+
+export async function reassignBannerDevices(bannerId: string | number, dispositivoIds: number[]) {
+  try {
+    const response = await api.patch(`/banners/${bannerId}/dispositivos`, { dispositivo_ids: dispositivoIds });
+    return response.data;
+  } catch (err) {
+    throw err;
+  }
 }

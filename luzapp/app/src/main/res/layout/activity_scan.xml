@@ -284,7 +284,7 @@
                         android:gravity="center"
                         android:maxLines="2"
                         android:textColor="#555555"
-                        android:textSize="55sp"
+                        android:textSize="@dimen/text_size_nombre"
                         android:textStyle="bold|italic"
                         />
 
@@ -323,7 +323,7 @@
                             android:layout_height="wrap_content"
                             android:textColor="@color/verde_luz"
                             android:fontFamily="@font/rubik_semibold"
-                            android:textSize="150sp"
+                            android:textSize="@dimen/text_size_precio_usd"
                             android:textStyle="bold|italic" />
 
                     </LinearLayout>
@@ -335,7 +335,7 @@
                         android:textColor="@color/rojo_luz_logo"
                         android:fontFamily="@font/rubik_semibold"
                         android:textStyle="bold|italic"
-                        android:textSize="50sp" />
+                        android:textSize="@dimen/text_size_precio_bs" />
 
                     <TextView
                         android:id="@+id/tvIva"
@@ -376,7 +376,7 @@
                         android:text="@string/festival_de"
                         android:textAllCaps="true"
                         android:textColor="@color/blanco"
-                        android:textSize="30sp"
+                        android:textSize="@dimen/text_size_festival"
                         android:textStyle="bold|italic" />
 
                     <TextView
@@ -388,7 +388,9 @@
                         android:fontFamily="@font/rubik_semibold"
                         android:gravity="center"
                         android:textColor="@color/oferta_text_black"
-                        android:textSize="47sp"
+                        android:textSize="@dimen/text_size_nombre_oferta"
+                        android:maxLines="3"
+                        android:ellipsize="end"
                         android:textStyle="bold|italic"
                         />
 
@@ -412,7 +414,7 @@
                         android:layout_marginBottom="4dp"
                         android:fontFamily="@font/rubik_semibold"
                         android:textColor="@color/oferta_text_black"
-                        android:textSize="160sp"
+                        android:textSize="@dimen/text_size_precio_oferta"
                         android:textStyle="bold|italic" />
                     <TextView
                         android:id="@+id/tvPrecioBsOferta"
@@ -420,7 +422,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:textColor="@color/oferta_text_black"
-                        android:textSize="70sp"
+                        android:textSize="@dimen/text_size_precio_bs_oferta"
                         android:textStyle="bold|italic"
                         android:gravity="center"
                         android:fontFamily="@font/rubik_semibold" />

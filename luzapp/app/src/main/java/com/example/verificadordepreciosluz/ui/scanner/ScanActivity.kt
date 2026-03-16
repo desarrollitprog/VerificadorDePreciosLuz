@@ -1046,11 +1046,19 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         // Mostrar nombre
         binding.tvNombre.text = producto.nombre
 
+        // Obtener dimensiones según el tamaño de pantalla
+        val config = resources.configuration
+        val screenWidthDp = config.smallestScreenWidthDp
+        val esTabletPequena = screenWidthDp < 600
+        
         // Si el nombre supera 25 caracteres, reducir tamaño
+        val tamanoNormal = if (esTabletPequena) 35f else 45f
+        val tamanoReducido = if (esTabletPequena) 28f else 35f
+        
         if (producto.nombre.length > 25) {
-            binding.tvNombre.textSize = 35f  // Reducir de 45sp a 35sp
+            binding.tvNombre.textSize = tamanoReducido
         } else {
-            binding.tvNombre.textSize = 45f  // Tamaño normal
+            binding.tvNombre.textSize = tamanoNormal
         }
 
         // Mostrar precio en Bs con separador de miles y decimales
@@ -1065,10 +1073,13 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         binding.tvPrecioActual.text = precioBsText
         
         // Si el texto supera 25 caracteres, achicar el tamaño
+        val tamanoPrecioNormal = if (esTabletPequena) 30f else 40f
+        val tamanoPrecioReducido = if (esTabletPequena) 24f else 30f
+        
         if (precioBsText.length > 25) {
-            binding.tvPrecioActual.textSize = 30f  // Reducir de 40sp a 30sp
+            binding.tvPrecioActual.textSize = tamanoPrecioReducido
         } else {
-            binding.tvPrecioActual.textSize = 40f  // Tamaño normal
+            binding.tvPrecioActual.textSize = tamanoPrecioNormal
         }
 
         // Mostrar mensaje informativo de IVA

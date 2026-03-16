@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dimensiones para tablets pequeñas (sw600dp) -->
+<resources>
+    <!-- Textos ofertas - más pequeños para tablets con menor resolución -->
+    <dimen name="text_size_nombre_oferta">40sp</dimen>
+    <dimen name="text_size_precio_oferta">120sp</dimen>
+    <dimen name="text_size_precio_bs_oferta">70sp</dimen>
+    <dimen name="text_size_festival">30sp</dimen>
+    
+    <!-- Textos normal -->
+    <dimen name="text_size_nombre">55sp</dimen>
+    <dimen name="text_size_precio_usd">150sp</dimen>
+    <dimen name="text_size_precio_bs">50sp</dimen>
+    
+    <!-- Paddings y margins -->
+    <dimen name="padding_card">12dp</dimen>
+    <dimen name="margin_card">16dp</dimen>
+</resources>

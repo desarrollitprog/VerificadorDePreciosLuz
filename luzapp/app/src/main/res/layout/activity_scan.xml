@@ -284,8 +284,9 @@
                         android:gravity="center"
                         android:maxLines="2"
                         android:textColor="#555555"
-                        android:textSize="50sp"
-                        android:textStyle="bold" />
+                        android:textSize="55sp"
+                        android:textStyle="bold|italic"
+                        />
 
                     <TextView
                         android:id="@+id/tvPriceLabel"
@@ -296,7 +297,8 @@
                         android:fontFamily="@font/rubik_semibold"
                         android:text="@string/price_label"
                         android:textColor="#999999"
-                        android:textSize="30sp" />
+                        android:textSize="35sp"
+                        android:textStyle="bold|italic"/>
 
                     <LinearLayout
                         android:layout_width="wrap_content"
@@ -312,8 +314,8 @@
                             android:text="@string/currency_symbol"
                             android:textColor="@color/verde_luz"
                             android:fontFamily="@font/rubik_semibold"
-                            android:textSize="30sp"
-                            android:textStyle="bold" />
+                            android:textSize="50sp"
+                            android:textStyle="bold|italic" />
 
                         <TextView
                             android:id="@+id/tvPrecioDolar"
@@ -321,11 +323,10 @@
                             android:layout_height="wrap_content"
                             android:textColor="@color/verde_luz"
                             android:fontFamily="@font/rubik_semibold"
-                            android:textSize="140sp"
-                            android:textStyle="bold" />
+                            android:textSize="150sp"
+                            android:textStyle="bold|italic" />
 
                     </LinearLayout>
-
                     <TextView
                         android:id="@+id/tvPrecioActual"
                         android:layout_width="wrap_content"
@@ -333,7 +334,8 @@
                         android:layout_marginTop="6dp"
                         android:textColor="@color/rojo_luz_logo"
                         android:fontFamily="@font/rubik_semibold"
-                        android:textSize="40sp" />
+                        android:textStyle="bold|italic"
+                        android:textSize="50sp" />
 
                     <TextView
                         android:id="@+id/tvIva"
@@ -341,8 +343,9 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:fontFamily="@font/rubik_semibold"
+                        android:textStyle="bold|italic"
                         android:textColor="#555555"
-                        android:textSize="25sp" />
+                        android:textSize="30sp" />
 
                 </LinearLayout>
 
@@ -373,28 +376,8 @@
                         android:text="@string/festival_de"
                         android:textAllCaps="true"
                         android:textColor="@color/blanco"
-                        android:textSize="40sp"
+                        android:textSize="30sp"
                         android:textStyle="bold|italic" />
-
-                    <TextView
-                        android:id="@+id/tvPrecios"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginBottom="4dp"
-                        android:fontFamily="@font/rubik_semibold"
-                        android:background="@drawable/bg_festival_label"
-                        android:text="@string/precios"
-                        android:textAllCaps="true"
-                        android:textColor="@color/blanco"
-                        android:textSize="40sp"
-                        android:textStyle="bold|italic" />
-
-                    <View
-                        android:layout_width="45dp"
-                        android:layout_height="2dp"
-                        android:layout_marginTop="4dp"
-                        android:layout_marginBottom="8dp"
-                        android:background="@color/oferta_text_black" />
 
                     <TextView
                         android:id="@+id/tvNombreOferta"
@@ -405,8 +388,9 @@
                         android:fontFamily="@font/rubik_semibold"
                         android:gravity="center"
                         android:textColor="@color/oferta_text_black"
-                        android:textSize="65sp"
-                        android:textStyle="bold|italic" />
+                        android:textSize="47sp"
+                        android:textStyle="bold|italic"
+                        />
 
                     <TextView
                         android:id="@+id/tvTotalRef"
@@ -417,7 +401,7 @@
                         android:fontFamily="@font/rubik_semibold"
                         android:text="@string/total_ref"
                         android:textColor="@color/oferta_text_black"
-                        android:textSize="25sp"
+                        android:textSize="30sp"
                         android:textStyle="bold|italic" />
 
                     <TextView
@@ -428,7 +412,7 @@
                         android:layout_marginBottom="4dp"
                         android:fontFamily="@font/rubik_semibold"
                         android:textColor="@color/oferta_text_black"
-                        android:textSize="140sp"
+                        android:textSize="160sp"
                         android:textStyle="bold|italic" />
                     <TextView
                         android:id="@+id/tvPrecioBsOferta"
@@ -436,7 +420,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:textColor="@color/oferta_text_black"
-                        android:textSize="40sp"
+                        android:textSize="70sp"
                         android:textStyle="bold|italic"
                         android:gravity="center"
                         android:fontFamily="@font/rubik_semibold" />
@@ -450,7 +434,7 @@
                         android:textStyle="bold|italic"
                         android:text="@string/iva_incluido"
                         android:textColor="@color/oferta_text_black"
-                        android:textSize="25sp" />
+                        android:textSize="30sp" />
                 </LinearLayout>
 
             </androidx.constraintlayout.widget.ConstraintLayout>

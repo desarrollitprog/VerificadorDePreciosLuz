@@ -124,6 +124,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private var standbyTimerRunnable: Runnable? = null
     private val KIOSK_EXIT_CODE = "ADMIN-CODE-125"
     private var isKioskMode = false
+    private var isDownloading = false  // Para bloquear salida durante descarga
     private lateinit var dpm: DevicePolicyManager
     private lateinit var adminComponent: ComponentName
     private var standbySlideRunnable: Runnable? = null
@@ -166,6 +167,11 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
+                if (isDownloading) {
+                    Toast.makeText(this@ScanActivity, "Descarga en progreso, espera...", Toast.LENGTH_SHORT).show()
+                    binding.etMockCode.requestFocus()
+                    return
+                }
                 if (!backupReady) {
                     Toast.makeText(this@ScanActivity, "Respaldo no está listo. Espera la sincronización", Toast.LENGTH_SHORT).show()
                     binding.etMockCode.requestFocus()
@@ -514,19 +520,23 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                     uiHandler.post { updateOfflineTimestamp(offlineBackup) }
                     return@launch
                 }
+                isDownloading = true  // Bloquear salida durante descarga
                 val repo = BackupRepository(this@ScanActivity, service)
                 val result = repo.downloadAndSaveBackup(this@ScanActivity)
                 Log.i(TAG, "Resultado backup en ScanActivity: ${result.isSuccess}")
                 offlineBackup = loadOfflineBackup()
                 setBackupReady(offlineBackup != null)
+                isDownloading = false  // Permitir salida después de descarga
                 scope.launch {
                     BackupIndexRepository(this@ScanActivity).ensureIndex(offlineBackup?.updatedAt)
                 }
                 uiHandler.post { updateOfflineTimestamp(offlineBackup) }
             } catch (e: Exception) {
                 Log.e(TAG, "Error al sincronizar backup", e)
+                isDownloading = false  // Permitir salida en caso de error
             } finally {
                 hideProgress()
+                isDownloading = false
             }
         }
     }
@@ -721,18 +731,22 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                     uiHandler.post { updateOfflineTimestamp(offlineBackup) }
                     return@launch
                 }
+                isDownloading = true  // Bloquear salida durante descarga
                 val repo = BackupRepository(this@ScanActivity, service)
                 repo.downloadAndSaveBackup(this@ScanActivity)
                 offlineBackup = loadOfflineBackup()
                 setBackupReady(offlineBackup != null)
+                isDownloading = false  // Permitir salida después de descarga
                 scope.launch {
                     BackupIndexRepository(this@ScanActivity).ensureIndex(offlineBackup?.updatedAt)
                 }
                 uiHandler.post { updateOfflineTimestamp(offlineBackup) }
             } catch (_: Exception) {
                 // En caso de fallo, mantener el respaldo existente
+                isDownloading = false
             } finally {
                 hideProgress()
+                isDownloading = false
             }
         }
     }
@@ -1032,6 +1046,13 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         // Mostrar nombre
         binding.tvNombre.text = producto.nombre
 
+        // Si el nombre supera 25 caracteres, reducir tamaño
+        if (producto.nombre.length > 25) {
+            binding.tvNombre.textSize = 35f  // Reducir de 45sp a 35sp
+        } else {
+            binding.tvNombre.textSize = 45f  // Tamaño normal
+        }
+
         // Mostrar precio en Bs con separador de miles y decimales
         val precioBs = producto.pvpBaseOferta ?: producto.pvpBase ?: 0.0
         val symbols = DecimalFormatSymbols(Locale("es", "VE")).apply {
@@ -1040,7 +1061,15 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         }
         val formatter = DecimalFormat("#,##0.##", symbols)
         val precioBsFormateado = formatter.format(precioBs)
-        binding.tvPrecioActual.text = precioBsFormateado
+        val precioBsText = "Bs $precioBsFormateado"
+        binding.tvPrecioActual.text = precioBsText
+        
+        // Si el texto supera 25 caracteres, achicar el tamaño
+        if (precioBsText.length > 25) {
+            binding.tvPrecioActual.textSize = 30f  // Reducir de 40sp a 30sp
+        } else {
+            binding.tvPrecioActual.textSize = 40f  // Tamaño normal
+        }
 
         // Mostrar mensaje informativo de IVA
         binding.tvIva.text = getString(R.string.price_with_iva_format)
@@ -1234,9 +1263,11 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         }
     }
 
-    // Implementar hideProgress antes de cualquier uso
+    // Ocultar progressBar al terminar la descarga
     private fun hideProgress() {
-        // Aquí puedes ocultar un ProgressBar o similar
+        runOnUiThread {
+            findViewById<android.widget.FrameLayout>(R.id.progressContainer).visibility = View.GONE
+        }
     }
 
     // Método para manejar mensajes de WebSocket

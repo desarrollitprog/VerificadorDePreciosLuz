@@ -1,5 +1,23 @@
 version: '3.8'
+
 services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: dashboard-sqlserver
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=${SA_PASSWORD:-Dit12345*}
+    volumes:
+      - mssql_data:/var/opt/mssql
+    ports:
+      - "1433:1433"
+    restart: always
+    healthcheck:
+      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P ${SA_PASSWORD:-Dit12345*} -Q "SELECT 1" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   dashboard-backend:
     build:
       context: ./backend-dashboard
@@ -7,26 +25,32 @@ services:
     container_name: dashboard-backend
     env_file:
       - ./backend-dashboard/.env.dashboard
+    environment:
+      - DB_SERVER_USUARIOS=sqlserver
+      - DB_PORT_USUARIOS=1433
     ports:
       - "8001:8000"
     restart: always
     volumes:
       - ./backend-dashboard/app/static/banners:/app/static/banners
-    # depends_on eliminado: ahora se conecta a SQL Server externo
+    depends_on:
+      sqlserver:
+        condition: service_healthy
 
   dashboard-frontend:
     build:
       context: .
       dockerfile: dashboard/Dockerfile
     container_name: dashboard-frontend
-    env_file:
-      - ./dashboard/.env.local
     ports:
       - "80:80"
-      - "443:443"
     depends_on:
       - dashboard-backend
+    restart: always
 
+volumes:
+  mssql_data:
 
-
-
+networks:
+  default:
+    name: dashboard-network

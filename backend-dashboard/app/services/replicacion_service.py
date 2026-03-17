@@ -138,3 +138,132 @@ async def actualizar_metadata_api(
             return data if isinstance(data, dict) else {"success": True}
     except Exception as e:
         return {"success": False, "message": str(e)}
+
+
+def get_api_urls() -> list:
+    """
+    Obtiene la lista de URLs de APIs de replicación desde variables de entorno.
+    Soporta BACKEND_API_URLS (comma-separated) o BACKEND_API_URL (single, backwards compatible).
+    """
+    urls_env = os.getenv("BACKEND_API_URLS", "")
+    if urls_env:
+        return [u.strip() for u in urls_env.split(",") if u.strip()]
+    
+    legacy_url = os.getenv("BACKEND_API_URL", "")
+    if legacy_url:
+        return [legacy_url.strip()]
+    
+    return []
+
+
+async def replicar_archivo_a_todas_las_apis(
+    file_path: str,
+    IdPublicidadRemoto: int = None,
+    titulo: str = None,
+    tipo: str = None,
+    prioridad: int = 0,
+    fecha_inicio: str = None,
+    fecha_fin: str = None,
+    duracion_seg: int = None,
+    activo: bool = True,
+    timeout: int = 30
+) -> list:
+    """
+    Replica un archivo a todas las APIs de replicación configuradas.
+    Retorna una lista de resultados por cada API.
+    """
+    api_urls = get_api_urls()
+    resultados = []
+    for api_url in api_urls:
+        try:
+            resp = await replicar_archivo_al_api(
+                api_url=api_url,
+                file_path=file_path,
+                IdPublicidadRemoto=IdPublicidadRemoto,
+                titulo=titulo,
+                tipo=tipo,
+                prioridad=prioridad,
+                fecha_inicio=fecha_inicio,
+                fecha_fin=fecha_fin,
+                duracion_seg=duracion_seg,
+                activo=activo,
+                timeout=timeout
+            )
+            resultados.append({"api_url": api_url, "success": True, "response": resp})
+        except Exception as e:
+            resultados.append({"api_url": api_url, "success": False, "error": str(e)})
+    return resultados
+
+
+async def replicar_archivos_batch_a_todas_las_apis(file_paths: list, banners: list, timeout: int = 30) -> list:
+    """
+    Replica múltiples archivos a todas las APIs de replicación configuradas.
+    Retorna una lista de resultados por cada archivo y cada API.
+    """
+    api_urls = get_api_urls()
+    resultados = []
+    for api_url in api_urls:
+        try:
+            batch_results = await replicar_archivos_batch_al_api(
+                api_url=api_url,
+                file_paths=file_paths,
+                banners=banners,
+                timeout=timeout
+            )
+            resultados.append({"api_url": api_url, "success": True, "results": batch_results})
+        except Exception as e:
+            resultados.append({"api_url": api_url, "success": False, "error": str(e)})
+    return resultados
+
+
+async def Borrado_a_todas_las_apis(id_remoto: int, timeout: int = 30) -> list:
+    """
+    Envía petición de borrado a todas las APIs de replicación configuradas.
+    """
+    api_urls = get_api_urls()
+    resultados = []
+    for api_url in api_urls:
+        try:
+            resp = await Borrado_api(api_url, id_remoto, timeout)
+            resultados.append({"api_url": api_url, "success": True, "response": resp})
+        except Exception as e:
+            resultados.append({"api_url": api_url, "success": False, "error": str(e)})
+    return resultados
+
+
+async def actualizar_estado_a_todas_las_apis(id_remoto: int, activo: bool, timeout: int = 15) -> list:
+    """
+    Actualiza el estado activo/inactivo en todas las APIs de replicación.
+    """
+    api_urls = get_api_urls()
+    resultados = []
+    for api_url in api_urls:
+        try:
+            resp = await actualizar_estado_api(api_url, id_remoto, activo, timeout)
+            resultados.append({"api_url": api_url, "success": True, "response": resp})
+        except Exception as e:
+            resultados.append({"api_url": api_url, "success": False, "error": str(e)})
+    return resultados
+
+
+async def actualizar_metadata_a_todas_las_apis(
+    id_remoto: int,
+    activo: bool | None = None,
+    fecha_inicio: str | None = None,
+    fecha_fin: str | None = None,
+    timeout: int = 15,
+) -> list:
+    """
+    Actualiza metadatos en todas las APIs de replicación configuradas.
+    """
+    api_urls = get_api_urls()
+    resultados = []
+    for api_url in api_urls:
+        try:
+            resp = await actualizar_metadata_api(
+                api_url, id_remoto, activo, fecha_inicio, fecha_fin, timeout
+            )
+            resultados.append({"api_url": api_url, "success": True, "response": resp})
+        except Exception as e:
+            resultados.append({"api_url": api_url, "success": False, "error": str(e)})
+    return resultados

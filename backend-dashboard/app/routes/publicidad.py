@@ -14,7 +14,7 @@ from ..schemas import PublicidadResponse, PublicidadCreate
 from ..database import get_db_usuarios
 from ..dependencies import get_current_cliente
 from ..services.notificacion_service import registrar_accion
-from ..services.replicacion_service import replicar_archivo_al_api, Borrado_api, actualizar_estado_api, actualizar_metadata_api
+from ..services.replicacion_service import replicar_archivo_a_todas_las_apis, replicar_archivos_batch_a_todas_las_apis, Borrado_a_todas_las_apis, actualizar_estado_a_todas_las_apis, actualizar_metadata_a_todas_las_apis
 
 
 router = APIRouter()
@@ -208,22 +208,23 @@ async def upload_banner(
     # Replicar archivo al backend-api y guardar el ID remoto
     id_remoto = None
     try:
-        api_url = os.getenv("BACKEND_API_URL")
-        print(f"Replicando archivo al backend-api: {file_location} -> {api_url}")
-        resp = await replicar_archivo_al_api(
-                api_url=api_url,
-                file_path=file_location,
-                IdPublicidadRemoto=nuevo_banner.IdPublicidad,
-                titulo=Titulo,
-                tipo=Tipo,
-                prioridad=Prioridad,
-                fecha_inicio=FechaInicio,
-                fecha_fin=FechaFin,
-                duracion_seg=DuracionSeg,
-                activo=Activo,
-            )
-        print("Replicación al backend-api finalizada")
-        id_remoto = resp.get("id") if resp else None
+        print(f"Replicando archivo al backend-api: {file_location}")
+        replicacion_resultados = await replicar_archivo_a_todas_las_apis(
+            file_path=file_location,
+            IdPublicidadRemoto=nuevo_banner.IdPublicidad,
+            titulo=Titulo,
+            tipo=Tipo,
+            prioridad=Prioridad,
+            fecha_inicio=FechaInicio,
+            fecha_fin=FechaFin,
+            duracion_seg=DuracionSeg,
+            activo=Activo,
+        )
+        print(f"Replicación al backend-api finalizada: {replicacion_resultados}")
+        for res in replicacion_resultados:
+            if res.get("success") and res.get("response", {}).get("id"):
+                id_remoto = res["response"]["id"]
+                break
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al replicar archivo al backend-api: {str(e)}")
 
@@ -270,11 +271,11 @@ async def eliminar_banner(
                 os.remove(file_path)
         # Intentar borrar remotamente en backend-api usando el IdPublicidad como IdPublicidadRemoto
         try:
-            api_url = os.getenv("BACKEND_API_URL")
             remote_id = banner.IdPublicidad
-            remote_result = await Borrado_api(api_url, remote_id)
-            if not remote_result.get("success", False):
-                raise Exception(f"No se pudo borrar remotamente: {remote_result.get('message', 'Sin mensaje')}")
+            replicacion_resultados = await Borrado_a_todas_las_apis(remote_id)
+            for res in replicacion_resultados:
+                if not res.get("success", False):
+                    raise Exception(f"No se pudo borrar remotamente en {res['api_url']}: {res.get('error', 'Sin mensaje')}")
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error al borrar remotamente: {str(e)}")
 
@@ -362,34 +363,14 @@ async def upload_banners_batch(
         except Exception as e:
             errores.append({"filename": file.filename, "error": str(e)})
             continue
-            replicacion_resultados = []
-        try:
-            api_url = os.getenv("BACKEND_API_URL")
-            if archivos_guardados:
-                from ..services.replicacion_service import replicar_archivos_batch_al_api
-                replicacion_resultados = await replicar_archivos_batch_al_api(
-                    api_url=api_url,
-                    file_paths=archivos_guardados,
-                    banners=metadatos_guardados
-                )
-        except Exception as e:
-            errores.append({"error": f"Error en replicación batch: {str(e)}"})
-        # Agregar feedback de replicación por archivo
-        for idx, r in enumerate(replicacion_resultados):
-            resultados[idx]["replicacion"] = r
-            errores.append({"filename": file.filename, "error": str(e)})
-            continue
-    # Replicación batch al backend-api
+    # Replicación batch a todas las APIs
+    replicacion_resultados = []
     try:
-        api_url = os.getenv("BACKEND_API_URL")
         if archivos_guardados:
-            from ..services.replicacion_service import replicar_archivos_batch_al_api
-            resp = await replicar_archivos_batch_al_api(
-                api_url=api_url,
+            replicacion_resultados = await replicar_archivos_batch_a_todas_las_apis(
                 file_paths=archivos_guardados,
                 banners=metadatos_guardados
             )
-            # Puedes agregar feedback de replicación por archivo si lo deseas
     except Exception as e:
         errores.append({"error": f"Error en replicación batch: {str(e)}"})
     user_id = current_user.get("user_id")
@@ -425,14 +406,13 @@ async def cambiar_estado_banner(
 
     # Replica estado al backend-api (si falla, revierte para evitar desalineación)
     try:
-        api_url = os.getenv("BACKEND_API_URL")
-        remote_result = await actualizar_estado_api(
-            api_url=api_url,
+        replicacion_resultados = await actualizar_estado_a_todas_las_apis(
             id_remoto=banner.IdPublicidad,
             activo=body.activo,
         )
-        if not remote_result.get("success", False):
-            raise Exception(remote_result.get("message", "Error remoto sin detalle"))
+        for res in replicacion_resultados:
+            if not res.get("success", False):
+                raise Exception(f"Error en {res['api_url']}: {res.get('error', 'Sin detalle')}")
     except Exception as e:
         banner.Activo = estado_anterior
         await db.commit()
@@ -495,16 +475,15 @@ async def actualizar_banner_metadata(
     await db.refresh(banner)
 
     try:
-        api_url = os.getenv("BACKEND_API_URL")
-        remote_result = await actualizar_metadata_api(
-            api_url=api_url,
+        replicacion_resultados = await actualizar_metadata_a_todas_las_apis(
             id_remoto=banner.IdPublicidad,
             activo=banner.Activo,
             fecha_inicio=banner.FechaInicio.isoformat() if banner.FechaInicio else None,
             fecha_fin=banner.FechaFin.isoformat() if banner.FechaFin else None,
         )
-        if not remote_result.get("success", False):
-            raise Exception(remote_result.get("message", "Error remoto sin detalle"))
+        for res in replicacion_resultados:
+            if not res.get("success", False):
+                raise Exception(f"Error en {res['api_url']}: {res.get('error', 'Sin detalle')}")
     except Exception as e:
         banner.Activo = prev_activo
         banner.FechaInicio = prev_inicio

@@ -58,6 +58,7 @@ import com.example.verificadordepreciosluz.databinding.ActivityScanBinding
 import com.example.verificadordepreciosluz.R
 import com.example.verificadordepreciosluz.util.NetworkUtils
 import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import retrofit2.HttpException
 import kotlinx.coroutines.CoroutineScope
@@ -396,9 +397,20 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
         scanner.process(image)
             .addOnSuccessListener { barcodes ->
-                val raw = barcodes.firstOrNull()?.rawValue
-                if (!raw.isNullOrBlank()) {
-                    maybeProcessCode(raw)
+                // Filtrar solo códigos de barras válidos (EAN, UPC)
+                val validFormats = listOf(
+                    Barcode.FORMAT_EAN_13,
+                    Barcode.FORMAT_EAN_8,
+                    Barcode.FORMAT_UPC_A,
+                    Barcode.FORMAT_UPC_E
+                )
+                val validBarcode = barcodes.firstOrNull { barcode ->
+                    barcode.format in validFormats
+                }
+                validBarcode?.rawValue?.let { raw ->
+                    if (raw.isNotBlank()) {
+                        maybeProcessCode(raw)
+                    }
                 }
             }
             .addOnFailureListener { /* ignore: keep scanning */ }
@@ -419,7 +431,14 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             return
         }
         
-        val clean = sanitizeCode(code) ?: return
+        val clean = sanitizeCode(code)
+        if (clean == null) {
+            // Código no válido (longitud incorrecta)
+            Toast.makeText(this, "Código no válido. Use serial del producto.", Toast.LENGTH_SHORT).show()
+            binding.etMockCode.requestFocus()
+            return
+        }
+        
         // Debounce: evita spam si el mismo código se mantiene en cámara.
         val now = android.os.SystemClock.elapsedRealtime()
         if (now < pauseUntil) return

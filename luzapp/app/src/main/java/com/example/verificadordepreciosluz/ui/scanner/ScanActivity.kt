@@ -1323,8 +1323,23 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                     Log.i(TAG, "[WebSocket] Mensaje recibido (texto): $text")
                     try {
                         val message = org.json.JSONObject(text)
+                        val type = message.optString("type")
+                        
+                        if (type == "ping") {
+                            Log.d(TAG, "[WebSocket] Ping recibido, enviando pong...")
+                            val pongMsg = org.json.JSONObject()
+                            pongMsg.put("type", "pong")
+                            pongMsg.put("timestamp", message.optLong("timestamp", System.currentTimeMillis() / 1000))
+                            webSocket.send(pongMsg.toString())
+                            Log.d(TAG, "[WebSocket] Pong enviado")
+                            return
+                        }
+                        
                         val command = message.optString("command")
-                        // Enviar confirmación de recepción
+                        if (command.isEmpty()) {
+                            return
+                        }
+                        
                         try {
                             sendSyncConfirmation(webSocket, command, "RECEIVED")
                             Log.i(TAG, "[WebSocket] Confirmación enviada para comando: $command")
@@ -1366,8 +1381,23 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                         val text = bytes.utf8()
                         Log.w(TAG, "[WebSocket] Binario decodificado como texto: $text")
                         val message = org.json.JSONObject(text)
+                        val type = message.optString("type")
+                        
+                        if (type == "ping") {
+                            Log.d(TAG, "[WebSocket] Ping recibido (binario), enviando pong...")
+                            val pongMsg = org.json.JSONObject()
+                            pongMsg.put("type", "pong")
+                            pongMsg.put("timestamp", message.optLong("timestamp", System.currentTimeMillis() / 1000))
+                            webSocket.send(pongMsg.toString())
+                            Log.d(TAG, "[WebSocket] Pong enviado (binario)")
+                            return
+                        }
+                        
                         val command = message.optString("command")
-                        // Enviar confirmación de recepción
+                        if (command.isEmpty()) {
+                            return
+                        }
+                        
                         try {
                             sendSyncConfirmation(webSocket, command, "RECEIVED")
                             Log.i(TAG, "[WebSocket] Confirmación enviada para comando (binario): $command")

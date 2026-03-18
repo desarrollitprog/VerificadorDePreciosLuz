@@ -653,14 +653,91 @@ SYNC_SEQUENCE_LOCK = asyncio.Lock()
 sync_ack_waiters: dict[str, asyncio.Event] = {}
 sync_ack_payloads: dict[str, dict] = {}
 
+# --- Configuración de Ping WebSocket ---
+WEBSOCKET_PING_INTERVAL = int(os.getenv("WEBSOCKET_PING_INTERVAL", "30"))
+WEBSOCKET_PONG_TIMEOUT = int(os.getenv("WEBSOCKET_PONG_TIMEOUT", "10"))
+
 class TabletWebSocketManager:
     def __init__(self):
         self.active_connections: list[WebSocket] = []
         self.device_map: dict[str, WebSocket] = {}  # device_id -> WebSocket
+        self.ping_tasks: dict[int, asyncio.Task] = {}  # id(websocket) -> Task
+
+    async def start_ping_loop(self, websocket: WebSocket):
+        ws_id = id(websocket)
+        
+        async def ping_sender():
+            while True:
+                try:
+                    await asyncio.sleep(WEBSOCKET_PING_INTERVAL)
+                    
+                    device_id = self.get_device_id(websocket)
+                    if device_id and device_state_store is not None:
+                        await device_state_store.upsert_heartbeat(device_id=device_id)
+                    
+                    try:
+                        import time
+                        await websocket.send_json({
+                            "type": "ping",
+                            "timestamp": int(time.time())
+                        })
+                        
+                        try:
+                            msg = await asyncio.wait_for(
+                                websocket.receive_text(),
+                                timeout=WEBSOCKET_PONG_TIMEOUT
+                            )
+                            import json
+                            data = json.loads(msg)
+                            if data.get("type") != "pong":
+                                raise ValueError("No es un mensaje pong")
+                        except asyncio.TimeoutError:
+                            logger.warning(
+                                f"[Ping] No se recibió pong del dispositivo {device_id or 'desconocido'} "
+                                f"en {WEBSOCKET_PONG_TIMEOUT}s. Cerrando conexión."
+                            )
+                            try:
+                                await websocket.close(code=1001, reason="Ping timeout")
+                            except Exception:
+                                pass
+                            return
+                        except (json.JSONDecodeError, ValueError, Exception) as e:
+                            if "Ping timeout" not in str(e):
+                                logger.warning(f"[Ping] Respuesta inválida: {e}")
+                            raise
+                    except Exception as e:
+                        if "code=1001" in str(e) or "WebSocket is not connected" in str(e):
+                            return
+                        if "no Frame" in str(e) or "Connection closed" in str(e):
+                            return
+                        logger.error(f"[Ping] Error enviando ping: {e}")
+                        return
+                        
+                except asyncio.CancelledError:
+                    logger.info(f"[Ping] Tarea de ping cancelada para websocket {ws_id}")
+                    break
+                except Exception as e:
+                    logger.error(f"[Ping] Error en loop de ping: {e}")
+                    break
+        
+        task = asyncio.create_task(ping_sender())
+        self.ping_tasks[ws_id] = task
+
+    def cancel_ping_task(self, websocket: WebSocket):
+        ws_id = id(websocket)
+        if ws_id in self.ping_tasks:
+            self.ping_tasks[ws_id].cancel()
+            del self.ping_tasks[ws_id]
+            logger.info(f"[Ping] Tarea de ping cancelada para websocket {ws_id}")
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
-        # Esperar a recibir el primer mensaje de identificación
+        ws_id = id(websocket)
+        
+        if ws_id in self.ping_tasks:
+            self.ping_tasks[ws_id].cancel()
+            del self.ping_tasks[ws_id]
+        
         try:
             data = await asyncio.wait_for(websocket.receive_text(), timeout=10)
             import json
@@ -675,9 +752,10 @@ class TabletWebSocketManager:
         self.active_connections.append(websocket)
 
     def disconnect(self, websocket: WebSocket):
+        self.cancel_ping_task(websocket)
+        
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
-        # Limpiar device_map si corresponde
         for k, v in list(self.device_map.items()):
             if v == websocket:
                 if device_state_store is not None:
@@ -1007,6 +1085,7 @@ async def retry_sync_with_device(device_id: str):
 @app.websocket("/ws/tablet")
 async def websocket_tablet(websocket: WebSocket):
     await tablet_ws_manager.connect(websocket)
+    asyncio.create_task(tablet_ws_manager.start_ping_loop(websocket))
     try:
         while True:
             data = await websocket.receive_text()

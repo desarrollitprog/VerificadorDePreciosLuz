@@ -2,15 +2,17 @@
 <!-- Dimensiones por defecto -->
 <resources>
     <!-- Textos ofertas -->
-    <dimen name="text_size_nombre_oferta">100sp</dimen>
+    <dimen name="text_size_nombre_oferta">110sp</dimen>
     <dimen name="text_size_precio_oferta">170sp</dimen>
-    <dimen name="text_size_precio_bs_oferta">70sp</dimen>
-    <dimen name="text_size_festival">60sp</dimen>
+    <dimen name="text_size_precio_bs_oferta">80sp</dimen>
     
     <!-- Textos normal -->
-    <dimen name="text_size_nombre">110sp</dimen>
+    <dimen name="text_size_nombre">120sp</dimen>
     <dimen name="text_size_precio_usd">170sp</dimen>
-    <dimen name="text_size_precio_bs">70sp</dimen>
+    <dimen name="text_size_precio_bs">80sp</dimen>
+    
+    <!-- BCV -->
+    <dimen name="text_size_bcv">70sp</dimen>
     
     <!-- Paddings y margins -->
     <dimen name="padding_card">16dp</dimen>

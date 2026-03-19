@@ -5,12 +5,14 @@
     <dimen name="text_size_nombre_oferta">40sp</dimen>
     <dimen name="text_size_precio_oferta">120sp</dimen>
     <dimen name="text_size_precio_bs_oferta">70sp</dimen>
-    <dimen name="text_size_festival">30sp</dimen>
     
     <!-- Textos normal -->
     <dimen name="text_size_nombre">55sp</dimen>
     <dimen name="text_size_precio_usd">150sp</dimen>
     <dimen name="text_size_precio_bs">50sp</dimen>
+    
+    <!-- BCV -->
+    <dimen name="text_size_bcv">24sp</dimen>
     
     <!-- Paddings y margins -->
     <dimen name="padding_card">12dp</dimen>

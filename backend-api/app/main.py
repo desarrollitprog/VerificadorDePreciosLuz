@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 from fastapi.middleware.gzip import GZipMiddleware
 from dotenv import load_dotenv
-from sqlalchemy import and_, or_, select, cast, Date
+from sqlalchemy import and_, or_, select, cast, Date, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Any, Awaitable, Callable, Optional
 import uuid
@@ -104,6 +104,43 @@ async def buscar_producto_y_precio(db: AsyncSession, codigo_barras: str):
     )
     result = await db.execute(stmt)
     return result.first()
+
+
+# Paso 1b: Buscar coincidencias cercanas (async)
+async def buscar_coincidencias_cercanas(db: AsyncSession, codigo_barras: str, limite: int = 5):
+    """
+    Busca productos con SKU similar al código escaneado.
+    Usa múltiples estrategias de búsqueda:
+    1. LIKE% - SKU que empieza con el código
+    2. %LIKE% - SKU que contiene el código en cualquier parte
+    """
+    codigo = codigo_barras.strip()
+    
+    if len(codigo) < 3:
+        return []
+    
+    stmt = (
+        select(models.Producto, models.ProductoPrecio)
+        .join(
+            models.ProductoPrecio,
+            models.Producto.IdProducto == models.ProductoPrecio.IdProducto,
+        )
+        .where(
+            models.ProductoPrecio.CostoBase > 0,
+            or_(
+                models.Producto.SKU.like(f"{codigo}%"),
+                models.Producto.SKU.like(f"%{codigo}%"),
+            )
+        )
+        .order_by(
+            func.len(models.Producto.SKU),
+            models.Producto.SKU
+        )
+        .limit(limite)
+    )
+    
+    result = await db.execute(stmt)
+    return result.all()
 
 
 # Paso 2: Buscar oferta asociada (async)
@@ -460,25 +497,50 @@ async def backup_data(
     }
 
 # Endpoint principal usando funciones auxiliares async
-@app.get("/consultar/{codigo_barras}", response_model=schemas.ProductoResponse)
+@app.get("/consultar/{codigo_barras}")
 async def obtener_precio(
     codigo_barras: str,
     db: AsyncSession = Depends(database.get_db),
     db_erp: AsyncSession = Depends(database.get_db_erp),
 ):
     resultado = await buscar_producto_y_precio(db, codigo_barras)
-    if not resultado:
-        raise HTTPException(status_code=404, detail="Producto no encontrado")
-    producto, precio = resultado
-
-    oferta = await buscar_oferta(db, producto.IdProducto)
-    now = datetime.now()
-    detalle = await buscar_detalle_oferta_vigente(db, precio, now)
-
-
-    tasa_impuesto = await buscar_tasa_impuesto(db, db_erp, producto.IdProducto, precio)
-
-    return armar_respuesta(producto, precio, oferta, detalle, tasa_impuesto)
+    
+    if resultado:
+        producto, precio = resultado
+        oferta = await buscar_oferta(db, producto.IdProducto)
+        now = datetime.now()
+        detalle = await buscar_detalle_oferta_vigente(db, precio, now)
+        tasa_impuesto = await buscar_tasa_impuesto(db, db_erp, producto.IdProducto, precio)
+        return armar_respuesta(producto, precio, oferta, detalle, tasa_impuesto)
+    
+    coincidencias = await buscar_coincidencias_cercanas(db, codigo_barras)
+    
+    if coincidencias:
+        sugerencias = [
+            {
+                "sku": p.SKU,
+                "nombre": p.Nombre,
+                "id_producto": p.IdProducto,
+            }
+            for p, _ in coincidencias
+        ]
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "mensaje": "Producto no encontrado",
+                "codigo_buscado": codigo_barras,
+                "sugerencias": sugerencias,
+            }
+        )
+    
+    raise HTTPException(
+        status_code=404,
+        detail={
+            "mensaje": "Producto no encontrado",
+            "codigo_buscado": codigo_barras,
+            "sugerencias": [],
+        }
+    )
 
 
 #Sincronizacion forzada

@@ -639,15 +639,15 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 } else {
                     Log.w(TAG, "BCV: API devolvio vacio")
                     uiHandler.post {
-                        findViewById<android.widget.TextView>(R.id.tvDolarBc)?.text = "Sin Actualizacion del BCV"
-                        findViewById<androidx.cardview.widget.CardView>(R.id.cardDolarBc)?.visibility = View.VISIBLE
+                        findViewById<android.widget.TextView>(R.id.cardDolarBc)?.text = "Sin Actualizacion del BCV"
+                        findViewById<android.widget.TextView>(R.id.cardDolarBc)?.visibility = View.VISIBLE
                     }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "BCV: Error fetching BCV rate", e)
                 uiHandler.post {
-                    findViewById<android.widget.TextView>(R.id.tvDolarBc)?.text = "Sin Actualizacion del BCV"
-                    findViewById<androidx.cardview.widget.CardView>(R.id.cardDolarBc)?.visibility = View.VISIBLE
+                    findViewById<android.widget.TextView>(R.id.cardDolarBc)?.text = "Sin Actualizacion del BCV"
+                    findViewById<android.widget.TextView>(R.id.cardDolarBc)?.visibility = View.VISIBLE
                 }
             }
         }
@@ -666,8 +666,12 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         val textoFinal = parts.joinToString(" | ")
 
         Log.d(TAG, "BCV: mostrando - $textoFinal")
-        findViewById<android.widget.TextView>(R.id.tvDolarBc)?.text = textoFinal
-        findViewById<androidx.cardview.widget.CardView>(R.id.cardDolarBc)?.visibility = View.VISIBLE
+        findViewById<android.widget.TextView>(R.id.cardDolarBc)?.text = textoFinal
+        findViewById<android.widget.TextView>(R.id.cardDolarBc)?.visibility = View.VISIBLE
+        
+        // También actualizar tvBcvOferta para la sección de ofertas
+        findViewById<android.widget.TextView>(R.id.tvBcvOferta)?.text = textoFinal
+        findViewById<android.widget.TextView>(R.id.tvBcvOferta)?.visibility = View.VISIBLE
     }
 
     // Programa actualización de la tasa BCV al iniciar día siguiente
@@ -1228,8 +1232,6 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             binding.resultCard.setCardBackgroundColor(getColor(R.color.oferta_yellow))
             binding.ofertaGroup.visibility = View.VISIBLE
             binding.infoGroup.visibility = View.GONE
-            binding.tvResultTitle.visibility = View.GONE
-
             // Setear datos de oferta
             binding.tvNombreOferta.text = producto.nombre
             binding.tvPrecioOferta.text = String.format(Locale.US, "$%.2f", producto.pvpOferta)
@@ -1248,7 +1250,6 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             binding.resultCard.setCardBackgroundColor(getColor(R.color.cardview_default_background))
             binding.ofertaGroup.visibility = View.GONE
             binding.infoGroup.visibility = View.VISIBLE
-            binding.tvResultTitle.visibility = View.VISIBLE
         }
 
         binding.resultOverlay.visibility = View.VISIBLE

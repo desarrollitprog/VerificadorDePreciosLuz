@@ -27,7 +27,6 @@
     <string name="offline_indicator">• Offline</string>
     <string name="offline_last_update_format">Última actualización: %1$s</string>
     <string name="progress_percent_default">0%</string>
-    <string name="festival_de">FESTIVAL DE PRECIOS</string>
     <string name="precios">PRECIOS</string>
     <string name="total_ref">PRECIO</string>
     <string name="iva_incluido">IVA INCLUIDO (SI APLICA)</string>

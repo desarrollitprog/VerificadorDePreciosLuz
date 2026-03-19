@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 from fastapi.middleware.gzip import GZipMiddleware
 from dotenv import load_dotenv
-from sqlalchemy import and_, or_, select, func
+from sqlalchemy import and_, or_, select, cast, Date
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Any, Awaitable, Callable, Optional
 import uuid
@@ -156,8 +156,8 @@ async def buscar_detalle_oferta_vigente(
             or_(
                 models.OfertasxProductos.FechaFin.is_(None),
                 and_(
-                    func.date(models.OfertasxProductos.FechaFin) >= today_start,
-                    func.date(models.OfertasxProductos.FechaFin) >= now.date(),
+                    cast(models.OfertasxProductos.FechaFin, Date) >= today_start.date(),
+                    cast(models.OfertasxProductos.FechaFin, Date) >= now.date(),
                 ),
             ),
         )

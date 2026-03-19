@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 from fastapi.middleware.gzip import GZipMiddleware
 from dotenv import load_dotenv
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Any, Awaitable, Callable, Optional
 import uuid
@@ -125,6 +125,8 @@ async def buscar_detalle_oferta_vigente(
     if not precio or precio.IdEmpaque is None:
         return None
 
+    today_start = datetime.combine(now.date(), datetime.min.time())
+
     stmt = (
         select(models.OfertasxProductosxSucursalesDetalles)
         .join(
@@ -147,8 +149,17 @@ async def buscar_detalle_oferta_vigente(
                 models.OfertasxProductos.IndExpirado != 1,
                 models.OfertasxProductos.IndExpirado.is_(None),
             ),
-            or_(models.OfertasxProductos.FechaInicio.is_(None), models.OfertasxProductos.FechaInicio <= now),
-            or_(models.OfertasxProductos.FechaFin.is_(None), models.OfertasxProductos.FechaFin >= now),
+            or_(
+                models.OfertasxProductos.FechaInicio.is_(None),
+                models.OfertasxProductos.FechaInicio <= now,
+            ),
+            or_(
+                models.OfertasxProductos.FechaFin.is_(None),
+                and_(
+                    func.date(models.OfertasxProductos.FechaFin) >= today_start,
+                    func.date(models.OfertasxProductos.FechaFin) >= now.date(),
+                ),
+            ),
         )
         .limit(1)
     )

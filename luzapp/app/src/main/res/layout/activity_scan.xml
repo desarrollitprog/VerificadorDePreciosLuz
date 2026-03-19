@@ -155,19 +155,18 @@
             android:paddingVertical="8dp">
 
             <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:layout_marginEnd="8dp"
                 android:contentDescription="@null"
-                android:src="@drawable/ic_bcv"
-                app:tint="@android:color/black" />
+                android:src="@drawable/ic_bcv" />
 
             <TextView
                 android:id="@+id/tvDolarBc"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textColor="@android:color/black"
-                android:textSize="14sp"
+                android:textSize="25sp"
                 android:textStyle="bold"
                 tools:text="USD: Bs 451,51 | EUR: Bs 520,64" />
 

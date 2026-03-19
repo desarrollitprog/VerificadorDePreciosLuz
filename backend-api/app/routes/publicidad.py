@@ -1,6 +1,6 @@
 from fastapi import UploadFile, File, Form, APIRouter, HTTPException, status, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, and_, func
 from ..database import get_db_publicidad
 import shutil
 from datetime import datetime
@@ -25,12 +25,19 @@ class BannerRemotoUpdateBody(BaseModel):
 @router.get("/banners", response_model=List[PublicidadResponse])
 async def listar_banners(db: AsyncSession = Depends(get_db_publicidad)):
     now = datetime.utcnow()
+    today_start = datetime.combine(now.date(), datetime.min.time())
     result = await db.execute(
         select(Publicidad)
         .where(
             Publicidad.activo == True,
             or_(Publicidad.fecha_inicio.is_(None), Publicidad.fecha_inicio <= now),
-            or_(Publicidad.fecha_fin.is_(None), Publicidad.fecha_fin >= now),
+            or_(
+                Publicidad.fecha_fin.is_(None),
+                and_(
+                    func.date(Publicidad.fecha_fin) >= today_start,
+                    func.date(Publicidad.fecha_fin) >= now.date(),
+                ),
+            ),
         )
         .order_by(Publicidad.prioridad, Publicidad.id)
     )

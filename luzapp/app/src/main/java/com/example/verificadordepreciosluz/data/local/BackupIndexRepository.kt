@@ -7,6 +7,7 @@ import com.example.verificadordepreciosluz.data.network.ProductoResponse
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.concurrent.TimeUnit
 
 class BackupIndexRepository(private val context: Context) {
     private val gson = Gson()
@@ -249,39 +250,12 @@ class BackupIndexRepository(private val context: Context) {
     }
 
     private fun isWithinVigencia(now: Long, fechaInicioMs: Long?, fechaFinMs: Long?): Boolean {
-        val nowDate = java.util.Calendar.getInstance().apply { timeInMillis = now }.let {
-            java.util.Calendar.getInstance().apply {
-                set(it.get(java.util.Calendar.YEAR), it.get(java.util.Calendar.MONTH), it.get(java.util.Calendar.DAY_OF_MONTH), 0, 0, 0)
-                set(java.util.Calendar.MILLISECOND, 0)
-            }
-        }.timeInMillis
+        val fechaFinAjustada = fechaFinMs?.let { it + TimeUnit.DAYS.toMillis(1) }
         
         return when {
-            fechaInicioMs == null && fechaFinMs != null -> {
-                val fechaFinDate = java.util.Calendar.getInstance().apply { timeInMillis = fechaFinMs }.let {
-                    java.util.Calendar.getInstance().apply {
-                        set(it.get(java.util.Calendar.YEAR), it.get(java.util.Calendar.MONTH), it.get(java.util.Calendar.DAY_OF_MONTH), 23, 59, 59)
-                        set(java.util.Calendar.MILLISECOND, 999)
-                    }
-                }.timeInMillis
-                nowDate <= fechaFinDate
-            }
-            fechaInicioMs != null && fechaFinMs == null -> now >= fechaInicioMs
-            fechaInicioMs != null && fechaFinMs != null -> {
-                val fechaInicioDate = java.util.Calendar.getInstance().apply { timeInMillis = fechaInicioMs }.let {
-                    java.util.Calendar.getInstance().apply {
-                        set(it.get(java.util.Calendar.YEAR), it.get(java.util.Calendar.MONTH), it.get(java.util.Calendar.DAY_OF_MONTH), 0, 0, 0)
-                        set(java.util.Calendar.MILLISECOND, 0)
-                    }
-                }.timeInMillis
-                val fechaFinDate = java.util.Calendar.getInstance().apply { timeInMillis = fechaFinMs }.let {
-                    java.util.Calendar.getInstance().apply {
-                        set(it.get(java.util.Calendar.YEAR), it.get(java.util.Calendar.MONTH), it.get(java.util.Calendar.DAY_OF_MONTH), 23, 59, 59)
-                        set(java.util.Calendar.MILLISECOND, 999)
-                    }
-                }.timeInMillis
-                nowDate >= fechaInicioDate && nowDate <= fechaFinDate
-            }
+            fechaInicioMs == null && fechaFinAjustada != null -> now <= fechaFinAjustada
+            fechaInicioMs != null && fechaFinAjustada == null -> now >= fechaInicioMs
+            fechaInicioMs != null && fechaFinAjustada != null -> now >= fechaInicioMs && now <= fechaFinAjustada
             else -> false
         }
     }

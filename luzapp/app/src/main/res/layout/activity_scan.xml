@@ -132,6 +132,49 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toBottomOf="@id/tvOfflineIndicator" />
 
+    <!-- Indicador de tasa BCV (centrado arriba con icono) -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/cardDolarBc"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:visibility="gone"
+        app:cardBackgroundColor="#FFEB3B"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="4dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="8dp">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_marginEnd="8dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_bcv"
+                app:tint="@android:color/black" />
+
+            <TextView
+                android:id="@+id/tvDolarBc"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@android:color/black"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                tools:text="USD: Bs 451,51 | EUR: Bs 520,64" />
+
+        </LinearLayout>
+
+    </androidx.cardview.widget.CardView>
+
     <LinearLayout
         android:id="@+id/messageBar"
         android:layout_width="0dp"

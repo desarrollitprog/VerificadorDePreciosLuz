@@ -77,6 +77,7 @@ import androidx.core.view.isVisible
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import com.example.verificadordepreciosluz.data.local.ejecutarPurgaTotal
+import com.example.verificadordepreciosluz.data.repository.DolarRepository
 import java.io.File
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -126,6 +127,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private val KIOSK_EXIT_CODE = "ADMIN-CODE-125"
     private var isKioskMode = false
     private var isDownloading = false  // Para bloquear salida durante descarga
+    private var dolarBcJob: Job? = null
+    private val dolarRepository = DolarRepository()
+    private val prefsDolar by lazy { getSharedPreferences("DolarBCV", MODE_PRIVATE) }
     private lateinit var dpm: DevicePolicyManager
     private lateinit var adminComponent: ComponentName
     private var standbySlideRunnable: Runnable? = null
@@ -226,6 +230,15 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
         if (hasNetwork && backendBaseUrl != null && api != null) {
             startTabletWebSocket()
+        }
+
+        // Obtener tasa BCV al inicio y programar actualizaciones
+        if (hasNetwork) {
+            Log.d(TAG, "BCV: onCreate - tiene red, invocando syncDolarBCV()")
+            syncDolarBCV()
+            scheduleDolarBCVRefresh()
+        } else {
+            Log.d(TAG, "BCV: onCreate - sin red, no se obtiene tasa BCV")
         }
     }
 
@@ -496,6 +509,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     }
 
     private fun handleNetworkChange(available: Boolean) {
+        Log.d(TAG, "BCV: handleNetworkChange - available=$available, isNetworkAvailable=$isNetworkAvailable")
         if (available == isNetworkAvailable) return
         isNetworkAvailable = available
 
@@ -518,6 +532,10 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             resyncBackupIfOnline(service)
             syncBannersOnStart()
         }
+        // Refrescar tasa BCV cuando vuelve la conexion
+        Log.d(TAG, "BCV: handleNetworkChange - red disponible, invocando syncDolarBCV()")
+        syncDolarBCV()
+        scheduleDolarBCVRefresh()
     }
 
     // 2) Cargar respaldo local desde almacenamiento interno
@@ -572,6 +590,103 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 Log.e(TAG, "Error al sincronizar banners", e)
             }
         }
+    }
+
+    // Obtiene y muestra las cotizaciones BCV (USD y EUR)
+    private fun syncDolarBCV() {
+        Log.i(TAG, "BCV: syncDolarBCV() llamado")
+        
+        val today = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US).format(java.util.Date())
+        val cachedDate = prefsDolar.getString("fecha", null)
+        val cachedUsd = prefsDolar.getFloat("usd", 0f)
+        val cachedEur = prefsDolar.getFloat("eur", 0f)
+        Log.d(TAG, "BCV: today=$today, cachedDate=$cachedDate, cachedUsd=$cachedUsd, cachedEur=$cachedEur")
+
+        // Si ya tenemos del día de hoy, mostrar cache y salir
+        if (cachedDate == today && (cachedUsd > 0f || cachedEur > 0f)) {
+            Log.d(TAG, "BCV: mostrando datos cacheados")
+            mostrarTasaBCV(cachedUsd, cachedEur)
+            return
+        }
+
+        Log.d(TAG, "BCV: sin cache o fecha diferente, llamando API...")
+        dolarBcJob?.cancel()
+        dolarBcJob = scope.launch {
+            try {
+                Log.d(TAG, "BCV: ejecutando getCotizaciones()")
+                val cotizaciones = dolarRepository.getCotizaciones()
+                Log.d(TAG, "BCV: respuesta cruda: $cotizaciones")
+                
+                val usd = cotizaciones["USD"]
+                val eur = cotizaciones["EUR"]
+                Log.d(TAG, "BCV: USD=$usd, EUR=$eur")
+
+                if (usd != null || eur != null) {
+                    val usdVal = usd?.promedio ?: 0.0
+                    val eurVal = eur?.promedio ?: 0.0
+                    
+                    // Guardar fecha y valores
+                    prefsDolar.edit()
+                        .putString("fecha", today)
+                        .putFloat("usd", usdVal.toFloat())
+                        .putFloat("eur", eurVal.toFloat())
+                        .apply()
+
+                    uiHandler.post {
+                        mostrarTasaBCV(usdVal.toFloat(), eurVal.toFloat())
+                    }
+                    Log.d(TAG, "BCV: cotizaciones actualizadas")
+                } else {
+                    Log.w(TAG, "BCV: API devolvio vacio")
+                    uiHandler.post {
+                        findViewById<android.widget.TextView>(R.id.tvDolarBc)?.text = "Sin Actualizacion del BCV"
+                        findViewById<androidx.cardview.widget.CardView>(R.id.cardDolarBc)?.visibility = View.VISIBLE
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "BCV: Error fetching BCV rate", e)
+                uiHandler.post {
+                    findViewById<android.widget.TextView>(R.id.tvDolarBc)?.text = "Sin Actualizacion del BCV"
+                    findViewById<androidx.cardview.widget.CardView>(R.id.cardDolarBc)?.visibility = View.VISIBLE
+                }
+            }
+        }
+    }
+
+    private fun mostrarTasaBCV(usd: Float, eur: Float) {
+        val symbols = DecimalFormatSymbols(Locale("es", "VE")).apply {
+            groupingSeparator = '.'
+            decimalSeparator = ','
+        }
+        val formatter = DecimalFormat("#,##0.0000", symbols)
+
+        val parts = mutableListOf<String>()
+        if (usd > 0f) parts.add("USD: Bs ${formatter.format(usd)}")
+        if (eur > 0f) parts.add("EUR: Bs ${formatter.format(eur)}")
+        val textoFinal = parts.joinToString(" | ")
+
+        Log.d(TAG, "BCV: mostrando - $textoFinal")
+        findViewById<android.widget.TextView>(R.id.tvDolarBc)?.text = textoFinal
+        findViewById<androidx.cardview.widget.CardView>(R.id.cardDolarBc)?.visibility = View.VISIBLE
+    }
+
+    // Programa actualización de la tasa BCV al iniciar día siguiente
+    private fun scheduleDolarBCVRefresh() {
+        val now = java.util.Calendar.getInstance()
+        val midnight = java.util.Calendar.getInstance().apply {
+            add(java.util.Calendar.DAY_OF_MONTH, 1)
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 1)
+            set(java.util.Calendar.SECOND, 0)
+        }
+        val msUntilMidnight = midnight.timeInMillis - now.timeInMillis
+
+        uiHandler.postDelayed({
+            if (isNetworkAvailable && !isFinishing) {
+                syncDolarBCV()
+            }
+            scheduleDolarBCVRefresh()
+        }, msUntilMidnight)
     }
 
     // Reinicia el temporizador de inactividad
@@ -1230,7 +1345,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 networkCallbackRegistered = true
             }
         }
-        handleNetworkChange(NetworkUtils.isNetworkAvailable(this))
+        val networkAvailable = NetworkUtils.isNetworkAvailable(this)
+        Log.d(TAG, "BCV: onStart - NetworkUtils.isNetworkAvailable=$networkAvailable")
+        handleNetworkChange(networkAvailable)
     }
 
     override fun onStop() {
@@ -1252,6 +1369,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         tone = null
         job.cancel()
         scope.cancel()
+        dolarBcJob?.cancel()
         tabletWebSocket?.close(1000, "Activity destroyed")
         wsClient?.dispatcher?.executorService?.shutdown()
     }

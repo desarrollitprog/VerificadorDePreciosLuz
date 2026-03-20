@@ -3,9 +3,9 @@
 Rutas de monitoreo: heartbeat de servidores secundarios y estado.
 """
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, List, Optional
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,6 +26,12 @@ class HeartbeatBody(BaseModel):
     ip: str
     almacenamiento_total: int
     almacenamiento_usado: int
+
+
+class SyncSelectivoBody(BaseModel):
+    servidor_ids: Optional[List[int]] = None
+    dispositivo_ids: Optional[List[int]] = None
+
 
 
 class DeviceRenameBody(BaseModel):
@@ -377,6 +383,256 @@ async def _execute_force_sync_job(job_id: str, user_id: int | None, username: st
         )
 
 
+async def _get_dispositivos_por_servidor(db: AsyncSession, servidor_ids: List[int] = None, dispositivo_ids: List[int] = None) -> dict:
+    """
+    Obtiene los dispositivos filtrados por servidor y/o dispositivo.
+    Retorna: {servidor_id: [codigo_kiosko, ...]}
+    """
+    query = select(Dispositivo)
+    if dispositivo_ids:
+        query = query.where(Dispositivo.id.in_(dispositivo_ids))
+    result = await db.execute(query)
+    dispositivos = result.scalars().all()
+    
+    mapa = {}
+    for d in dispositivos:
+        if servidor_ids and d.servidor_id not in servidor_ids:
+            continue
+        if d.servidor_id not in mapa:
+            mapa[d.servidor_id] = []
+        mapa[d.servidor_id].append(d.codigo_kiosko)
+    
+    return mapa
+
+
+async def _execute_selective_sync_job(
+    job_id: str,
+    user_id: int | None,
+    username: str | None,
+    servidor_ids: List[int] = None,
+    dispositivo_ids: List[int] = None,
+) -> None:
+    """
+    Ejecuta sincronización selectiva: solo servidores y/o dispositivos específicos.
+    """
+    await _set_job_state(job_id, status="RUNNING")
+    try:
+        async with AsyncSessionLocalUsuarios() as db:
+            stmt = select(ServidorSecundario)
+            result = await db.execute(stmt)
+            servidores = result.scalars().all()
+
+            now = _utcnow()
+            umbral = now - timedelta(minutes=HEARTBEAT_OFFLINE_MINUTES)
+            
+            online_servers = [
+                s for s in servidores
+                if s.ultimo_heartbeat and s.ultimo_heartbeat >= umbral
+            ]
+            
+            if servidor_ids:
+                online_servers = [s for s in online_servers if s.id in servidor_ids]
+
+            dispositivos_por_servidor = await _get_dispositivos_por_servidor(
+                db, servidor_ids, dispositivo_ids
+            )
+
+            async def send_selective_sync(ip: str, dispositivo_ids_list: List[str] = None, on_progress: Any = None) -> dict[str, Any]:
+                url = f"http://{ip}:8000/api/fuerza-sync"
+                try:
+                    payload = {}
+                    if dispositivo_ids_list:
+                        payload["dispositivo_ids"] = dispositivo_ids_list
+                    
+                    async with httpx.AsyncClient(timeout=FORCE_SYNC_TIMEOUT_SECONDS) as client:
+                        resp = await client.post(url, json=payload, params={"async_mode": "true"})
+                        payload_response: dict[str, Any] = {}
+                        try:
+                            payload_response = resp.json()
+                        except Exception:
+                            payload_response = {}
+
+                        if resp.status_code != 200 or not bool(payload_response.get("success", True)):
+                            return {
+                                "ok": False,
+                                "status_code": resp.status_code,
+                                "backend_result": payload_response,
+                                "reason": payload_response.get("message") if isinstance(payload_response, dict) else "Error iniciando sync",
+                            }
+
+                        remote_job_id = payload_response.get("job_id") if isinstance(payload_response, dict) else None
+                        if not remote_job_id:
+                            ok = resp.status_code == 200 and bool(payload_response.get("success", True))
+                            return {
+                                "ok": ok,
+                                "status_code": resp.status_code,
+                                "backend_result": payload_response,
+                                "reason": payload_response.get("message") if isinstance(payload_response, dict) else None,
+                            }
+
+                        poll_url = f"http://{ip}:8000/api/fuerza-sync/{remote_job_id}"
+                        deadline = asyncio.get_running_loop().time() + FORCE_SYNC_TIMEOUT_SECONDS
+
+                        while True:
+                            if asyncio.get_running_loop().time() > deadline:
+                                return {
+                                    "ok": False,
+                                    "status_code": 504,
+                                    "backend_result": {"total": 0, "sent": 0, "confirmed": 0, "failed": 0, "details": []},
+                                    "reason": "Timeout esperando progreso de sincronización",
+                                }
+
+                            poll_resp = await client.get(poll_url)
+                            poll_payload: dict[str, Any] = {}
+                            try:
+                                poll_payload = poll_resp.json()
+                            except Exception:
+                                poll_payload = {}
+
+                            if on_progress is not None and isinstance(poll_payload, dict):
+                                await on_progress(poll_payload)
+
+                            status = str(poll_payload.get("status", "")).upper()
+                            if status in ("COMPLETED", "FAILED"):
+                                ok = status == "COMPLETED" and bool(poll_payload.get("success", True))
+                                return {
+                                    "ok": ok,
+                                    "status_code": poll_resp.status_code,
+                                    "backend_result": poll_payload,
+                                    "reason": poll_payload.get("error") or poll_payload.get("message"),
+                                }
+
+                            await asyncio.sleep(FORCE_SYNC_POLL_INTERVAL_SECONDS)
+                except Exception as e:
+                    return {
+                        "ok": False,
+                        "status_code": None,
+                        "backend_result": {},
+                        "reason": str(e),
+                    }
+
+            success_count = 0
+            failed_count = 0
+            details: list[dict[str, Any]] = []
+
+            await _set_job_state(
+                job_id,
+                status="RUNNING",
+                success=True,
+                total_online=len(online_servers),
+                success_count=success_count,
+                failed_count=failed_count,
+                details=details,
+            )
+
+            for server in online_servers:
+                disp_ids = dispositivos_por_servidor.get(server.id, None)
+                
+                detail = {
+                    "ip": server.ip,
+                    "nombre": server.nombre,
+                    "ok": False,
+                    "status_code": None,
+                    "reason": "Sincronizando...",
+                    "dispositivos_seleccionados": len(disp_ids) if disp_ids else "todos",
+                    "sync_total": 0,
+                    "sync_sent": 0,
+                    "sync_confirmed": 0,
+                    "sync_failed": 0,
+                    "sync_details": [],
+                }
+                details.append(detail)
+
+                await _set_job_state(
+                    job_id,
+                    status="RUNNING",
+                    success=True,
+                    total_online=len(online_servers),
+                    success_count=success_count,
+                    failed_count=failed_count,
+                    details=details,
+                )
+
+                async def on_server_progress(progress_payload: dict[str, Any]) -> None:
+                    detail["sync_total"] = progress_payload.get("total")
+                    detail["sync_sent"] = progress_payload.get("sent")
+                    detail["sync_confirmed"] = progress_payload.get("confirmed")
+                    detail["sync_failed"] = progress_payload.get("failed")
+                    detail["sync_details"] = progress_payload.get("details", [])
+                    if str(progress_payload.get("status", "")).upper() == "RUNNING":
+                        detail["reason"] = "Sincronizando..."
+                    await _set_job_state(
+                        job_id,
+                        status="RUNNING",
+                        success=True,
+                        total_online=len(online_servers),
+                        success_count=success_count,
+                        failed_count=failed_count,
+                        details=details,
+                    )
+
+                result_item = await send_selective_sync(server.ip, disp_ids, on_progress=on_server_progress)
+                backend_result = result_item.get("backend_result") or {}
+                detail["ok"] = result_item.get("ok") is True
+                detail["status_code"] = result_item.get("status_code")
+                detail["reason"] = result_item.get("reason")
+                detail["sync_total"] = backend_result.get("total")
+                detail["sync_sent"] = backend_result.get("sent")
+                detail["sync_confirmed"] = backend_result.get("confirmed")
+                detail["sync_failed"] = backend_result.get("failed")
+                detail["sync_details"] = backend_result.get("details", [])
+
+                if detail["ok"]:
+                    success_count += 1
+                else:
+                    failed_count += 1
+
+                await _set_job_state(
+                    job_id,
+                    status="RUNNING",
+                    success=True,
+                    total_online=len(online_servers),
+                    success_count=success_count,
+                    failed_count=failed_count,
+                    details=details,
+                )
+
+            failed_servers = [d for d in details if not d["ok"]]
+            resumen_fallos = ", ".join(
+                f"{d['nombre']}({d['reason'] or 'sin motivo'})" for d in failed_servers[:5]
+            )
+
+            if user_id is not None:
+                actor_name = (username or "").strip() or "Sistema"
+                await registrar_accion(
+                    db,
+                    user_id,
+                    "SINCRONIZACION_SELECTIVA",
+                    (
+                        f"Sincronización selectiva ejecutada por usuario {actor_name}. "
+                        f"Servidores: {len(online_servers)}, éxito: {success_count}, fallo: {failed_count}. "
+                        f"Dispositivos: {len(dispositivo_ids) if dispositivo_ids else 'todos'}"
+                    )
+                )
+
+            await _set_job_state(
+                job_id,
+                status="COMPLETED",
+                success=True,
+                total_online=len(online_servers),
+                success_count=success_count,
+                failed_count=failed_count,
+                details=details,
+            )
+    except Exception as e:
+        await _set_job_state(
+            job_id,
+            status="FAILED",
+            success=False,
+            error=str(e),
+        )
+
+
 @router.get("/status")
 async def status(
     db: AsyncSession = Depends(get_db_usuarios),
@@ -695,27 +951,38 @@ async def obtener_alertas(
 async def sincronizar_fuerza(
     db: AsyncSession = Depends(get_db_usuarios),
     current_user: dict = Depends(get_current_cliente),
-    request: Request = None,
+    body: SyncSelectivoBody = None,
 ):
     """
-    Inicia la sincronización forzada en background y retorna un job_id para polling.
+    Inicia la sincronización forzada en background.
+    Si no se especifican servidor_ids, sincroniza todos los servidores online.
+    Si se especifican servidor_ids, solo sincroniza esos servidores.
+    Si se especifican dispositivo_ids, solo sincroniza esos dispositivos.
     """
     actor_name = (current_user.get("nombre_usuario") or current_user.get("usuario") or "Sistema")
 
     job_id = str(uuid.uuid4())
+    
+    servidor_ids = body.servidor_ids if body else None
+    dispositivo_ids = body.dispositivo_ids if body else None
+
     await _set_job_state(
         job_id,
         status="QUEUED",
         success=None,
         created_at=_utcnow().isoformat(),
         requested_by=actor_name,
+        servidor_ids=servidor_ids,
+        dispositivo_ids=dispositivo_ids,
     )
 
     asyncio.create_task(
-        _execute_force_sync_job(
+        _execute_selective_sync_job(
             job_id=job_id,
             user_id=current_user.get("user_id"),
             username=actor_name,
+            servidor_ids=servidor_ids,
+            dispositivo_ids=dispositivo_ids,
         )
     )
 
@@ -724,6 +991,8 @@ async def sincronizar_fuerza(
         "message": "Sincronización en ejecución",
         "job_id": job_id,
         "status": "QUEUED",
+        "servidores_seleccionados": len(servidor_ids) if servidor_ids else "todos",
+        "dispositivos_seleccionados": len(dispositivo_ids) if dispositivo_ids else "todos",
     }
 
 

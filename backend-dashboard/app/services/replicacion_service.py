@@ -12,11 +12,13 @@ async def replicar_archivo_al_api(
     fecha_fin: str = None,
     duracion_seg: int = None,
     activo: bool = True,
-    timeout: int = 30
+    timeout: int = 30,
+    dispositivo_ids: list = None,
 ) -> dict:
     """
     Envía un archivo y metadatos al endpoint de replicación del backend-api.
     Retorna la respuesta del API como dict.
+    Si dispositivo_ids está presente, solo replica a esos dispositivos.
     """
     if not os.path.isfile(file_path):
         print(f"[DEBUG] Archivo no encontrado: {file_path}")
@@ -33,6 +35,8 @@ async def replicar_archivo_al_api(
             "duracion_seg": duracion_seg,
             "activo": activo,
         }
+        if dispositivo_ids:
+            data["dispositivo_ids"] = ",".join(str(d) for d in dispositivo_ids)
         data = {k: v for k, v in data.items() if v is not None}
 
         upload_url = api_url.rstrip('/') + '/replicar-archivo' if not api_url.rstrip('/').endswith('/replicar-archivo') else api_url
@@ -267,3 +271,130 @@ async def actualizar_metadata_a_todas_las_apis(
         except Exception as e:
             resultados.append({"api_url": api_url, "success": False, "error": str(e)})
     return resultados
+
+
+async def replicar_archivo_a_api_especifica(
+    api_url: str,
+    file_path: str,
+    IdPublicidadRemoto: int = None,
+    titulo: str = None,
+    tipo: str = None,
+    prioridad: int = 0,
+    fecha_inicio: str = None,
+    fecha_fin: str = None,
+    duracion_seg: int = None,
+    activo: bool = True,
+    timeout: int = 30
+) -> dict:
+    """
+    Replica un archivo a una API específica.
+    Retorna la respuesta del API como dict.
+    """
+    return await replicar_archivo_al_api(
+        api_url=api_url,
+        file_path=file_path,
+        IdPublicidadRemoto=IdPublicidadRemoto,
+        titulo=titulo,
+        tipo=tipo,
+        prioridad=prioridad,
+        fecha_inicio=fecha_inicio,
+        fecha_fin=fecha_fin,
+        duracion_seg=duracion_seg,
+        activo=activo,
+        timeout=timeout
+    )
+
+
+async def replicar_a_servidores(
+    file_path: str,
+    servidores: list,
+    IdPublicidadRemoto: int = None,
+    titulo: str = None,
+    tipo: str = None,
+    prioridad: int = 0,
+    fecha_inicio: str = None,
+    fecha_fin: str = None,
+    duracion_seg: int = None,
+    activo: bool = True,
+    timeout: int = 30,
+    dispositivo_ids: list = None,
+) -> list:
+    """
+    Replica un archivo a los servidores seleccionados.
+    Cada servidor debe tener 'ip' o 'api_url'.
+    Si dispositivo_ids está presente, filtra por esos dispositivos.
+    """
+    resultados = []
+    for servidor in servidores:
+        api_url = servidor.get("api_url")
+        if not api_url:
+            ip = servidor.get("ip")
+            if ip:
+                api_url = f"http://{ip}:8000"
+        
+        if not api_url:
+            resultados.append({
+                "servidor_id": servidor.get("id"),
+                "servidor_nombre": servidor.get("nombre"),
+                "api_url": api_url,
+                "success": False,
+                "error": "No se encontró URL del backend-api"
+            })
+            continue
+        
+        try:
+            resp = await replicar_archivo_al_api(
+                api_url=api_url,
+                file_path=file_path,
+                IdPublicidadRemoto=IdPublicidadRemoto,
+                titulo=titulo,
+                tipo=tipo,
+                prioridad=prioridad,
+                fecha_inicio=fecha_inicio,
+                fecha_fin=fecha_fin,
+                duracion_seg=duracion_seg,
+                activo=activo,
+                timeout=timeout,
+                dispositivo_ids=dispositivo_ids,
+            )
+            resultados.append({
+                "servidor_id": servidor.get("id"),
+                "servidor_nombre": servidor.get("nombre"),
+                "api_url": api_url,
+                "success": True,
+                "response": resp
+            })
+        except Exception as e:
+            resultados.append({
+                "servidor_id": servidor.get("id"),
+                "servidor_nombre": servidor.get("nombre"),
+                "api_url": api_url,
+                "success": False,
+                "error": str(e)
+            })
+    return resultados
+
+
+async def sync_a_servidor(
+    servidor_ip: str,
+    dispositivo_ids: list = None,
+    publicidad_ids: list = None,
+    timeout: int = 120
+) -> dict:
+    """
+    Envía comando de sincronización a un servidor específico.
+    """
+    api_url = f"http://{servidor_ip}:8000/api/fuerza-sync"
+    payload = {}
+    if dispositivo_ids:
+        payload["dispositivo_ids"] = dispositivo_ids
+    if publicidad_ids:
+        payload["publicidad_ids"] = publicidad_ids
+    
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(api_url, json=payload)
+            response.raise_for_status()
+            return {"success": True, "response": response.json()}
+    except Exception as e:
+        return {"success": False, "error": str(e)}

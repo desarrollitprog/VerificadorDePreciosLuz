@@ -10,8 +10,9 @@ class ServidorSecundario(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(100), nullable=False)
-    ip = Column(String(45), nullable=False)  # Soporta IPv4/IPv6
-    almacenamiento_total = Column(BigInteger, nullable=False)  # bytes
-    almacenamiento_usado = Column(BigInteger, nullable=False, default=0)  # bytes
+    ip = Column(String(45), nullable=False)
+    almacenamiento_total = Column(BigInteger, nullable=False)
+    almacenamiento_usado = Column(BigInteger, nullable=False, default=0)
     ultimo_heartbeat = Column(DateTime, nullable=True, default=None)
+    api_url = Column(String(255), nullable=True)
 

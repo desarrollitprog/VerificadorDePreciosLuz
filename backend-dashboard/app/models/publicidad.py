@@ -1,6 +1,8 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from ..database import Base
+
 
 class Publicidad(Base):
     """
@@ -19,6 +21,7 @@ class Publicidad(Base):
     FechaFin = Column("FechaFin", DateTime, nullable=True)
     DuracionSeg = Column("DuracionSeg", Integer, nullable=True)
     UpdatedAt = Column("UpdatedAt", DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+    asignacion_todos = Column("asignacion_todos", Boolean, nullable=False, default=True)
 
     def __repr__(self):
         return (

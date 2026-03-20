@@ -1,10 +1,10 @@
 import api from '../services/axiosInstance';
-import { Video } from '../types';
+import { Video, Servidor } from '../types';
 
 export interface UpdateBannerMetadataPayload {
   activo?: boolean;
-  fecha_inicio?: string | null;
-  fecha_fin?: string | null;
+  fechaInicio?: string | null;
+  fechaFin?: string | null;
 }
 
 export interface UploadMediaPayload {
@@ -12,6 +12,24 @@ export interface UploadMediaPayload {
   fechaInicio?: string | null;
   fechaFin?: string | null;
   activo: boolean;
+  asignacionTodos?: boolean;
+  servidorIds?: number[];
+  dispositivoIds?: number[];
+}
+
+export interface FileMetadata {
+  titulo: string;
+  fechaInicio: string;
+  fechaFin: string;
+  activo: boolean;
+  asignacionTodos: boolean;
+  servidorIds: number[];
+  dispositivoIds: number[];
+}
+
+export interface AsignacionPayload {
+  servidor_id: number;
+  dispositivo_id: number;
 }
 
 export async function getVideos(): Promise<Video[]> {
@@ -19,7 +37,7 @@ export async function getVideos(): Promise<Video[]> {
     const response = await api.get('/banners');
     const banners = response.data?.banners;
     if (Array.isArray(banners)) {
-      return banners.map((item) => ({
+      return banners.map((item: any) => ({
         id: String(item.IdPublicidad ?? item.id ?? ''),
         filename: (item.Url ?? item.url ?? '').split('/').pop() || '',
         url: item.Url ?? item.url ?? '',
@@ -35,9 +53,22 @@ export async function getVideos(): Promise<Video[]> {
         fechaFin: item.FechaFin ?? item.fecha_fin ?? null,
         prioridad: item.Prioridad ?? item.prioridad ?? 0,
         views: item.views ?? undefined,
+        asignacion_todos: item.asignacion_todos ?? true,
+        asignaciones: item.asignaciones ?? [],
+        dispositivos_count: item.dispositivos_count ?? 0,
+        estado: item.estado ?? 'activo',
       }));
     }
     return [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getServidores(): Promise<Servidor[]> {
+  try {
+    const response = await api.get('/servidores');
+    return response.data?.servidores ?? [];
   } catch {
     return [];
   }
@@ -65,6 +96,13 @@ export async function uploadMedia(file: File, payload?: UploadMediaPayload) {
       formData.append('FechaFin', payload.fechaFin);
     }
     formData.append('Activo', String(payload.activo));
+    formData.append('AsignacionTodos', String(payload.asignacionTodos ?? true));
+    if (payload.servidorIds && payload.servidorIds.length > 0) {
+      formData.append('ServidorIds', JSON.stringify(payload.servidorIds));
+    }
+    if (payload.dispositivoIds && payload.dispositivoIds.length > 0) {
+      formData.append('DispositivoIds', JSON.stringify(payload.dispositivoIds));
+    }
   }
   const response = await api.post('/banners/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
@@ -72,6 +110,32 @@ export async function uploadMedia(file: File, payload?: UploadMediaPayload) {
   return response.data;
 }
 
+export async function asignarBanner(videoId: string, asignaciones: AsignacionPayload[]) {
+  const response = await api.post(`/banners/${videoId}/asignaciones`, asignaciones);
+  return response.data;
+}
+
+export async function sincronizarBanners(
+  publicidadIds: string[],
+  servidorIds: number[]
+) {
+  const response = await api.post('/banners/sincronizar', {
+    publicidad_ids: publicidadIds,
+    servidor_ids: servidorIds
+  });
+  return response.data;
+}
+
+export async function sincronizarServidores(
+  servidorIds: number[],
+  dispositivoIds?: number[]
+) {
+  const response = await api.post('/monitoreo/sincronizar-fuerza', {
+    servidor_ids: servidorIds,
+    dispositivo_ids: dispositivoIds
+  });
+  return response.data;
+}
 
 export async function deleteVideo(videoId: string) {
   const response = await api.delete(`/banners/${videoId}`);

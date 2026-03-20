@@ -250,12 +250,10 @@ class BackupIndexRepository(private val context: Context) {
     }
 
     private fun isWithinVigencia(now: Long, fechaInicioMs: Long?, fechaFinMs: Long?): Boolean {
-        val fechaFinAjustada = fechaFinMs?.let { it + TimeUnit.DAYS.toMillis(1) }
-        
         return when {
-            fechaInicioMs == null && fechaFinAjustada != null -> now <= fechaFinAjustada
-            fechaInicioMs != null && fechaFinAjustada == null -> now >= fechaInicioMs
-            fechaInicioMs != null && fechaFinAjustada != null -> now >= fechaInicioMs && now <= fechaFinAjustada
+            fechaInicioMs == null && fechaFinMs != null -> now <= fechaFinMs
+            fechaInicioMs != null && fechaFinMs == null -> now >= fechaInicioMs
+            fechaInicioMs != null && fechaFinMs != null -> now >= fechaInicioMs && now <= fechaFinMs
             else -> false
         }
     }

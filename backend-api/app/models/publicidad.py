@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text
 from sqlalchemy.sql import func
 from ..database import Base
 
@@ -22,6 +22,7 @@ class Publicidad(Base):
     fecha_fin = Column("FechaFin", DateTime, nullable=True)
     duracion_seg = Column("DuracionSeg", Integer, nullable=True)
     updated_at = Column("UpdatedAt", DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+    device_ids = Column("device_ids", Text, nullable=True)
 
     def __repr__(self):
         return (

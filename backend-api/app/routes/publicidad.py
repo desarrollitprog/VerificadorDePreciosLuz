@@ -1,4 +1,4 @@
-from fastapi import UploadFile, File, Form, APIRouter, HTTPException, status, Depends
+from fastapi import UploadFile, File, Form, APIRouter, HTTPException, status, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, and_, func
 from ..database import get_db_publicidad
@@ -22,26 +22,47 @@ class BannerRemotoUpdateBody(BaseModel):
     fecha_inicio: Optional[datetime] = None
     fecha_fin: Optional[datetime] = None
 
+
+class PublicidadDispositivoBody(BaseModel):
+    dispositivo_ids: List[str] = []
+
+
 @router.get("/banners", response_model=List[PublicidadResponse])
-async def listar_banners(db: AsyncSession = Depends(get_db_publicidad)):
+async def listar_banners(
+    device_ids: str = Query(None, description="Lista de device_ids separados por coma"),
+    db: AsyncSession = Depends(get_db_publicidad)
+):
     now = datetime.utcnow()
     today_start = datetime.combine(now.date(), datetime.min.time())
-    result = await db.execute(
-        select(Publicidad)
-        .where(
-            Publicidad.activo == True,
-            or_(Publicidad.fecha_inicio.is_(None), Publicidad.fecha_inicio <= now),
-            or_(
-                Publicidad.fecha_fin.is_(None),
-                and_(
-                    func.date(Publicidad.fecha_fin) >= today_start,
-                    func.date(Publicidad.fecha_fin) >= now.date(),
-                ),
+    
+    query = select(Publicidad).where(
+        Publicidad.activo == True,
+        or_(Publicidad.fecha_inicio.is_(None), Publicidad.fecha_inicio <= now),
+        or_(
+            Publicidad.fecha_fin.is_(None),
+            and_(
+                func.date(Publicidad.fecha_fin) >= today_start,
+                func.date(Publicidad.fecha_fin) >= now.date(),
             ),
-        )
-        .order_by(Publicidad.prioridad, Publicidad.id)
-    )
+        ),
+    ).order_by(Publicidad.prioridad, Publicidad.id)
+    
+    result = await db.execute(query)
     banners = result.scalars().all()
+    
+    if device_ids:
+        device_id_list = [d.strip() for d in device_ids.split(",") if d.strip()]
+        filtered_banners = []
+        for banner in banners:
+            banner_device_ids = getattr(banner, 'device_ids', None)
+            if banner_device_ids:
+                banner_ids_set = set(banner_device_ids.split(","))
+                if any(d in banner_ids_set for d in device_id_list):
+                    filtered_banners.append(banner)
+            else:
+                filtered_banners.append(banner)
+        banners = filtered_banners
+    
     return [PublicidadResponse.model_validate(banner.__dict__) for banner in banners]
 
 @router.post("/replicar-archivo")
@@ -55,6 +76,7 @@ async def replicar_archivo(
     fecha_inicio: str = Form(None),
     fecha_fin: str = Form(None),
     duracion_seg: int = Form(None),
+    dispositivo_ids: str = Form(None),
     db: AsyncSession = Depends(get_db_publicidad)
 ):
     """
@@ -105,6 +127,7 @@ async def replicar_archivo(
             fecha_inicio=fecha_inicio_dt,
             fecha_fin=fecha_fin_dt,
             duracion_seg=duracion_seg,
+            device_ids=dispositivo_ids,
             IdPublicidadRemoto=IdPublicidadRemoto
         )
         db.add(nuevo_banner)

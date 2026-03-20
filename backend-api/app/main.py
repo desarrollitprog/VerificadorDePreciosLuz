@@ -11,7 +11,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from dotenv import load_dotenv
 from sqlalchemy import and_, or_, select, cast, Date, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Any, Awaitable, Callable, Optional
+from typing import Any, Awaitable, Callable, List, Optional
 import uuid
 from pydantic import BaseModel
 from . import database, models, schemas
@@ -598,7 +598,7 @@ async def _get_force_sync_job_state(job_id: str) -> dict[str, Any] | None:
         return dict(job) if job else None
 
 
-async def _run_force_sync_job(job_id: str) -> None:
+async def _run_force_sync_job(job_id: str, dispositivo_ids: List[str] = None) -> None:
     try:
         async with SYNC_SEQUENCE_LOCK:
             await _set_force_sync_job_state(job_id, status="RUNNING", success=True)
@@ -615,7 +615,10 @@ async def _run_force_sync_job(job_id: str) -> None:
                     details=progress.get("details", []),
                 )
 
-            result = await orchestrate_forced_sync_sequential(progress_hook=_on_progress)
+            result = await orchestrate_forced_sync_sequential(
+                progress_hook=_on_progress,
+                dispositivo_ids=dispositivo_ids
+            )
 
         await _set_force_sync_job_state(
             job_id,
@@ -637,7 +640,10 @@ async def _run_force_sync_job(job_id: str) -> None:
 
 # Endpoint para sincronización forzada
 @app.post("/api/fuerza-sync")
-async def fuerza_sync(async_mode: bool = Query(False)):
+async def fuerza_sync(
+    async_mode: bool = Query(False),
+    dispositivo_ids: List[str] = Query(None),
+):
     global SYNC_REQUIRED_NOW
     SYNC_REQUIRED_NOW = True
 
@@ -653,17 +659,19 @@ async def fuerza_sync(async_mode: bool = Query(False)):
             failed=0,
             details=[],
             created_at=datetime.utcnow().isoformat() + "Z",
+            dispositivo_ids=dispositivo_ids,
         )
-        asyncio.create_task(_run_force_sync_job(job_id))
+        asyncio.create_task(_run_force_sync_job(job_id, dispositivo_ids))
         return {
             "success": True,
             "message": "Sincronización forzada en ejecución",
             "job_id": job_id,
             "status": "QUEUED",
+            "dispositivo_ids": dispositivo_ids,
         }
 
     async with SYNC_SEQUENCE_LOCK:
-        result = await orchestrate_forced_sync_sequential()
+        result = await orchestrate_forced_sync_sequential(dispositivo_ids=dispositivo_ids)
     return {
         "success": True,
         "message": "Sincronización forzada secuencial ejecutada",
@@ -934,21 +942,23 @@ async def _start_device_bus_listener():
 
 async def orchestrate_forced_sync_sequential(
     progress_hook: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+    dispositivo_ids: List[str] = None,
 ) -> dict:
-    device_ids: list[str] = []
+    target_device_ids: list[str] = []
 
-    if device_state_store is not None:
+    if dispositivo_ids:
+        target_device_ids = list(dispositivo_ids)
+    elif device_state_store is not None:
         try:
             status_map = await device_state_store.get_all_status()
-            device_ids = sorted([device_id for device_id, info in status_map.items() if info.get("online")])
+            target_device_ids = sorted([device_id for device_id, info in status_map.items() if info.get("online")])
         except Exception as e:
             logger.error("Error leyendo estado compartido de dispositivos: %s", e)
 
-    if not device_ids:
-        # Fallback local si no hay estado compartido disponible
-        device_ids = sorted([device_id for device_id, _ in tablet_ws_manager.get_connected_targets() if device_id])
+    if not target_device_ids:
+        target_device_ids = sorted([device_id for device_id, _ in tablet_ws_manager.get_connected_targets() if device_id])
 
-    if not device_ids:
+    if not target_device_ids:
         return {
             "total": 0,
             "sent": 0,
@@ -964,15 +974,15 @@ async def orchestrate_forced_sync_sequential(
     if progress_hook:
         await progress_hook(
             {
-                "total": len(device_ids),
+                "total": len(target_device_ids),
                 "sent": sent,
                 "confirmed": confirmed,
-                "failed": len(device_ids) - confirmed,
+                "failed": len(target_device_ids) - confirmed,
                 "details": list(details),
             }
         )
 
-    for device_id in device_ids:
+    for device_id in target_device_ids:
         ack_key = f"device:{device_id}"
         waiter = asyncio.Event()
         sync_ack_waiters[ack_key] = waiter
@@ -1009,10 +1019,10 @@ async def orchestrate_forced_sync_sequential(
             if progress_hook:
                 await progress_hook(
                     {
-                        "total": len(device_ids),
+                        "total": len(target_device_ids),
                         "sent": sent,
                         "confirmed": confirmed,
-                        "failed": len(device_ids) - confirmed,
+                        "failed": len(target_device_ids) - confirmed,
                         "details": list(details),
                     }
                 )
@@ -1057,17 +1067,17 @@ async def orchestrate_forced_sync_sequential(
         if progress_hook:
             await progress_hook(
                 {
-                    "total": len(device_ids),
+                    "total": len(target_device_ids),
                     "sent": sent,
                     "confirmed": confirmed,
-                    "failed": len(device_ids) - confirmed,
+                    "failed": len(target_device_ids) - confirmed,
                     "details": list(details),
                 }
             )
 
-    failed = len(device_ids) - confirmed
+    failed = len(target_device_ids) - confirmed
     return {
-        "total": len(device_ids),
+        "total": len(target_device_ids),
         "sent": sent,
         "confirmed": confirmed,
         "failed": failed,

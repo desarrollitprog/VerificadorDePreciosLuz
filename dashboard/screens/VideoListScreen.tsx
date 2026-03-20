@@ -1,68 +1,24 @@
 import React, { useEffect, useState } from 'react';
-import { getVideos, deleteVideo, updateBannerEstado, updateBannerMetadata } from '../services/videoService';
-import { Video } from '../types';
-import { Search, FileVideo, AlertCircle, Clock, Edit2, Trash2, Download, Power, ListChecks, ArrowUpDown } from 'lucide-react';
-
-const StatusIcon = ({ status }: { status: string }) => {
-  switch (status) {
-    case 'error':
-      return <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded bg-red-500/10 text-red-500"><AlertCircle size={16} /></div>;
-    case 'queued':
-      return <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded bg-gray-700/50 text-gray-400"><Clock size={16} /></div>;
-    default:
-      return <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded bg-primary/10 text-primary"><FileVideo size={16} /></div>;
-  }
-};
-
-const getVigenciaStatus = (item: Video): 'vigente' | 'programado' | 'expirado' => {
-  const now = Date.now();
-  const ini = item.fechaInicio ? new Date(item.fechaInicio).getTime() : null;
-  const fin = item.fechaFin ? new Date(item.fechaFin).getTime() : null;
-
-  if (ini && now < ini) return 'programado';
-  if (fin && now > fin) return 'expirado';
-  return 'vigente';
-};
-
-const VigenciaBadge = ({ item }: { item: Video }) => {
-  const vigencia = getVigenciaStatus(item);
-  if (vigencia === 'programado') {
-    return <span className="inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold bg-blue-500/10 text-blue-500 border border-blue-500/20">Programado</span>;
-  }
-  if (vigencia === 'expirado') {
-    return <span className="inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold bg-rose-500/10 text-rose-500 border border-rose-500/20">Expirado</span>;
-  }
-  return <span className="inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">Vigente</span>;
-};
-
-const OperativoBadge = ({ activo }: { activo?: boolean }) => (
-  <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold border ${
-    activo
-      ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-      : 'bg-slate-500/10 text-slate-500 border-slate-500/20'
-  }`}>
-    {activo ? 'Activo' : 'Inactivo'}
-  </span>
-);
+import { getVideos, deleteVideo, updateBannerEstado, sincronizarServidores, getServidores, updateBannerMetadata, asignarBanner } from '../services/videoService';
+import { Video, Servidor } from '../types';
+import { Search, FileVideo, AlertCircle, Clock, Edit2, Trash2, Eye, Monitor, Smartphone, Server, RefreshCw, ChevronDown, ChevronRight, Save, X } from 'lucide-react';
 
 const toInputDateTime = (iso?: string | null): string => {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
 
 const toIsoOrNull = (val: string): string | null => {
   if (!val) return null;
-  // Si es formato local, agrega zona Caracas
   if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(val)) {
     return val.includes('-04:00') ? val : `${val}:00-04:00`;
   }
   return new Date(val).toISOString();
 };
 
-// Formatea una fecha a la hora de Caracas (UTC-4)
 const formatCaracasTime = (value?: string): string => {
   if (!value) return '-';
   const date = new Date(value);
@@ -70,41 +26,58 @@ const formatCaracasTime = (value?: string): string => {
   return date.toLocaleString('es-VE', { timeZone: 'America/Caracas' });
 };
 
+const getEstadoColor = (estado: string) => {
+  switch (estado) {
+    case 'activo':
+      return 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
+    case 'inactivo':
+      return 'bg-slate-500/10 text-slate-500 border-slate-500/20';
+    case 'borrador':
+      return 'bg-amber-500/10 text-amber-500 border-amber-500/20';
+    case 'vencido':
+      return 'bg-rose-500/10 text-rose-500 border-rose-500/20';
+    default:
+      return 'bg-slate-500/10 text-slate-500 border-slate-500/20';
+  }
+};
+
 export const VideoListScreen: React.FC = () => {
   const [videos, setVideos] = useState<Video[]>([]);
+  const [servidores, setServidores] = useState<Servidor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [vigenciaFilter, setVigenciaFilter] = useState('');
-  const [dateFilter, setDateFilter] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string[]>([]);
-  const [editItem, setEditItem] = useState<Video | null>(null);
+  const [viewModal, setViewModal] = useState<Video | null>(null);
+  const [sincronizando, setSincronizando] = useState(false);
+  const [syncServidores, setSyncServidores] = useState<number[]>([]);
+  const [editModal, setEditModal] = useState<Video | null>(null);
+  const [editTitulo, setEditTitulo] = useState('');
+  const [editFechaInicio, setEditFechaInicio] = useState('');
+  const [editFechaFin, setEditFechaFin] = useState('');
+  const [editAsignacionTodos, setEditAsignacionTodos] = useState(true);
+  const [editServidorIds, setEditServidorIds] = useState<number[]>([]);
+  const [editDispositivoIds, setEditDispositivoIds] = useState<number[]>([]);
+  const [expandedServers, setExpandedServers] = useState<number[]>([]);
   const [savingEdit, setSavingEdit] = useState(false);
-  const [editForm, setEditForm] = useState({
-    activo: true,
-    fechaInicio: '',
-    fechaFin: '',
-  });
-  const [page, setPage] = useState(1);
-  const rowsPerPage = 8;
 
   useEffect(() => {
-    async function fetchVideos() {
+    async function fetchData() {
       setLoading(true);
       try {
-        const data = await getVideos();
-        setVideos(Array.isArray(data) ? data : []);
+        const [videosData, servidoresData] = await Promise.all([
+          getVideos(),
+          getServidores()
+        ]);
+        setVideos(Array.isArray(videosData) ? videosData : []);
+        setServidores(Array.isArray(servidoresData) ? servidoresData : []);
       } catch {
-        setError('Error Cargando Videos');
-        setVideos([]);
+        setError('Error Cargando Datos');
       } finally {
         setLoading(false);
       }
     }
-    fetchVideos();
+    fetchData();
   }, []);
 
   const handleDelete = async (videoId: string) => {
@@ -113,7 +86,7 @@ export const VideoListScreen: React.FC = () => {
       await deleteVideo(videoId);
       setVideos((prev) => prev.filter((v) => v.id !== videoId));
     } catch {
-      setError('Error Borrando Videos');
+      setError('Error Borrando Video');
     }
   };
 
@@ -121,415 +94,559 @@ export const VideoListScreen: React.FC = () => {
     setError(null);
     try {
       await updateBannerEstado(videoId, nextActivo);
-      setVideos((prev) => prev.map((v) => (v.id === videoId ? { ...v, activo: nextActivo } : v)));
+      setVideos((prev) => prev.map((v) => (v.id === videoId ? { ...v, activo: nextActivo, estado: nextActivo ? 'activo' : 'inactivo' } : v)));
     } catch {
-      setError('Error actualizando estado del video');
+      setError('Error actualizando estado');
     }
   };
 
-  const openEditVigencia = (item: Video) => {
-    setEditItem(item);
-    setEditForm({
-      activo: !!item.activo,
-      fechaInicio: toInputDateTime(item.fechaInicio),
-      fechaFin: toInputDateTime(item.fechaFin),
-    });
-  };
-
-  const saveEditVigencia = async () => {
-    if (!editItem) return;
-    const ini = editForm.fechaInicio ? new Date(editForm.fechaInicio) : null;
-    const fin = editForm.fechaFin ? new Date(editForm.fechaFin) : null;
-
-    if (ini && fin && ini.getTime() > fin.getTime()) {
-      setError('Rango inválido: FechaInicio no puede ser mayor que FechaFin.');
+  const handleSync = async () => {
+    if (syncServidores.length === 0) {
+      setError('Selecciona al menos un servidor');
       return;
     }
-
-    setSavingEdit(true);
+    setSincronizando(true);
     setError(null);
     try {
-      await updateBannerMetadata(editItem.id, {
-        activo: editForm.activo,
-        fecha_inicio: toIsoOrNull(editForm.fechaInicio),
-        fecha_fin: toIsoOrNull(editForm.fechaFin),
-      });
+      await sincronizarServidores(syncServidores);
+      setSyncServidores([]);
+    } catch {
+      setError('Error en sincronización');
+    } finally {
+      setSincronizando(false);
+    }
+  };
 
-      setVideos((prev) =>
-        prev.map((v) =>
-          v.id === editItem.id
-            ? {
-                ...v,
-                activo: editForm.activo,
-                fechaInicio: toIsoOrNull(editForm.fechaInicio),
-                fechaFin: toIsoOrNull(editForm.fechaFin),
+  const toggleServidorSync = (servidorId: number) => {
+    setSyncServidores(prev =>
+      prev.includes(servidorId)
+        ? prev.filter(id => id !== servidorId)
+        : [...prev, servidorId]
+    );
+  };
+
+  const openEditModal = (video: Video) => {
+    setEditModal(video);
+    setEditTitulo(video.titulo || '');
+    setEditFechaInicio(video.fechaInicio ? video.fechaInicio.split('T')[0] + 'T' + video.fechaInicio.split('T')[1]?.substring(0, 5) : '');
+    setEditFechaFin(video.fechaFin ? video.fechaFin.split('T')[0] + 'T' + video.fechaFin.split('T')[1]?.substring(0, 5) : '');
+    setEditAsignacionTodos(video.asignacion_todos ?? true);
+    setEditServidorIds([]);
+    setEditDispositivoIds([]);
+    if (video.asignaciones) {
+      const srvIds = [...new Set(video.asignaciones.map(a => a.servidor_id))];
+      const dispIds = video.asignaciones.map(a => a.dispositivo_id);
+      setEditServidorIds(srvIds);
+      setEditDispositivoIds(dispIds);
+    }
+  };
+
+  const closeEditModal = () => {
+    setEditModal(null);
+    setEditServidorIds([]);
+    setEditDispositivoIds([]);
+    setExpandedServers([]);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editModal) return;
+    setSavingEdit(true);
+    try {
+      await updateBannerMetadata(editModal.id, {
+        fechaInicio: editFechaInicio || null,
+        fechaFin: editFechaFin || null,
+      });
+      if (!editAsignacionTodos) {
+        const asignaciones: { servidor_id: number; dispositivo_id: number }[] = [];
+        for (const srvId of editServidorIds) {
+          if (editDispositivoIds.length > 0) {
+            for (const dispId of editDispositivoIds) {
+              asignaciones.push({ servidor_id: srvId, dispositivo_id: dispId });
+            }
+          } else {
+            const srv = servidores.find(s => s.id === srvId);
+            if (srv?.dispositivos) {
+              for (const disp of srv.dispositivos) {
+                asignaciones.push({ servidor_id: srvId, dispositivo_id: disp.id });
               }
-            : v
-        )
-      );
-      setEditItem(null);
-    } catch (e: any) {
-      setError(e?.response?.data?.detail || 'Error actualizando vigencia.');
+            }
+          }
+        }
+        if (asignaciones.length > 0) {
+          await asignarBanner(editModal.id, asignaciones);
+        }
+      }
+      const updatedVideos = await getVideos();
+      setVideos(updatedVideos);
+      closeEditModal();
+    } catch {
+      setError('Error al guardar cambios');
     } finally {
       setSavingEdit(false);
     }
-  };
-
-  const handleBulkSetActivo = async (nextActivo: boolean) => {
-    if (!selected.length) return;
-    let ok = 0;
-    let fail = 0;
-
-    for (const id of selected) {
-      try {
-        await updateBannerEstado(id, nextActivo);
-        ok += 1;
-      } catch {
-        fail += 1;
-      }
-    }
-
-    setVideos((prev) => prev.map((v) => (selected.includes(v.id) ? { ...v, activo: nextActivo } : v)));
-    setSelected([]);
-    setError(fail ? `Actualizados: ${ok}. Fallaron: ${fail}.` : null);
-  };
-
-  const downloadVideoFile = (item: Video) => {
-    if (!item.url) return;
-    const link = document.createElement('a');
-    link.href = item.url;
-    link.download = item.filename || `video-${item.id}`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const handleBulkDownload = () => {
-    const selectedItems = videos.filter((v) => selected.includes(v.id));
-    selectedItems.forEach((item, index) => {
-      window.setTimeout(() => downloadVideoFile(item), index * 120);
-    });
   };
 
   let filteredVideos = videos.filter((v: Video) => {
     const searchMatch =
       search === '' ||
       v.filename?.toLowerCase().includes(search.toLowerCase()) ||
+      v.titulo?.toLowerCase().includes(search.toLowerCase()) ||
       v.id?.toString().includes(search);
-
-    const statusMatch =
-      statusFilter === '' ||
-      (statusFilter === 'activo' && v.activo === true) ||
-      (statusFilter === 'inactivo' && v.activo === false);
-
-    const vig = getVigenciaStatus(v);
-    const vigenciaMatch = vigenciaFilter === '' || vigenciaFilter === vig;
-
-    const dateMatch = dateFilter === '' || (v.date && v.date.startsWith(dateFilter));
-    const typeMatch = typeFilter === '' || (v.tipo && v.tipo.toLowerCase() === typeFilter);
-    return searchMatch && statusMatch && vigenciaMatch && dateMatch && typeMatch;
+    return searchMatch;
   });
 
   filteredVideos = filteredVideos.sort((a: Video, b: Video) => (b.date || '').localeCompare(a.date || ''));
 
-  const paginatedVideos = filteredVideos.slice((page - 1) * rowsPerPage, page * rowsPerPage);
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full gap-6">
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">BIBLIOTECA DE VIDEOS</h2>
-          <p className="text-slate-500 mt-1 text-sm">CHECKEA EL ESTATUS ACTUAL DE LOS VIDEOS O ELIMINA Y DESCARGA EL CONTENIDO</p>
+          <h2 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">BIBLIOTECA DE PUBLICIDADES</h2>
+          <p className="text-slate-500 mt-1 text-sm">Gestiona y asigna publicidades a dispositivos</p>
+        </div>
+        <div className="flex gap-2">
+          {syncServidores.length > 0 && (
+            <button
+              onClick={handleSync}
+              disabled={sincronizando}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            >
+              <RefreshCw size={16} className={sincronizando ? 'animate-spin' : ''} />
+              {sincronizando ? 'Sincronizando...' : `Sincronizar (${syncServidores.length})`}
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 bg-white dark:bg-[#16212b] p-2 rounded-xl border border-slate-200 dark:border-[#324d67]/30 shadow-sm">
-        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
-        <div className="relative w-full sm:max-w-md">
+      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+        <div className="relative flex-1 w-full">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
             <Search className="text-slate-400" size={18} />
           </div>
           <input
             type="text"
-            className="block w-full rounded-lg bg-slate-50 dark:bg-[#0b1219] border-none py-2.5 pl-10 pr-3 text-sm text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-[#58728a] focus:ring-1 focus:ring-primary"
-            placeholder="Coloca el Nombre del Archivo"
+            className="block w-full rounded-lg bg-white dark:bg-[#16212b] border border-slate-200 dark:border-[#324d67]/30 py-2.5 pl-10 pr-3 text-sm text-slate-900 dark:text-white placeholder-slate-500 focus:ring-1 focus:ring-primary"
+            placeholder="Buscar por nombre o ID..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="flex gap-2 w-full sm:w-auto items-center flex-wrap">
-          <select
-            className="rounded-lg px-3 py-2 bg-slate-50 dark:bg-[#0b1219] border-none text-sm text-slate-900 dark:text-white"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option value="">Estatus</option>
-            <option value="activo">Activos</option>
-            <option value="inactivo">Inactivos</option>
-          </select>
-          <select
-            className="rounded-lg px-3 py-2 bg-slate-50 dark:bg-[#0b1219] border-none text-sm text-slate-900 dark:text-white"
-            value={vigenciaFilter}
-            onChange={(e) => setVigenciaFilter(e.target.value)}
-          >
-            <option value="">Vigencia</option>
-            <option value="vigente">Vigente</option>
-            <option value="programado">Programado</option>
-            <option value="expirado">Expirado</option>
-          </select>
-          <input
-            type="date"
-            className="rounded-lg px-3 py-2 bg-slate-50 dark:bg-[#0b1219] border-none text-sm text-slate-900 dark:text-white"
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-          />
-          <select
-            className="rounded-lg px-3 py-2 bg-slate-50 dark:bg-[#0b1219] border-none text-sm text-slate-900 dark:text-white"
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            style={{ minWidth: 100 }}
-          >
-            <option value="">Tipo</option>
-            <option value="video">Video</option>
-            <option value="image">Foto</option>
-          </select>
-        </div>
-        </div>
       </div>
 
-      <div className="flex-1 w-full rounded-xl border border-slate-200 dark:border-[#324d67]/30 bg-white dark:bg-[#16212b] flex flex-col shadow-xl overflow-hidden" style={{ minHeight: '600px', height: 'auto' }}>
-        <div className="grid grid-cols-12 gap-2 border-b border-slate-200 dark:border-[#324d67]/50 bg-slate-50 dark:bg-[#1f2b38] px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-[#92adc9]">
-          <div className="col-span-1 flex items-center justify-center gap-1" title="Seleccionar todo el contenido">
-            <input
-              type="checkbox"
-              className="rounded border-slate-300 dark:border-[#324d67] bg-white dark:bg-[#0b1219] text-primary focus:ring-primary focus:ring-offset-0"
-              checked={paginatedVideos.length > 0 && paginatedVideos.every((item) => selected.includes(item.id))}
-              onChange={(e) => {
-                if (e.target.checked) {
-                  const ids = paginatedVideos.map((item) => item.id);
-                  setSelected((prev) => Array.from(new Set([...prev, ...ids])));
-                } else {
-                  const ids = new Set(paginatedVideos.map((item) => item.id));
-                  setSelected((prev) => prev.filter((id) => !ids.has(id)));
-                }
-              }}
-            />
-            <ListChecks size={13} className="text-slate-400 dark:text-[#92adc9]" />
-          </div>
-          <div className="col-span-5 sm:col-span-4 md:col-span-3 lg:col-span-2 flex items-center gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
-            Nombre del Archivo
-            <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-          </div>
-          <div className="col-span-3 hidden sm:flex md:col-span-2 items-center gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
-            Fecha de Subida
-            <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-          </div>
-          <div className="hidden lg:flex lg:col-span-2 items-center gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
-            Fecha Inicio
-            <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-          </div>
-          <div className="hidden lg:flex lg:col-span-2 items-center gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
-            Fecha Fin
-            <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-          </div>
-          <div className="col-span-1 hidden md:flex lg:hidden items-center justify-end gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
-            Tamaño
-            <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-          </div>
-          <div className="col-span-3 sm:col-span-2 md:col-span-2 lg:col-span-1 flex items-center justify-start">Estatus</div>
+      {error && (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 text-red-500 text-sm">
+          <AlertCircle size={16} />
+          {error}
         </div>
-        <div>
-          {Array.isArray(paginatedVideos) && paginatedVideos.map((item) => (
-            <div key={item.id} className="group grid grid-cols-12 gap-2 border-b border-slate-100 dark:border-[#324d67]/30 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-[#1f2b38] transition-colors items-center">
-              <div className="col-span-1 flex items-center justify-center">
+      )}
+
+      <div className="flex gap-4">
+        <div className="w-64 shrink-0 bg-white dark:bg-[#16212b] rounded-xl border border-slate-200 dark:border-[#324d67]/30 p-4">
+          <h3 className="text-sm font-semibold text-slate-700 dark:text-white mb-3 flex items-center gap-2">
+            <Server size={16} />
+            Servidores
+          </h3>
+          <div className="space-y-2">
+            {servidores.map(srv => (
+              <label
+                key={srv.id}
+                className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 p-2 rounded-lg"
+              >
                 <input
                   type="checkbox"
-                  className="rounded border-slate-300 dark:border-[#324d67] bg-white dark:bg-[#0b1219] text-primary focus:ring-primary focus:ring-offset-0"
-                  checked={selected.includes(item.id)}
-                  onChange={(e) => {
-                    if (e.target.checked) setSelected([...selected, item.id]);
-                    else setSelected(selected.filter((id) => id !== item.id));
-                  }}
+                  checked={syncServidores.includes(srv.id)}
+                  onChange={() => toggleServidorSync(srv.id)}
+                  className="rounded border-slate-300 dark:border-[#324d67] text-primary focus:ring-primary"
                 />
+                <span className="text-sm text-slate-700 dark:text-slate-300 truncate">{srv.nombre}</span>
+                <span className={`ml-auto text-xs px-1.5 py-0.5 rounded ${srv.online ? 'bg-emerald-500/10 text-emerald-500' : 'bg-slate-500/10 text-slate-500'}`}>
+                  {srv.online ? 'Online' : 'Offline'}
+                </span>
+              </label>
+            ))}
+            {servidores.length === 0 && (
+              <p className="text-xs text-slate-500">Sin servidores</p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {filteredVideos.map((item) => (
+            <div
+              key={item.id}
+              className="bg-white dark:bg-[#16212b] rounded-xl border border-slate-200 dark:border-[#324d67]/30 overflow-hidden"
+            >
+              <div className="aspect-video bg-slate-100 dark:bg-[#0b1219] flex items-center justify-center">
+                {item.tipo === 'image' ? (
+                  <img
+                    src={item.url}
+                    alt={item.titulo || item.filename}
+                    className="w-full h-full object-contain"
+                  />
+                ) : (
+                  <div className="text-slate-400">
+                    <FileVideo size={48} />
+                  </div>
+                )}
               </div>
-              <div className="col-span-5 sm:col-span-4 md:col-span-3 lg:col-span-2 flex items-center gap-3 overflow-hidden">
-                <StatusIcon status={item.status} />
-                <div className="flex flex-col min-w-0">
-                  <span className="text-sm font-medium text-slate-900 dark:text-white truncate" title={item.filename}>{item.filename}</span>
-                  <span className="text-xs text-slate-500 dark:text-[#58728a] truncate">ID: {item.id}</span>
+
+              <div className="p-4">
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-white truncate mb-1">
+                  {item.titulo || item.filename}
+                </h3>
+                <div className="h-px bg-slate-200 dark:bg-slate-700 mb-3" />
+
+                <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 mb-2">
+                  {item.tipo === 'image' ? (
+                    <span className="flex items-center gap-1"><FileVideo size={14} /> Imagen</span>
+                  ) : (
+                    <span className="flex items-center gap-1"><FileVideo size={14} /> Video</span>
+                  )}
                 </div>
-              </div>
-              <div className="col-span-3 hidden sm:flex md:col-span-2 text-xs text-slate-600 dark:text-[#92adc9] truncate" title={item.date}>{formatCaracasTime(item.date)}</div>
-              <div className="hidden lg:flex lg:col-span-2 text-xs text-slate-600 dark:text-[#92adc9] truncate" title={item.fechaInicio || undefined}>{formatCaracasTime(item.fechaInicio)}</div>
-              <div className="hidden lg:flex lg:col-span-2 text-xs text-slate-600 dark:text-[#92adc9] truncate" title={item.fechaFin || undefined}>{formatCaracasTime(item.fechaFin)}</div>
-              <div className="col-span-1 hidden md:flex lg:hidden justify-end text-xs text-slate-600 dark:text-[#92adc9] font-mono">{item.size}</div>
-              <div className="col-span-3 sm:col-span-2 md:col-span-2 lg:col-span-1 flex items-center gap-1.5 flex-wrap">
-                <OperativoBadge activo={item.activo} />
-                <VigenciaBadge item={item} />
-              </div>
-              <div className="col-span-3 sm:col-span-2 md:col-span-2 flex items-center justify-center gap-1 whitespace-nowrap">
-                <button
-                  className="p-1.5 rounded text-blue-500 hover:text-blue-600 hover:bg-blue-500/10"
-                  title="Editar vigencia"
-                  onClick={() => openEditVigencia(item)}
-                >
-                  <Edit2 size={16} />
-                </button>
-                <button
-                  className="p-1.5 rounded text-sky-500 hover:text-sky-600 hover:bg-sky-500/10"
-                  title="Descargar"
-                  onClick={() => downloadVideoFile(item)}
-                >
-                  <Download size={16} />
-                </button>
-                <button
-                  className={`p-1.5 rounded transition-colors ${
-                    item.activo
-                      ? 'text-amber-500 hover:text-amber-600 hover:bg-amber-500/10'
-                      : 'text-emerald-500 hover:text-emerald-600 hover:bg-emerald-500/10'
-                  }`}
-                  title={item.activo ? 'Desactivar' : 'Activar'}
-                  onClick={() => handleToggleActivo(item.id, !item.activo)}
-                >
-                  <Power size={16} />
-                </button>
-                <button
-                  className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-500/10 rounded transition-colors"
-                  title="Delete"
-                  onClick={() => setDeleteId(item.id)}
-                >
-                  <Trash2 size={16} />
-                </button>
+
+                {item.fechaInicio || item.fechaFin ? (
+                  <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mb-3">
+                    <Clock size={12} />
+                    <span>
+                      {formatCaracasTime(item.fechaInicio)} - {formatCaracasTime(item.fechaFin)}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="mb-3" />
+                )}
+
+                <div className="flex items-center gap-2 mb-3">
+                  <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold border ${getEstadoColor(item.estado || 'activo')}`}>
+                    {(item.estado || 'activo').toUpperCase()}
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold bg-blue-500/10 text-blue-500 border border-blue-500/20">
+                    <Smartphone size={10} />
+                    {item.dispositivos_count || 0} devs
+                  </span>
+                </div>
+
+                {item.asignaciones && item.asignaciones.length > 0 && (
+                  <div className="mb-3">
+                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Asignado a:</p>
+                    <div className="space-y-0.5">
+                      {item.asignaciones.slice(0, 3).map((asig, idx) => (
+                        <div key={idx} className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                          <Smartphone size={10} />
+                          <span className="truncate">
+                            {asig.dispositivo_nombre || asig.dispositivo_codigo || 'Dispositivo'} - {asig.servidor_nombre}
+                          </span>
+                        </div>
+                      ))}
+                      {item.asignaciones.length > 3 && (
+                        <p className="text-xs text-slate-400">+{item.asignaciones.length - 3} más</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-3 border-t border-slate-100 dark:border-slate-700/50">
+                  <button
+                    onClick={() => setViewModal(item)}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium hover:bg-slate-200 dark:hover:bg-slate-700"
+                  >
+                    <Eye size={14} />
+                    Visualizar
+                  </button>
+                  <button
+                    onClick={() => openEditModal(item)}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-blue-500/10 text-blue-500 text-xs font-medium hover:bg-blue-500/20"
+                  >
+                    <Edit2 size={14} />
+                    Editar
+                  </button>
+                  <button
+                    onClick={() => handleToggleActivo(item.id, !item.activo)}
+                    className={`px-3 py-2 rounded-lg text-xs font-medium ${
+                      item.activo
+                        ? 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20'
+                        : 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20'
+                    }`}
+                  >
+                    {item.activo ? 'Pausar' : 'Activar'}
+                  </button>
+                  <button
+                    onClick={() => setDeleteId(item.id)}
+                    className="px-3 py-2 rounded-lg bg-red-500/10 text-red-500 text-xs font-medium hover:bg-red-500/20"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
             </div>
           ))}
-          {/* Si hay menos de 8 videos, rellena el espacio para que el footer quede fijo */}
-          {paginatedVideos.length < rowsPerPage && Array.from({ length: rowsPerPage - paginatedVideos.length }).map((_, idx) => (
-            <div key={`empty-row-${idx}`} className="grid grid-cols-12 gap-2 px-3 py-2.5" style={{ minHeight: '60px' }} />
-          ))}
-        </div>
-        {/* Paginación sticky */}
-        <div className="sticky bottom-0 z-10 bg-slate-50 dark:bg-[#1f2b38] border-t border-slate-200 dark:border-[#324d67]/30 p-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-[#92adc9]">
-          <span className="text-xs text-slate-500 dark:text-[#92adc9]">Seleccionados: {selected.length}</span>
-          <div className="flex items-center gap-2">
-            <button
-            className="px-3 py-1 rounded bg-slate-100 dark:bg-[#0b1219] text-slate-700 dark:text-[#92adc9] hover:bg-slate-200 dark:hover:bg-[#1f2b38] text-xs disabled:opacity-40 disabled:cursor-not-allowed"
-            onClick={() => setPage(page - 1)}
-            disabled={page <= 1}
-          >Anterior</button>
-          <span className="text-xs text-slate-500 dark:text-[#92adc9]">Página {page}</span>
-          <button
-            className="px-3 py-1 rounded bg-slate-100 dark:bg-[#0b1219] text-slate-700 dark:text-[#92adc9] hover:bg-slate-200 dark:hover:bg-[#1f2b38] text-xs disabled:opacity-40 disabled:cursor-not-allowed"
-            onClick={() => setPage(page + 1)}
-            disabled={page * rowsPerPage >= filteredVideos.length}
-          >Siguiente</button>
 
-            <button
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-slate-100 dark:bg-[#0b1219] text-slate-700 dark:text-[#92adc9] hover:bg-slate-200 dark:hover:bg-[#1f2b38] text-xs disabled:opacity-40 disabled:cursor-not-allowed"
-              onClick={handleBulkDownload}
-              title="Descargar seleccionados"
-              disabled={!selected.length}
-            >
-              <Download size={14} />
-              Descargar
-            </button>
-            <button
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-red-600 text-white hover:bg-red-700 text-xs disabled:opacity-40 disabled:cursor-not-allowed"
-              onClick={() => setDeleteId('bulk')}
-              title="Borrar seleccionados"
-              disabled={!selected.length}
-            >
-              <Trash2 size={14} />
-              Borrar
-            </button>
-          </div>
+          {filteredVideos.length === 0 && (
+            <div className="col-span-full flex flex-col items-center justify-center py-12 text-slate-500">
+              <FileVideo size={48} className="mb-4 opacity-50" />
+              <p>No hay publicidades {search ? 'que coincidan con la búsqueda' : 'disponibles'}</p>
+            </div>
+          )}
         </div>
       </div>
 
       {deleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white dark:bg-[#16212b] rounded-lg p-6 shadow-xl w-full max-w-xs flex flex-col items-center">
-            <p className="mb-4 text-center text-slate-800 dark:text-white">
-              {deleteId === 'bulk'
-                ? `¿Seguro que deseas borrar ${selected.length} elementos seleccionados?`
-                : '¿Seguro que deseas borrar este video?'}
+          <div className="bg-white dark:bg-[#16212b] rounded-lg p-6 shadow-xl w-full max-w-sm">
+            <h3 className="text-lg font-semibold mb-4 text-slate-900 dark:text-white">¿Eliminar publicidad?</h3>
+            <p className="mb-6 text-sm text-slate-600 dark:text-slate-400">
+              Esta acción eliminará la publicidad y sus asignaciones.
             </p>
-            <div className="flex gap-4">
+            <div className="flex gap-3">
               <button
-                className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700"
-                onClick={async () => {
-                  if (deleteId === 'bulk') {
-                    for (const id of selected) {
-                      await handleDelete(id);
-                    }
-                    setSelected([]);
-                  } else {
-                    await handleDelete(deleteId);
-                  }
-                  setDeleteId(null);
-                }}
-              >
-                Borrar
-              </button>
-              <button
-                className="px-4 py-2 rounded bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-white hover:bg-slate-300 dark:hover:bg-slate-600"
+                className="flex-1 px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-white hover:bg-slate-300 dark:hover:bg-slate-600"
                 onClick={() => setDeleteId(null)}
               >
                 Cancelar
+              </button>
+              <button
+                className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700"
+                onClick={async () => {
+                  await handleDelete(deleteId);
+                  setDeleteId(null);
+                }}
+              >
+                Eliminar
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {editItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white dark:bg-[#16212b] rounded-lg p-5 w-full max-w-md border border-slate-200 dark:border-slate-700">
-            <h3 className="text-lg font-semibold mb-4 text-slate-900 dark:text-white">Editar vigencia</h3>
-            <div className="space-y-3">
-              <label className="block text-sm text-slate-700 dark:text-slate-300">
-                <span className="mb-1 block">FechaInicio</span>
-                <input
-                  type="datetime-local"
-                  value={editForm.fechaInicio}
-                  onChange={(e) => setEditForm((p) => ({ ...p, fechaInicio: e.target.value }))}
-                  className="w-full rounded-lg px-3 py-2 bg-slate-50 dark:bg-[#0b1219] border border-slate-200 dark:border-slate-700"
-                />
-              </label>
-
-              <label className="block text-sm text-slate-700 dark:text-slate-300">
-                <span className="mb-1 block">FechaFin</span>
-                <input
-                  type="datetime-local"
-                  value={editForm.fechaFin}
-                  onChange={(e) => setEditForm((p) => ({ ...p, fechaFin: e.target.value }))}
-                  className="w-full rounded-lg px-3 py-2 bg-slate-50 dark:bg-[#0b1219] border border-slate-200 dark:border-slate-700"
-                />
-              </label>
-
-              <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={editForm.activo}
-                  onChange={(e) => setEditForm((p) => ({ ...p, activo: e.target.checked }))}
-                />
-                Activo
-              </label>
-            </div>
-
-            <div className="mt-5 flex justify-end gap-2">
+      {viewModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white dark:bg-[#16212b] rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                {viewModal.titulo || viewModal.filename}
+              </h3>
               <button
-                className="px-4 py-2 rounded bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-white"
-                onClick={() => setEditItem(null)}
+                onClick={() => setViewModal(null)}
+                className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <Trash2 size={20} className="text-slate-400" />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto max-h-[calc(90vh-120px)]">
+              <div className="aspect-video bg-slate-100 dark:bg-slate-800 rounded-lg mb-4 flex items-center justify-center">
+                {viewModal.tipo === 'image' ? (
+                  <img src={viewModal.url} alt={viewModal.titulo} className="max-w-full max-h-full object-contain" />
+                ) : (
+                  <video src={viewModal.url} controls className="max-w-full max-h-full" />
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-slate-500 text-xs">Tipo</p>
+                  <p className="text-slate-900 dark:text-white">{viewModal.tipo === 'image' ? 'Imagen' : 'Video'}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500 text-xs">Estado</p>
+                  <p className={`font-medium ${viewModal.estado === 'activo' ? 'text-emerald-500' : 'text-slate-500'}`}>
+                    {(viewModal.estado || 'activo').toUpperCase()}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-slate-500 text-xs">Fecha Inicio</p>
+                  <p className="text-slate-900 dark:text-white">{formatCaracasTime(viewModal.fechaInicio)}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500 text-xs">Fecha Fin</p>
+                  <p className="text-slate-900 dark:text-white">{formatCaracasTime(viewModal.fechaFin)}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500 text-xs">Asignado a</p>
+                  <p className="text-slate-900 dark:text-white">
+                    {viewModal.asignacion_todos ? 'Todos los dispositivos' : `${viewModal.dispositivos_count || 0} dispositivos`}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-slate-500 text-xs">ID</p>
+                  <p className="text-slate-900 dark:text-white font-mono text-xs">{viewModal.id}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white dark:bg-[#16212b] rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                Editar Publicidad
+              </h3>
+              <button
+                onClick={closeEditModal}
+                className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <X size={20} className="text-slate-400" />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto max-h-[calc(90vh-140px)] space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Título</label>
+                <input
+                  type="text"
+                  value={editTitulo}
+                  onChange={(e) => setEditTitulo(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#0b1219] px-3 py-2 text-sm text-slate-900 dark:text-white"
+                  placeholder="Título de la publicidad"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Fecha Inicio</label>
+                  <input
+                    type="datetime-local"
+                    value={editFechaInicio}
+                    onChange={(e) => setEditFechaInicio(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#0b1219] px-3 py-2 text-sm text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Fecha Fin</label>
+                  <input
+                    type="datetime-local"
+                    value={editFechaFin}
+                    onChange={(e) => setEditFechaFin(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#0b1219] px-3 py-2 text-sm text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+              <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
+                <label className="flex items-center gap-2 mb-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editAsignacionTodos}
+                    onChange={(e) => {
+                      setEditAsignacionTodos(e.target.checked);
+                      if (e.target.checked) {
+                        setEditServidorIds([]);
+                        setEditDispositivoIds([]);
+                      }
+                    }}
+                    className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
+                  />
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                    Asignar a TODOS los servidores
+                  </span>
+                </label>
+                {!editAsignacionTodos && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-slate-600 dark:text-slate-400 flex items-center gap-1">
+                      <Server size={12} />
+                      Seleccionar servidores:
+                    </p>
+                    <div className="max-h-40 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-lg p-2 space-y-1">
+                      {servidores.length === 0 ? (
+                        <p className="text-xs text-slate-500">No hay servidores disponibles</p>
+                      ) : (
+                        servidores.map(srv => (
+                          <div key={srv.id}>
+                            <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 p-1.5 rounded">
+                              <input
+                                type="checkbox"
+                                checked={editServidorIds.includes(srv.id)}
+                                onChange={() => {
+                                  setEditServidorIds(prev =>
+                                    prev.includes(srv.id)
+                                      ? prev.filter(id => id !== srv.id)
+                                      : [...prev, srv.id]
+                                  );
+                                }}
+                                className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
+                              />
+                              <span className="text-sm text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                                <Server size={12} />
+                                {srv.nombre}
+                                <span className={`text-[10px] px-1 py-0.5 rounded ${srv.online ? 'bg-emerald-500/10 text-emerald-500' : 'bg-slate-500/10 text-slate-500'}`}>
+                                  {srv.online ? 'Online' : 'Offline'}
+                                </span>
+                              </span>
+                              {srv.dispositivos && srv.dispositivos.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setExpandedServers(prev =>
+                                      prev.includes(srv.id)
+                                        ? prev.filter(id => id !== srv.id)
+                                        : [...prev, srv.id]
+                                    );
+                                  }}
+                                  className="ml-auto p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded"
+                                >
+                                  {expandedServers.includes(srv.id) ? (
+                                    <ChevronDown size={14} className="text-slate-500" />
+                                  ) : (
+                                    <ChevronRight size={14} className="text-slate-500" />
+                                  )}
+                                </button>
+                              )}
+                            </label>
+                            {expandedServers.includes(srv.id) && srv.dispositivos && srv.dispositivos.length > 0 && (
+                              <div className="ml-6 mt-1 space-y-0.5">
+                                {srv.dispositivos.map(disp => (
+                                  <label key={disp.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 p-1 rounded">
+                                    <input
+                                      type="checkbox"
+                                      checked={editDispositivoIds.includes(disp.id)}
+                                      onChange={() => {
+                                        setEditDispositivoIds(prev =>
+                                          prev.includes(disp.id)
+                                            ? prev.filter(id => id !== disp.id)
+                                            : [...prev, disp.id]
+                                        );
+                                      }}
+                                      className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
+                                    />
+                                    <span className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1">
+                                      <Smartphone size={10} />
+                                      {disp.nombre_amigable || disp.codigo_kiosko}
+                                    </span>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-500">
+                      Seleccionados: {editServidorIds.length} servidores, {editDispositivoIds.length} dispositivos
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-3 p-4 border-t border-slate-200 dark:border-slate-700">
+              <button
+                onClick={closeEditModal}
                 disabled={savingEdit}
+                className="flex-1 px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-white hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-50"
               >
                 Cancelar
               </button>
               <button
-                className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-                onClick={saveEditVigencia}
-                disabled={savingEdit}
+                onClick={handleSaveEdit}
+                disabled={savingEdit || (!editAsignacionTodos && editServidorIds.length === 0)}
+                className="flex-1 px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-2"
               >
+                <Save size={16} />
                 {savingEdit ? 'Guardando...' : 'Guardar'}
               </button>
             </div>
@@ -537,7 +654,7 @@ export const VideoListScreen: React.FC = () => {
         </div>
       )}
 
-      <div className="pb-4 text-xs text-slate-400 dark:text-[#58728a] text-center lg:text-right">
+      <div className="pb-4 text-xs text-slate-400 dark:text-[#58728a] text-center">
         © 2026 Verificador de Precios Luz. Todos los derechos reservados.
       </div>
     </div>

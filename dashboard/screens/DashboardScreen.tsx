@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useNotification } from '../components/useNotification';
-import { Search, UploadCloud, MoreVertical, Eye, Trash, Film, Plus } from 'lucide-react';
-import { getVideos, uploadMedia, deleteVideo } from '../services/videoService';
-import { Video } from '../types';
+import { Search, UploadCloud, MoreVertical, Eye, Trash, Film, Plus, Server, Smartphone, ChevronDown, ChevronRight } from 'lucide-react';
+import { getVideos, uploadMedia, deleteVideo, FileMetadata } from '../services/videoService';
+import { Video, Servidor } from '../types';
 import {
   getForceSyncJobStatus,
   getSecondaryServersVideoCounts,
   startForceSyncJob,
+  getServersStatusWithDevices,
 } from '../services/monitoreoService';
 
 
@@ -72,14 +73,11 @@ export const DashboardScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   // Batch upload states
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [fileMetadatas, setFileMetadatas] = useState<Array<{
-    titulo: string;
-    fechaInicio: string;
-    fechaFin: string;
-    activo: boolean;
-  }>>([]);
+  const [fileMetadatas, setFileMetadatas] = useState<FileMetadata[]>([]);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [currentEditIndex, setCurrentEditIndex] = useState<number | null>(null);
+  const [servidores, setServidores] = useState<Servidor[]>([]);
+  const [expandedServers, setExpandedServers] = useState<number[]>([]);
 
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncServerProgress, setSyncServerProgress] = useState<SyncServerProgress[]>([]);
@@ -104,6 +102,31 @@ export const DashboardScreen: React.FC = () => {
       }
     }
     fetchVideos();
+  }, []);
+
+  useEffect(() => {
+    async function fetchServidores() {
+      try {
+        const data = await getServersStatusWithDevices();
+        const mapped: Servidor[] = data.map((s: any) => ({
+          id: Number(s.id),
+          nombre: s.nombre,
+          ip: s.ip,
+          api_url: `http://${s.ip}:8000`,
+          online: s.online,
+          dispositivos: s.dispositivos.map((d: any) => ({
+            id: Number(d.device_id),
+            codigo_kiosko: d.device_id,
+            nombre_amigable: d.nombre_amigable,
+            online: d.online,
+          })),
+        }));
+        setServidores(mapped);
+      } catch {
+        setServidores([]);
+      }
+    }
+    fetchServidores();
   }, []);
 
   useEffect(() => {
@@ -151,7 +174,7 @@ export const DashboardScreen: React.FC = () => {
     const files = Array.from(event.target.files);
     const maxSize = 20 * 1024 * 1024;
     const validFiles: File[] = [];
-    const metadatas: typeof fileMetadatas = [];
+    const metadatas: FileMetadata[] = [];
     let rejected = 0;
     files.forEach(file => {
       if (file.size > maxSize) {
@@ -165,6 +188,9 @@ export const DashboardScreen: React.FC = () => {
         fechaInicio: '',
         fechaFin: '',
         activo: true,
+        asignacionTodos: true,
+        servidorIds: [],
+        dispositivoIds: [],
       });
     });
     if (rejected > 0) {
@@ -204,7 +230,6 @@ export const DashboardScreen: React.FC = () => {
       showNotification('Selecciona archivos primero', 'warning');
       return;
     }
-    // Validar metadatos
     for (let i = 0; i < fileMetadatas.length; i++) {
       const meta = fileMetadatas[i];
       if (!meta.titulo.trim()) {
@@ -217,10 +242,13 @@ export const DashboardScreen: React.FC = () => {
         showNotification(`La fecha de inicio no puede ser mayor a la fecha fin para el archivo #${i + 1}`, 'warning');
         return;
       }
+      if (!meta.asignacionTodos && meta.servidorIds.length === 0) {
+        showNotification(`Selecciona al menos un servidor para el archivo #${i + 1}`, 'warning');
+        return;
+      }
     }
     setUploading(true);
     setError(null);
-    // Feedback por archivo
     setUploadStatuses(Array(selectedFiles.length).fill('pending'));
     let allSuccess = true;
     for (let i = 0; i < selectedFiles.length; i++) {
@@ -236,7 +264,10 @@ export const DashboardScreen: React.FC = () => {
           titulo: fileMetadatas[i].titulo,
           fechaInicio: fechaInicioIso,
           fechaFin: fechaFinIso,
-          activo: fileMetadatas[i].activo
+          activo: fileMetadatas[i].activo,
+          asignacionTodos: fileMetadatas[i].asignacionTodos,
+          servidorIds: fileMetadatas[i].servidorIds,
+          dispositivoIds: fileMetadatas[i].dispositivoIds,
         });
         setUploadStatuses(prev => {
           const next = [...prev];
@@ -683,6 +714,117 @@ export const DashboardScreen: React.FC = () => {
                             }}
                           />
                         </div>
+                      </div>
+                      {/* Asignación */}
+                      <div className="mt-3 border-t border-slate-200 dark:border-slate-700 pt-3">
+                        <label className="flex items-center gap-2 mb-3">
+                          <input
+                            type="checkbox"
+                            checked={fileMetadatas[idx]?.asignacionTodos ?? true}
+                            onChange={e => {
+                              const newMetas = [...fileMetadatas];
+                              newMetas[idx].asignacionTodos = e.target.checked;
+                              if (e.target.checked) {
+                                newMetas[idx].servidorIds = [];
+                                newMetas[idx].dispositivoIds = [];
+                              }
+                              setFileMetadatas(newMetas);
+                            }}
+                            className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
+                          />
+                          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                            Asignar a TODOS los servidores y dispositivos
+                          </span>
+                        </label>
+                        {!fileMetadatas[idx]?.asignacionTodos && (
+                          <div className="space-y-2">
+                            <p className="text-xs font-medium text-slate-600 dark:text-slate-400 flex items-center gap-1">
+                              <Server size={12} />
+                              Seleccionar servidores:
+                            </p>
+                            <div className="max-h-32 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-lg p-2 space-y-1">
+                              {servidores.length === 0 ? (
+                                <p className="text-xs text-slate-500">No hay servidores disponibles</p>
+                              ) : (
+                                servidores.map(srv => (
+                                  <div key={srv.id}>
+                                    <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 p-1.5 rounded">
+                                      <input
+                                        type="checkbox"
+                                        checked={fileMetadatas[idx]?.servidorIds.includes(srv.id) ?? false}
+                                        onChange={() => {
+                                          const newMetas = [...fileMetadatas];
+                                          const ids = newMetas[idx].servidorIds;
+                                          if (ids.includes(srv.id)) {
+                                            newMetas[idx].servidorIds = ids.filter(id => id !== srv.id);
+                                          } else {
+                                            newMetas[idx].servidorIds = [...ids, srv.id];
+                                          }
+                                          setFileMetadatas(newMetas);
+                                        }}
+                                        className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
+                                      />
+                                      <span className="text-sm text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                                        <Server size={12} />
+                                        {srv.nombre}
+                                        <span className={`text-[10px] px-1 py-0.5 rounded ${srv.online ? 'bg-emerald-500/10 text-emerald-500' : 'bg-slate-500/10 text-slate-500'}`}>
+                                          {srv.online ? 'Online' : 'Offline'}
+                                        </span>
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setExpandedServers(prev =>
+                                            prev.includes(srv.id)
+                                              ? prev.filter(id => id !== srv.id)
+                                              : [...prev, srv.id]
+                                          );
+                                        }}
+                                        className="ml-auto p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded"
+                                      >
+                                        {expandedServers.includes(srv.id) ? (
+                                          <ChevronDown size={14} className="text-slate-500" />
+                                        ) : (
+                                          <ChevronRight size={14} className="text-slate-500" />
+                                        )}
+                                      </button>
+                                    </label>
+                                    {expandedServers.includes(srv.id) && srv.dispositivos && srv.dispositivos.length > 0 && (
+                                      <div className="ml-6 mt-1 space-y-0.5">
+                                        {srv.dispositivos.map(disp => (
+                                          <label key={disp.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 p-1 rounded">
+                                            <input
+                                              type="checkbox"
+                                              checked={fileMetadatas[idx]?.dispositivoIds.includes(disp.id) ?? false}
+                                              onChange={() => {
+                                                const newMetas = [...fileMetadatas];
+                                                const ids = newMetas[idx].dispositivoIds;
+                                                if (ids.includes(disp.id)) {
+                                                  newMetas[idx].dispositivoIds = ids.filter(id => id !== disp.id);
+                                                } else {
+                                                  newMetas[idx].dispositivoIds = [...ids, disp.id];
+                                                }
+                                                setFileMetadatas(newMetas);
+                                              }}
+                                              className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
+                                            />
+                                            <span className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1">
+                                              <Smartphone size={10} />
+                                              {disp.nombre_amigable || disp.codigo_kiosko}
+                                            </span>
+                                          </label>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                            <p className="text-[10px] text-slate-500">
+                              Seleccionados: {fileMetadatas[idx]?.servidorIds.length || 0} servidores, {fileMetadatas[idx]?.dispositivoIds.length || 0} dispositivos
+                            </p>
+                          </div>
+                        )}
                       </div>
                       {/* Feedback por archivo */}
                       {uploadStatuses[idx] === 'uploading' && <div className="mt-2 text-primary">Subiendo...</div>}

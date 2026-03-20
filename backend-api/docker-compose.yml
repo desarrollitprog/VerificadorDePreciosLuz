@@ -1,11 +1,33 @@
+version: '3.8'
+
 services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-CU12-ubuntu-22.04
+    container_name: verificador-sqlserver
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=${SA_PASSWORD:-Dit12345*}
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+    healthcheck:
+      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P ${SA_PASSWORD:-Dit12345*} -Q "SELECT 1" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
   api:
     build: .
     image: verificador-backend
-    container_name: verificador-backend 
+    container_name: verificador-backend
     env_file: .env
     depends_on:
-      - redis
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_started
     ports:
       - "8000:8000"
     volumes:
@@ -21,3 +43,6 @@ services:
     volumes:
       - ./redis.conf:/usr/local/etc/redis/redis.conf
     command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+
+volumes:
+  mssql_data:

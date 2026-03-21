@@ -314,6 +314,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                     isKioskMode = false
                     Toast.makeText(this@ScanActivity, "Modo kiosco desactivado", Toast.LENGTH_SHORT).show()
                     editable?.clear()
+                    binding.etMockCode.requestFocus()
                     return
                 }
                 
@@ -1285,6 +1286,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
     private fun showThrottledError(key: String, message: String, minIntervalMs: Long = 2000) {
         resetScanStateAfterError()
+        binding.etMockCode.requestFocus()
         val now = android.os.SystemClock.elapsedRealtime()
         if (key == lastErrorKey && (now - lastErrorAt) < minIntervalMs) return
         lastErrorKey = key
@@ -1295,8 +1297,6 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         if (!overlayVisible) {
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         }
-        // Asegura que el input recupere el foco tras error
-        binding.etMockCode.requestFocus()
     }
 
     private fun resetScanStateAfterError() {
@@ -1624,8 +1624,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             binding.resultCard.setCardBackgroundColor(getColor(R.color.cardview_default_background))
             binding.tvOfflineIndicator.visibility = View.VISIBLE
             binding.tvOfflineUpdated.visibility = View.VISIBLE
-            binding.etMockCode.isEnabled = false
-            binding.btnMockScan.isEnabled = false
+            binding.etMockCode.isEnabled = true
+            binding.etMockCode.requestFocus()
+            binding.btnMockScan.isEnabled = true
         }
     }
 

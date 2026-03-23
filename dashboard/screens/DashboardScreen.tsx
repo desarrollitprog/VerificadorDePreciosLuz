@@ -768,7 +768,6 @@ export const DashboardScreen: React.FC = () => {
                             type="checkbox"
                             checked={fileMetadatas[idx]?.asignacionTodos ?? true}
                             onChange={e => {
-                              console.log('[DEBUG TODOS CHECKBOX] Before:', fileMetadatas[idx]?.asignacionTodos, 'servidorIds:', fileMetadatas[idx]?.servidorIds, 'dispositivoIds:', fileMetadatas[idx]?.dispositivoIds);
                               const newMetas = [...fileMetadatas];
                               newMetas[idx].asignacionTodos = e.target.checked;
                               if (e.target.checked) {
@@ -776,7 +775,6 @@ export const DashboardScreen: React.FC = () => {
                                 newMetas[idx].dispositivoIds = [];
                               }
                               setFileMetadatas(newMetas);
-                              console.log('[DEBUG TODOS CHECKBOX] After:', newMetas[idx].asignacionTodos);
                             }}
                             className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
                           />
@@ -803,11 +801,9 @@ export const DashboardScreen: React.FC = () => {
                                         onChange={(e) => {
                                           e.stopPropagation();
                                           const servidorId = Number(srv.id);
-                                          console.log('[DEBUG SERVER CHECKBOX] Toggle servidor:', servidorId, 'Current servidorIds:', fileMetadatas[idx]?.servidorIds);
                                           setFileMetadatas(prevMetas => {
                                             const newMetas = [...prevMetas];
                                             const currentIds = [...(newMetas[idx]?.servidorIds || [])];
-                                            console.log('[DEBUG SERVER CHECKBOX] After toggle, new servidorIds:', currentIds.includes(servidorId) ? currentIds.filter(id => id !== servidorId) : [...currentIds, servidorId]);
                                             if (currentIds.includes(servidorId)) {
                                               newMetas[idx] = {
                                                 ...newMetas[idx],
@@ -854,41 +850,40 @@ export const DashboardScreen: React.FC = () => {
                                     {expandedServers.includes(srv.id) && srv.dispositivos && srv.dispositivos.length > 0 && (
                                       <div className="ml-6 mt-1 space-y-0.5">
                                         {srv.dispositivos.map(disp => (
-                                          <label key={`${srv.id}-${disp.id}`} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 p-1 rounded">
-                                            <input
-                                              type="checkbox"
-                                              checked={(fileMetadatas[idx]?.dispositivoIds || []).includes(disp.id)}
-                                              onChange={(e) => {
-                                                e.stopPropagation();
-                                                const dispositivoId = disp.id;
-                                                setFileMetadatas(prevMetas => {
-                                                  const newMetas = [...prevMetas];
-                                                  const currentIds = [...(newMetas[idx]?.dispositivoIds || [])];
-                                                  if (currentIds.includes(dispositivoId)) {
-                                                    newMetas[idx] = {
-                                                      ...newMetas[idx],
-                                                      asignacionTodos: false,
-                                                      dispositivoIds: currentIds.filter(id => id !== dispositivoId)
-                                                    };
-                                                  } else {
-                                                    newMetas[idx] = {
-                                                      ...newMetas[idx],
-                                                      asignacionTodos: false,
-                                                      dispositivoIds: [...currentIds, dispositivoId]
-                                                    };
-                                                  }
-                                                  return newMetas;
-                                                });
-                                              }}
-                                              className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
-                                            />
-                                            <span className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1">
-                                              <Smartphone size={10} />
-                                              {disp.nombre_amigable || disp.codigo_kiosko}
-                                            </span>
-                                          </label>
-                                        );
-                                      })}
+                                        <label key={`${srv.id}-${disp.id}`} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 p-1 rounded">
+                                          <input
+                                            type="checkbox"
+                                            checked={(fileMetadatas[idx]?.dispositivoIds || []).includes(disp.id)}
+                                            onChange={(e) => {
+                                              e.stopPropagation();
+                                              const dispositivoId = disp.id;
+                                              setFileMetadatas(prevMetas => {
+                                                const newMetas = [...prevMetas];
+                                                const currentIds = [...(newMetas[idx]?.dispositivoIds || [])];
+                                                if (currentIds.includes(dispositivoId)) {
+                                                  newMetas[idx] = {
+                                                    ...newMetas[idx],
+                                                    asignacionTodos: false,
+                                                    dispositivoIds: currentIds.filter(id => id !== dispositivoId)
+                                                  };
+                                                } else {
+                                                  newMetas[idx] = {
+                                                    ...newMetas[idx],
+                                                    asignacionTodos: false,
+                                                    dispositivoIds: [...currentIds, dispositivoId]
+                                                  };
+                                                }
+                                                return newMetas;
+                                              });
+                                            }}
+                                            className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
+                                          />
+                                          <span className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1">
+                                            <Smartphone size={10} />
+                                            {disp.nombre_amigable || disp.codigo_kiosko}
+                                          </span>
+                                        </label>
+                                      ))}
                                       </div>
                                     )}
                                   </div>

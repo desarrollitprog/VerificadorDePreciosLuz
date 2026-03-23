@@ -855,7 +855,9 @@ export const DashboardScreen: React.FC = () => {
                                     </label>
                                     {expandedServers.includes(srv.id) && srv.dispositivos && srv.dispositivos.length > 0 && (
                                       <div className="ml-6 mt-1 space-y-0.5">
-                                        {srv.dispositivos.map(disp => (
+                                        {srv.dispositivos.map(disp => {
+                                        console.log('[DEBUG RENDER] disp:', disp, 'disp.id:', disp.id, 'typeof:', typeof disp.id);
+                                        return (
                                           <label key={`${srv.id}-${disp.id}`} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 p-1 rounded">
                                             <input
                                               type="checkbox"
@@ -891,7 +893,8 @@ export const DashboardScreen: React.FC = () => {
                                               {disp.nombre_amigable || disp.codigo_kiosko}
                                             </span>
                                           </label>
-                                        ))}
+                                        );
+                                      })}
                                       </div>
                                     )}
                                   </div>

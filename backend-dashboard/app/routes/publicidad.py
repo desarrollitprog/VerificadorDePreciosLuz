@@ -266,16 +266,23 @@ async def upload_banner(
         selected_servidor_ids = []
         selected_dispositivo_ids = []
         
+        print(f"[DEBUG] ServidorIds raw: '{ServidorIds}' (type: {type(ServidorIds)})")
+        print(f"[DEBUG] DispositivoIds raw: '{DispositivoIds}' (type: {type(DispositivoIds)})")
+        
         if ServidorIds:
             try:
                 selected_servidor_ids = json.loads(ServidorIds)
-            except:
+                print(f"[DEBUG] Parsed servidor_ids: {selected_servidor_ids}")
+            except Exception as e:
+                print(f"[DEBUG] Error parsing ServidorIds: {e}")
                 selected_servidor_ids = []
         
         if DispositivoIds:
             try:
                 selected_dispositivo_ids = json.loads(DispositivoIds)
-            except:
+                print(f"[DEBUG] Parsed dispositivo_ids: {selected_dispositivo_ids}")
+            except Exception as e:
+                print(f"[DEBUG] Error parsing DispositivoIds: {e}")
                 selected_dispositivo_ids = []
 
         # Guardar asignaciones en la tabla publicidad_asignacion

@@ -260,6 +260,12 @@ export const DashboardScreen: React.FC = () => {
       try {
         let fechaInicioIso = fileMetadatas[i].fechaInicio || null;
         let fechaFinIso = fileMetadatas[i].fechaFin || null;
+        console.log('[DEBUG] ========== UPLOAD START ==========');
+        console.log('[DEBUG] File:', selectedFiles[i].name);
+        console.log('[DEBUG] asignacionTodos:', fileMetadatas[i].asignacionTodos);
+        console.log('[DEBUG] servidorIds:', fileMetadatas[i].servidorIds);
+        console.log('[DEBUG] dispositivoIds:', fileMetadatas[i].dispositivoIds);
+        console.log('[DEBUG] full metadata:', fileMetadatas[i]);
         await uploadMedia(selectedFiles[i], {
           titulo: fileMetadatas[i].titulo,
           fechaInicio: fechaInicioIso,
@@ -857,9 +863,11 @@ export const DashboardScreen: React.FC = () => {
                                               onChange={(e) => {
                                                 e.stopPropagation();
                                                 const dispositivoId = Number(disp.id);
+                                                console.log('[DEBUG CHECKBOX] Toggle device:', dispositivoId, 'Current dispositivoIds:', fileMetadatas[idx]?.dispositivoIds);
                                                 setFileMetadatas(prevMetas => {
                                                   const newMetas = [...prevMetas];
                                                   const currentIds = [...(newMetas[idx]?.dispositivoIds || [])];
+                                                  console.log('[DEBUG CHECKBOX] After toggle, new ids:', currentIds.includes(dispositivoId) ? currentIds.filter(id => id !== dispositivoId) : [...currentIds, dispositivoId]);
                                                   if (currentIds.includes(dispositivoId)) {
                                                     newMetas[idx] = {
                                                       ...newMetas[idx],

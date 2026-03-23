@@ -88,6 +88,7 @@ export async function uploadMedia(file: File, payload?: UploadMediaPayload) {
   const formData = new FormData();
   formData.append('file', file);
   if (payload) {
+    console.log('[DEBUG FRONTEND] Payload dispositivoIds:', payload.dispositivoIds);
     formData.append('Titulo', payload.titulo);
     if (payload.fechaInicio) {
       formData.append('FechaInicio', payload.fechaInicio);
@@ -98,9 +99,11 @@ export async function uploadMedia(file: File, payload?: UploadMediaPayload) {
     formData.append('Activo', String(payload.activo));
     formData.append('AsignacionTodos', String(payload.asignacionTodos ?? true));
     if (payload.servidorIds && payload.servidorIds.length > 0) {
+      console.log('[DEBUG FRONTEND] Sending ServidorIds:', payload.servidorIds);
       formData.append('ServidorIds', JSON.stringify(payload.servidorIds));
     }
     if (payload.dispositivoIds && payload.dispositivoIds.length > 0) {
+      console.log('[DEBUG FRONTEND] Sending DispositivoIds:', payload.dispositivoIds);
       formData.append('DispositivoIds', JSON.stringify(payload.dispositivoIds));
     }
   }

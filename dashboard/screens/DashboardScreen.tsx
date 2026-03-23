@@ -566,6 +566,52 @@ export const DashboardScreen: React.FC = () => {
                       <MoreVertical size={16} />
                     </button>
                   </div>
+                  {/* Badges de asignación */}
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold border ${video.estado === 'activo' ? 'bg-green-500/10 text-green-500 border-green-500/20' : video.estado === 'inactivo' ? 'bg-slate-500/10 text-slate-500 border-slate-500/20' : video.estado === 'vencido' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-amber-500/10 text-amber-500 border-amber-500/20'}`}>
+                      {(video.estado || 'activo').toUpperCase()}
+                    </span>
+                    {video.asignacion_todos ? (
+                      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                        <Server size={10} />
+                        Todos
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold bg-blue-500/10 text-blue-500 border border-blue-500/20">
+                        <Smartphone size={10} />
+                        {video.dispositivos_count || 0} devs
+                      </span>
+                    )}
+                  </div>
+                  {/* Texto de asignación */}
+                  <div className="mb-2">
+                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
+                      Asignado a: {video.asignacion_todos ? 'Todos los dispositivos' : `${video.dispositivos_count || 0} dispositivos`}
+                    </p>
+                    {video.asignacion_todos ? (
+                      <p className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1">
+                        <Server size={10} />
+                        Todos los servidores y dispositivos del sistema
+                      </p>
+                    ) : (
+                      <div className="space-y-0.5">
+                        {video.asignaciones && video.asignaciones.slice(0, 3).map((asig, idx) => (
+                          <div key={idx} className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                            <Smartphone size={10} />
+                            <span className="truncate">
+                              {asig.dispositivo_nombre || asig.dispositivo_codigo || 'Dispositivo'} - {asig.servidor_nombre || 'Servidor'}
+                            </span>
+                          </div>
+                        ))}
+                        {video.asignaciones && video.asignaciones.length > 3 && (
+                          <p className="text-xs text-slate-400">+{video.asignaciones.length - 3} más</p>
+                        )}
+                        {(!video.asignaciones || video.asignaciones.length === 0) && (
+                          <p className="text-xs text-slate-400 italic">Sin asignaciones específicas</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                   <div className="flex items-center justify-between mt-auto pt-2">
                     <span className="text-slate-500 text-xs">
                       Fecha subida: {video.date ? formatCaracasTime(video.date) : 'Fecha desconocida'}
@@ -751,16 +797,26 @@ export const DashboardScreen: React.FC = () => {
                                     <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 p-1.5 rounded">
                                       <input
                                         type="checkbox"
-                                        checked={fileMetadatas[idx]?.servidorIds.includes(srv.id) ?? false}
-                                        onChange={() => {
-                                          const newMetas = [...fileMetadatas];
-                                          const ids = newMetas[idx].servidorIds;
-                                          if (ids.includes(srv.id)) {
-                                            newMetas[idx].servidorIds = ids.filter(id => id !== srv.id);
-                                          } else {
-                                            newMetas[idx].servidorIds = [...ids, srv.id];
-                                          }
-                                          setFileMetadatas(newMetas);
+                                        checked={(fileMetadatas[idx]?.servidorIds || []).includes(Number(srv.id))}
+                                        onChange={(e) => {
+                                          e.stopPropagation();
+                                          const servidorId = Number(srv.id);
+                                          setFileMetadatas(prevMetas => {
+                                            const newMetas = [...prevMetas];
+                                            const currentIds = [...(newMetas[idx]?.servidorIds || [])];
+                                            if (currentIds.includes(servidorId)) {
+                                              newMetas[idx] = {
+                                                ...newMetas[idx],
+                                                servidorIds: currentIds.filter(id => id !== servidorId)
+                                              };
+                                            } else {
+                                              newMetas[idx] = {
+                                                ...newMetas[idx],
+                                                servidorIds: [...currentIds, servidorId]
+                                              };
+                                            }
+                                            return newMetas;
+                                          });
                                         }}
                                         className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
                                       />
@@ -792,19 +848,29 @@ export const DashboardScreen: React.FC = () => {
                                     {expandedServers.includes(srv.id) && srv.dispositivos && srv.dispositivos.length > 0 && (
                                       <div className="ml-6 mt-1 space-y-0.5">
                                         {srv.dispositivos.map(disp => (
-                                          <label key={disp.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 p-1 rounded">
+                                          <label key={`${srv.id}-${disp.id}`} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 p-1 rounded">
                                             <input
                                               type="checkbox"
-                                              checked={fileMetadatas[idx]?.dispositivoIds.includes(disp.id) ?? false}
-                                              onChange={() => {
-                                                const newMetas = [...fileMetadatas];
-                                                const ids = newMetas[idx].dispositivoIds;
-                                                if (ids.includes(disp.id)) {
-                                                  newMetas[idx].dispositivoIds = ids.filter(id => id !== disp.id);
-                                                } else {
-                                                  newMetas[idx].dispositivoIds = [...ids, disp.id];
-                                                }
-                                                setFileMetadatas(newMetas);
+                                              checked={(fileMetadatas[idx]?.dispositivoIds || []).includes(Number(disp.id))}
+                                              onChange={(e) => {
+                                                e.stopPropagation();
+                                                const dispositivoId = Number(disp.id);
+                                                setFileMetadatas(prevMetas => {
+                                                  const newMetas = [...prevMetas];
+                                                  const currentIds = [...(newMetas[idx]?.dispositivoIds || [])];
+                                                  if (currentIds.includes(dispositivoId)) {
+                                                    newMetas[idx] = {
+                                                      ...newMetas[idx],
+                                                      dispositivoIds: currentIds.filter(id => id !== dispositivoId)
+                                                    };
+                                                  } else {
+                                                    newMetas[idx] = {
+                                                      ...newMetas[idx],
+                                                      dispositivoIds: [...currentIds, dispositivoId]
+                                                    };
+                                                  }
+                                                  return newMetas;
+                                                });
                                               }}
                                               className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
                                             />

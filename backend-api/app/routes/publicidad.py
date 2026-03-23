@@ -1,6 +1,6 @@
 from fastapi import UploadFile, File, Form, APIRouter, HTTPException, status, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_, and_, func
+from sqlalchemy import select, or_, and_, func, cast, Date
 from ..database import get_db_publicidad
 import shutil
 from datetime import datetime
@@ -41,8 +41,8 @@ async def listar_banners(
         or_(
             Publicidad.fecha_fin.is_(None),
             and_(
-                func.date(Publicidad.fecha_fin) >= today_start,
-                func.date(Publicidad.fecha_fin) >= now.date(),
+                cast(Publicidad.fecha_fin, Date) >= today_start.date(),
+                cast(Publicidad.fecha_fin, Date) >= now.date(),
             ),
         ),
     ).order_by(Publicidad.prioridad, Publicidad.id)

@@ -25,6 +25,21 @@ app = FastAPI(title="Verificador de Precios Luz - Backend")
 logger = logging.getLogger("uvicorn.error")
 
 
+def normalizar_codigo_barras(codigo: str) -> list[str]:
+    """
+    Normaliza el código de barras/SKU para búsqueda.
+    Agrega ceros al inicio hasta completar 13 dígitos.
+    """
+    codigo_limpio = codigo.strip()
+    variantes = [codigo_limpio]
+    
+    if codigo_limpio.isdigit() and len(codigo_limpio) < 13:
+        ceros_faltantes = '0' * (13 - len(codigo_limpio))
+        variantes.append(ceros_faltantes + codigo_limpio)
+    
+    return variantes
+
+
 # Comprimir respuestas grandes para reducir tiempo de descarga
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
@@ -141,6 +156,37 @@ async def buscar_coincidencias_cercanas(db: AsyncSession, codigo_barras: str, li
     
     result = await db.execute(stmt)
     return result.all()
+
+
+# Paso 1c: Buscar en BarrasAsociadas - Fallback cuando no se encuentra por SKU directo
+async def buscar_en_barras_asociadas(db: AsyncSession, codigo_barras: str):
+    """
+    Busca el código de barras en la tabla Transaccional.BarrasAsociadas.
+    Si lo encuentra, retorna el IdProducto asociado para buscar el producto completo.
+    """
+    stmt = select(models.BarrasAsociadas).where(
+        models.BarrasAsociadas.Barra == codigo_barras,
+        models.BarrasAsociadas.IndActivo == 1,
+    )
+    result = await db.execute(stmt)
+    barra_asociada = result.scalars().first()
+    
+    if not barra_asociada:
+        return None
+    
+    stmt_producto = (
+        select(models.Producto, models.ProductoPrecio)
+        .join(
+            models.ProductoPrecio,
+            models.Producto.IdProducto == models.ProductoPrecio.IdProducto,
+        )
+        .where(
+            models.Producto.IdProducto == barra_asociada.IdProducto,
+            models.ProductoPrecio.CostoBase > 0,
+        )
+    )
+    result_producto = await db.execute(stmt_producto)
+    return result_producto.first()
 
 
 # Paso 2: Buscar oferta asociada (async)
@@ -503,42 +549,35 @@ async def obtener_precio(
     db: AsyncSession = Depends(database.get_db),
     db_erp: AsyncSession = Depends(database.get_db_erp),
 ):
-    resultado = await buscar_producto_y_precio(db, codigo_barras)
+    # Normalizar código de barras para búsqueda
+    codigos_a_buscar = normalizar_codigo_barras(codigo_barras)
     
-    if resultado:
-        producto, precio = resultado
-        oferta = await buscar_oferta(db, producto.IdProducto)
-        now = datetime.now()
-        detalle = await buscar_detalle_oferta_vigente(db, precio, now)
-        tasa_impuesto = await buscar_tasa_impuesto(db, db_erp, producto.IdProducto, precio)
-        return armar_respuesta(producto, precio, oferta, detalle, tasa_impuesto)
-    
-    coincidencias = await buscar_coincidencias_cercanas(db, codigo_barras)
-    
-    if coincidencias:
-        sugerencias = [
-            {
-                "sku": p.SKU,
-                "nombre": p.Nombre,
-                "id_producto": p.IdProducto,
-            }
-            for p, _ in coincidencias
-        ]
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "mensaje": "Producto no encontrado",
-                "codigo_buscado": codigo_barras,
-                "sugerencias": sugerencias,
-            }
-        )
+    # Intentar buscar con cada variante del código
+    for codigo in codigos_a_buscar:
+        resultado = await buscar_producto_y_precio(db, codigo)
+        if resultado:
+            producto, precio = resultado
+            oferta = await buscar_oferta(db, producto.IdProducto)
+            now = datetime.now()
+            detalle = await buscar_detalle_oferta_vigente(db, precio, now)
+            tasa_impuesto = await buscar_tasa_impuesto(db, db_erp, producto.IdProducto, precio)
+            return armar_respuesta(producto, precio, oferta, detalle, tasa_impuesto)
+        
+        # Buscar en BarrasAsociadas si no se encuentra por SKU
+        resultado_barras_asociadas = await buscar_en_barras_asociadas(db, codigo)
+        if resultado_barras_asociadas:
+            producto, precio = resultado_barras_asociadas
+            oferta = await buscar_oferta(db, producto.IdProducto)
+            now = datetime.now()
+            detalle = await buscar_detalle_oferta_vigente(db, precio, now)
+            tasa_impuesto = await buscar_tasa_impuesto(db, db_erp, producto.IdProducto, precio)
+            return armar_respuesta(producto, precio, oferta, detalle, tasa_impuesto)
     
     raise HTTPException(
         status_code=404,
         detail={
             "mensaje": "Producto no encontrado",
             "codigo_buscado": codigo_barras,
-            "sugerencias": [],
         }
     )
 

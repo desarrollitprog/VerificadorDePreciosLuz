@@ -25,9 +25,6 @@ services:
     container_name: dashboard-backend
     env_file:
       - ./backend-dashboard/.env.dashboard
-    environment:
-      - DB_SERVER_USUARIOS=sqlserver
-      - DB_PORT_USUARIOS=1433
     ports:
       - "8001:8000"
     restart: always

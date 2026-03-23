@@ -13,6 +13,7 @@ from .ofertas_x_productos_sucursal_detalles import OfertasxProductosxSucursalesD
 from .productos_x_impuestos import ProductosXImpuestos
 from .tasa_impuesto import TasaImpuesto
 from .publicidad import Publicidad
+from .barras_asociadas import BarrasAsociadas
 
 # Exportar todos los modelos
 __all__ = [
@@ -25,4 +26,5 @@ __all__ = [
     "ProductosXImpuestos",
     "TasaImpuesto",
     "Publicidad",
+    "BarrasAsociadas",
 ]

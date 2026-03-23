@@ -807,11 +807,13 @@ export const DashboardScreen: React.FC = () => {
                                             if (currentIds.includes(servidorId)) {
                                               newMetas[idx] = {
                                                 ...newMetas[idx],
+                                                asignacionTodos: false,
                                                 servidorIds: currentIds.filter(id => id !== servidorId)
                                               };
                                             } else {
                                               newMetas[idx] = {
                                                 ...newMetas[idx],
+                                                asignacionTodos: false,
                                                 servidorIds: [...currentIds, servidorId]
                                               };
                                             }
@@ -861,11 +863,13 @@ export const DashboardScreen: React.FC = () => {
                                                   if (currentIds.includes(dispositivoId)) {
                                                     newMetas[idx] = {
                                                       ...newMetas[idx],
+                                                      asignacionTodos: false,
                                                       dispositivoIds: currentIds.filter(id => id !== dispositivoId)
                                                     };
                                                   } else {
                                                     newMetas[idx] = {
                                                       ...newMetas[idx],
+                                                      asignacionTodos: false,
                                                       dispositivoIds: [...currentIds, dispositivoId]
                                                     };
                                                   }

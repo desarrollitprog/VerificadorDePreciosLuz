@@ -279,9 +279,10 @@ async def upload_banner(
                 selected_dispositivo_ids = []
 
         # Guardar asignaciones en la tabla publicidad_asignacion
-        # Guardar cuando: NO es "todos" Y (hay servidores seleccionados O hay dispositivos seleccionados)
+        # Guardar cuando: (NO es "todos" Y hay servidores/dispositivos) O (es "todos" pero hay dispositivos específicos seleccionados)
         print(f"[DEBUG] AsignacionTodos={AsignacionTodos}, selected_servidor_ids={selected_servidor_ids}, selected_dispositivo_ids={selected_dispositivo_ids}")
-        if not AsignacionTodos and (selected_servidor_ids or selected_dispositivo_ids):
+        guardar_asignaciones = (not AsignacionTodos and (selected_servidor_ids or selected_dispositivo_ids)) or (AsignacionTodos and selected_dispositivo_ids)
+        if guardar_asignaciones:
             print(f"Guardando asignaciones para publicidad {nuevo_banner.IdPublicidad}: servidores={selected_servidor_ids}, dispositivos={selected_dispositivo_ids}")
             
             # Obtener dispositivos de los servidores seleccionados
@@ -335,7 +336,7 @@ async def upload_banner(
             except:
                 selected_dispositivo_ids = []
         
-        if AsignacionTodos:
+        if AsignacionTodos and not selected_dispositivo_ids:
             print(f"Replicando archivo a TODAS las APIs: {file_location}")
             replicacion_resultados = await replicar_archivo_a_todas_las_apis(
                 file_path=file_location,
@@ -348,6 +349,20 @@ async def upload_banner(
                 duracion_seg=DuracionSeg,
                 activo=Activo,
                 dispositivo_ids=None,
+            )
+        elif selected_dispositivo_ids:
+            print(f"Replicando archivo a dispositivos específicos: {selected_dispositivo_ids}")
+            replicacion_resultados = await replicar_archivo_a_todas_las_apis(
+                file_path=file_location,
+                IdPublicidadRemoto=nuevo_banner.IdPublicidad,
+                titulo=Titulo,
+                tipo=Tipo,
+                prioridad=Prioridad,
+                fecha_inicio=FechaInicio,
+                fecha_fin=FechaFin,
+                duracion_seg=DuracionSeg,
+                activo=Activo,
+                dispositivo_ids=selected_dispositivo_ids,
             )
         elif selected_servidor_ids or selected_dispositivo_ids:
             print(f"Replicando archivo a servidores seleccionados: {selected_servidor_ids}")

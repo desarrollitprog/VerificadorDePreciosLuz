@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -23,8 +23,7 @@ class PublicidadAsignacion(Base):
         nullable=False
     )
     dispositivo_id = Column(
-        Integer,
-        ForeignKey("dispositivos.id", ondelete="CASCADE"),
+        String(50),
         nullable=False
     )
     fecha_asignacion = Column(DateTime, nullable=False, server_default=func.now())

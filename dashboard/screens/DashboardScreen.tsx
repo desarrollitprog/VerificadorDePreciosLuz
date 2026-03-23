@@ -115,7 +115,7 @@ export const DashboardScreen: React.FC = () => {
           api_url: `http://${s.ip}:8000`,
           online: s.online,
           dispositivos: s.dispositivos.map((d: any) => ({
-            id: Number(d.device_id),
+            id: d.device_id,
             codigo_kiosko: d.device_id,
             nombre_amigable: d.nombre_amigable,
             online: d.online,
@@ -260,12 +260,6 @@ export const DashboardScreen: React.FC = () => {
       try {
         let fechaInicioIso = fileMetadatas[i].fechaInicio || null;
         let fechaFinIso = fileMetadatas[i].fechaFin || null;
-        console.log('[DEBUG] ========== UPLOAD START ==========');
-        console.log('[DEBUG] File:', selectedFiles[i].name);
-        console.log('[DEBUG] asignacionTodos:', fileMetadatas[i].asignacionTodos);
-        console.log('[DEBUG] servidorIds:', fileMetadatas[i].servidorIds);
-        console.log('[DEBUG] dispositivoIds:', fileMetadatas[i].dispositivoIds);
-        console.log('[DEBUG] full metadata:', fileMetadatas[i]);
         await uploadMedia(selectedFiles[i], {
           titulo: fileMetadatas[i].titulo,
           fechaInicio: fechaInicioIso,
@@ -774,6 +768,7 @@ export const DashboardScreen: React.FC = () => {
                             type="checkbox"
                             checked={fileMetadatas[idx]?.asignacionTodos ?? true}
                             onChange={e => {
+                              console.log('[DEBUG TODOS CHECKBOX] Before:', fileMetadatas[idx]?.asignacionTodos, 'servidorIds:', fileMetadatas[idx]?.servidorIds, 'dispositivoIds:', fileMetadatas[idx]?.dispositivoIds);
                               const newMetas = [...fileMetadatas];
                               newMetas[idx].asignacionTodos = e.target.checked;
                               if (e.target.checked) {
@@ -781,6 +776,7 @@ export const DashboardScreen: React.FC = () => {
                                 newMetas[idx].dispositivoIds = [];
                               }
                               setFileMetadatas(newMetas);
+                              console.log('[DEBUG TODOS CHECKBOX] After:', newMetas[idx].asignacionTodos);
                             }}
                             className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
                           />
@@ -807,9 +803,11 @@ export const DashboardScreen: React.FC = () => {
                                         onChange={(e) => {
                                           e.stopPropagation();
                                           const servidorId = Number(srv.id);
+                                          console.log('[DEBUG SERVER CHECKBOX] Toggle servidor:', servidorId, 'Current servidorIds:', fileMetadatas[idx]?.servidorIds);
                                           setFileMetadatas(prevMetas => {
                                             const newMetas = [...prevMetas];
                                             const currentIds = [...(newMetas[idx]?.servidorIds || [])];
+                                            console.log('[DEBUG SERVER CHECKBOX] After toggle, new servidorIds:', currentIds.includes(servidorId) ? currentIds.filter(id => id !== servidorId) : [...currentIds, servidorId]);
                                             if (currentIds.includes(servidorId)) {
                                               newMetas[idx] = {
                                                 ...newMetas[idx],
@@ -855,21 +853,17 @@ export const DashboardScreen: React.FC = () => {
                                     </label>
                                     {expandedServers.includes(srv.id) && srv.dispositivos && srv.dispositivos.length > 0 && (
                                       <div className="ml-6 mt-1 space-y-0.5">
-                                        {srv.dispositivos.map(disp => {
-                                        console.log('[DEBUG RENDER] disp:', disp, 'disp.id:', disp.id, 'typeof:', typeof disp.id);
-                                        return (
+                                        {srv.dispositivos.map(disp => (
                                           <label key={`${srv.id}-${disp.id}`} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 p-1 rounded">
                                             <input
                                               type="checkbox"
-                                              checked={(fileMetadatas[idx]?.dispositivoIds || []).includes(Number(disp.id))}
+                                              checked={(fileMetadatas[idx]?.dispositivoIds || []).includes(disp.id)}
                                               onChange={(e) => {
                                                 e.stopPropagation();
-                                                const dispositivoId = Number(disp.id);
-                                                console.log('[DEBUG CHECKBOX] Toggle device:', dispositivoId, 'Current dispositivoIds:', fileMetadatas[idx]?.dispositivoIds);
+                                                const dispositivoId = disp.id;
                                                 setFileMetadatas(prevMetas => {
                                                   const newMetas = [...prevMetas];
                                                   const currentIds = [...(newMetas[idx]?.dispositivoIds || [])];
-                                                  console.log('[DEBUG CHECKBOX] After toggle, new ids:', currentIds.includes(dispositivoId) ? currentIds.filter(id => id !== dispositivoId) : [...currentIds, dispositivoId]);
                                                   if (currentIds.includes(dispositivoId)) {
                                                     newMetas[idx] = {
                                                       ...newMetas[idx],

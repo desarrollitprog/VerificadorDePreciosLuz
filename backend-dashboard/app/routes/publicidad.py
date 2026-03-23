@@ -259,7 +259,7 @@ async def upload_banner(
         db.add(nuevo_banner)
         await db.commit()
         await db.refresh(nuevo_banner)
-            print(f"Se ha guardado correctamente en la base de datos: Id={nuevo_banner.IdPublicidad}, Titulo={nuevo_banner.Titulo}, Url={nuevo_banner.Url}")
+        print(f"Se ha guardado correctamente en la base de datos: Id={nuevo_banner.IdPublicidad}, Titulo={nuevo_banner.Titulo}, Url={nuevo_banner.Url}")
 
         # Procesar servidores y dispositivos seleccionados
         import json

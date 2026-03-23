@@ -170,11 +170,13 @@ async def replicar_archivo_a_todas_las_apis(
     fecha_fin: str = None,
     duracion_seg: int = None,
     activo: bool = True,
-    timeout: int = 30
+    timeout: int = 30,
+    dispositivo_ids: list = None
 ) -> list:
     """
     Replica un archivo a todas las APIs de replicación configuradas.
     Retorna una lista de resultados por cada API.
+    Si dispositivo_ids está presente (no None), lo envía al backend-api.
     """
     api_urls = get_api_urls()
     resultados = []
@@ -191,7 +193,8 @@ async def replicar_archivo_a_todas_las_apis(
                 fecha_fin=fecha_fin,
                 duracion_seg=duracion_seg,
                 activo=activo,
-                timeout=timeout
+                timeout=timeout,
+                dispositivo_ids=dispositivo_ids
             )
             resultados.append({"api_url": api_url, "success": True, "response": resp})
         except Exception as e:

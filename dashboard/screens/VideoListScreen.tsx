@@ -327,30 +327,47 @@ export const VideoListScreen: React.FC = () => {
                   <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold border ${getEstadoColor(item.estado || 'activo')}`}>
                     {(item.estado || 'activo').toUpperCase()}
                   </span>
-                  <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold bg-blue-500/10 text-blue-500 border border-blue-500/20">
-                    <Smartphone size={10} />
-                    {item.dispositivos_count || 0} devs
-                  </span>
+                  {item.asignacion_todos ? (
+                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                      <Server size={10} />
+                      Todos
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold bg-blue-500/10 text-blue-500 border border-blue-500/20">
+                      <Smartphone size={10} />
+                      {item.dispositivos_count || 0} devs
+                    </span>
+                  )}
                 </div>
 
-                {item.asignaciones && item.asignaciones.length > 0 && (
-                  <div className="mb-3">
-                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Asignado a:</p>
+                <div className="mb-3">
+                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
+                    Asignado a: {item.asignacion_todos ? 'Todos los dispositivos' : `${item.dispositivos_count || 0} dispositivos`}
+                  </p>
+                  {item.asignacion_todos ? (
+                    <p className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1">
+                      <Server size={10} />
+                      Todos los servidores y dispositivos del sistema
+                    </p>
+                  ) : (
                     <div className="space-y-0.5">
-                      {item.asignaciones.slice(0, 3).map((asig, idx) => (
+                      {item.asignaciones && item.asignaciones.slice(0, 5).map((asig, idx) => (
                         <div key={idx} className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1">
                           <Smartphone size={10} />
                           <span className="truncate">
-                            {asig.dispositivo_nombre || asig.dispositivo_codigo || 'Dispositivo'} - {asig.servidor_nombre}
+                            {asig.dispositivo_nombre || asig.dispositivo_codigo || 'Dispositivo'} - {asig.servidor_nombre || 'Servidor'}
                           </span>
                         </div>
                       ))}
-                      {item.asignaciones.length > 3 && (
-                        <p className="text-xs text-slate-400">+{item.asignaciones.length - 3} más</p>
+                      {item.asignaciones && item.asignaciones.length > 5 && (
+                        <p className="text-xs text-slate-400">+{item.asignaciones.length - 5} más</p>
+                      )}
+                      {(!item.asignaciones || item.asignaciones.length === 0) && (
+                        <p className="text-xs text-slate-400 italic">Sin asignaciones específicas</p>
                       )}
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
 
                 <div className="flex gap-2 pt-3 border-t border-slate-100 dark:border-slate-700/50">
                   <button

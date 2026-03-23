@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
+from sqlalchemy import func
 from ..models import Publicidad, PublicidadAsignacion, ServidorSecundario, Dispositivo
 from ..schemas import PublicidadResponse, PublicidadCreate
 from ..database import get_db_usuarios
@@ -87,6 +88,9 @@ async def listar_banners(
     current_user: dict = Depends(get_current_cliente),
 ):
     try:
+        total_dispositivos_result = await db.execute(select(func.count(Dispositivo.id)))
+        total_dispositivos = total_dispositivos_result.scalar() or 0
+        
         result = await db.execute(
             select(Publicidad)
             .options(selectinload(Publicidad.asignaciones).selectinload(PublicidadAsignacion.servidor))
@@ -101,7 +105,7 @@ async def listar_banners(
             
             asignaciones = []
             if banner.asignacion_todos:
-                dispositivos_count = 0
+                dispositivos_count = total_dispositivos
             else:
                 for asig in banner.asignaciones:
                     asignaciones.append({
@@ -255,7 +259,51 @@ async def upload_banner(
         db.add(nuevo_banner)
         await db.commit()
         await db.refresh(nuevo_banner)
-        print(f"Se ha guardado correctamente en la base de datos: Id={nuevo_banner.IdPublicidad}, Titulo={nuevo_banner.Titulo}, Url={nuevo_banner.Url}")
+            print(f"Se ha guardado correctamente en la base de datos: Id={nuevo_banner.IdPublicidad}, Titulo={nuevo_banner.Titulo}, Url={nuevo_banner.Url}")
+
+        # Procesar servidores y dispositivos seleccionados
+        import json
+        selected_servidor_ids = []
+        selected_dispositivo_ids = []
+        
+        if ServidorIds:
+            try:
+                selected_servidor_ids = json.loads(ServidorIds)
+            except:
+                selected_servidor_ids = []
+        
+        if DispositivoIds:
+            try:
+                selected_dispositivo_ids = json.loads(DispositivoIds)
+            except:
+                selected_dispositivo_ids = []
+
+        # Guardar asignaciones en la tabla publicidad_asignacion
+        # Guardar cuando: NO es "todos" Y (hay servidores seleccionados O hay dispositivos seleccionados)
+        if not AsignacionTodos and (selected_servidor_ids or selected_dispositivo_ids):
+            print(f"Guardando asignaciones para publicidad {nuevo_banner.IdPublicidad}: servidores={selected_servidor_ids}, dispositivos={selected_dispositivo_ids}")
+            
+            # Obtener dispositivos de los servidores seleccionados
+            dispositivos_query = select(Dispositivo)
+            if selected_servidor_ids:
+                dispositivos_query = dispositivos_query.where(Dispositivo.servidor_id.in_(selected_servidor_ids))
+            if selected_dispositivo_ids:
+                dispositivos_query = dispositivos_query.where(Dispositivo.id.in_(selected_dispositivo_ids))
+            
+            dispositivos_result = await db.execute(dispositivos_query)
+            dispositivos = dispositivos_result.scalars().all()
+            
+            # Crear registros de asignación
+            for disp in dispositivos:
+                asignacion = PublicidadAsignacion(
+                    publicidad_id=nuevo_banner.IdPublicidad,
+                    servidor_id=disp.servidor_id,
+                    dispositivo_id=disp.id
+                )
+                db.add(asignacion)
+            
+            await db.commit()
+            print(f"Asignaciones guardadas: {len(dispositivos)} registros")
     except HTTPException:
         if os.path.exists(file_location):
             os.remove(file_location)
@@ -297,6 +345,7 @@ async def upload_banner(
                 fecha_fin=FechaFin,
                 duracion_seg=DuracionSeg,
                 activo=Activo,
+                dispositivo_ids=None,
             )
         elif selected_servidor_ids or selected_dispositivo_ids:
             print(f"Replicando archivo a servidores seleccionados: {selected_servidor_ids}")

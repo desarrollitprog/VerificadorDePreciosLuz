@@ -280,6 +280,7 @@ async def upload_banner(
 
         # Guardar asignaciones en la tabla publicidad_asignacion
         # Guardar cuando: NO es "todos" Y (hay servidores seleccionados O hay dispositivos seleccionados)
+        print(f"[DEBUG] AsignacionTodos={AsignacionTodos}, selected_servidor_ids={selected_servidor_ids}, selected_dispositivo_ids={selected_dispositivo_ids}")
         if not AsignacionTodos and (selected_servidor_ids or selected_dispositivo_ids):
             print(f"Guardando asignaciones para publicidad {nuevo_banner.IdPublicidad}: servidores={selected_servidor_ids}, dispositivos={selected_dispositivo_ids}")
             
@@ -292,6 +293,7 @@ async def upload_banner(
             
             dispositivos_result = await db.execute(dispositivos_query)
             dispositivos = dispositivos_result.scalars().all()
+            print(f"[DEBUG] Dispositivos encontrados: {len(dispositivos)}")
             
             # Crear registros de asignación
             for disp in dispositivos:

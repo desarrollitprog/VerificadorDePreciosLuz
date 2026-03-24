@@ -373,6 +373,10 @@ export const DashboardScreen: React.FC = () => {
     setSyncLoading(true);
     setSyncServerProgress([]);
     try {
+      console.log('[DEBUG SYNC] syncAllDevices:', syncAllDevices);
+      console.log('[DEBUG SYNC] syncServidorIds:', syncServidorIds);
+      console.log('[DEBUG SYNC] syncDispositivoIds:', syncDispositivoIds);
+      
       if (syncAllDevices) {
         await handleForceSync();
         return;

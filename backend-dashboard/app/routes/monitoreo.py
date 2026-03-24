@@ -979,6 +979,8 @@ async def sincronizar_fuerza(
     
     servidor_ids = body.servidor_ids if body else None
     dispositivo_ids = body.dispositivo_ids if body else None
+    
+    print(f"[DEBUG ENDPOINT] sincronizar-fuerza recibido - servidor_ids: {servidor_ids}, dispositivo_ids: {dispositivo_ids}, body: {body}")
 
     await _set_job_state(
         job_id,

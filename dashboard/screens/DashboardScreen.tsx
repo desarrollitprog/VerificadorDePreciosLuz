@@ -775,7 +775,7 @@ export const DashboardScreen: React.FC = () => {
                           <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Título</label>
                           <input
                             type="text"
-                            className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
+                            className="w-full rounded-lg border border-slate-200/50 dark:border-slate-700/50 bg-white/50 dark:bg-[#17202b]/50 px-3 py-2 text-sm text-slate-800 dark:text-white focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all duration-200"
                             value={fileMetadatas[idx]?.titulo || ''}
                             onChange={e => {
                               const newMetas = [...fileMetadatas];
@@ -789,7 +789,7 @@ export const DashboardScreen: React.FC = () => {
                         <div>
                           <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Estado</label>
                           <select
-                            className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
+                            className="w-full rounded-lg border border-slate-200/50 dark:border-slate-700/50 bg-white/50 dark:bg-[#17202b]/50 px-3 py-2 text-sm text-slate-800 dark:text-white focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all duration-200"
                             value={fileMetadatas[idx]?.activo ? 'activo' : 'inactivo'}
                             onChange={e => {
                               const newMetas = [...fileMetadatas];

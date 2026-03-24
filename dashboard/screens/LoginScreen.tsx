@@ -122,7 +122,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 brightness-100 contrast-150"></div>
       </div>
 
-      <div className="relative z-10 w-full max-w-md transform rounded-xl border border-slate-200 bg-white p-8 shadow-2xl transition-all dark:border-slate-800 dark:bg-[#182430]">
+      <div className="relative z-10 w-full max-w-md transform rounded-xl border border-slate-200/50 bg-white/95 p-8 shadow-lg transition-all dark:border-slate-800/50 dark:bg-[#182430]/95 backdrop-blur-sm">
         <div className="mb-8 text-center">
           <div className="mb-4 flex justify-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/20 text-primary">
@@ -149,7 +149,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                     id="username"
                     type="text"
                     required
-                    className="block w-full rounded-lg border-slate-300 bg-slate-50 p-2.5 text-slate-900 placeholder:text-slate-400 focus:border-primary focus:ring-primary dark:border-slate-700 dark:bg-[#111a22] dark:text-white dark:placeholder:text-slate-500 sm:text-sm sm:leading-6 h-12 pl-10"
+                    className="block w-full rounded-lg border border-slate-200/50 bg-slate-50/50 p-2.5 text-slate-800 placeholder:text-slate-400 focus:border-primary/50 focus:ring-1 focus:ring-primary/20 dark:border-slate-700/50 dark:bg-[#111a22]/50 dark:text-white dark:placeholder:text-slate-500 sm:text-sm sm:leading-6 h-12 pl-10 transition-all duration-200"
                     placeholder="INGRESA TU USUARIO"
                     value={username}
                     onChange={e => setUsername(e.target.value)}
@@ -169,7 +169,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                     id="correo"
                     type="email"
                     required
-                    className="block w-full rounded-lg border-slate-300 bg-slate-50 p-2.5 text-slate-900 placeholder:text-slate-400 focus:border-primary focus:ring-primary dark:border-slate-700 dark:bg-[#111a22] dark:text-white dark:placeholder:text-slate-500 sm:text-sm sm:leading-6 h-12 pl-10"
+                    className="block w-full rounded-lg border border-slate-200/50 bg-slate-50/50 p-2.5 text-slate-800 placeholder:text-slate-400 focus:border-primary/50 focus:ring-1 focus:ring-primary/20 dark:border-slate-700/50 dark:bg-[#111a22]/50 dark:text-white dark:placeholder:text-slate-500 sm:text-sm sm:leading-6 h-12 pl-10 transition-all duration-200"
                     placeholder="INGRESA TU CORREO"
                     value={correo}
                     onChange={e => setCorreo(e.target.value)}
@@ -189,7 +189,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                     id="password"
                     type={showPassword ? 'text' : 'password'}
                     required
-                    className="block w-full rounded-lg border-slate-300 bg-slate-50 p-2.5 text-slate-900 placeholder:text-slate-400 focus:border-primary focus:ring-primary dark:border-slate-700 dark:bg-[#111a22] dark:text-white dark:placeholder:text-slate-500 sm:text-sm sm:leading-6 h-12 pr-10"
+                    className="block w-full rounded-lg border border-slate-200/50 bg-slate-50/50 p-2.5 text-slate-800 placeholder:text-slate-400 focus:border-primary/50 focus:ring-1 focus:ring-primary/20 dark:border-slate-700/50 dark:bg-[#111a22]/50 dark:text-white dark:placeholder:text-slate-500 sm:text-sm sm:leading-6 h-12 pr-10 transition-all duration-200"
                     placeholder="••••••••"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
@@ -245,7 +245,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                     onChange={e => handleOtpChange(index, e.target.value)}
                     onKeyDown={e => handleOtpKeyDown(index, e)}
                     onPaste={handleOtpPaste}
-                    className="h-12 w-12 rounded-lg border border-slate-300 bg-slate-50 text-center text-lg font-semibold text-slate-900 focus:border-primary focus:ring-primary dark:border-slate-700 dark:bg-[#111a22] dark:text-white"
+                    className="h-12 w-12 rounded-lg border border-slate-200/50 bg-slate-50/50 text-center text-lg font-semibold text-slate-800 focus:border-primary/50 focus:ring-1 focus:ring-primary/20 dark:border-slate-700/50 dark:bg-[#111a22]/50 dark:text-white transition-all duration-200"
                   />
                 ))}
               </div>

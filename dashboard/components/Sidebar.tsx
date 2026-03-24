@@ -22,7 +22,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, on
     <aside
       className={`
         fixed inset-y-0 left-0 z-40
-        w-64 flex flex-col bg-[#111a22] border-r border-slate-800
+        w-64 flex flex-col bg-[#111a22] border-r border-slate-800/50
         transform transition-transform duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
       `}
@@ -99,7 +99,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, on
           </button>
         )}
 
-        <div className="my-2 border-t border-slate-800"></div>
+        <div className="my-2 border-t border-slate-800/30"></div>
 
         {/* Gestión de Usuarios solo para ADMIN */}
         {role === 'ADMIN' && (
@@ -128,9 +128,9 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, on
         </button>*/}
       </nav>
 
-      <div className="p-4 border-t border-slate-800 mt-auto">
-        <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer group">
-          <div className="h-10 w-10 flex items-center justify-center rounded-full bg-slate-700 border border-slate-600 shadow-sm">
+      <div className="p-4 border-t border-slate-800/30 mt-auto">
+        <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800/50 transition-colors cursor-pointer group">
+          <div className="h-10 w-10 flex items-center justify-center rounded-full bg-slate-800 border border-slate-700 shadow-sm">
             <User size={28} className="text-blue-400" />
           </div>
           <div className="flex flex-col flex-1 min-w-0">

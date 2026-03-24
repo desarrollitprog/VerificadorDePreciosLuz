@@ -63,3 +63,48 @@ Thumbs.db
 
 # Archivos de Docker opcionales
 *.pid
+
+# --- Android Studio ---
+# Build folders
+**/build/
+**/out/
+
+# Gradle
+.gradle/
+**/gradle/
+**/gradle-wrapper.jar
+gradle-app.setting
+gradle.properties
+gradlew
+gradlew.bat
+local.properties
+
+# IDE config
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Log, cache, and temp files
+.cxx/
+.externalNativeBuild/
+.captures/
+.cache/
+.DS_Store
+*.log
+*.tmp
+
+# Keystore files (sensitive)
+*.jks
+*.keystore
+
+# APKs and AABs
+*.apk
+*.ap_*
+*.aab
+
+# Misc
+captures/
+output.json
+releases/
+*.orig

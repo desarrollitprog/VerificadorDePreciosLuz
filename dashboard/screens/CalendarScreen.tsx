@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
@@ -25,9 +25,16 @@ export const CalendarScreen: React.FC = () => {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
-  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const lastFetchedRange = useRef<string>('');
 
   const fetchEvents = useCallback(async (start: Date, end: Date) => {
+    const rangeKey = `${start.toISOString()}_${end.toISOString()}`;
+    
+    if (lastFetchedRange.current === rangeKey) {
+      return;
+    }
+    lastFetchedRange.current = rangeKey;
+    
     setLoading(true);
     try {
       const data = await getVideosWithDateFilter(
@@ -85,11 +92,6 @@ export const CalendarScreen: React.FC = () => {
     const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1);
     const threeMonthsLater = new Date(now.getFullYear(), now.getMonth() + 4, 0);
     
-    setDateRange({
-      start: threeMonthsAgo.toISOString(),
-      end: threeMonthsLater.toISOString()
-    });
-    
     fetchEvents(threeMonthsAgo, threeMonthsLater);
   }, [fetchEvents]);
 
@@ -99,11 +101,6 @@ export const CalendarScreen: React.FC = () => {
     
     const newStart = new Date(start);
     const newEnd = new Date(end);
-    
-    setDateRange({
-      start: newStart.toISOString(),
-      end: newEnd.toISOString()
-    });
     
     fetchEvents(newStart, newEnd);
   };
@@ -121,13 +118,30 @@ export const CalendarScreen: React.FC = () => {
     });
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 rounded-full border-2 border-primary/30 border-t-primary animate-spin"></div>
-      </div>
-    );
-  }
+  const calendarOptions = {
+    plugins: [dayGridPlugin, interactionPlugin],
+    initialView: 'dayGridMonth' as const,
+    events: events,
+    eventClick: handleEventClick,
+    datesSet: handleDatesSet,
+    locale: 'es',
+    headerToolbar: {
+      left: 'prev,next today',
+      center: 'title',
+      right: 'dayGridMonth,dayGridWeek'
+    },
+    buttonText: {
+      today: 'Hoy',
+      month: 'Mes',
+      week: 'Semana',
+    },
+    eventDisplay: 'block' as const,
+    dayMaxEvents: 3,
+    moreLinkClick: 'popover' as const,
+    height: 'auto' as const,
+    contentHeight: 'auto' as const,
+    aspectRatio: 1.5,
+  };
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -166,31 +180,14 @@ export const CalendarScreen: React.FC = () => {
         </div>
       </div>
 
-      <div className="bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-800 p-4">
-        <FullCalendar
-          plugins={[dayGridPlugin, interactionPlugin]}
-          initialView="dayGridMonth"
-          events={events}
-          eventClick={handleEventClick}
-          datesSet={handleDatesSet}
-          locale="es"
-          headerToolbar={{
-            left: 'prev,next today',
-            center: 'title',
-            right: 'dayGridMonth,dayGridWeek'
-          }}
-          buttonText={{
-            today: 'Hoy',
-            month: 'Mes',
-            week: 'Semana',
-          }}
-          eventDisplay="block"
-          dayMaxEvents={3}
-          moreLinkClick="popover"
-          height="auto"
-          contentHeight="auto"
-          aspectRatio={1.5}
-        />
+      <div className="bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-800 p-4 relative">
+        {loading && (
+          <div className="absolute top-4 right-4 z-10 flex items-center gap-2 bg-white dark:bg-[#1c2936] px-3 py-1.5 rounded-full shadow border border-slate-200 dark:border-slate-700">
+            <div className="w-4 h-4 rounded-full border-2 border-primary/30 border-t-primary animate-spin"></div>
+            <span className="text-xs text-slate-500">Cargando...</span>
+          </div>
+        )}
+        <FullCalendar {...calendarOptions} />
       </div>
 
       {selectedEvent && (

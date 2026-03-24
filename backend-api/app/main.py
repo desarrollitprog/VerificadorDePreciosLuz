@@ -74,14 +74,18 @@ async def ping(device_id: str | None = None):
 
 
 banner_check_task: asyncio.Task | None = None
-notified_banners: set[int] = set()
+notified_banners_start: set[int] = set()
+notified_banners_end: set[int] = set()
+
+BANNER_CHECK_INTERVAL = 20 * 60  # 20 minutos en segundos
 
 
 async def _check_banners_starting():
     while True:
         try:
-            await asyncio.sleep(60)
+            await asyncio.sleep(BANNER_CHECK_INTERVAL)
             await _notify_banners_started()
+            await _notify_banners_ended()
         except asyncio.CancelledError:
             break
         except Exception as e:
@@ -92,7 +96,7 @@ async def _notify_banners_started():
     try:
         async for db in get_db_publicidad():
             now = datetime.utcnow()
-            window_start = now - timedelta(minutes=1)
+            window_start = now - timedelta(minutes=20)
             window_end = now
             
             stmt = select(Publicidad).where(
@@ -104,24 +108,55 @@ async def _notify_banners_started():
             banners = result.scalars().all()
             
             for banner in banners:
-                if banner.id in notified_banners:
+                if banner.id in notified_banners_start:
                     continue
                 
-                notified_banners.add(banner.id)
+                notified_banners_start.add(banner.id)
                 
                 target_device_ids = None
                 if banner.device_ids:
                     target_device_ids = [d.strip() for d in banner.device_ids.split(",") if d.strip()]
                 
-                await _send_banner_notification(banner, target_device_ids)
+                await _send_banner_notification(banner, target_device_ids, "BANNER_INICIADO")
             break
     except Exception as e:
         logger.error("Error notificando banners iniciados: %s", e)
 
 
-async def _send_banner_notification(banner: Publicidad, target_device_ids: List[str] | None):
+async def _notify_banners_ended():
+    try:
+        async for db in get_db_publicidad():
+            now = datetime.utcnow()
+            window_start = now - timedelta(minutes=20)
+            window_end = now
+            
+            stmt = select(Publicidad).where(
+                Publicidad.activo == True,
+                Publicidad.fecha_fin >= window_start,
+                Publicidad.fecha_fin <= window_end,
+            )
+            result = await db.execute(stmt)
+            banners = result.scalars().all()
+            
+            for banner in banners:
+                if banner.id in notified_banners_end:
+                    continue
+                
+                notified_banners_end.add(banner.id)
+                
+                target_device_ids = None
+                if banner.device_ids:
+                    target_device_ids = [d.strip() for d in banner.device_ids.split(",") if d.strip()]
+                
+                await _send_banner_notification(banner, target_device_ids, "BANNER_FINALIZADO")
+            break
+    except Exception as e:
+        logger.error("Error notificando banners finalizados: %s", e)
+
+
+async def _send_banner_notification(banner: Publicidad, target_device_ids: List[str] | None, command: str):
     banner_info = {
-        "command": "BANNER_INICIADO",
+        "command": command,
         "banner_id": banner.id,
         "titulo": banner.titulo,
         "url": banner.url,
@@ -133,10 +168,10 @@ async def _send_banner_notification(banner: Publicidad, target_device_ids: List[
     if target_device_ids:
         for device_id in target_device_ids:
             await tablet_ws_manager.send_to_device(device_id, banner_info)
-            logger.info(f"Enviado BANNER_INICIADO a {device_id}: {banner.titulo}")
+            logger.info(f"Enviado {command} a {device_id}: {banner.titulo}")
     else:
         await tablet_ws_manager.broadcast(banner_info)
-        logger.info(f"Broadcast BANNER_INICIADO: {banner.titulo}")
+        logger.info(f"Broadcast {command}: {banner.titulo}")
 
 
 @app.on_event("startup")

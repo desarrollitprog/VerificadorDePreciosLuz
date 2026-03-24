@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
-import { getVideosWithDateFilter } from '../services/videoService';
+import { getVideos } from '../services/videoService';
 import { Video } from '../types';
 
 interface CalendarEvent {
@@ -25,23 +25,11 @@ export const CalendarScreen: React.FC = () => {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
-  const lastFetchedRange = useRef<string>('');
 
-  const fetchEvents = useCallback(async (start: Date, end: Date) => {
-    const rangeKey = `${start.toISOString()}_${end.toISOString()}`;
-    
-    if (lastFetchedRange.current === rangeKey) {
-      return;
-    }
-    lastFetchedRange.current = rangeKey;
-    
+  const fetchEvents = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getVideosWithDateFilter(
-        start.toISOString(),
-        end.toISOString(),
-        true
-      );
+      const data = await getVideos();
       
       const calendarEvents: CalendarEvent[] = [];
       
@@ -88,21 +76,12 @@ export const CalendarScreen: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const now = new Date();
-    const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1);
-    const threeMonthsLater = new Date(now.getFullYear(), now.getMonth() + 4, 0);
-    
-    fetchEvents(threeMonthsAgo, threeMonthsLater);
+    fetchEvents();
   }, [fetchEvents]);
 
   const handleDatesSet = (dateInfo: any) => {
-    const start = dateInfo.view.currentStart;
-    const end = dateInfo.view.currentEnd;
-    
-    const newStart = new Date(start);
-    const newEnd = new Date(end);
-    
-    fetchEvents(newStart, newEnd);
+    // Recargar todos los eventos al cambiar de mes/semana
+    fetchEvents();
   };
 
   const handleEventClick = (info: any) => {

@@ -1601,6 +1601,16 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                 syncBannersOnStart()
                                 Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_INICIADO")
                             }
+                        } else if (command == "BANNER_FINALIZADO") {
+                            val bannerId = message.optInt("banner_id", 0)
+                            val titulo = message.optString("titulo", "")
+                            Log.i(TAG, "[WebSocket] BANNER_FINALIZADO recibido: id=$bannerId, titulo=$titulo")
+                            
+                            // Recargar banners inmediatamente cuando un banner termina
+                            uiHandler.post {
+                                syncBannersOnStart()
+                                Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_FINALIZADO")
+                            }
                         } else {
                             Log.i(TAG, "[WebSocket] Comando recibido no reconocido: $command")
                         }
@@ -1667,6 +1677,15 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                             uiHandler.post {
                                 syncBannersOnStart()
                                 Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_INICIADO (binario)")
+                            }
+                        } else if (command == "BANNER_FINALIZADO") {
+                            val bannerId = message.optInt("banner_id", 0)
+                            val titulo = message.optString("titulo", "")
+                            Log.i(TAG, "[WebSocket] BANNER_FINALIZADO recibido (binario): id=$bannerId, titulo=$titulo")
+                            
+                            uiHandler.post {
+                                syncBannersOnStart()
+                                Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_FINALIZADO (binario)")
                             }
                         } else {
                             Log.i(TAG, "[WebSocket] Comando recibido no reconocido (binario): $command")

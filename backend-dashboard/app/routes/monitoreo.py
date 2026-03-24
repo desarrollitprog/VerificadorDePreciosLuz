@@ -456,7 +456,7 @@ async def _execute_selective_sync_job(
                     if dispositivo_ids_list:
                         print(f"[DEBUG] Enviando dispositivo_ids al servidor {ip}: {dispositivo_ids_list}")
                         # Convertir lista a string separado por comas
-                        params["dispositivo_ids"] = ",".join(dispositivo_ids_list)
+                        params["device_ids"] = ",".join(dispositivo_ids_list)
                     
                     async with httpx.AsyncClient(timeout=FORCE_SYNC_TIMEOUT_SECONDS) as client:
                         resp = await client.post(url, params=params)
@@ -979,8 +979,6 @@ async def sincronizar_fuerza(
     
     servidor_ids = body.servidor_ids if body else None
     dispositivo_ids = body.dispositivo_ids if body else None
-    
-    print(f"[DEBUG ENDPOINT] sincronizar-fuerza recibido - servidor_ids: {servidor_ids}, dispositivo_ids: {dispositivo_ids}, body: {body}")
 
     await _set_job_state(
         job_id,

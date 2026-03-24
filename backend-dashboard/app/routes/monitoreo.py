@@ -398,9 +398,10 @@ async def _get_dispositivos_por_servidor(db: AsyncSession, servidor_ids: List[in
     for d in dispositivos:
         if servidor_ids and d.servidor_id not in servidor_ids:
             continue
-        if d.servidor_id not in mapa:
+        if d.servidor_id and d.servidor_id not in mapa:
             mapa[d.servidor_id] = []
-        mapa[d.servidor_id].append(d.codigo_kiosko)
+        if d.servidor_id:
+            mapa[d.servidor_id].append(d.codigo_kiosko)
     
     return mapa
 
@@ -413,7 +414,7 @@ async def _execute_selective_sync_job(
     dispositivo_ids: List[str] = None,
 ) -> None:
     """
-    Ejecuta sincronización selectiva: solo servidores y/o dispositivos específicos.
+    Ejecuta sincronización forzada: solo servidores y/o dispositivos específicos.
     """
     await _set_job_state(job_id, status="RUNNING")
     try:
@@ -430,22 +431,31 @@ async def _execute_selective_sync_job(
                 if s.ultimo_heartbeat and s.ultimo_heartbeat >= umbral
             ]
             
-            if servidor_ids:
+            # Si se especifican dispositivo_ids pero no servidor_ids,
+            # determinar automáticamente los servidores basados en los dispositivos
+            if dispositivo_ids and not servidor_ids:
+                dispositivos_mapa = await _get_dispositivos_por_servidor(db, None, dispositivo_ids)
+                servidor_ids_automatico = list(dispositivos_mapa.keys())
+                print(f"[DEBUG] Dispositivo_ids especificados sin servidores. Servers automáticos: {servidor_ids_automatico}")
+                online_servers = [s for s in online_servers if s.id in servidor_ids_automatico]
+            elif servidor_ids:
                 online_servers = [s for s in online_servers if s.id in servidor_ids]
 
             dispositivos_por_servidor = await _get_dispositivos_por_servidor(
                 db, servidor_ids, dispositivo_ids
             )
+            print(f"[DEBUG] servidores_ids: {servidor_ids}, dispositivo_ids: {dispositivo_ids}, online_servers: {[s.id for s in online_servers]}, disp_por_srv: {dispositivos_por_servidor}")
 
             async def send_selective_sync(ip: str, dispositivo_ids_list: List[str] = None, on_progress: Any = None) -> dict[str, Any]:
                 url = f"http://{ip}:8000/api/fuerza-sync"
                 try:
-                    payload = {}
+                    params = {"async_mode": "true"}
                     if dispositivo_ids_list:
-                        payload["dispositivo_ids"] = dispositivo_ids_list
+                        print(f"[DEBUG] Enviando dispositivo_ids al servidor {ip}: {dispositivo_ids_list}")
+                        params["dispositivo_ids"] = dispositivo_ids_list
                     
                     async with httpx.AsyncClient(timeout=FORCE_SYNC_TIMEOUT_SECONDS) as client:
-                        resp = await client.post(url, json=payload, params={"async_mode": "true"})
+                        resp = await client.post(url, params=params)
                         payload_response: dict[str, Any] = {}
                         try:
                             payload_response = resp.json()

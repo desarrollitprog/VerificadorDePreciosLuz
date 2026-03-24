@@ -446,6 +446,16 @@ async def eliminar_banner(
             file_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "static", "banners", filename))
             if os.path.exists(file_path):
                 os.remove(file_path)
+        
+        # Eliminar asignaciones primero
+        try:
+            from sqlalchemy import delete
+            await db.execute(delete(PublicidadAsignacion).where(PublicidadAsignacion.publicidad_id == id))
+            await db.commit()
+        except Exception as e:
+            print(f"[DEBUG] Error eliminando asignaciones: {e}")
+            await db.rollback()
+        
         # Intentar borrar remotamente en backend-api usando el IdPublicidad como IdPublicidadRemoto
         try:
             remote_id = banner.IdPublicidad

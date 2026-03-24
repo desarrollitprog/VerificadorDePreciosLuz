@@ -18,7 +18,6 @@ export const Header: React.FC<HeaderProps> = ({ currentScreen }) => {
     }
   };
 
-  // Hook para alternar modo claro/oscuro
   const [isDark, setIsDark] = React.useState(() => document.documentElement.classList.contains('dark'));
   const toggleDark = () => {
     document.documentElement.classList.toggle('dark');
@@ -26,20 +25,20 @@ export const Header: React.FC<HeaderProps> = ({ currentScreen }) => {
   };
 
   return (
-    <header className="h-16 flex items-center justify-between pl-16 md:pl-20 pr-4 md:pr-8 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111a22] z-20 shadow-sm">
-      <div className="flex items-center gap-2">
-        <div className="flex items-center text-sm text-slate-500">
-          <span className="text-slate-900 dark:text-white font-medium">{getBreadcrumb()}</span>
-        </div>
+    <header className="h-14 flex items-center justify-between pl-16 md:pl-20 pr-4 md:pr-6 border-b border-slate-200/50 dark:border-slate-800/50 bg-white/80 dark:bg-[#111a22]/80 backdrop-blur-sm z-20">
+      <div className="flex items-center">
+        <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{getBreadcrumb()}</span>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2">
         <button
           onClick={toggleDark}
-          className="p-2 rounded-full transition-colors text-slate-400 hover:text-yellow-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+          className="p-2 rounded-lg transition-colors text-slate-500 hover:text-primary hover:bg-slate-100 dark:hover:bg-slate-800"
           aria-label="Toggle dark mode"
         >
-          {isDark ? <Sun size={20} /> : <Moon size={20} />}
+          <div className="transition-transform duration-300">
+            {isDark ? <Sun size={18} /> : <Moon size={18} />}
+          </div>
         </button>
         <GeneralNotifications />
       </div>

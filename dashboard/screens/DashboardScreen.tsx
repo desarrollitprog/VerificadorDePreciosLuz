@@ -582,7 +582,7 @@ export const DashboardScreen: React.FC = () => {
             });
             // Renderizar tarjetas
             return filteredVideos.length > 0 ? filteredVideos.map((video) => (
-              <div key={video.id} className="group relative bg-white dark:bg-[#1c2936] rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 hover:border-primary/50 transition-all hover:shadow-xl hover:shadow-slate-900/10 dark:hover:shadow-black/40 flex flex-col">
+              <div key={video.id} className="group relative bg-white dark:bg-[#1c2936] rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 hover:border-primary/40 transition-all hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-900/10 dark:hover:shadow-black/30 flex flex-col">
                 {/* Thumbnail */}
                 <div className="aspect-video bg-slate-800 relative overflow-hidden">
                   {video.tipo === 'image' ? (

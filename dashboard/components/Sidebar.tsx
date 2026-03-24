@@ -51,26 +51,32 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, on
         <button 
           onClick={() => { onNavigate('dashboard'); onClose(); }}
           title="Mis Videos"
-          className={`flex items-center gap-3 px-3 justify-start py-3 rounded-lg transition-colors w-full text-left
+          className={`group relative flex items-center gap-3 px-3 justify-start py-3 rounded-lg transition-colors w-full text-left
             ${currentScreen === 'dashboard' 
-              ? 'bg-primary/20 border border-primary/10 text-primary font-semibold' 
+              ? 'text-primary font-semibold' 
               : 'text-slate-400 hover:bg-slate-800 hover:text-white font-medium'
             }`}
         >
-          <LayoutGrid size={20} />
+          {currentScreen === 'dashboard' && (
+            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full"></span>
+          )}
+          <LayoutGrid size={20} className={currentScreen === 'dashboard' ? 'text-primary' : 'text-slate-500 group-hover:text-white'} />
           <span className="text-sm">Mis Videos</span>
         </button>
 
         <button 
           onClick={() => { onNavigate('list'); onClose(); }}
           title="Biblioteca de Videos"
-          className={`flex items-center gap-3 px-3 justify-start py-3 rounded-lg transition-colors w-full text-left
+          className={`group relative flex items-center gap-3 px-3 justify-start py-3 rounded-lg transition-colors w-full text-left
             ${currentScreen === 'list' 
-              ? 'bg-primary/20 border border-primary/10 text-primary font-semibold' 
+              ? 'text-primary font-semibold' 
               : 'text-slate-400 hover:bg-slate-800 hover:text-white font-medium'
             }`}
         >
-          <Video size={20} />
+          {currentScreen === 'list' && (
+            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full"></span>
+          )}
+          <Video size={20} className={currentScreen === 'list' ? 'text-primary' : 'text-slate-500 group-hover:text-white'} />
           <span className="text-sm">Biblioteca de Videos</span>
         </button>
 
@@ -79,13 +85,16 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, on
           <button 
             onClick={() => { onNavigate('servers'); onClose(); }}
             title="Servidores"
-            className={`flex items-center gap-3 px-3 justify-start py-3 rounded-lg transition-colors w-full text-left
+            className={`group relative flex items-center gap-3 px-3 justify-start py-3 rounded-lg transition-colors w-full text-left
               ${currentScreen === 'servers' 
-                ? 'bg-primary/20 border border-primary/10 text-primary font-semibold' 
+                ? 'text-primary font-semibold' 
                 : 'text-slate-400 hover:bg-slate-800 hover:text-white font-medium'
               }`}
           >
-            <Server size={20} />
+            {currentScreen === 'servers' && (
+              <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full"></span>
+            )}
+            <Server size={20} className={currentScreen === 'servers' ? 'text-primary' : 'text-slate-500 group-hover:text-white'} />
             <span className="text-sm">Servidores</span>
           </button>
         )}
@@ -96,10 +105,17 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, on
         {role === 'ADMIN' && (
           <button 
             title="Gestión de Usuarios"
-            className="flex items-center gap-3 px-3 justify-start py-3 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors w-full text-left group"
+            className={`group relative flex items-center gap-3 px-3 justify-start py-3 rounded-lg transition-colors w-full text-left
+              ${currentScreen === 'users' 
+                ? 'text-primary font-semibold' 
+                : 'text-slate-400 hover:bg-slate-800 hover:text-white font-medium'
+              }`}
             onClick={() => { onNavigate('users'); onClose(); }}
           >
-            <Users size={20} />
+            {currentScreen === 'users' && (
+              <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full"></span>
+            )}
+            <Users size={20} className={currentScreen === 'users' ? 'text-primary' : 'text-slate-500 group-hover:text-white'} />
             <span className="text-sm font-medium">Gestión de Usuarios</span>
           </button>
         )}

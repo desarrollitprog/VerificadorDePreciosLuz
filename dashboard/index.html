@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -18,33 +18,53 @@
           extend: {
             colors: {
               primary: "#137fec",
-              "background-light": "#f6f7f8",
-              "background-dark": "#101922",
-              "card-dark": "#16212b",
-              "border-dark": "#324d67",
+              "background-light": "#f8f9fa",
+              "background-dark": "#0f1114",
+              "card-dark": "#161a21",
+              "border-dark": "#252b36",
+              // Colores sutiles adicionales
+              surface: "#1a1f27",
+              accent: "#3b82f6",
             },
             fontFamily: {
               sans: ["Inter", "sans-serif"],
+              serif: ["Playfair Display", "serif"],
             },
+            transitionDuration: {
+              '250': '250ms',
+            }
           },
         },
       };
     </script>
     <style>
-      /* Custom Scrollbar */
+      /* Custom Scrollbar - más sutil */
       ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
+        width: 6px;
+        height: 6px;
       }
       ::-webkit-scrollbar-track {
-        background: #101922;
+        background: transparent;
       }
       ::-webkit-scrollbar-thumb {
-        background: #2d3e50;
-        border-radius: 4px;
+        background: #334155;
+        border-radius: 3px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #4b627a;
+        background: #475569;
+      }
+      
+      /* Transiciones globales suaves */
+      * {
+        transition-property: background-color, border-color, color, fill, stroke;
+        transition-duration: 200ms;
+        transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      
+      /* Focus ring más suave */
+      :focus-visible {
+        outline: 2px solid #3b82f6;
+        outline-offset: 2px;
       }
     </style>
   <link rel="stylesheet" href="/index.css">

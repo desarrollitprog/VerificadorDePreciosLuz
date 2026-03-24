@@ -433,16 +433,19 @@ async def _execute_selective_sync_job(
             
             # Si se especifican dispositivo_ids pero no servidor_ids,
             # determinar automáticamente los servidores basados en los dispositivos
+            servidor_ids_a_buscar = servidor_ids
             if dispositivo_ids and not servidor_ids:
                 dispositivos_mapa = await _get_dispositivos_por_servidor(db, None, dispositivo_ids)
                 servidor_ids_automatico = list(dispositivos_mapa.keys())
                 print(f"[DEBUG] Dispositivo_ids especificados sin servidores. Servers automáticos: {servidor_ids_automatico}")
                 online_servers = [s for s in online_servers if s.id in servidor_ids_automatico]
+                servidor_ids_a_buscar = servidor_ids_automatico
             elif servidor_ids:
                 online_servers = [s for s in online_servers if s.id in servidor_ids]
+                servidor_ids_a_buscar = servidor_ids
 
             dispositivos_por_servidor = await _get_dispositivos_por_servidor(
-                db, servidor_ids, dispositivo_ids
+                db, servidor_ids_a_buscar, dispositivo_ids
             )
             print(f"[DEBUG] servidores_ids: {servidor_ids}, dispositivo_ids: {dispositivo_ids}, online_servers: {[s.id for s in online_servers]}, disp_por_srv: {dispositivos_por_servidor}")
 

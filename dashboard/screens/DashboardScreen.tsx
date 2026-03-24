@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNotification } from '../components/useNotification';
 import { Search, UploadCloud, MoreVertical, Eye, Trash, Film, Plus, Server, Smartphone, ChevronDown, ChevronRight } from 'lucide-react';
-import { getVideos, uploadMedia, deleteVideo, FileMetadata } from '../services/videoService';
+import { getVideos, uploadMedia, deleteVideo, sincronizarServidores, FileMetadata } from '../services/videoService';
 import { Video, Servidor } from '../types';
 import {
   getForceSyncJobStatus,
@@ -83,6 +83,13 @@ export const DashboardScreen: React.FC = () => {
   const [syncServerProgress, setSyncServerProgress] = useState<SyncServerProgress[]>([]);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [secondaryVideoCounts, setSecondaryVideoCounts] = useState<SecondaryVideoCounter[]>([]);
+  
+  // Sync modal states
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [syncAllDevices, setSyncAllDevices] = useState(true);
+  const [syncServidorIds, setSyncServidorIds] = useState<number[]>([]);
+  const [syncDispositivoIds, setSyncDispositivoIds] = useState<string[]>([]);
+  const [syncExpandedServers, setSyncExpandedServers] = useState<number[]>([]);
   const [selectedSecondaryServerId, setSelectedSecondaryServerId] = useState<string>('');
 
   // Estado para vista compacta
@@ -362,6 +369,30 @@ export const DashboardScreen: React.FC = () => {
     }
   };
 
+  const executeSync = async () => {
+    setSyncLoading(true);
+    setSyncServerProgress([]);
+    try {
+      if (syncAllDevices) {
+        await handleForceSync();
+        return;
+      }
+
+      if (syncServidorIds.length === 0 && syncDispositivoIds.length === 0) {
+        showNotification('Selecciona al menos un servidor o dispositivo', 'warning');
+        return;
+      }
+
+      await sincronizarServidores(syncServidorIds, syncDispositivoIds);
+      showNotification('Sincronización iniciada correctamente', 'success');
+      setLastSyncAt(formatCaracasTime(new Date()));
+    } catch (error: any) {
+      showNotification('Error al ejecutar la sincronización', 'error');
+    } finally {
+      setSyncLoading(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto flex flex-col gap-8">
       {/* Title & Search */}
@@ -383,7 +414,7 @@ export const DashboardScreen: React.FC = () => {
           </div>
           <button
             className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition disabled:opacity-50"
-            onClick={handleForceSync}
+            onClick={() => setIsSyncModalOpen(true)}
             disabled={syncLoading}
           >
             {syncLoading ? 'Sincronizando...' : 'Sincronizar'}
@@ -921,6 +952,153 @@ export const DashboardScreen: React.FC = () => {
                 className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-semibold disabled:opacity-60"
               >
                 {uploading ? 'Subiendo...' : 'Guardar y Subir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sync Modal */}
+      {isSyncModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-[#1c2936] rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-hidden">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Sincronización Selectiva</h2>
+              <p className="text-sm text-slate-500">Selecciona los dispositivos a sincronizar</p>
+            </div>
+            
+            <div className="p-4 overflow-y-auto max-h-[50vh]">
+              <label className="flex items-center gap-2 mb-4">
+                <input
+                  type="checkbox"
+                  checked={syncAllDevices}
+                  onChange={e => {
+                    setSyncAllDevices(e.target.checked);
+                    if (e.target.checked) {
+                      setSyncServidorIds([]);
+                      setSyncDispositivoIds([]);
+                    }
+                  }}
+                  className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
+                />
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Sincronizar a TODOS los dispositivos
+                </span>
+              </label>
+              
+              {!syncAllDevices && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-slate-600 dark:text-slate-400 flex items-center gap-1">
+                    <Server size={12} />
+                    Seleccionar servidores:
+                  </p>
+                  <div className="max-h-32 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-lg p-2 space-y-1">
+                    {servidores.length === 0 ? (
+                      <p className="text-xs text-slate-500">No hay servidores disponibles</p>
+                    ) : (
+                      servidores.map(srv => (
+                        <div key={srv.id}>
+                          <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 p-1.5 rounded">
+                            <input
+                              type="checkbox"
+                              checked={syncServidorIds.includes(Number(srv.id))}
+                              onChange={e => {
+                                e.stopPropagation();
+                                const servidorId = Number(srv.id);
+                                setSyncServidorIds(prev => {
+                                  if (prev.includes(servidorId)) {
+                                    return prev.filter(id => id !== servidorId);
+                                  }
+                                  return [...prev, servidorId];
+                                });
+                              }}
+                              className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
+                            />
+                            <span className="text-sm text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                              <Server size={12} />
+                              {srv.nombre}
+                              <span className={`text-[10px] px-1 py-0.5 rounded ${srv.online ? 'bg-emerald-500/10 text-emerald-500' : 'bg-slate-500/10 text-slate-500'}`}>
+                                {srv.online ? 'Online' : 'Offline'}
+                              </span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSyncExpandedServers(prev =>
+                                  prev.includes(srv.id)
+                                    ? prev.filter(id => id !== srv.id)
+                                    : [...prev, srv.id]
+                                );
+                              }}
+                              className="ml-auto p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded"
+                            >
+                              {syncExpandedServers.includes(srv.id) ? (
+                                <ChevronDown size={14} className="text-slate-500" />
+                              ) : (
+                                <ChevronRight size={14} className="text-slate-500" />
+                              )}
+                            </button>
+                          </label>
+                          {syncExpandedServers.includes(srv.id) && srv.dispositivos && srv.dispositivos.length > 0 && (
+                            <div className="ml-6 mt-1 space-y-0.5">
+                              {srv.dispositivos.map(disp => (
+                                <label key={`${srv.id}-${disp.id}`} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 p-1 rounded">
+                                  <input
+                                    type="checkbox"
+                                    checked={syncDispositivoIds.includes(disp.id)}
+                                    onChange={e => {
+                                      e.stopPropagation();
+                                      setSyncDispositivoIds(prev => {
+                                        if (prev.includes(disp.id)) {
+                                          return prev.filter(id => id !== disp.id);
+                                        }
+                                        return [...prev, disp.id];
+                                      });
+                                    }}
+                                    className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
+                                  />
+                                  <span className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1">
+                                    <Smartphone size={10} />
+                                    {disp.nombre_amigable || disp.codigo_kiosko}
+                                  </span>
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-500">
+                    Seleccionados: {syncServidorIds.length} servidores, {syncDispositivoIds.length} dispositivos
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2 p-4 border-t border-slate-200 dark:border-slate-700">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSyncModalOpen(false);
+                  setSyncAllDevices(true);
+                  setSyncServidorIds([]);
+                  setSyncDispositivoIds([]);
+                }}
+                className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsSyncModalOpen(false);
+                  await executeSync();
+                }}
+                disabled={!syncAllDevices && syncServidorIds.length === 0 && syncDispositivoIds.length === 0}
+                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold disabled:opacity-60"
+              >
+                Sincronizar
               </button>
             </div>
           </div>

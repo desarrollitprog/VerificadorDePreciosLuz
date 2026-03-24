@@ -128,7 +128,7 @@ export async function sincronizarBanners(
 
 export async function sincronizarServidores(
   servidorIds: number[],
-  dispositivoIds?: number[]
+  dispositivoIds?: string[]
 ) {
   const response = await api.post('/monitoreo/sincronizar-fuerza', {
     servidor_ids: servidorIds,

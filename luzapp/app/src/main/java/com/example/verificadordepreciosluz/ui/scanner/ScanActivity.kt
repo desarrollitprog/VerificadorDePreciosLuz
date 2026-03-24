@@ -586,7 +586,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         scope.launch {
             try {
                 val repo = BannerRepository(this@ScanActivity, service, baseUrl)
-                repo.refreshIfStale(bannerMaxAgeMs)
+                repo.refreshIfStale(bannerMaxAgeMs, deviceId)
             } catch (e: Exception) {
                 Log.e(TAG, "Error al sincronizar banners", e)
             }
@@ -1426,7 +1426,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             val apiService = api ?: return
             val baseUrl = backendBaseUrl ?: return
             scope.launch {
-                ejecutarPurgaTotal(this@ScanActivity, apiService, baseUrl)
+                ejecutarPurgaTotal(this@ScanActivity, apiService, baseUrl, deviceId)
             }
         }
         // ...otros comandos...
@@ -1493,7 +1493,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                     return@launch
                                 }
 
-                                val purgeResult = ejecutarPurgaTotal(this@ScanActivity, apiService, baseUrl) {
+                                val purgeResult = ejecutarPurgaTotal(this@ScanActivity, apiService, baseUrl, deviceId) {
                                     uiHandler.post {
                                         stopStandbyCarousel()
                                         startStandbyCarousel()
@@ -1551,7 +1551,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                     return@launch
                                 }
 
-                                val purgeResult = ejecutarPurgaTotal(this@ScanActivity, apiService, baseUrl) {
+                                val purgeResult = ejecutarPurgaTotal(this@ScanActivity, apiService, baseUrl, deviceId) {
                                     uiHandler.post {
                                         stopStandbyCarousel()
                                         startStandbyCarousel()

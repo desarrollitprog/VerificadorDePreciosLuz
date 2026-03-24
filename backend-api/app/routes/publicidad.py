@@ -29,7 +29,8 @@ class PublicidadDispositivoBody(BaseModel):
 
 @router.get("/banners", response_model=List[PublicidadResponse])
 async def listar_banners(
-    device_ids: str = Query(None, description="Lista de device_ids separados por coma"),
+    device_id: str = Query(None, description="Un solo device_id del dispositivo"),
+    device_ids: str = Query(None, description="Lista de device_ids separados por coma (deprecated, usar device_id)"),
     db: AsyncSession = Depends(get_db_publicidad)
 ):
     now = datetime.utcnow()
@@ -50,17 +51,22 @@ async def listar_banners(
     result = await db.execute(query)
     banners = result.scalars().all()
     
-    if device_ids:
-        device_id_list = [d.strip() for d in device_ids.split(",") if d.strip()]
+    # Usar device_id si se proporciona, sino usar device_ids (para compatibilidad)
+    target_device_ids = device_id if device_id else device_ids
+    
+    if target_device_ids:
+        device_id_list = [d.strip() for d in target_device_ids.split(",") if d.strip()]
         filtered_banners = []
         for banner in banners:
             banner_device_ids = getattr(banner, 'device_ids', None)
-            if banner_device_ids:
+            # Si el banner NO tiene device_ids asignados, es para TODOS los dispositivos
+            if not banner_device_ids:
+                filtered_banners.append(banner)
+            else:
+                # Si tiene device_ids, verificar si el dispositivo está en la lista
                 banner_ids_set = set(banner_device_ids.split(","))
                 if any(d in banner_ids_set for d in device_id_list):
                     filtered_banners.append(banner)
-            else:
-                filtered_banners.append(banner)
         banners = filtered_banners
     
     return [PublicidadResponse.model_validate(banner.__dict__) for banner in banners]

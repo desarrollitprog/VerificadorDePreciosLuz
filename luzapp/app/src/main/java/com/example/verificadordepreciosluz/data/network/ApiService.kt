@@ -71,7 +71,7 @@ interface ApiService {
     suspend fun consultar(@Path("codigo") codigo: String): ProductoResponse
 
     @GET("banners")
-    suspend fun banners(): List<BannerResponse>
+    suspend fun banners(@Query("device_id") deviceId: String? = null): List<BannerResponse>
 
     @GET("backup")
     suspend fun getBackupSection(

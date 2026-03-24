@@ -35,10 +35,10 @@ class BannerRepository(
     }
 
     // Descarga y cachea banners si están vencidos
-    suspend fun refreshIfStale(maxAgeMs: Long): BannerCacheMeta? {
+    suspend fun refreshIfStale(maxAgeMs: Long, deviceId: String? = null): BannerCacheMeta? {
         if (!shouldRefresh(maxAgeMs)) return loadCache()
         return runCatching {
-            val remote = api.banners().sortedBy { it.prioridad ?: 0 }
+            val remote = api.banners(deviceId).sortedBy { it.prioridad ?: 0 }
             val items = remote.mapNotNull { downloadBanner(it) }
             if (items.isEmpty()) {
                 Log.w(TAG, "No se pudo descargar ningún banner, se conserva el cache actual")

@@ -13,10 +13,10 @@ data class PurgaResult(
     val reason: String? = null,
 )
 
-suspend fun ejecutarPurgaTotal(context: android.content.Context, api: ApiService, baseUrl: String, onPurgeComplete: (() -> Unit)? = null): PurgaResult {
+suspend fun ejecutarPurgaTotal(context: android.content.Context, api: ApiService, baseUrl: String, deviceId: String? = null, onPurgeComplete: (() -> Unit)? = null): PurgaResult {
     return withContext(Dispatchers.IO) {
         try {
-            Log.d("PurgaTotal", "Iniciando purga total...")
+            Log.d("PurgaTotal", "Iniciando purga total con deviceId: $deviceId")
             // Paso 1: Borrado de archivos locales
             val bannersDir = File(context.filesDir, "banners")
             Log.d("PurgaTotal", "Borrando archivos en: ${bannersDir.absolutePath}")
@@ -30,8 +30,8 @@ suspend fun ejecutarPurgaTotal(context: android.content.Context, api: ApiService
             }
 
             // Paso 2: Solicitar manifiesto actualizado al backend secundario
-            Log.d("PurgaTotal", "Solicitando manifiesto de banners al backend...")
-            val banners = api.banners()
+            Log.d("PurgaTotal", "Solicitando manifiesto de banners al backend con deviceId: $deviceId...")
+            val banners = api.banners(deviceId)
             Log.d("PurgaTotal", "Manifiesto recibido: ${banners.size} items")
             if (banners.isEmpty()) {
                 Log.w("PurgaTotal", "Manifiesto vacío. Nada que descargar.")

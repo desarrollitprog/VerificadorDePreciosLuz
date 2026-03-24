@@ -681,11 +681,16 @@ async def _run_force_sync_job(job_id: str, dispositivo_ids: List[str] = None) ->
 @app.post("/api/fuerza-sync")
 async def fuerza_sync(
     async_mode: bool = Query(False),
-    dispositivo_ids: List[str] = Query(None),
+    dispositivo_ids: str = Query(None, description="Device IDs separados por coma"),
 ):
     global SYNC_REQUIRED_NOW
     SYNC_REQUIRED_NOW = True
 
+    # Convertir string separado por comas a lista
+    dispositivo_ids_list = None
+    if dispositivo_ids:
+        dispositivo_ids_list = [d.strip() for d in dispositivo_ids.split(",") if d.strip()]
+    
     if async_mode:
         job_id = uuid.uuid4().hex
         await _set_force_sync_job_state(
@@ -698,19 +703,19 @@ async def fuerza_sync(
             failed=0,
             details=[],
             created_at=datetime.utcnow().isoformat() + "Z",
-            dispositivo_ids=dispositivo_ids,
+            dispositivo_ids=dispositivo_ids_list,
         )
-        asyncio.create_task(_run_force_sync_job(job_id, dispositivo_ids))
+        asyncio.create_task(_run_force_sync_job(job_id, dispositivo_ids_list))
         return {
             "success": True,
             "message": "Sincronización forzada en ejecución",
             "job_id": job_id,
             "status": "QUEUED",
-            "dispositivo_ids": dispositivo_ids,
+            "dispositivo_ids": dispositivo_ids_list,
         }
 
     async with SYNC_SEQUENCE_LOCK:
-        result = await orchestrate_forced_sync_sequential(dispositivo_ids=dispositivo_ids)
+        result = await orchestrate_forced_sync_sequential(dispositivo_ids=dispositivo_ids_list)
     return {
         "success": True,
         "message": "Sincronización forzada secuencial ejecutada",

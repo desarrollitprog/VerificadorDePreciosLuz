@@ -455,8 +455,9 @@ async def _execute_selective_sync_job(
                     params = {"async_mode": "true"}
                     if dispositivo_ids_list:
                         print(f"[DEBUG] Enviando dispositivo_ids al servidor {ip}: {dispositivo_ids_list}")
-                        # Convertir lista a string separado por comas
-                        params["device_ids"] = ",".join(dispositivo_ids_list)
+                        # Enviar como string separado por comas
+                        # IMPORTANTE: El backend-api espera "dispositivo_ids", no "device_ids"
+                        params["dispositivo_ids"] = ",".join(dispositivo_ids_list)
                     
                     async with httpx.AsyncClient(timeout=FORCE_SYNC_TIMEOUT_SECONDS) as client:
                         resp = await client.post(url, params=params)

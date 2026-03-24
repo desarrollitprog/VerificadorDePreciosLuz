@@ -286,28 +286,34 @@ async def upload_banner(
             print(f"Guardando asignaciones para publicidad {nuevo_banner.IdPublicidad}: servidores={selected_servidor_ids}, dispositivos={selected_dispositivo_ids}")
             
             # Obtener dispositivos de los servidores seleccionados (usando codigo_kiosko para strings)
-            dispositivos_query = select(Dispositivo)
-            if selected_servidor_ids:
-                dispositivos_query = dispositivos_query.where(Dispositivo.servidor_id.in_(selected_servidor_ids))
-            if selected_dispositivo_ids:
-                # Los selected_dispositivo_ids son strings (codigo_kiosko), no ids enteros
-                dispositivos_query = dispositivos_query.where(Dispositivo.codigo_kiosko.in_(selected_dispositivo_ids))
-            
-            dispositivos_result = await db.execute(dispositivos_query)
-            dispositivos = dispositivos_result.scalars().all()
-            print(f"[DEBUG] Dispositivos encontrados: {len(dispositivos)}")
-            
-            # Crear registros de asignación - guardar codigo_kiosko como dispositivo_id (string)
-            for disp in dispositivos:
-                asignacion = PublicidadAsignacion(
-                    publicidad_id=nuevo_banner.IdPublicidad,
-                    servidor_id=disp.servidor_id,
-                    dispositivo_id=disp.codigo_kiosko
-                )
-                db.add(asignacion)
-            
-            await db.commit()
-            print(f"Asignaciones guardadas: {len(dispositivos)} registros")
+            try:
+                dispositivos_query = select(Dispositivo)
+                if selected_servidor_ids:
+                    dispositivos_query = dispositivos_query.where(Dispositivo.servidor_id.in_(selected_servidor_ids))
+                if selected_dispositivo_ids:
+                    # Los selected_dispositivo_ids son strings (codigo_kiosko), no ids enteros
+                    dispositivos_query = dispositivos_query.where(Dispositivo.codigo_kiosko.in_(selected_dispositivo_ids))
+                
+                print(f"[DEBUG] SQL Query: {dispositivos_query}")
+                dispositivos_result = await db.execute(dispositivos_query)
+                dispositivos = dispositivos_result.scalars().all()
+                print(f"[DEBUG] Dispositivos encontrados: {len(dispositivos)}")
+                
+                # Crear registros de asignación - guardar codigo_kiosko como dispositivo_id (string)
+                for disp in dispositivos:
+                    asignacion = PublicidadAsignacion(
+                        publicidad_id=nuevo_banner.IdPublicidad,
+                        servidor_id=disp.servidor_id,
+                        dispositivo_id=disp.codigo_kiosko
+                    )
+                    db.add(asignacion)
+                
+                await db.commit()
+                print(f"Asignaciones guardadas: {len(dispositivos)} registros")
+            except Exception as e:
+                print(f"[ERROR] Error guardando asignaciones: {str(e)}")
+                await db.rollback()
+                raise
     except HTTPException:
         if os.path.exists(file_location):
             os.remove(file_location)

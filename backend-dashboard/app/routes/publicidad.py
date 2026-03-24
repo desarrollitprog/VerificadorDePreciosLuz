@@ -94,7 +94,6 @@ async def listar_banners(
         result = await db.execute(
             select(Publicidad)
             .options(selectinload(Publicidad.asignaciones).selectinload(PublicidadAsignacion.servidor))
-            .options(selectinload(Publicidad.asignaciones).selectinload(PublicidadAsignacion.dispositivo))
             .order_by(Publicidad.IdPublicidad.desc())
         )
         banners = result.scalars().all()
@@ -112,8 +111,8 @@ async def listar_banners(
                         "servidor_id": asig.servidor_id,
                         "servidor_nombre": asig.servidor.nombre if asig.servidor else None,
                         "dispositivo_id": asig.dispositivo_id,
-                        "dispositivo_nombre": asig.dispositivo.nombre_amigable if asig.dispositivo else None,
-                        "dispositivo_codigo": asig.dispositivo.codigo_kiosko if asig.dispositivo else None,
+                        "dispositivo_nombre": None,
+                        "dispositivo_codigo": asig.dispositivo_id,
                     })
                 dispositivos_count = len(asignaciones)
             

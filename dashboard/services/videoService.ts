@@ -34,10 +34,7 @@ export interface AsignacionPayload {
 
 export async function getVideos(): Promise<Video[]> {
   try {
-    console.log('[videoService] Calling /banners endpoint...');
     const response = await api.get('/banners');
-    console.log('[videoService] Response status:', response.status);
-    console.log('[videoService] Response data:', response.data);
     const banners = response.data?.banners;
     if (Array.isArray(banners)) {
       return banners.map((item: any) => ({
@@ -63,10 +60,8 @@ export async function getVideos(): Promise<Video[]> {
       }));
     }
     return [];
-  } catch (err: any) {
-    console.error('[videoService] Error fetching videos:', err);
-    console.error('[videoService] Error response:', err?.response);
-    throw err;
+  } catch {
+    return [];
   }
 }
 

@@ -93,13 +93,10 @@ export const VideoListScreen: React.FC = () => {
     async function fetchVideos() {
       setLoading(true);
       try {
-        console.log('[VideoList] Fetching videos...');
         const data = await getVideos();
-        console.log('[VideoList] Response:', data);
         setVideos(Array.isArray(data) ? data : []);
-      } catch (err: any) {
-        console.error('[VideoList] Error:', err);
-        setError('Error Cargando Videos: ' + (err?.response?.data?.detail || err?.message || 'Error desconocido'));
+      } catch {
+        setError('Error Cargando Videos');
         setVideos([]);
       } finally {
         setLoading(false);

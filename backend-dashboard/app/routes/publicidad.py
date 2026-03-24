@@ -112,13 +112,15 @@ async def listar_banners(
             except ValueError:
                 pass
         
-        if not incluir_todos:
-            query = query.where(Publicidad.FechaInicio.isnot(None))
+        # Por defecto mostrar todos los banners (sin filtro de fecha inicio)
+        # if not incluir_todos:
+        #     query = query.where(Publicidad.FechaInicio.isnot(None))
         
         query = query.order_by(Publicidad.IdPublicidad.desc())
         
         result = await db.execute(query)
         banners = result.scalars().all()
+        
         banners_payload = []
         
         for banner in banners:

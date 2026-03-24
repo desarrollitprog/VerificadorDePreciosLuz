@@ -38,11 +38,6 @@ class PublicidadAsignacion(Base):
         backref="asignaciones",
         lazy="joined"
     )
-    dispositivo = relationship(
-        "Dispositivo",
-        backref="asignaciones",
-        lazy="joined"
-    )
 
     __table_args__ = (
         UniqueConstraint(

@@ -86,16 +86,38 @@ class BannerUploadBody(BaseModel):
 async def listar_banners(
     db: AsyncSession = Depends(get_db_usuarios),
     current_user: dict = Depends(get_current_cliente),
+    fecha_desde: str | None = None,
+    fecha_hasta: str | None = None,
+    incluir_todos: bool = False,
 ):
     try:
         total_dispositivos_result = await db.execute(select(func.count(Dispositivo.id)))
         total_dispositivos = total_dispositivos_result.scalar() or 0
         
-        result = await db.execute(
-            select(Publicidad)
-            .options(selectinload(Publicidad.asignaciones).selectinload(PublicidadAsignacion.servidor))
-            .order_by(Publicidad.IdPublicidad.desc())
+        query = select(Publicidad).options(
+            selectinload(Publicidad.asignaciones).selectinload(PublicidadAsignacion.servidor)
         )
+        
+        if fecha_desde:
+            try:
+                desde_date = datetime.fromisoformat(fecha_desde.replace('Z', '+00:00'))
+                query = query.where(Publicidad.FechaInicio >= desde_date)
+            except ValueError:
+                pass
+        
+        if fecha_hasta:
+            try:
+                hasta_date = datetime.fromisoformat(fecha_hasta.replace('Z', '+00:00'))
+                query = query.where(Publicidad.FechaInicio <= hasta_date)
+            except ValueError:
+                pass
+        
+        if not incluir_todos:
+            query = query.where(Publicidad.FechaInicio.isnot(None))
+        
+        query = query.order_by(Publicidad.IdPublicidad.desc())
+        
+        result = await db.execute(query)
         banners = result.scalars().all()
         banners_payload = []
         

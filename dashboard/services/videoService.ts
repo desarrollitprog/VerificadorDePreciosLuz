@@ -65,6 +65,48 @@ export async function getVideos(): Promise<Video[]> {
   }
 }
 
+export async function getVideosWithDateFilter(
+  fechaDesde?: string,
+  fechaHasta?: string,
+  incluirTodos: boolean = false
+): Promise<Video[]> {
+  try {
+    const params = new URLSearchParams();
+    if (fechaDesde) params.append('fecha_desde', fechaDesde);
+    if (fechaHasta) params.append('fecha_hasta', fechaHasta);
+    if (incluirTodos) params.append('incluir_todos', 'true');
+    
+    const response = await api.get(`/banners?${params.toString()}`);
+    const banners = response.data?.banners;
+    if (Array.isArray(banners)) {
+      return banners.map((item: any) => ({
+        id: String(item.IdPublicidad ?? item.id ?? ''),
+        filename: (item.Url ?? item.url ?? '').split('/').pop() || '',
+        url: item.Url ?? item.url ?? '',
+        thumbnail: (item.Tipo ?? item.tipo) === 'image' ? (item.Url ?? item.url ?? '') : '',
+        tipo: item.Tipo ?? item.tipo ?? '',
+        titulo: item.Titulo ?? item.titulo ?? '',
+        size: item.size_human ?? item.SizeHuman ?? item.size ?? '',
+        date: item.UpdatedAt ?? item.updated_at ?? '',
+        duration: item.DuracionSeg ?? item.duracion_seg ?? '',
+        status: item.status ?? undefined,
+        activo: (item.Activo ?? item.activo) ?? true,
+        fechaInicio: item.FechaInicio ?? item.fecha_inicio ?? null,
+        fechaFin: item.FechaFin ?? item.fecha_fin ?? null,
+        prioridad: item.Prioridad ?? item.prioridad ?? 0,
+        views: item.views ?? undefined,
+        asignacion_todos: item.asignacion_todos ?? true,
+        asignaciones: item.asignaciones ?? [],
+        dispositivos_count: item.dispositivos_count ?? 0,
+        estado: item.estado ?? 'activo',
+      }));
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
 export async function getServidores(): Promise<Servidor[]> {
   try {
     const response = await api.get('/servidores');

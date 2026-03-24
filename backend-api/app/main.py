@@ -17,6 +17,8 @@ from pydantic import BaseModel
 from . import database, models, schemas
 from .routes import consultas, publicidad
 from .services import DeviceCommandBus, DeviceStateStore
+from .database import get_db_publicidad
+from .models.publicidad import Publicidad
 
 # Cargar variables de entorno desde .env
 load_dotenv()
@@ -71,9 +73,75 @@ async def ping(device_id: str | None = None):
     return {"status": "Conexion Exitosa"}
 
 
+banner_check_task: asyncio.Task | None = None
+notified_banners: set[int] = set()
+
+
+async def _check_banners_starting():
+    while True:
+        try:
+            await asyncio.sleep(60)
+            await _notify_banners_started()
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error("Error en task de verificación de banners: %s", e)
+
+
+async def _notify_banners_started():
+    try:
+        async for db in get_db_publicidad():
+            now = datetime.utcnow()
+            window_start = now - timedelta(minutes=1)
+            window_end = now
+            
+            stmt = select(Publicidad).where(
+                Publicidad.activo == True,
+                Publicidad.fecha_inicio >= window_start,
+                Publicidad.fecha_inicio <= window_end,
+            )
+            result = await db.execute(stmt)
+            banners = result.scalars().all()
+            
+            for banner in banners:
+                if banner.id in notified_banners:
+                    continue
+                
+                notified_banners.add(banner.id)
+                
+                target_device_ids = None
+                if banner.device_ids:
+                    target_device_ids = [d.strip() for d in banner.device_ids.split(",") if d.strip()]
+                
+                await _send_banner_notification(banner, target_device_ids)
+            break
+    except Exception as e:
+        logger.error("Error notificando banners iniciados: %s", e)
+
+
+async def _send_banner_notification(banner: Publicidad, target_device_ids: List[str] | None):
+    banner_info = {
+        "command": "BANNER_INICIADO",
+        "banner_id": banner.id,
+        "titulo": banner.titulo,
+        "url": banner.url,
+        "tipo": banner.tipo,
+        "fecha_inicio": banner.fecha_inicio.isoformat() if banner.fecha_inicio else None,
+        "fecha_fin": banner.fecha_fin.isoformat() if banner.fecha_fin else None,
+    }
+    
+    if target_device_ids:
+        for device_id in target_device_ids:
+            await tablet_ws_manager.send_to_device(device_id, banner_info)
+            logger.info(f"Enviado BANNER_INICIADO a {device_id}: {banner.titulo}")
+    else:
+        await tablet_ws_manager.broadcast(banner_info)
+        logger.info(f"Broadcast BANNER_INICIADO: {banner.titulo}")
+
+
 @app.on_event("startup")
 async def start_device_monitor():
-    global device_state_store, device_command_bus, device_bus_listener_task
+    global device_state_store, device_command_bus, device_bus_listener_task, banner_check_task
     try:
         device_state_store = await DeviceStateStore.create()
         logger.info("DeviceStateStore inicializado con Redis")
@@ -87,10 +155,17 @@ async def start_device_monitor():
     except Exception as e:
         logger.error("No se pudo inicializar DeviceCommandBus: %s", e)
 
+    banner_check_task = asyncio.create_task(_check_banners_starting())
+    logger.info("Banner check task iniciada")
+
 
 @app.on_event("shutdown")
 async def shutdown_device_state_store():
-    global device_state_store, device_command_bus, device_bus_listener_task
+    global device_state_store, device_command_bus, device_bus_listener_task, banner_check_task
+    if banner_check_task is not None:
+        banner_check_task.cancel()
+        banner_check_task = None
+
     if device_bus_listener_task is not None:
         device_bus_listener_task.cancel()
         device_bus_listener_task = None

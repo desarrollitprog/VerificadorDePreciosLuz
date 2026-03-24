@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutGrid, Video, LogOut, X, Users, Server, User } from 'lucide-react';
+import { LayoutGrid, Video, LogOut, X, Users, Server, User, Calendar } from 'lucide-react';
 import { Screen } from '../types';
 import { getUserRole, getUserName } from '../services/tokenUtils';
 
@@ -78,6 +78,22 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, on
           )}
           <Video size={20} className={currentScreen === 'list' ? 'text-primary' : 'text-slate-500 group-hover:text-white'} />
           <span className="text-sm">Biblioteca de Videos</span>
+        </button>
+
+        <button 
+          onClick={() => { onNavigate('calendar'); onClose(); }}
+          title="Calendario de Publicidad"
+          className={`group relative flex items-center gap-3 px-3 justify-start py-3 rounded-lg transition-colors w-full text-left
+            ${currentScreen === 'calendar' 
+              ? 'text-primary font-semibold' 
+              : 'text-slate-400 hover:bg-slate-800 hover:text-white font-medium'
+            }`}
+        >
+          {currentScreen === 'calendar' && (
+            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full"></span>
+          )}
+          <Calendar size={20} className={currentScreen === 'calendar' ? 'text-primary' : 'text-slate-500 group-hover:text-white'} />
+          <span className="text-sm">Calendario</span>
         </button>
 
         {/* Solo ADMIN puede ver la opción de Servidores */}

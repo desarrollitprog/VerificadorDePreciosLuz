@@ -120,6 +120,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private val backupMaxAgeMs = (12 * 60 * 60 * 1000L).toLong()
     private var cameraProvider: ProcessCameraProvider? = null
     private val bannerMaxAgeMs = (12 * 60 * 60 * 1000L).toLong()
+    private val bannerPollIntervalMs = (25 * 60 * 1000L).toLong()
+    private val bannerPollHandler = Handler(Looper.getMainLooper())
+    private var bannerPollRunnable: Runnable? = null
     private var backendBaseUrl: String? = null
     private val standbyIdleMs = 20_000L
     private var standbyItems: MutableList<BannerCacheItem> = mutableListOf()
@@ -211,6 +214,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             startPingMonitor()
             syncBackupOnStart()
             syncBannersOnStart()
+            startBannerPolling()
         } else {
             configureBackend()
             startOfflineModeOnLaunch()
@@ -593,6 +597,37 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 Log.e(TAG, "Error al sincronizar banners", e)
             }
         }
+    }
+
+    // Inicia polling de banners cada 25 minutos
+    private fun startBannerPolling() {
+        val runnable = object : Runnable {
+            override fun run() {
+                Log.d(TAG, "Banner polling: refreshing banners")
+                val service = api
+                val baseUrl = backendBaseUrl
+                if (service != null && baseUrl != null) {
+                    scope.launch {
+                        try {
+                            val repo = BannerRepository(this@ScanActivity, service, baseUrl)
+                            repo.refreshIfStale(bannerMaxAgeMs, deviceId)
+                            Log.d(TAG, "Banner polling: refresh completed")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Banner polling: error", e)
+                        }
+                    }
+                }
+                bannerPollHandler.postDelayed(this, bannerPollIntervalMs)
+            }
+        }
+        bannerPollRunnable = runnable
+        bannerPollHandler.postDelayed(runnable, bannerPollIntervalMs)
+    }
+
+    // Detiene el polling de banners
+    private fun stopBannerPolling() {
+        bannerPollRunnable?.let { bannerPollHandler.removeCallbacks(it) }
+        bannerPollRunnable = null
     }
 
     // Obtiene y muestra las cotizaciones BCV (USD y EUR)
@@ -1396,6 +1431,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
     override fun onDestroy() {
         super.onDestroy()
+        stopBannerPolling()
         cameraProvider?.unbindAll()
         cameraExecutor.shutdown()
         tone?.release()
@@ -1555,6 +1591,16 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                     sendSyncConfirmation(webSocket, command, "FAILED", purgeResult.reason ?: "Purga fallida")
                                 }
                             }
+                        } else if (command == "BANNER_INICIADO") {
+                            val bannerId = message.optInt("banner_id", 0)
+                            val titulo = message.optString("titulo", "")
+                            Log.i(TAG, "[WebSocket] BANNER_INICIADO recibido: id=$bannerId, titulo=$titulo")
+                            
+                            // Recargar banners inmediatamente cuando un banner comienza
+                            uiHandler.post {
+                                syncBannersOnStart()
+                                Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_INICIADO")
+                            }
                         } else {
                             Log.i(TAG, "[WebSocket] Comando recibido no reconocido: $command")
                         }
@@ -1612,6 +1658,15 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                 } else {
                                     sendSyncConfirmation(webSocket, command, "FAILED", purgeResult.reason ?: "Purga fallida")
                                 }
+                            }
+                        } else if (command == "BANNER_INICIADO") {
+                            val bannerId = message.optInt("banner_id", 0)
+                            val titulo = message.optString("titulo", "")
+                            Log.i(TAG, "[WebSocket] BANNER_INICIADO recibido (binario): id=$bannerId, titulo=$titulo")
+                            
+                            uiHandler.post {
+                                syncBannersOnStart()
+                                Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_INICIADO (binario)")
                             }
                         } else {
                             Log.i(TAG, "[WebSocket] Comando recibido no reconocido (binario): $command")

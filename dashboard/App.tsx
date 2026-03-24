@@ -5,6 +5,7 @@ import { LoginScreen } from './screens/LoginScreen';
 import { DashboardScreen } from './screens/DashboardScreen';
 import { VideoListScreen } from './screens/VideoListScreen';
 import { UsersScreen } from './screens/UsersScreen';
+import { CalendarScreen } from './screens/CalendarScreen';
 
 import { Screen } from './types';
 import Sidebar from './components/Sidebar';
@@ -60,6 +61,8 @@ export default function App() {
         return <ServerDashboard />;
       case 'users':
         return <UsersScreen />;
+      case 'calendar':
+        return <CalendarScreen />;
       default:
         return <LoginScreen onLogin={() => setCurrentScreen('dashboard')} />;
     }

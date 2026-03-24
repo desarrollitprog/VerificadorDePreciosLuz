@@ -1118,6 +1118,10 @@ async def orchestrate_forced_sync_sequential(
                     "details": list(details),
                 }
             )
+        
+        # Delay entre dispositivos para evitar colapsos (2 segundos)
+        if len(target_device_ids) > 1:
+            await asyncio.sleep(2)
 
     failed = len(target_device_ids) - confirmed
     return {

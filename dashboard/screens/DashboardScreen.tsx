@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNotification } from '../components/useNotification';
 import { Search, UploadCloud, MoreVertical, Eye, Trash, Film, Plus, Server, Smartphone, ChevronDown, ChevronRight } from 'lucide-react';
-import { getVideos, uploadMedia, deleteVideo, sincronizarServidores, FileMetadata } from '../services/videoService';
+import { getVideos, uploadMedia, deleteVideo, sincronizarServidores, updateBannerMetadata, FileMetadata } from '../services/videoService';
 import { Video, Servidor } from '../types';
 import {
   getForceSyncJobStatus,
@@ -91,6 +91,17 @@ export const DashboardScreen: React.FC = () => {
   const [syncDispositivoIds, setSyncDispositivoIds] = useState<string[]>([]);
   const [syncExpandedServers, setSyncExpandedServers] = useState<number[]>([]);
   const [selectedSecondaryServerId, setSelectedSecondaryServerId] = useState<string>('');
+  
+  // Edit modal states
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingVideo, setEditingVideo] = useState<Video | null>(null);
+  const [editFormData, setEditFormData] = useState({
+    titulo: '',
+    activo: true,
+    fechaInicio: '',
+    fechaFin: '',
+  });
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // Estado para vista compacta
   const [expandedFiles, setExpandedFiles] = useState<boolean[]>([]);
@@ -593,7 +604,20 @@ export const DashboardScreen: React.FC = () => {
                     <h4 className="text-slate-900 dark:text-white font-semibold text-sm leading-tight line-clamp-2" title={video.titulo || video.filename}>
                       {video.titulo || video.filename}
                     </h4>
-                    <button className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+                    <button 
+                      onClick={() => {
+                        setEditingVideo(video);
+                        setEditFormData({
+                          titulo: video.titulo || video.filename || '',
+                          activo: video.activo ?? true,
+                          fechaInicio: video.fechaInicio || '',
+                          fechaFin: video.fechaFin || '',
+                        });
+                        setIsEditModalOpen(true);
+                      }}
+                      className="text-slate-400 hover:text-primary dark:hover:text-primary transition-colors"
+                      title="Editar"
+                    >
                       <MoreVertical size={16} />
                     </button>
                   </div>
@@ -1099,6 +1123,109 @@ export const DashboardScreen: React.FC = () => {
                 className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold disabled:opacity-60"
               >
                 Sincronizar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Edit Modal */}
+      {isEditModalOpen && editingVideo && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-[#1c2936] rounded-xl shadow-2xl w-full max-w-md">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Editar Publicidad</h2>
+              <p className="text-sm text-slate-500">Modifica los datos de la publicidad</p>
+            </div>
+            
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Título
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.titulo}
+                  onChange={e => setEditFormData({ ...editFormData, titulo: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-sm text-slate-900 dark:text-white"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Fecha Inicio
+                </label>
+                <input
+                  type="datetime-local"
+                  value={editFormData.fechaInicio}
+                  onChange={e => setEditFormData({ ...editFormData, fechaInicio: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-sm text-slate-900 dark:text-white"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Fecha Fin
+                </label>
+                <input
+                  type="datetime-local"
+                  value={editFormData.fechaFin}
+                  onChange={e => setEditFormData({ ...editFormData, fechaFin: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-sm text-slate-900 dark:text-white"
+                />
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="editActivo"
+                  checked={editFormData.activo}
+                  onChange={e => setEditFormData({ ...editFormData, activo: e.target.checked })}
+                  className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
+                />
+                <label htmlFor="editActivo" className="text-sm text-slate-700 dark:text-slate-300">
+                  Activo
+                </label>
+              </div>
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2 p-4 border-t border-slate-200 dark:border-slate-700">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditModalOpen(false);
+                  setEditingVideo(null);
+                }}
+                disabled={isSavingEdit}
+                className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsSavingEdit(true);
+                  try {
+                    await updateBannerMetadata(editingVideo.id, {
+                      activo: editFormData.activo,
+                      fechaInicio: editFormData.fechaInicio || null,
+                      fechaFin: editFormData.fechaFin || null,
+                    });
+                    showNotification('Publicidad actualizada correctamente', 'success');
+                    setIsEditModalOpen(false);
+                    setEditingVideo(null);
+                    // Refresh videos
+                    const data = await getVideos();
+                    setVideos(data);
+                  } catch (error: any) {
+                    showNotification('Error al actualizar la publicidad', 'error');
+                  } finally {
+                    setIsSavingEdit(false);
+                  }
+                }}
+                disabled={isSavingEdit}
+                className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-semibold disabled:opacity-60"
+              >
+                {isSavingEdit ? 'Guardando...' : 'Guardar'}
               </button>
             </div>
           </div>

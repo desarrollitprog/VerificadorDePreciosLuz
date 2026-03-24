@@ -1,6 +1,7 @@
 package com.example.verificadordepreciosluz.data.local
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.File
 import com.example.verificadordepreciosluz.data.network.ApiService
@@ -44,7 +45,7 @@ suspend fun ejecutarPurgaTotal(context: android.content.Context, api: ApiService
                 )
             }
 
-            // Paso 3: Descargar todos los archivos del manifiesto
+            // Paso 3: Descargar todos los archivos del manifiesto con delay entre cada uno
             val repo = BannerRepository(context, api, baseUrl)
             val items = mutableListOf<BannerCacheItem>()
             for ((i, banner) in banners.withIndex()) {
@@ -58,6 +59,10 @@ suspend fun ejecutarPurgaTotal(context: android.content.Context, api: ApiService
                         } else {
                             Log.w("PurgaTotal", "Archivo descargado no existe: ${item.localPath} (id=${banner.id}) - No se agrega al cache")
                         }
+                    }
+                    // Delay entre descargas para evitar sobrecarga (1.5 segundos)
+                    if (i < banners.size - 1) {
+                        delay(2000)
                     }
                 } catch (e: Exception) {
                     Log.e("PurgaTotal", "Error descargando banner id=${banner.id}: ${e.message}")

@@ -30,7 +30,7 @@ class HeartbeatBody(BaseModel):
 
 class SyncSelectivoBody(BaseModel):
     servidor_ids: Optional[List[int]] = None
-    dispositivo_ids: Optional[List[int]] = None
+    dispositivo_ids: Optional[List[str]] = None
 
 
 
@@ -383,14 +383,14 @@ async def _execute_force_sync_job(job_id: str, user_id: int | None, username: st
         )
 
 
-async def _get_dispositivos_por_servidor(db: AsyncSession, servidor_ids: List[int] = None, dispositivo_ids: List[int] = None) -> dict:
+async def _get_dispositivos_por_servidor(db: AsyncSession, servidor_ids: List[int] = None, dispositivo_ids: List[str] = None) -> dict:
     """
     Obtiene los dispositivos filtrados por servidor y/o dispositivo.
     Retorna: {servidor_id: [codigo_kiosko, ...]}
     """
     query = select(Dispositivo)
     if dispositivo_ids:
-        query = query.where(Dispositivo.id.in_(dispositivo_ids))
+        query = query.where(Dispositivo.codigo_kiosko.in_(dispositivo_ids))
     result = await db.execute(query)
     dispositivos = result.scalars().all()
     
@@ -410,7 +410,7 @@ async def _execute_selective_sync_job(
     user_id: int | None,
     username: str | None,
     servidor_ids: List[int] = None,
-    dispositivo_ids: List[int] = None,
+    dispositivo_ids: List[str] = None,
 ) -> None:
     """
     Ejecuta sincronización selectiva: solo servidores y/o dispositivos específicos.

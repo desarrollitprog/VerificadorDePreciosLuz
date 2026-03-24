@@ -835,6 +835,84 @@ async def eliminar_asignaciones_banner(
         raise HTTPException(status_code=500, detail=f"Error al eliminar asignaciones: {str(e)}")
 
 
+@router.put("/banners/{id}/asignaciones")
+async def reemplazar_asignaciones_banner(
+    id: int = Path(..., description="ID del banner"),
+    asignacion_todos: bool = Query(True, description="Si es true, se asigna a todos"),
+    servidor_ids: str = Query(None, description="IDs de servidores separados por coma"),
+    dispositivo_ids: str = Query(None, description="IDs de dispositivos separados por coma"),
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_cliente),
+):
+    """
+    Reemplaza todas las asignaciones de una publicidad.
+    """
+    import json
+    
+    banner = await db.get(Publicidad, id)
+    if not banner:
+        raise HTTPException(status_code=404, detail="Banner no encontrado.")
+    
+    try:
+        # Eliminar todas las asignaciones existentes
+        await db.execute(
+            select(PublicidadAsignacion).where(PublicidadAsignacion.publicidad_id == id)
+        )
+        result = await db.execute(
+            select(PublicidadAsignacion).where(PublicidadAsignacion.publicidad_id == id)
+        )
+        existentes = result.scalars().all()
+        for asig in existentes:
+            await db.delete(asig)
+        
+        # Actualizar el flag de asignacion_todos
+        banner.asignacion_todos = asignacion_todos
+        await db.commit()
+        
+        # Si no es asignacion_todos, crear nuevas asignaciones
+        if not asignacion_todos:
+            parsed_servidor_ids = []
+            parsed_dispositivo_ids = []
+            
+            if servidor_ids:
+                try:
+                    parsed_servidor_ids = json.loads(servidor_ids)
+                except:
+                    parsed_servidor_ids = []
+            
+            if dispositivo_ids:
+                try:
+                    parsed_dispositivo_ids = json.loads(dispositivo_ids)
+                except:
+                    parsed_dispositivo_ids = []
+            
+            # Obtener dispositivos de los servidores seleccionados
+            if parsed_servidor_ids or parsed_dispositivo_ids:
+                query = select(Dispositivo)
+                if parsed_servidor_ids:
+                    query = query.where(Dispositivo.servidor_id.in_(parsed_servidor_ids))
+                if parsed_dispositivo_ids:
+                    query = query.where(Dispositivo.codigo_kiosko.in_(parsed_dispositivo_ids))
+                
+                result = await db.execute(query)
+                dispositivos = result.scalars().all()
+                
+                for disp in dispositivos:
+                    nueva_asignacion = PublicidadAsignacion(
+                        publicidad_id=id,
+                        servidor_id=disp.servidor_id,
+                        dispositivo_id=disp.codigo_kiosko
+                    )
+                    db.add(nueva_asignacion)
+                
+                await db.commit()
+        
+        return {"success": True, "message": "Asignaciones actualizadas correctamente."}
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al actualizar asignaciones: {str(e)}")
+
+
 @router.post("/banners/sincronizar")
 async def sincronizar_banners(
     publicidad_ids: List[int] = ...,

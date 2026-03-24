@@ -60,9 +60,12 @@ suspend fun ejecutarPurgaTotal(context: android.content.Context, api: ApiService
                             Log.w("PurgaTotal", "Archivo descargado no existe: ${item.localPath} (id=${banner.id}) - No se agrega al cache")
                         }
                     }
-                    // Delay entre descargas para evitar sobrecarga (1.5 segundos)
+                    // Delay entre descargas para evitar sobrecarga
+                    // Videos necesitan más tiempo para descargarse completamente
                     if (i < banners.size - 1) {
-                        delay(2000)
+                        val delayMs = if (banner.tipo == "video") 8000L else 1500L
+                        Log.d("PurgaTotal", "Esperando ${delayMs}ms antes del siguiente banner (tipo=${banner.tipo})")
+                        delay(delayMs)
                     }
                 } catch (e: Exception) {
                     Log.e("PurgaTotal", "Error descargando banner id=${banner.id}: ${e.message}")

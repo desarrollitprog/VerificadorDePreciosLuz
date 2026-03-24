@@ -106,6 +106,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private var lastErrorAt = 0L
     private var lastPlaybackReportKey: String? = null
     private var lastPlaybackReportAt = 0L
+    private val retryCountMap = mutableMapOf<String, Int>()
+    private val MAX_RETRY_BEFORE_REPORT = 3
     private var lastMockSubmitAt = 0L
     private var pendingMockText: String? = null
     private var mockIdleRunnable: Runnable? = null
@@ -730,11 +732,23 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         val item = standbyItems[standbyIndex]
         val fileExists = java.io.File(item.localPath).exists()
         if (!fileExists) {
-            Log.w(TAG, "Standby: archivo no existe, eliminando de la lista: ${item.localPath}")
-            reportPlaybackFailure(
-                localPath = item.localPath,
-                reason = "Archivo no encontrado en almacenamiento local"
-            )
+            // Contador de reintentos para evitar spam de notificaciones
+            val currentRetry = retryCountMap.getOrDefault(item.localPath, 0)
+            val newRetry = currentRetry + 1
+            retryCountMap[item.localPath] = newRetry
+            
+            if (newRetry >= MAX_RETRY_BEFORE_REPORT) {
+                // Solo reportar si falló MAX_RETRY_BEFORE_REPORT veces consecutivas
+                Log.w(TAG, "Standby: archivo no existe tras $newRetry intentos, eliminando de la lista: ${item.localPath}")
+                reportPlaybackFailure(
+                    localPath = item.localPath,
+                    reason = "Archivo no encontrado tras $newRetry intentos"
+                )
+                retryCountMap.remove(item.localPath)
+            } else {
+                Log.w(TAG, "Standby: archivo no existe (intento $newRetry/$MAX_RETRY_BEFORE_REPORT), reintentando: ${item.localPath}")
+            }
+            
             if (standbyItems.isNotEmpty()) {
                 standbyItems.removeAt(standbyIndex)
             }
@@ -747,6 +761,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             playStandbyItem()
             return
         }
+        
+        // Si el archivo existe, resetear el contador de reintentos
+        retryCountMap.remove(item.localPath)
         Log.i(TAG, "Standby: item idx=$standbyIndex tipo=${item.tipo} path=${item.localPath} exists=$fileExists")
         standbySlideRunnable?.let { uiHandler.removeCallbacks(it) }
         binding.standbyImage.visibility = View.GONE
@@ -762,10 +779,23 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             }
             binding.standbyVideo.setOnErrorListener { _, what, extra ->
                 Log.w(TAG, "Standby: error video what=$what extra=$extra para ${item.localPath}")
-                reportPlaybackFailure(
-                    localPath = item.localPath,
-                    reason = "VideoView error what=$what extra=$extra"
-                )
+                
+                // Contador de reintentos para errores de video
+                val currentRetry = retryCountMap.getOrDefault(item.localPath, 0)
+                val newRetry = currentRetry + 1
+                retryCountMap[item.localPath] = newRetry
+                
+                // Solo reportar si falló MAX_RETRY_BEFORE_REPORT veces consecutivas
+                if (newRetry >= MAX_RETRY_BEFORE_REPORT) {
+                    reportPlaybackFailure(
+                        localPath = item.localPath,
+                        reason = "VideoView error what=$what extra=$extra tras $newRetry intentos"
+                    )
+                    retryCountMap.remove(item.localPath)
+                } else {
+                    Log.w(TAG, "Standby: error video (intento $newRetry/$MAX_RETRY_BEFORE_REPORT), reintentando...")
+                }
+                
                 if (standbyItems.size == 1) {
                     stopStandbyCarousel()
                 } else {
@@ -781,7 +811,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 }
                 true
             }
-            binding.standbyVideo.setVideoPath(item.localPath)
+            val videoFile = java.io.File(item.localPath)
+            val videoUri = android.net.Uri.fromFile(videoFile)
+            binding.standbyVideo.setVideoURI(videoUri)
             binding.standbyVideo.start()
         } else {
             binding.standbyImage.visibility = View.VISIBLE
@@ -1485,7 +1517,15 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                             Log.e(TAG, "[WebSocket] Error enviando confirmación", e)
                         }
                         if (command == "WIPE_AND_RESYNC") {
-                            Log.i(TAG, "[WebSocket] Comando WIPE_AND_RESYNC recibido. Ejecutando purga total...")
+                            Log.i(TAG, "[WebSocket] Comando WIPE_AND_RESYNC recibido. Pausando carrusel antes de purga...")
+                            
+                            // 1. PAUSAR el carrusel INMEDIATAMENTE antes de borrar archivos
+                            uiHandler.post {
+                                stopStandbyCarousel()
+                                binding.standbyOverlay.visibility = View.GONE
+                                Log.d(TAG, "[WebSocket] Carrusel detenido y overlay ocultado")
+                            }
+                            
                             scope.launch {
                                 val apiService = api
                                 if (apiService == null) {
@@ -1493,10 +1533,19 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                     return@launch
                                 }
 
+                                // 2. Ejecutar purga SIN callback de inicio de carrusel
                                 val purgeResult = ejecutarPurgaTotal(this@ScanActivity, apiService, baseUrl, deviceId) {
-                                    uiHandler.post {
-                                        stopStandbyCarousel()
+                                    // Callback vacío - controlamos el inicio manualmente
+                                }
+
+                                // 3. Solo iniciar carrusel DESPUÉS de que la purga termine exitosamente
+                                uiHandler.post {
+                                    if (purgeResult.success) {
+                                        Log.i(TAG, "[WebSocket] Purga exitosa, iniciando carrusel...")
                                         startStandbyCarousel()
+                                    } else {
+                                        Log.w(TAG, "[WebSocket] Purga fallida, no se inicia carrusel")
+                                        sendSyncConfirmation(webSocket, command, "FAILED", purgeResult.reason ?: "Purga fallida")
                                     }
                                 }
 

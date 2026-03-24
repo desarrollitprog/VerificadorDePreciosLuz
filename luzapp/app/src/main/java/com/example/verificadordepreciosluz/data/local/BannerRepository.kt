@@ -8,6 +8,7 @@ import com.google.gson.Gson
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 class BannerRepository(
     private val context: Context,
@@ -15,7 +16,12 @@ class BannerRepository(
     private val baseUrl: String,
 ) {
     private val gson = Gson()
-    private val client = OkHttpClient()
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(120, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .build()
 
     // Carga metadata local (banners_meta.json)
     fun loadCache(): BannerCacheMeta? {
@@ -93,6 +99,31 @@ class BannerRepository(
             Log.w(TAG, "Archivo descargado no es legible: ${outFile.absolutePath} (id=${item.id}) - Eliminando archivo")
             outFile.delete()
             return null
+        }
+        // Verificación de tamaño mínimo para videos (al menos 10KB)
+        if (item.tipo == "video" && fileSize < 10000) {
+            Log.w(TAG, "Video demasiado pequeño (${fileSize} bytes), probablemente incompleto: ${outFile.absolutePath} (id=${item.id}) - Eliminando archivo")
+            outFile.delete()
+            return null
+        }
+        // Verificación adicional con MediaMetadataRetriever para videos
+        if (item.tipo == "video") {
+            try {
+                val retriever = android.media.MediaMetadataRetriever()
+                retriever.setDataSource(outFile.absolutePath)
+                val duration = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
+                retriever.release()
+                if (duration == null) {
+                    Log.w(TAG, "Video sin duración válida, probablemente corrupto: ${outFile.absolutePath} (id=${item.id}) - Eliminando archivo")
+                    outFile.delete()
+                    return null
+                }
+                Log.d(TAG, "Video verificado OK: ${outFile.absolutePath} (id=${item.id}) duration=${duration}ms")
+            } catch (e: Exception) {
+                Log.w(TAG, "No se pudo leer metadata del video: ${e.message} - ${outFile.absolutePath} (id=${item.id}) - Eliminando archivo")
+                outFile.delete()
+                return null
+            }
         }
         Log.d(TAG, "Banner descargado OK: ${outFile.absolutePath} (id=${item.id}) size=${fileSize}")
 

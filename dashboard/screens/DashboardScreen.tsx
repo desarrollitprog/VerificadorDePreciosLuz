@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNotification } from '../components/useNotification';
 import { Search, UploadCloud, MoreVertical, Eye, Trash, Film, Plus, Server, Smartphone, ChevronDown, ChevronRight } from 'lucide-react';
-import { getVideos, uploadMedia, deleteVideo, sincronizarServidores, updateBannerMetadata, FileMetadata } from '../services/videoService';
+import { getVideos, uploadMedia, deleteVideo, sincronizarServidores, updateBannerMetadata, updateBannerAsignations, FileMetadata } from '../services/videoService';
 import { Video, Servidor } from '../types';
 import {
   getForceSyncJobStatus,
@@ -102,6 +102,10 @@ export const DashboardScreen: React.FC = () => {
     fechaFin: '',
   });
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editAsignacionTodos, setEditAsignacionTodos] = useState(true);
+  const [editServidorIds, setEditServidorIds] = useState<number[]>([]);
+  const [editDispositivoIds, setEditDispositivoIds] = useState<string[]>([]);
+  const [editExpandedServers, setEditExpandedServers] = useState<number[]>([]);
 
   // Estado para vista compacta
   const [expandedFiles, setExpandedFiles] = useState<boolean[]>([]);
@@ -613,6 +617,18 @@ export const DashboardScreen: React.FC = () => {
                           fechaInicio: video.fechaInicio || '',
                           fechaFin: video.fechaFin || '',
                         });
+                        // Inicializar estados de asignación
+                        const asignacionTodos = video.asignacion_todos ?? true;
+                        setEditAsignacionTodos(asignacionTodos);
+                        if (!asignacionTodos && video.asignaciones) {
+                          const srvIds = [...new Set(video.asignaciones.map((a: any) => a.servidor_id).filter(Boolean))];
+                          const dispIds = video.asignaciones.map((a: any) => a.dispositivo_id).filter(Boolean);
+                          setEditServidorIds(srvIds);
+                          setEditDispositivoIds(dispIds);
+                        } else {
+                          setEditServidorIds([]);
+                          setEditDispositivoIds([]);
+                        }
                         setIsEditModalOpen(true);
                       }}
                       className="text-slate-400 hover:text-primary dark:hover:text-primary transition-colors"
@@ -1186,6 +1202,106 @@ export const DashboardScreen: React.FC = () => {
                   Activo
                 </label>
               </div>
+              
+              {/* Sección de asignación */}
+              <div className="border-t border-slate-200 dark:border-slate-700 pt-4 mt-2">
+                <label className="flex items-center gap-2 mb-3">
+                  <input
+                    type="checkbox"
+                    id="editAsignacionTodos"
+                    checked={editAsignacionTodos}
+                    onChange={e => {
+                      setEditAsignacionTodos(e.target.checked);
+                      if (e.target.checked) {
+                        setEditServidorIds([]);
+                        setEditDispositivoIds([]);
+                      }
+                    }}
+                    className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
+                  />
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Asignar a TODOS los dispositivos
+                  </span>
+                </label>
+                
+                {!editAsignacionTodos && (
+                  <div className="space-y-2 max-h-40 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-lg p-2">
+                    {servidores.length === 0 ? (
+                      <p className="text-xs text-slate-500">No hay servidores disponibles</p>
+                    ) : (
+                      servidores.map(srv => (
+                        <div key={srv.id}>
+                          <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 p-1.5 rounded">
+                            <input
+                              type="checkbox"
+                              checked={editServidorIds.includes(Number(srv.id))}
+                              onChange={e => {
+                                e.stopPropagation();
+                                const servidorId = Number(srv.id);
+                                if (e.target.checked) {
+                                  setEditServidorIds([...editServidorIds, servidorId]);
+                                } else {
+                                  setEditServidorIds(editServidorIds.filter(id => id !== servidorId));
+                                }
+                              }}
+                              className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
+                            />
+                            <span className="text-sm text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                              <Server size={12} />
+                              {srv.nombre}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditExpandedServers(prev =>
+                                  prev.includes(srv.id)
+                                    ? prev.filter(id => id !== srv.id)
+                                    : [...prev, srv.id]
+                                );
+                              }}
+                              className="ml-auto p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded"
+                            >
+                              {editExpandedServers.includes(srv.id) ? (
+                                <ChevronDown size={14} className="text-slate-500" />
+                              ) : (
+                                <ChevronRight size={14} className="text-slate-500" />
+                              )}
+                            </button>
+                          </label>
+                          {editExpandedServers.includes(srv.id) && srv.dispositivos && srv.dispositivos.length > 0 && (
+                            <div className="ml-6 mt-1 space-y-0.5">
+                              {srv.dispositivos.map(disp => (
+                                <label key={`${srv.id}-${disp.id}`} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 p-1 rounded">
+                                  <input
+                                    type="checkbox"
+                                    checked={editDispositivoIds.includes(disp.id)}
+                                    onChange={e => {
+                                      e.stopPropagation();
+                                      if (e.target.checked) {
+                                        setEditDispositivoIds([...editDispositivoIds, disp.id]);
+                                      } else {
+                                        setEditDispositivoIds(editDispositivoIds.filter(id => id !== disp.id));
+                                      }
+                                    }}
+                                    className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
+                                  />
+                                  <span className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1">
+                                    <Smartphone size={10} />
+                                    {disp.nombre_amigable || disp.codigo_kiosko}
+                                  </span>
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+                <p className="text-[10px] text-slate-500 mt-2">
+                  Seleccionados: {editServidorIds.length} servidores, {editDispositivoIds.length} dispositivos
+                </p>
+              </div>
             </div>
 
             <div className="mt-4 flex justify-end gap-2 p-4 border-t border-slate-200 dark:border-slate-700">
@@ -1194,6 +1310,9 @@ export const DashboardScreen: React.FC = () => {
                 onClick={() => {
                   setIsEditModalOpen(false);
                   setEditingVideo(null);
+                  setEditAsignacionTodos(true);
+                  setEditServidorIds([]);
+                  setEditDispositivoIds([]);
                 }}
                 disabled={isSavingEdit}
                 className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
@@ -1205,11 +1324,21 @@ export const DashboardScreen: React.FC = () => {
                 onClick={async () => {
                   setIsSavingEdit(true);
                   try {
+                    // Actualizar metadata
                     await updateBannerMetadata(editingVideo.id, {
                       activo: editFormData.activo,
                       fechaInicio: editFormData.fechaInicio || null,
                       fechaFin: editFormData.fechaFin || null,
                     });
+                    
+                    // Actualizar asignaciones
+                    await updateBannerAsignations(
+                      editingVideo.id,
+                      editAsignacionTodos,
+                      editServidorIds,
+                      editDispositivoIds
+                    );
+                    
                     showNotification('Publicidad actualizada correctamente', 'success');
                     setIsEditModalOpen(false);
                     setEditingVideo(null);

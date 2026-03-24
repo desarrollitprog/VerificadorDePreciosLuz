@@ -84,6 +84,24 @@ export async function updateBannerMetadata(videoId: string, payload: UpdateBanne
   return response.data;
 }
 
+export async function updateBannerAsignations(
+  videoId: string, 
+  asignacionTodos: boolean, 
+  servidorIds?: number[], 
+  dispositivoIds?: string[]
+) {
+  const params = new URLSearchParams();
+  params.append('asignacion_todos', String(asignacionTodos));
+  if (servidorIds && servidorIds.length > 0) {
+    params.append('servidor_ids', JSON.stringify(servidorIds));
+  }
+  if (dispositivoIds && dispositivoIds.length > 0) {
+    params.append('dispositivo_ids', JSON.stringify(dispositivoIds));
+  }
+  const response = await api.put(`/banners/${videoId}/asignaciones?${params.toString()}`);
+  return response.data;
+}
+
 export async function uploadMedia(file: File, payload?: UploadMediaPayload) {
   const formData = new FormData();
   formData.append('file', file);

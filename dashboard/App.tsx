@@ -94,7 +94,7 @@ export default function App() {
             <Header 
               currentScreen={currentScreen}
             />
-            <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 scroll-smooth">
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 scroll-smooth animate-fade-in">
               {renderScreen()}
             </div>
           </main>

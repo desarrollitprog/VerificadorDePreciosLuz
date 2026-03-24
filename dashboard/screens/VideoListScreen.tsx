@@ -249,15 +249,15 @@ export const VideoListScreen: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 bg-white dark:bg-[#16212b] p-2 rounded-xl border border-slate-200 dark:border-[#324d67]/30 shadow-sm">
-        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+      <div className="flex flex-col gap-4 bg-white/80 dark:bg-[#16212b]/80 p-4 rounded-xl border border-slate-200/50 dark:border-[#324d67]/30 backdrop-blur-sm">
+        <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
         <div className="relative w-full sm:max-w-md">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
             <Search className="text-slate-400" size={18} />
           </div>
           <input
             type="text"
-            className="block w-full rounded-lg bg-slate-50 dark:bg-[#0b1219] border-none py-2.5 pl-10 pr-3 text-sm text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-[#58728a] focus:ring-1 focus:ring-primary"
+            className="block w-full rounded-lg bg-slate-50/50 dark:bg-[#0b1219]/50 border-none py-2.5 pl-10 pr-3 text-sm text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-[#58728a] focus:ring-1 focus:ring-primary/50"
             placeholder="Coloca el Nombre del Archivo"
             value={search}
             onChange={(e) => setSearch(e.target.value)}

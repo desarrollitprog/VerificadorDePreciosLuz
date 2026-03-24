@@ -66,10 +66,25 @@
         outline: 2px solid #3b82f6;
         outline-offset: 2px;
       }
+      
+      /* Page load animation */
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .animate-fade-in {
+        animation: fadeIn 0.4s ease-out forwards;
+      }
+      
+      /* Color de selección más sutil */
+      ::selection {
+        background-color: rgba(59, 130, 246, 0.25);
+        color: inherit;
+      }
     </style>
   <link rel="stylesheet" href="/index.css">
 </head>
-  <body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white antialiased selection:bg-primary selection:text-white">
+  <body class="bg-background-light dark:bg-[#0f1114] text-slate-900 dark:text-white antialiased selection:bg-primary selection:text-white font-sans" style="background-image: linear-gradient(180deg, #0f1114 0%, #13161b 100%);">
     <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>

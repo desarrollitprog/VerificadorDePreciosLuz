@@ -160,15 +160,14 @@ export function ServerDashboard() {
   const formatLastSeen = (lastSeen: string | null) => {
     if (!lastSeen) return 'Sin conexión';
     const date = new Date(lastSeen);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-
-    if (diffMins < 1) return 'Hace un momento';
-    if (diffMins < 60) return `Hace ${diffMins} min`;
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `Hace ${diffHours} h`;
-    return date.toLocaleDateString('es-VE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleString('es-VE', { 
+      day: '2-digit', 
+      month: 'short', 
+      year: 'numeric',
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: true 
+    });
   };
 
   return (
@@ -234,6 +233,7 @@ export function ServerDashboard() {
                                 ID: {d.device_id}
                               </div>
                               <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                                <span className="text-slate-500 dark:text-slate-400">Última conexión: </span>
                                 {formatLastSeen(d.last_seen)}
                               </div>
                               <div className="flex items-center gap-2 mt-2">

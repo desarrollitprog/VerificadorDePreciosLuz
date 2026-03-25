@@ -108,7 +108,7 @@ export const VideoListScreen: React.FC = () => {
   useEffect(() => {
     if (deleteId) {
       setTimeout(() => {
-        document.getElementById('delete-modal')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }, 50);
     }
   }, [deleteId]);
@@ -143,7 +143,7 @@ export const VideoListScreen: React.FC = () => {
         fechaFin: toInputDateTime(item.fechaFin),
       });
       setTimeout(() => {
-        document.getElementById('edit-modal')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }, 50);
     }, 0);
   };
@@ -469,7 +469,7 @@ export const VideoListScreen: React.FC = () => {
       </div>
 
       {deleteId && (
-        <div id="delete-modal" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div id="delete-modal" className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-20">
           <div className="bg-white dark:bg-[#16212b] rounded-lg p-6 shadow-xl w-full max-w-xs flex flex-col items-center">
             <p className="mb-4 text-center text-slate-800 dark:text-white">
               {deleteId === 'bulk'
@@ -505,7 +505,7 @@ export const VideoListScreen: React.FC = () => {
       )}
 
       {editItem && (
-        <div id="edit-modal" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div id="edit-modal" className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-20">
           <div className="bg-white dark:bg-[#16212b] rounded-lg p-5 w-full max-w-md border border-slate-200 dark:border-slate-700">
             <h3 className="text-lg font-semibold mb-4 text-slate-900 dark:text-white">Editar vigencia</h3>
             <div className="space-y-3">

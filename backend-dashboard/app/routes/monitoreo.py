@@ -754,6 +754,7 @@ async def status_detalle(
                         codigo_kiosko=codigo,
                         online=bool(info.get("online", False)),
                         servidor_id=s.id,
+                        primera_conexion=now,
                     )
                     db.add(dispositivo)
                     dispositivo_por_codigo[codigo] = dispositivo
@@ -779,6 +780,11 @@ async def status_detalle(
             nombre_amigable = dispositivo.nombre_amigable
             nombre_mostrado = nombre_amigable if nombre_amigable else dispositivo.codigo_kiosko
 
+            device_uptime = None
+            if dispositivo.primera_conexion:
+                device_uptime_delta = now - dispositivo.primera_conexion
+                device_uptime = int(device_uptime_delta.total_seconds())
+
             dispositivos.append(
                 {
                     "device_id": dispositivo.codigo_kiosko,
@@ -786,6 +792,8 @@ async def status_detalle(
                     "nombre_mostrado": nombre_mostrado,
                     "online": is_online,
                     "last_seen": runtime_info.get("last_seen"),
+                    "primera_conexion": dispositivo.primera_conexion.isoformat() if dispositivo.primera_conexion else None,
+                    "uptime": device_uptime,
                     "server_id": runtime_info.get("server_id"),
                 }
             )

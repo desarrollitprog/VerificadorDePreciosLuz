@@ -16,6 +16,7 @@ const getBarColor = (porcentaje: number) => {
 };
 
 const ServerCard: React.FC<ServerCardProps> = ({ nombre, ip, online, porcentaje_uso, onRename }) => {
+
   return (
     <div 
       className={`

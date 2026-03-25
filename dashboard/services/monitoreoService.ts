@@ -6,6 +6,8 @@ export interface DeviceStatus {
   nombre_mostrado?: string;
   online: boolean;
   last_seen: string | null;
+  primera_conexion?: string | null;
+  uptime?: number | null;
   server_id?: string | null;
 }
 
@@ -116,6 +118,8 @@ export async function getServersStatusWithDevices(): Promise<ServerStatusDetail[
           nombre_mostrado: d.nombre_mostrado ?? String(d.device_id),
           online: !!d.online,
           last_seen: d.last_seen ?? null,
+          primera_conexion: d.primera_conexion ?? null,
+          uptime: d.uptime ?? null,
           server_id: d.server_id ?? null,
         }))
       : [],

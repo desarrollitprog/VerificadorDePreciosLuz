@@ -6,84 +6,219 @@ import { getVideos } from '../services/videoService';
 import { Video } from '../types';
 
 const calendarStyles = `
-  .fc .fc-daygrid-day-number {
-    color: #000000;
-    font-weight: 500;
+  /* Base */
+  .fc {
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
   }
-  .fc .fc-col-header-cell-cushion {
-    color: #000000;
-    font-weight: 600;
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-  .fc .fc-daygrid-day-top {
-    color: #000000;
-  }
-  .fc .fc-day-today {
-    background-color: rgba(59, 130, 246, 0.15) !important;
-  }
-  .fc .fc-day-today .fc-daygrid-day-number {
-    color: #2563eb;
-    font-weight: 700;
-  }
-  .fc .fc-button-primary {
-    background-color: #3b82f6;
-    border-color: #3b82f6;
-    font-weight: 500;
-    font-size: 0.75rem;
-    padding: 0.4rem 0.75rem;
-    text-transform: capitalize;
-  }
-  .fc .fc-button-primary:hover {
-    background-color: #2563eb;
-    border-color: #2563eb;
-  }
+  
+  /* Header */
   .fc .fc-toolbar-title {
-    color: #000000;
+    color: #0f172a;
+    font-weight: 700;
+    font-size: 1.25rem;
+    letter-spacing: -0.02em;
+  }
+  
+  /* Day headers */
+  .fc .fc-col-header-cell-cushion {
+    color: #64748b;
     font-weight: 600;
-    font-size: 1.1rem;
-  }
-  .fc .fc-button {
-    color: #000000;
-  }
-  .fc .fc-button-group > .fc-button {
-    background-color: #f1f5f9;
-    border-color: #cbd5e1;
-    color: #000000;
-    font-size: 0.75rem;
-  }
-  .fc .fc-button-group > .fc-button:hover {
-    background-color: #e2e8f0;
-  }
-  .fc .fc-button-active {
-    background-color: #3b82f6 !important;
-    border-color: #3b82f6 !important;
-  }
-  .fc-daygrid-day-events {
-    color: #000000;
-  }
-  .fc-more-link {
-    color: #3b82f6;
-    font-weight: 500;
-  }
-  .fc-event {
-    border-radius: 0.25rem;
     font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 0.75rem 0;
+    text-decoration: none;
+  }
+  
+  /* Day numbers */
+  .fc .fc-daygrid-day-number {
+    color: #334155;
     font-weight: 500;
-    padding: 0.15rem 0.3rem;
-    border: none;
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    font-size: 0.85rem;
+    padding: 0.5rem;
+    text-decoration: none;
   }
-  .fc-event:hover {
+  
+  .fc .fc-daygrid-day-top {
+    padding: 0.25rem 0.5rem;
+  }
+  
+  /* Days grid */
+  .fc .fc-daygrid-day {
+    border-color: #e2e8f0 !important;
+    transition: background-color 0.2s ease;
+  }
+  
+  .fc .fc-daygrid-day:hover {
+    background-color: #f8fafc;
+  }
+  
+  .fc .fc-day-other .fc-daygrid-day-number {
+    color: #cbd5e1;
+  }
+  
+  /* Today */
+  .fc .fc-day-today {
+    background-color: rgba(99, 102, 241, 0.08) !important;
+  }
+  
+  .fc .fc-day-today .fc-daygrid-day-number {
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    color: white;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+  }
+  
+  /* Buttons */
+  .fc .fc-button {
+    background: white;
+    border: 1px solid #e2e8f0;
+    color: #475569;
+    font-weight: 600;
+    font-size: 0.75rem;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    text-transform: capitalize;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    transition: all 0.2s ease;
+  }
+  
+  .fc .fc-button:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    color: #0f172a;
     transform: translateY(-1px);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
   }
+  
+  .fc .fc-button-active {
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
+    border-color: transparent !important;
+    color: white !important;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4) !important;
+  }
+  
+  .fc .fc-button-group {
+    background: #f1f5f9;
+    border-radius: 0.625rem;
+    padding: 0.25rem;
+    gap: 0.25rem;
+  }
+  
+  .fc .fc-button-group .fc-button {
+    border-radius: 0.375rem;
+  }
+  
+  /* Events */
+  .fc .fc-daygrid-day-events {
+    padding: 0.125rem 0.25rem;
+  }
+  
+  .fc-daygrid-event {
+    border-radius: 0.375rem !important;
+    font-size: 0.7rem !important;
+    font-weight: 600 !important;
+    padding: 0.25rem 0.5rem !important;
+    border: none !important;
+    margin-bottom: 0.25rem !important;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+  
+  .fc-daygrid-event:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+  }
+  
   .fc-event-main {
-    padding: 0;
+    padding: 0 !important;
   }
+  
   .fc-daygrid-event-dot {
-    display: none;
+    display: none !important;
+  }
+  
+  .fc-more-link {
+    color: #6366f1 !important;
+    font-weight: 600 !important;
+    font-size: 0.7rem !important;
+  }
+  
+  /* Popover */
+  .fc-popover {
+    border-radius: 0.75rem !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12) !important;
+  }
+  
+  .fc-popover-header {
+    background-color: #f8fafc !important;
+    color: #0f172a !important;
+    font-weight: 600 !important;
+    padding: 0.75rem !important;
+    border-radius: 0.75rem 0.75rem 0 0 !important;
+  }
+
+  /* Dark Mode */
+  .dark .fc .fc-toolbar-title {
+    color: #f1f5f9;
+  }
+  
+  .dark .fc .fc-col-header-cell-cushion {
+    color: #94a3b8;
+  }
+  
+  .dark .fc .fc-daygrid-day-number {
+    color: #cbd5e1;
+  }
+  
+  .dark .fc .fc-daygrid-day {
+    background-color: #1e293b !important;
+    border-color: #334155 !important;
+  }
+  
+  .dark .fc .fc-daygrid-day:hover {
+    background-color: #334155 !important;
+  }
+  
+  .dark .fc .fc-day-other .fc-daygrid-day-number {
+    color: #475569;
+  }
+  
+  .dark .fc .fc-day-today {
+    background-color: rgba(99, 102, 241, 0.15) !important;
+  }
+  
+  .dark .fc .fc-button {
+    background: #1e293b;
+    border-color: #334155;
+    color: #cbd5e1;
+  }
+  
+  .dark .fc .fc-button:hover {
+    background: #334155;
+    border-color: #475569;
+    color: #f1f5f9;
+  }
+  
+  .dark .fc .fc-button-group {
+    background: #0f172a;
+  }
+  
+  .dark .fc-popover {
+    background-color: #1e293b !important;
+    border-color: #334155 !important;
+  }
+  
+  .dark .fc-popover-header {
+    background-color: #334155 !important;
+    color: #f1f5f9 !important;
   }
 `;
 
@@ -210,90 +345,95 @@ export const CalendarScreen: React.FC = () => {
       <div className="flex flex-col gap-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-            <svg className="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            Programación de Anuncios
+          <h2 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <span className="bg-gradient-to-r from-slate-800 to-slate-600 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
+              Programación
+            </span>
           </h2>
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 ml-13">
             Vista de anuncios programados por fecha de inicio
           </p>
         </div>
         
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-xs">
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded bg-emerald-500"></span>
-              Activo
+          <div className="flex items-center gap-4 text-xs font-medium bg-white dark:bg-slate-800 px-4 py-2 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+            <span className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
+              <span className="text-slate-600 dark:text-slate-300">Activo</span>
             </span>
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded bg-blue-500"></span>
-              Programado
+            <span className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-sm shadow-indigo-500/50"></span>
+              <span className="text-slate-600 dark:text-slate-300">Programado</span>
             </span>
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded bg-rose-500"></span>
-              Vencido
+            <span className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-sm shadow-rose-500/50"></span>
+              <span className="text-slate-600 dark:text-slate-300">Vencido</span>
             </span>
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded bg-slate-400"></span>
-              Inactivo
+            <span className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-slate-400 shadow-sm"></span>
+              <span className="text-slate-600 dark:text-slate-300">Inactivo</span>
             </span>
           </div>
         </div>
       </div>
 
-      <div className="bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-800 p-4 relative">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-lg shadow-slate-200/50 dark:shadow-none border border-slate-200 dark:border-slate-800 p-4 relative overflow-hidden">
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>
         {loading && (
-          <div className="absolute top-4 right-4 z-10 flex items-center gap-2 bg-white dark:bg-[#1c2936] px-3 py-1.5 rounded-full shadow border border-slate-200 dark:border-slate-700">
-            <div className="w-4 h-4 rounded-full border-2 border-primary/30 border-t-primary animate-spin"></div>
-            <span className="text-xs text-slate-500">Cargando...</span>
+          <div className="absolute top-6 right-6 z-10 flex items-center gap-2 bg-white dark:bg-slate-800 px-4 py-2 rounded-full shadow-lg border border-slate-200 dark:border-slate-700">
+            <div className="w-4 h-4 rounded-full border-2 border-indigo-500/30 border-t-indigo-500 animate-spin"></div>
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Cargando...</span>
           </div>
         )}
         <FullCalendar {...calendarOptions} />
       </div>
 
       {selectedEvent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="bg-white dark:bg-[#1c2936] rounded-xl shadow-2xl max-w-lg w-full mx-4 overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
-              <h3 className="font-semibold text-slate-800 dark:text-white truncate pr-4">{selectedEvent.title}</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-lg w-full mx-4 overflow-hidden border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between p-5 border-b border-slate-200 dark:border-slate-800">
+              <h3 className="font-bold text-lg text-slate-800 dark:text-white truncate pr-4">{selectedEvent.title}</h3>
               <button 
                 onClick={() => setSelectedEvent(null)} 
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-white text-2xl leading-none"
+                className="w-8 h-8 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-xl leading-none"
               >
                 ×
               </button>
             </div>
-            <div className="p-4">
+            <div className="p-5">
               <div className="flex items-center gap-3 mb-4">
-                <div className={`px-2 py-1 rounded-full text-xs font-medium text-white ${selectedEvent.extendedProps.estado === 'activo' ? 'bg-emerald-500' : selectedEvent.extendedProps.estado === 'vencido' ? 'bg-rose-500' : selectedEvent.extendedProps.estado === 'inactivo' ? 'bg-slate-400' : 'bg-blue-500'}`}>
+                <div className={`px-3 py-1.5 rounded-full text-xs font-bold ${selectedEvent.extendedProps.estado === 'activo' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : selectedEvent.extendedProps.estado === 'vencido' ? 'bg-rose-100 text-rose-700 border border-rose-200' : selectedEvent.extendedProps.estado === 'inactivo' ? 'bg-slate-100 text-slate-600 border border-slate-200' : 'bg-indigo-100 text-indigo-700 border border-indigo-200'}`}>
                   {selectedEvent.extendedProps.estado}
                 </div>
-                <span className="text-xs text-slate-500">
+                <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">
                   {selectedEvent.extendedProps.tipo}
                 </span>
               </div>
               
               <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">
-                <strong>Inicio:</strong> {new Date(selectedEvent.start).toLocaleDateString('es-VE', { day: '2-digit', month: 'long', year: 'numeric' })}
+                <span className="font-semibold">Inicio:</span> {new Date(selectedEvent.start).toLocaleDateString('es-VE', { day: '2-digit', month: 'long', year: 'numeric' })}
                 {selectedEvent.end && (
-                  <span> • <strong>Fin:</strong> {new Date(selectedEvent.end).toLocaleDateString('es-VE', { day: '2-digit', month: 'long', year: 'numeric' })}</span>
+                  <span> • <span className="font-semibold">Fin:</span> {new Date(selectedEvent.end).toLocaleDateString('es-VE', { day: '2-digit', month: 'long', year: 'numeric' })}</span>
                 )}
               </p>
 
-              <div className="bg-slate-100 dark:bg-slate-800 rounded-lg p-2">
+              <div className="bg-slate-100 dark:bg-slate-800/50 rounded-xl p-3">
                 {selectedEvent.extendedProps.tipo === 'image' ? (
                   <img 
                     src={selectedEvent.extendedProps.thumbnail || selectedEvent.extendedProps.url} 
                     alt={selectedEvent.title} 
-                    className="max-h-48 mx-auto rounded"
+                    className="max-h-52 mx-auto rounded-lg shadow-md"
                   />
                 ) : (
                   <video 
                     src={selectedEvent.extendedProps.url} 
                     controls 
-                    className="max-h-48 mx-auto rounded"
+                    className="max-h-52 mx-auto rounded-lg shadow-md"
                   />
                 )}
               </div>

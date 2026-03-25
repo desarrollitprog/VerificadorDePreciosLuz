@@ -205,8 +205,6 @@ async def schedule_banner_notification(
             await asyncio.sleep(delay_inicio)
             
             # Obtener el banner actualizado de la BD para verificar si aún está activo
-            from ..database import get_db_publicidad
-            from sqlalchemy import select
             async for db in get_db_publicidad():
                 result = await db.execute(select(Publicidad).where(Publicidad.id == banner_id))
                 banner = result.scalars().first()
@@ -230,8 +228,6 @@ async def schedule_banner_notification(
             logger.info(f"Programando notificación de fin para banner {banner_id} en {delay_fin} segundos")
             await asyncio.sleep(delay_fin)
             
-            from ..database import get_db_publicidad
-            from sqlalchemy import select
             async for db in get_db_publicidad():
                 result = await db.execute(select(Publicidad).where(Publicidad.id == banner_id))
                 banner = result.scalars().first()

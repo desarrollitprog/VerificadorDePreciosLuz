@@ -87,9 +87,10 @@ BANNER_CHECK_INTERVAL = 20 * 60  # 20 minutos en segundos
 async def _check_banners_starting():
     while True:
         try:
-            await asyncio.sleep(BANNER_CHECK_INTERVAL)
+            # Verificar inmediatamente al iniciar y luego cada 20 minutos
             await _notify_banners_started()
             await _notify_banners_ended()
+            await asyncio.sleep(BANNER_CHECK_INTERVAL)
         except asyncio.CancelledError:
             break
         except Exception as e:
@@ -176,6 +177,71 @@ async def _send_banner_notification(banner: Publicidad, target_device_ids: List[
     else:
         await tablet_ws_manager.broadcast(banner_info)
         logger.info(f"Broadcast {command}: {banner.titulo}")
+
+
+async def schedule_banner_notification(
+    banner_id: int,
+    device_ids: str | None,
+    titulo: str | None,
+    url: str,
+    tipo: str,
+    fecha_inicio: datetime,
+    fecha_fin: datetime | None,
+):
+    """Programa notificaciones exactas para inicio y fin de banner."""
+    now = get_venezuela_now()
+    
+    # Programar notificación de inicio
+    if fecha_inicio:
+        # Convertir fecha_inicio a aware si es naive
+        if fecha_inicio.tzinfo is None:
+            fecha_inicio_aware = fecha_inicio.replace(tzinfo=timezone(timedelta(hours=-4)))
+        else:
+            fecha_inicio_aware = fecha_inicio
+        
+        delay_inicio = (fecha_inicio_aware - now).total_seconds()
+        if delay_inicio > 0:
+            logger.info(f"Programando notificación de inicio para banner {banner_id} en {delay_inicio} segundos")
+            await asyncio.sleep(delay_inicio)
+            
+            # Obtener el banner actualizado de la BD para verificar si aún está activo
+            from ..database import get_db_publicidad
+            from sqlalchemy import select
+            async for db in get_db_publicidad():
+                result = await db.execute(select(Publicidad).where(Publicidad.id == banner_id))
+                banner = result.scalars().first()
+                if banner and banner.activo:
+                    target_device_ids = None
+                    if banner.device_ids:
+                        target_device_ids = [d.strip() for d in banner.device_ids.split(",") if d.strip()]
+                    await _send_banner_notification(banner, target_device_ids, "BANNER_INICIADO")
+                    logger.info(f"Notificación de inicio enviada para banner {banner_id}")
+                break
+    
+    # Programar notificación de fin
+    if fecha_fin:
+        if fecha_fin.tzinfo is None:
+            fecha_fin_aware = fecha_fin.replace(tzinfo=timezone(timedelta(hours=-4)))
+        else:
+            fecha_fin_aware = fecha_fin
+        
+        delay_fin = (fecha_fin_aware - now).total_seconds()
+        if delay_fin > 0:
+            logger.info(f"Programando notificación de fin para banner {banner_id} en {delay_fin} segundos")
+            await asyncio.sleep(delay_fin)
+            
+            from ..database import get_db_publicidad
+            from sqlalchemy import select
+            async for db in get_db_publicidad():
+                result = await db.execute(select(Publicidad).where(Publicidad.id == banner_id))
+                banner = result.scalars().first()
+                if banner:
+                    target_device_ids = None
+                    if banner.device_ids:
+                        target_device_ids = [d.strip() for d in banner.device_ids.split(",") if d.strip()]
+                    await _send_banner_notification(banner, target_device_ids, "BANNER_FINALIZADO")
+                    logger.info(f"Notificación de fin enviada para banner {banner_id}")
+                break
 
 
 @app.on_event("startup")
@@ -1248,13 +1314,30 @@ async def orchestrate_forced_sync_sequential(
 
 
 async def process_sync_confirmation(websocket: WebSocket, msg: dict):
-    if msg.get("type") != "CONFIRMATION" or msg.get("command") != "WIPE_AND_RESYNC":
+    if msg.get("type") != "CONFIRMATION":
         return
-
+    
+    command = msg.get("command")
     status = str(msg.get("status", "")).upper()
     reason = msg.get("reason", "")
     device_id = msg.get("device_id") or tablet_ws_manager.get_device_id(websocket)
     if not device_id:
+        return
+    
+    # Manejar confirmación de BANNER_INICIADO
+    if command == "BANNER_INICIADO" and status == "SUCCESS":
+        banner_id = msg.get("banner_id")
+        await notify_dashboard_banner_iniciado(device_id, banner_id)
+        return
+    
+    # Manejar confirmación de BANNER_FINALIZADO
+    if command == "BANNER_FINALIZADO" and status == "SUCCESS":
+        banner_id = msg.get("banner_id")
+        await notify_dashboard_banner_finalizado(device_id, banner_id)
+        return
+    
+    # Manejar confirmación de WIPE_AND_RESYNC (original)
+    if command != "WIPE_AND_RESYNC":
         return
 
     if device_command_bus is not None:
@@ -1284,6 +1367,46 @@ async def notify_dashboard_sync_failure(device_id: str, reason: str = ""):
             await client.post(notify_endpoint, json=payload, timeout=10)
     except Exception as e:
         logging.error(f"Error notificando a backend-dashboard: {e}")
+
+
+async def notify_dashboard_banner_iniciado(device_id: str, banner_id: int | None = None):
+    """Notifica al dashboard cuando un banner inicia en un dispositivo."""
+    dashboard_url = os.getenv("DASHBOARD_URL")
+    if not dashboard_url:
+        logging.error("DASHBOARD_URL no está definida en el entorno.")
+        return
+    notify_endpoint = f"{dashboard_url.rstrip('/')}/api/banner-status"
+    try:
+        async with httpx.AsyncClient() as client:
+            payload = {
+                "device_id": device_id,
+                "banner_id": banner_id,
+                "status": "INICIADO",
+            }
+            await client.post(notify_endpoint, json=payload, timeout=10)
+            logger.info(f"Notificación enviada al dashboard: Banner {banner_id} iniciado en dispositivo {device_id}")
+    except Exception as e:
+        logging.error(f"Error notificando banner iniciado al dashboard: {e}")
+
+
+async def notify_dashboard_banner_finalizado(device_id: str, banner_id: int | None = None):
+    """Notifica al dashboard cuando un banner finaliza en un dispositivo."""
+    dashboard_url = os.getenv("DASHBOARD_URL")
+    if not dashboard_url:
+        logging.error("DASHBOARD_URL no está definida en el entorno.")
+        return
+    notify_endpoint = f"{dashboard_url.rstrip('/')}/api/banner-status"
+    try:
+        async with httpx.AsyncClient() as client:
+            payload = {
+                "device_id": device_id,
+                "banner_id": banner_id,
+                "status": "FINALIZADO",
+            }
+            await client.post(notify_endpoint, json=payload, timeout=10)
+            logger.info(f"Notificación enviada al dashboard: Banner {banner_id} finalizado en dispositivo {device_id}")
+    except Exception as e:
+        logging.error(f"Error notificando banner finalizado al dashboard: {e}")
     # Lanzar reintentos automáticos en background
     asyncio.create_task(retry_sync_with_device(device_id))
 

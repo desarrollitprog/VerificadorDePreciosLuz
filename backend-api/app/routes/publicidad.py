@@ -20,6 +20,31 @@ def get_venezuela_now_naive():
     return datetime.now(timezone(timedelta(hours=-4))).replace(tzinfo=None)
 
 
+async def _notify_banner_iniciado_inmediato(banner: Publicidad, device_ids: str | None):
+    """Notifica inmediatamente a los dispositivos cuando un banner ya debe iniciarse."""
+    from ..main import tablet_ws_manager
+    
+    target_device_ids = None
+    if device_ids:
+        target_device_ids = [d.strip() for d in device_ids.split(",") if d.strip()]
+    
+    banner_info = {
+        "command": "BANNER_INICIADO",
+        "banner_id": banner.id,
+        "titulo": banner.titulo,
+        "url": banner.url,
+        "tipo": banner.tipo,
+        "fecha_inicio": banner.fecha_inicio.isoformat() if banner.fecha_inicio else None,
+        "fecha_fin": banner.fecha_fin.isoformat() if banner.fecha_fin else None,
+    }
+    
+    if target_device_ids:
+        for device_id in target_device_ids:
+            await tablet_ws_manager.send_to_device(device_id, banner_info)
+    else:
+        await tablet_ws_manager.broadcast(banner_info)
+
+
 class EstadoRemotoBody(BaseModel):
     activo: bool
 
@@ -149,6 +174,30 @@ async def replicar_archivo(
         db.add(nuevo_banner)
         await db.commit()
         await db.refresh(nuevo_banner)
+        
+        # Notificar inmediatamente si fecha_inicio ya pasó o está muy cerca
+        if fecha_inicio_dt and activo:
+            now = get_venezuela_now_naive()
+            # Notificar si fecha_inicio <= now (ya pasó)
+            if fecha_inicio_dt <= now:
+                await _notify_banner_iniciado_inmediato(nuevo_banner, dispositivo_ids)
+                print(f"[DEBUG] Notificación inmediata enviada para banner ID={nuevo_banner.id}")
+            else:
+                # Programar notificación exacta para la hora de inicio
+                import asyncio
+                from ..main import schedule_banner_notification
+                asyncio.create_task(
+                    schedule_banner_notification(
+                        banner_id=nuevo_banner.id,
+                        device_ids=dispositivo_ids,
+                        titulo=nuevo_banner.titulo,
+                        url=nuevo_banner.url,
+                        tipo=nuevo_banner.tipo,
+                        fecha_inicio=fecha_inicio_dt,
+                        fecha_fin=fecha_fin_dt,
+                    )
+                )
+                print(f"[DEBUG] Tarea programada para banner ID={nuevo_banner.id} a las {fecha_inicio_dt}")
     except Exception as e:
         if os.path.exists(file_location):
             os.remove(file_location)
@@ -313,6 +362,13 @@ async def actualizar_banner_remoto(
 
     await db.commit()
     await db.refresh(banner)
+    
+    # Notificar inmediatamente si fecha_inicio ya pasó
+    if body.fecha_inicio and banner.activo:
+        now = get_venezuela_now_naive()
+        if body.fecha_inicio <= now:
+            await _notify_banner_iniciado_inmediato(banner, banner.device_ids)
+            print(f"[DEBUG] Notificación inmediata enviada por actualización para banner ID={banner.id}")
 
     return {
         "success": True,

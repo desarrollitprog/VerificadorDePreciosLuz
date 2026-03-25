@@ -1600,6 +1600,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                             uiHandler.post {
                                 syncBannersOnStart()
                                 Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_INICIADO")
+                                // Confirmar al backend que el banner fue recibido
+                                sendSyncConfirmation(webSocket, command, "SUCCESS")
                             }
                         } else if (command == "BANNER_FINALIZADO") {
                             val bannerId = message.optInt("banner_id", 0)
@@ -1610,6 +1612,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                             uiHandler.post {
                                 syncBannersOnStart()
                                 Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_FINALIZADO")
+                                // Confirmar al backend que el banner fue recibido
+                                sendSyncConfirmation(webSocket, command, "SUCCESS")
                             }
                         } else {
                             Log.i(TAG, "[WebSocket] Comando recibido no reconocido: $command")
@@ -1677,6 +1681,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                             uiHandler.post {
                                 syncBannersOnStart()
                                 Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_INICIADO (binario)")
+                                // Confirmar al backend que el banner fue recibido
+                                sendSyncConfirmation(webSocket, command, "SUCCESS")
                             }
                         } else if (command == "BANNER_FINALIZADO") {
                             val bannerId = message.optInt("banner_id", 0)
@@ -1686,7 +1692,10 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                             uiHandler.post {
                                 syncBannersOnStart()
                                 Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_FINALIZADO (binario)")
+                                // Confirmar al backend que el banner fue recibido
+                                sendSyncConfirmation(webSocket, command, "SUCCESS")
                             }
+
                         } else {
                             Log.i(TAG, "[WebSocket] Comando recibido no reconocido (binario): $command")
                         }

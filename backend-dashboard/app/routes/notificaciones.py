@@ -270,3 +270,33 @@ async def playback_status(
         "message": "Notificación de error de reproducción registrada",
         "duplicated": False,
     }
+
+
+class BannerStatusBody(BaseModel):
+    device_id: str
+    banner_id: int | None = None
+    status: str  # "INICIADO" o "FINALIZADO"
+
+
+@router.post("/banner-status", status_code=status.HTTP_201_CREATED)
+async def banner_status(
+    body: BannerStatusBody,
+    db: AsyncSession = Depends(get_db_usuarios),
+):
+    tipo = "BANNER_INICIADO" if body.status == "INICIADO" else "BANNER_FINALIZADO"
+    
+    descripcion = f"Dispositivo {body.device_id}"
+    if body.banner_id:
+        descripcion += f" - Banner ID {body.banner_id}"
+    descripcion += f" - {body.status}"
+    
+    await registrar_accion(
+        db=db,
+        usuario_id=None,
+        tipo=tipo,
+        descripcion=descripcion,
+    )
+    return {
+        "success": True,
+        "message": f"Notificación de banner {body.status} registrada",
+    }

@@ -22,7 +22,7 @@ from .models.publicidad import Publicidad
 
 
 def get_venezuela_now():
-    return datetime.now(timezone(timedelta(hours=-4))).replace(tzinfo=None)
+    return datetime.now(timezone(timedelta(hours=-4)))
 
 # Cargar variables de entorno desde .env
 load_dotenv()
@@ -100,7 +100,7 @@ async def _check_banners_starting():
 async def _notify_banners_started():
     try:
         async for db in get_db_publicidad():
-            now = get_venezuela_now()
+            now = get_venezuela_now().replace(tzinfo=None)  # Usar naive para comparar con BD
             window_start = now - timedelta(minutes=20)
             window_end = now
             
@@ -131,7 +131,7 @@ async def _notify_banners_started():
 async def _notify_banners_ended():
     try:
         async for db in get_db_publicidad():
-            now = get_venezuela_now()
+            now = get_venezuela_now().replace(tzinfo=None)  # Usar naive para comparar con BD
             window_start = now - timedelta(minutes=20)
             window_end = now
             

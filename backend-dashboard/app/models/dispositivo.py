@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 
 from ..database import Base
@@ -17,6 +17,5 @@ class Dispositivo(Base):
         ForeignKey("servidores_secundarios.id", ondelete="SET NULL"),
         nullable=True,
     )
-    primera_conexion = Column(DateTime, nullable=True, default=None)
     servidor = relationship("ServidorSecundario", backref="dispositivos")
 

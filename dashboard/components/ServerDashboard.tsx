@@ -170,24 +170,12 @@ export function ServerDashboard() {
     });
   };
 
-  const formatUptime = (primeraConexion: string | null, uptime: number | null) => {
-    if (!primeraConexion && !uptime) return null;
-    
-    let totalSeconds = 0;
-    
-    if (uptime && uptime > 0) {
-      totalSeconds = uptime;
-    } else if (primeraConexion) {
-      const start = new Date(primeraConexion).getTime();
-      const now = Date.now();
-      totalSeconds = Math.floor((now - start) / 1000);
-    }
-    
-    if (totalSeconds <= 0) return null;
+  const formatDuration = (seconds: number | null) => {
+    if (!seconds || seconds <= 0) return null;
 
-    const days = Math.floor(totalSeconds / 86400);
-    const hours = Math.floor((totalSeconds % 86400) / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
 
     if (days > 0) {
       return `${days}d ${hours}h ${minutes}m`;
@@ -196,6 +184,15 @@ export function ServerDashboard() {
     } else {
       return `${minutes}m`;
     }
+  };
+
+  const getDeviceUptime = (d: any) => {
+    if (d.sesion_activa && d.tiempo_actual) {
+      return formatDuration(d.tiempo_actual);
+    } else if (!d.sesion_activa && d.ultima_duracion) {
+      return formatDuration(d.ultima_duracion);
+    }
+    return null;
   };
 
   return (
@@ -256,9 +253,13 @@ export function ServerDashboard() {
                                 <span className="font-medium text-sm text-slate-900 dark:text-white truncate">
                                   {d.nombre_mostrado || d.device_id}
                                 </span>
-                                {formatUptime(d.primera_conexion, d.uptime) && (
-                                  <span className="ml-auto text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-1.5 py-0.5 rounded">
-                                    {formatUptime(d.primera_conexion, d.uptime)}
+                                {getDeviceUptime(d) && (
+                                  <span className={`ml-auto text-xs font-medium px-1.5 py-0.5 rounded ${
+                                    d.sesion_activa 
+                                      ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30' 
+                                      : 'text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800'
+                                  }`}>
+                                    {getDeviceUptime(d)}
                                   </span>
                                 )}
                               </div>

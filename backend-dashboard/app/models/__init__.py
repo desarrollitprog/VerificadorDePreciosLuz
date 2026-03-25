@@ -7,6 +7,7 @@ from .usuario import Usuario, RolUsuario
 from .publicidad import Publicidad
 from .servidor_secundario import ServidorSecundario
 from .dispositivo import Dispositivo
+from .dispositivo_sesion import DispositivoSesion
 from .notificacion import Notificacion
 from .notificacion_leida import NotificacionLeida
 from .asignacion import PublicidadAsignacion
@@ -17,6 +18,7 @@ __all__ = [
     "Publicidad",
     "ServidorSecundario",
     "Dispositivo",
+    "DispositivoSesion",
     "Notificacion",
     "NotificacionLeida",
     "PublicidadAsignacion",

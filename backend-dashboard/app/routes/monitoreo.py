@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db_usuarios, AsyncSessionLocalUsuarios
 from app.dependencies import get_current_cliente, validar_api_key, get_current_admin
 from app.models.dispositivo import Dispositivo
+from app.models.dispositivo_sesion import DispositivoSesion
 from app.models.servidor_secundario import ServidorSecundario
 from app.services.notificacion_service import registrar_accion
 import asyncio
@@ -754,20 +755,69 @@ async def status_detalle(
                         codigo_kiosko=codigo,
                         online=bool(info.get("online", False)),
                         servidor_id=s.id,
-                        primera_conexion=now,
                     )
                     db.add(dispositivo)
                     dispositivo_por_codigo[codigo] = dispositivo
+                    
+                    if bool(info.get("online", False)):
+                        sesion = DispositivoSesion(
+                            dispositivo_id=codigo,
+                            inicio=now,
+                        )
+                        db.add(sesion)
                 else:
-                    dispositivo.online = bool(info.get("online", False))
+                    estaba_online = dispositivo.online
+                    ahora_online = bool(info.get("online", False))
+                    
+                    if not estaba_online and ahora_online:
+                        sesion = DispositivoSesion(
+                            dispositivo_id=codigo,
+                            inicio=now,
+                        )
+                        db.add(sesion)
+                    elif estaba_online and not ahora_online:
+                        stmt_sesion = select(DispositivoSesion).where(
+                            DispositivoSesion.dispositivo_id == codigo,
+                            DispositivoSesion.fin == None
+                        )
+                        result_sesion = await db.execute(stmt_sesion)
+                        sesion_activa = result_sesion.scalars().first()
+                        if sesion_activa:
+                            sesion_activa.fin = now
+                            duracion = int((now - sesion_activa.inicio).total_seconds())
+                            sesion_activa.duracion_segundos = duracion
+                    
+                    dispositivo.online = ahora_online
                     dispositivo.servidor_id = s.id
 
             for dispositivo in dispositivo_por_codigo.values():
                 if dispositivo.servidor_id == s.id and dispositivo.codigo_kiosko not in vistos:
+                    if dispositivo.online:
+                        stmt_sesion = select(DispositivoSesion).where(
+                            DispositivoSesion.dispositivo_id == dispositivo.codigo_kiosko,
+                            DispositivoSesion.fin == None
+                        )
+                        result_sesion = await db.execute(stmt_sesion)
+                        sesion_activa = result_sesion.scalars().first()
+                        if sesion_activa:
+                            sesion_activa.fin = now
+                            duracion = int((now - sesion_activa.inicio).total_seconds())
+                            sesion_activa.duracion_segundos = duracion
                     dispositivo.online = False
         else:
             for dispositivo in dispositivo_por_codigo.values():
                 if dispositivo.servidor_id == s.id:
+                    if dispositivo.online:
+                        stmt_sesion = select(DispositivoSesion).where(
+                            DispositivoSesion.dispositivo_id == dispositivo.codigo_kiosko,
+                            DispositivoSesion.fin == None
+                        )
+                        result_sesion = await db.execute(stmt_sesion)
+                        sesion_activa = result_sesion.scalars().first()
+                        if sesion_activa:
+                            sesion_activa.fin = now
+                            duracion = int((now - sesion_activa.inicio).total_seconds())
+                            sesion_activa.duracion_segundos = duracion
                     dispositivo.online = False
 
         dispositivos: list[dict[str, Any]] = []
@@ -780,10 +830,33 @@ async def status_detalle(
             nombre_amigable = dispositivo.nombre_amigable
             nombre_mostrado = nombre_amigable if nombre_amigable else dispositivo.codigo_kiosko
 
-            device_uptime = None
-            if dispositivo.primera_conexion:
-                device_uptime_delta = now - dispositivo.primera_conexion
-                device_uptime = int(device_uptime_delta.total_seconds())
+            stmt_sesion_activa = select(DispositivoSesion).where(
+                DispositivoSesion.dispositivo_id == dispositivo.codigo_kiosko,
+                DispositivoSesion.fin == None
+            )
+            result_sesion_activa = await db.execute(stmt_sesion_activa)
+            sesion_activa = result_sesion_activa.scalars().first()
+
+            sesion_activa_bool = sesion_activa is not None
+            
+            tiempo_actual = None
+            if sesion_activa:
+                tiempo_actual = int((now - sesion_activa.inicio).total_seconds())
+
+            stmt_ultima = select(DispositivoSesion).where(
+                DispositivoSesion.dispositivo_id == dispositivo.codigo_kiosko,
+                DispositivoSesion.duracion_segundos != None
+            ).order_by(DispositivoSesion.inicio.desc()).limit(1)
+            result_ultima = await db.execute(stmt_ultima)
+            ultima_sesion = result_ultima.scalars().first()
+            ultima_duracion = ultima_sesion.duracion_segundos if ultima_sesion else None
+
+            stmt_total = select(func.sum(DispositivoSesion.duracion_segundos)).where(
+                DispositivoSesion.dispositivo_id == dispositivo.codigo_kiosko,
+                DispositivoSesion.duracion_segundos != None
+            )
+            result_total = await db.execute(stmt_total)
+            tiempo_acumulado = result_total.scalar() or 0
 
             dispositivos.append(
                 {
@@ -792,8 +865,10 @@ async def status_detalle(
                     "nombre_mostrado": nombre_mostrado,
                     "online": is_online,
                     "last_seen": runtime_info.get("last_seen"),
-                    "primera_conexion": dispositivo.primera_conexion.isoformat() if dispositivo.primera_conexion else None,
-                    "uptime": device_uptime,
+                    "sesion_activa": sesion_activa_bool,
+                    "tiempo_actual": tiempo_actual,
+                    "ultima_duracion": ultima_duracion,
+                    "tiempo_acumulado": tiempo_acumulado,
                     "server_id": runtime_info.get("server_id"),
                 }
             )

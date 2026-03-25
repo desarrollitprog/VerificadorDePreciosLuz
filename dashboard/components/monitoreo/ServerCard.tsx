@@ -28,7 +28,7 @@ const ServerCard: React.FC<ServerCardProps> = ({ nombre, ip, online, porcentaje_
         }
       `}
     >
-      <div className="p-3">
+      <div className="p-2">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2">
             <div 

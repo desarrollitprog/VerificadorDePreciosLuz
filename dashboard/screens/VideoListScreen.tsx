@@ -108,7 +108,7 @@ export const VideoListScreen: React.FC = () => {
   useEffect(() => {
     if (deleteId) {
       setTimeout(() => {
-        document.getElementById('main-content')?.scrollTo({ top: 0, behavior: 'smooth' });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }, 50);
     }
   }, [deleteId]);
@@ -143,7 +143,7 @@ export const VideoListScreen: React.FC = () => {
         fechaFin: toInputDateTime(item.fechaFin),
       });
       setTimeout(() => {
-        document.getElementById('main-content')?.scrollTo({ top: 0, behavior: 'smooth' });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }, 50);
     }, 0);
   };

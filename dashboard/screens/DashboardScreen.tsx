@@ -65,7 +65,7 @@ export const DashboardScreen: React.FC = () => {
   const handlePreview = (video: Video) => {
     setPreview({ url: video.url, tipo: video.tipo, titulo: video.titulo || video.filename });
     setTimeout(() => {
-      document.getElementById('main-content')?.scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }, 50);
   };
   const closePreview = () => setPreview(null);
@@ -227,7 +227,7 @@ export const DashboardScreen: React.FC = () => {
     setFileMetadatas(metadatas);
     setIsUploadModalOpen(true);
     setTimeout(() => {
-      document.getElementById('main-content')?.scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }, 50);
     event.target.value = '';
   };
@@ -438,7 +438,7 @@ export const DashboardScreen: React.FC = () => {
             onClick={() => {
               setIsSyncModalOpen(true);
               setTimeout(() => {
-                document.getElementById('main-content')?.scrollTo({ top: 0, behavior: 'smooth' });
+                window.scrollTo({ top: 0, behavior: 'smooth' });
               }, 50);
             }}
             disabled={syncLoading}
@@ -642,7 +642,7 @@ export const DashboardScreen: React.FC = () => {
                         }
                         setIsEditModalOpen(true);
                         setTimeout(() => {
-                          document.getElementById('main-content')?.scrollTo({ top: 0, behavior: 'smooth' });
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
                         }, 50);
                       }}
                       className="text-slate-400 hover:text-primary dark:hover:text-primary transition-colors"

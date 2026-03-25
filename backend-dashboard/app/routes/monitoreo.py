@@ -43,7 +43,7 @@ class ServerRenameBody(BaseModel):
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
 
 
 async def _obtener_dispositivos_de_servidor(ip: str) -> list[dict[str, Any]]:

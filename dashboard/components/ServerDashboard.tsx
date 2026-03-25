@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronDown, ChevronUp, RefreshCw, X, Monitor, Edit2, Play, RotateCcw, Eye, AlertCircle } from 'lucide-react';
+import { ChevronDown, ChevronUp, RefreshCw, X, Monitor, Edit2, Play, RotateCcw, Eye, AlertCircle, Clock } from 'lucide-react';
 import ServerCard from './monitoreo/ServerCard';
 import { useNotification } from './useNotification';
 import {
@@ -170,6 +170,34 @@ export function ServerDashboard() {
     });
   };
 
+  const formatUptime = (primeraConexion: string | null, uptime: number | null) => {
+    if (!primeraConexion && !uptime) return null;
+    
+    let totalSeconds = 0;
+    
+    if (uptime && uptime > 0) {
+      totalSeconds = uptime;
+    } else if (primeraConexion) {
+      const start = new Date(primeraConexion).getTime();
+      const now = Date.now();
+      totalSeconds = Math.floor((now - start) / 1000);
+    }
+    
+    if (totalSeconds <= 0) return null;
+
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+
+    if (days > 0) {
+      return `${days}d ${hours}h ${minutes}m`;
+    } else if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    } else {
+      return `${minutes}m`;
+    }
+  };
+
   return (
     <div className="flex flex-col min-w-0 p-6">
       <div className="flex items-center justify-between mb-6">
@@ -236,6 +264,12 @@ export function ServerDashboard() {
                                 <span className="text-slate-500 dark:text-slate-400">Última conexión: </span>
                                 {formatLastSeen(d.last_seen)}
                               </div>
+                              {formatUptime(d.primera_conexion, d.uptime) && (
+                                <div className="text-xs text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1">
+                                  <Clock size={10} />
+                                  <span>Activo: {formatUptime(d.primera_conexion, d.uptime)}</span>
+                                </div>
+                              )}
                               <div className="flex items-center gap-2 mt-2">
                                 <button
                                   onClick={() => openRenameDeviceModal(d.device_id, d.nombre_amigable)}

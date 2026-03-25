@@ -73,7 +73,7 @@ export default function App() {
       {currentScreen === 'login' ? (
         renderScreen()
       ) : (
-        <div className="flex h-screen w-full overflow-hidden bg-background-light dark:bg-background-dark text-slate-900 dark:text-white">
+        <div className="flex min-h-screen w-full overflow-hidden bg-background-light dark:bg-background-dark text-slate-900 dark:text-white">
           <Sidebar 
             currentScreen={currentScreen} 
             onNavigate={setCurrentScreen} 
@@ -93,7 +93,7 @@ export default function App() {
               <LayoutGrid size={22} />
             </button>
           )}
-          <main className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative transition-all duration-300">
+          <main className="flex-1 flex flex-col min-h-full min-w-0 overflow-hidden relative transition-all duration-300">
             <Header 
               currentScreen={currentScreen}
             />

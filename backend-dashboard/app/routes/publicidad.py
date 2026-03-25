@@ -1,7 +1,7 @@
 import os
 import shutil
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Path, Query
 from fastapi.responses import JSONResponse
@@ -28,6 +28,10 @@ from ..services.replicacion_service import (
 
 
 router = APIRouter()
+
+
+def get_venezuela_now():
+    return datetime.now(timezone(timedelta(hours=-4))).replace(tzinfo=None)
 
 
 def _format_size_human(size_bytes: int) -> str:
@@ -145,8 +149,14 @@ async def listar_banners(
                 estado = "inactivo"
             elif not banner.asignacion_todos and len(asignaciones) == 0:
                 estado = "borrador"
-            elif banner.FechaFin and banner.FechaFin < datetime.utcnow():
-                estado = "vencido"
+            elif banner.FechaFin:
+                now = get_venezuela_now()
+                print(f"[DEBUG] Banner ID={banner.IdPublicidad}, Titulo={banner.Titulo}")
+                print(f"[DEBUG]   FechaFin en BD: {banner.FechaFin}")
+                print(f"[DEBUG]   Hora actual Venezuela (now): {now}")
+                print(f"[DEBUG]   Comparacion: {banner.FechaFin} < {now} = {banner.FechaFin < now}")
+                if banner.FechaFin < now:
+                    estado = "vencido"
             
             banners_payload.append(
                 {
@@ -264,8 +274,10 @@ async def upload_banner(
     # Guardar metadatos en la base de datos
     url = f"/static/banners/{filename}"
     try:
+        print(f"[DEBUG] Recibido - FechaInicio: {FechaInicio}, FechaFin: {FechaFin}")
         FechaInicio_dt = datetime.fromisoformat(FechaInicio) if FechaInicio else None
         FechaFin_dt = datetime.fromisoformat(FechaFin) if FechaFin else None
+        print(f"[DEBUG] Parsed - FechaInicio_dt: {FechaInicio_dt}, FechaFin_dt: {FechaFin_dt}")
         if FechaInicio_dt and FechaFin_dt and FechaInicio_dt > FechaFin_dt:
             raise HTTPException(status_code=400, detail="Rango inválido: FechaInicio no puede ser mayor que FechaFin.")
         nuevo_banner = Publicidad(

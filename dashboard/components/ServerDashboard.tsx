@@ -256,6 +256,11 @@ export function ServerDashboard() {
                                 <span className="font-medium text-sm text-slate-900 dark:text-white truncate">
                                   {d.nombre_mostrado || d.device_id}
                                 </span>
+                                {formatUptime(d.primera_conexion, d.uptime) && (
+                                  <span className="ml-auto text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-1.5 py-0.5 rounded">
+                                    {formatUptime(d.primera_conexion, d.uptime)}
+                                  </span>
+                                )}
                               </div>
                               <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                                 ID: {d.device_id}
@@ -264,12 +269,6 @@ export function ServerDashboard() {
                                 <span className="text-slate-500 dark:text-slate-400">Última conexión: </span>
                                 {formatLastSeen(d.last_seen)}
                               </div>
-                              {formatUptime(d.primera_conexion, d.uptime) && (
-                                <div className="text-xs text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1">
-                                  <Clock size={10} />
-                                  <span>Activo: {formatUptime(d.primera_conexion, d.uptime)}</span>
-                                </div>
-                              )}
                               <div className="flex items-center gap-2 mt-2">
                                 <button
                                   onClick={() => openRenameDeviceModal(d.device_id, d.nombre_amigable)}

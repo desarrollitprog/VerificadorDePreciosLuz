@@ -42,6 +42,7 @@ async def listar_banners(
 ):
     now = get_venezuela_now_naive()
     today_start = datetime.combine(now.date(), datetime.min.time())
+    print(f"[DEBUG] GET /banners - Hora actual Venezuela (now): {now}")
     
     query = select(Publicidad).where(
         Publicidad.activo == True,
@@ -129,8 +130,10 @@ async def replicar_archivo(
     url = f"/static/banners/{filename}"
     try:
         from ..models.publicidad import Publicidad
+        print(f"[DEBUG] Replicar archivo - FechaInicio recibida: {fecha_inicio}, FechaFin recibida: {fecha_fin}")
         fecha_inicio_dt = datetime.fromisoformat(fecha_inicio) if fecha_inicio else None
         fecha_fin_dt = datetime.fromisoformat(fecha_fin) if fecha_fin else None
+        print(f"[DEBUG] Replicar archivo - FechaInicio guardada: {fecha_inicio_dt}, FechaFin guardada: {fecha_fin_dt}")
         nuevo_banner = Publicidad(
             titulo=titulo,
             tipo=tipo or tipo_archivo,

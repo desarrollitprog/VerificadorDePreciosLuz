@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, and_, func, cast, Date
 from ..database import get_db_publicidad
 import shutil
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import os
 from typing import List, Optional
 from pydantic import BaseModel
@@ -11,6 +11,13 @@ from ..schemas import PublicidadResponse
 from ..models.publicidad import Publicidad
 
 router = APIRouter()
+
+
+def get_venezuela_now():
+    return datetime.now(timezone(timedelta(hours=-4)))
+
+def get_venezuela_now_naive():
+    return datetime.now(timezone(timedelta(hours=-4))).replace(tzinfo=None)
 
 
 class EstadoRemotoBody(BaseModel):
@@ -33,7 +40,7 @@ async def listar_banners(
     device_ids: str = Query(None, description="Lista de device_ids separados por coma (deprecated, usar device_id)"),
     db: AsyncSession = Depends(get_db_publicidad)
 ):
-    now = datetime.utcnow()
+    now = get_venezuela_now_naive()
     today_start = datetime.combine(now.date(), datetime.min.time())
     
     query = select(Publicidad).where(

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dateutil.parser import isoparse
 import asyncio
 import logging
@@ -19,6 +19,10 @@ from .routes import consultas, publicidad
 from .services import DeviceCommandBus, DeviceStateStore
 from .database import get_db_publicidad
 from .models.publicidad import Publicidad
+
+
+def get_venezuela_now():
+    return datetime.now(timezone(timedelta(hours=-4))).replace(tzinfo=None)
 
 # Cargar variables de entorno desde .env
 load_dotenv()
@@ -95,7 +99,7 @@ async def _check_banners_starting():
 async def _notify_banners_started():
     try:
         async for db in get_db_publicidad():
-            now = datetime.utcnow()
+            now = get_venezuela_now()
             window_start = now - timedelta(minutes=20)
             window_end = now
             
@@ -126,7 +130,7 @@ async def _notify_banners_started():
 async def _notify_banners_ended():
     try:
         async for db in get_db_publicidad():
-            now = datetime.utcnow()
+            now = get_venezuela_now()
             window_start = now - timedelta(minutes=20)
             window_end = now
             

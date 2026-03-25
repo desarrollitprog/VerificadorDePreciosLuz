@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap"
       rel="stylesheet"
     />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -17,28 +17,79 @@
         theme: {
           extend: {
             colors: {
-              primary: "#137fec",
+              primary: "#22d3ee",
+              "primary-dark": "#06b6d4",
+              "primary-glow": "rgba(34, 211, 238, 0.4)",
               "background-light": "#f8f9fa",
-              "background-dark": "#0f1114",
-              "card-dark": "#161a21",
-              "border-dark": "#252b36",
-              // Colores sutiles adicionales
-              surface: "#1a1f27",
-              accent: "#3b82f6",
+              "background-dark": "#09090b",
+              "background-gradient-start": "#09090b",
+              "background-gradient-end": "#18181b",
+              "card-dark": "#18181b",
+              "card-hover": "#27272a",
+              "border-dark": "#27272a",
+              "border-light": "#3f3f46",
+              surface: "#18181b",
+              accent: "#22d3ee",
+              "accent-purple": "#a855f7",
+              "accent-purple-glow": "rgba(168, 85, 247, 0.3)",
             },
             fontFamily: {
-              sans: ["Inter", "sans-serif"],
-              serif: ["Playfair Display", "serif"],
+              sans: ["Outfit", "sans-serif"],
+              mono: ["Space Mono", "monospace"],
             },
             transitionDuration: {
               '250': '250ms',
-            }
+            },
+            animation: {
+              'fade-in': 'fadeIn 0.5s ease-out forwards',
+              'fade-in-up': 'fadeInUp 0.5s ease-out forwards',
+              'glow-pulse': 'glowPulse 2s ease-in-out infinite',
+              'float': 'float 3s ease-in-out infinite',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              },
+              fadeInUp: {
+                '0%': { opacity: '0', transform: 'translateY(20px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              },
+              glowPulse: {
+                '0%, 100%': { boxShadow: '0 0 20px rgba(34, 211, 238, 0.3)' },
+                '50%': { boxShadow: '0 0 40px rgba(34, 211, 238, 0.5)' },
+              },
+              float: {
+                '0%, 100%': { transform: 'translateY(0)' },
+                '50%': { transform: 'translateY(-10px)' },
+              },
+            },
+            boxShadow: {
+              'glow-cyan': '0 0 20px rgba(34, 211, 238, 0.3), 0 0 40px rgba(34, 211, 238, 0.1)',
+              'glow-purple': '0 0 20px rgba(168, 85, 247, 0.3), 0 0 40px rgba(168, 85, 247, 0.1)',
+              'card': '0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.2)',
+              'card-hover': '0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3)',
+            },
           },
         },
       };
     </script>
     <style>
-      /* Custom Scrollbar - más sutil */
+      /* Noise texture overlay */
+      body::before {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        opacity: 0.03;
+        z-index: 9999;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+      }
+      
+      /* Custom Scrollbar */
       ::-webkit-scrollbar {
         width: 6px;
         height: 6px;
@@ -47,23 +98,23 @@
         background: transparent;
       }
       ::-webkit-scrollbar-thumb {
-        background: #334155;
+        background: #3f3f46;
         border-radius: 3px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #475569;
+        background: #52525b;
       }
       
-      /* Transiciones globales suaves */
+      /* Transiciones globales */
       * {
-        transition-property: background-color, border-color, color, fill, stroke;
+        transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow, transform;
         transition-duration: 200ms;
         transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
       }
       
-      /* Focus ring más suave */
+      /* Focus ring */
       :focus-visible {
-        outline: 2px solid #3b82f6;
+        outline: 2px solid #22d3ee;
         outline-offset: 2px;
       }
       
@@ -76,15 +127,36 @@
         animation: fadeIn 0.4s ease-out forwards;
       }
       
-      /* Color de selección más sutil */
+      /* Stagger animation delays */
+      .stagger-1 { animation-delay: 0.05s; }
+      .stagger-2 { animation-delay: 0.1s; }
+      .stagger-3 { animation-delay: 0.15s; }
+      .stagger-4 { animation-delay: 0.2s; }
+      .stagger-5 { animation-delay: 0.25s; }
+      .stagger-6 { animation-delay: 0.3s; }
+      
+      /* Color de selección */
       ::selection {
-        background-color: rgba(59, 130, 246, 0.25);
+        background-color: rgba(34, 211, 238, 0.3);
         color: inherit;
+      }
+      
+      /* Glow effects */
+      .glow-hover:hover {
+        box-shadow: 0 0 20px rgba(34, 211, 238, 0.4), 0 0 40px rgba(34, 211, 238, 0.2);
+      }
+      
+      /* Gradient text */
+      .text-gradient {
+        background: linear-gradient(135deg, #22d3ee 0%, #a855f7 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
       }
     </style>
   <link rel="stylesheet" href="/index.css">
 </head>
-  <body class="h-screen bg-background-light dark:bg-[#0f1114] text-slate-900 dark:text-white antialiased selection:bg-primary selection:text-white font-sans" style="background-image: linear-gradient(180deg, #0f1114 0%, #13161b 100%);">
+  <body class="h-screen bg-background-light dark:text-white antialiased selection:bg-primary selection:text-black font-sans" style="background: linear-gradient(180deg, #09090b 0%, #18181b 50%, #09090b 100%);">
     <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>

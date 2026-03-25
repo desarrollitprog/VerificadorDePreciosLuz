@@ -64,6 +64,9 @@ export const DashboardScreen: React.FC = () => {
   const [preview, setPreview] = useState<{url: string, tipo: string, titulo: string} | null>(null);
   const handlePreview = (video: Video) => {
     setPreview({ url: video.url, tipo: video.tipo, titulo: video.titulo || video.filename });
+    setTimeout(() => {
+      document.getElementById('main-content')?.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 50);
   };
   const closePreview = () => setPreview(null);
   const [videos, setVideos] = useState<Video[]>([]);
@@ -223,6 +226,9 @@ export const DashboardScreen: React.FC = () => {
     setSelectedFiles(validFiles);
     setFileMetadatas(metadatas);
     setIsUploadModalOpen(true);
+    setTimeout(() => {
+      document.getElementById('main-content')?.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 50);
     event.target.value = '';
   };
 
@@ -429,7 +435,12 @@ export const DashboardScreen: React.FC = () => {
           </div>
           <button
             className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition disabled:opacity-50"
-            onClick={() => setIsSyncModalOpen(true)}
+            onClick={() => {
+              setIsSyncModalOpen(true);
+              setTimeout(() => {
+                document.getElementById('main-content')?.scrollTo({ top: 0, behavior: 'smooth' });
+              }, 50);
+            }}
             disabled={syncLoading}
           >
             {syncLoading ? 'Sincronizando...' : 'Sincronizar'}
@@ -630,6 +641,9 @@ export const DashboardScreen: React.FC = () => {
                           setEditDispositivoIds([]);
                         }
                         setIsEditModalOpen(true);
+                        setTimeout(() => {
+                          document.getElementById('main-content')?.scrollTo({ top: 0, behavior: 'smooth' });
+                        }, 50);
                       }}
                       className="text-slate-400 hover:text-primary dark:hover:text-primary transition-colors"
                       title="Editar"
@@ -695,7 +709,7 @@ export const DashboardScreen: React.FC = () => {
                       Reproducir
                     </button>
                     {preview && (
-                      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+                      <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 pt-20">
                         <div className="bg-white dark:bg-[#1c2936] rounded-lg shadow-lg p-6 max-w-lg w-full relative">
                           <button onClick={closePreview} className="absolute top-2 right-2 text-slate-500 hover:text-red-500 text-xl font-bold">&times;</button>
                           <div className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">{preview.titulo}</div>
@@ -722,7 +736,7 @@ export const DashboardScreen: React.FC = () => {
       </div>
 
       {isUploadModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 px-4 pt-20">
           <div className="w-full max-w-2xl bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl p-5">
             <div className="flex items-start justify-between mb-4">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white">Datos de Archivos</h3>
@@ -1000,7 +1014,7 @@ export const DashboardScreen: React.FC = () => {
 
       {/* Sync Modal */}
       {isSyncModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 pt-20">
           <div className="bg-white dark:bg-[#1c2936] rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-hidden">
             <div className="p-4 border-b border-slate-200 dark:border-slate-700">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">Sincronización Selectiva</h2>
@@ -1146,7 +1160,7 @@ export const DashboardScreen: React.FC = () => {
       )}
       {/* Edit Modal */}
       {isEditModalOpen && editingVideo && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 pt-20">
           <div className="bg-white dark:bg-[#1c2936] rounded-xl shadow-2xl w-full max-w-md">
             <div className="p-4 border-b border-slate-200 dark:border-slate-700">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">Editar Publicidad</h2>

@@ -105,6 +105,14 @@ export const VideoListScreen: React.FC = () => {
     fetchVideos();
   }, []);
 
+  useEffect(() => {
+    if (deleteId) {
+      setTimeout(() => {
+        document.getElementById('delete-modal')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 50);
+    }
+  }, [deleteId]);
+
   const handleDelete = async (videoId: string) => {
     setError(null);
     try {
@@ -126,12 +134,18 @@ export const VideoListScreen: React.FC = () => {
   };
 
   const openEditVigencia = (item: Video) => {
-    setEditItem(item);
-    setEditForm({
-      activo: !!item.activo,
-      fechaInicio: toInputDateTime(item.fechaInicio),
-      fechaFin: toInputDateTime(item.fechaFin),
-    });
+    setEditItem(null);
+    setTimeout(() => {
+      setEditItem(item);
+      setEditForm({
+        activo: !!item.activo,
+        fechaInicio: toInputDateTime(item.fechaInicio),
+        fechaFin: toInputDateTime(item.fechaFin),
+      });
+      setTimeout(() => {
+        document.getElementById('edit-modal')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 50);
+    }, 0);
   };
 
   const saveEditVigencia = async () => {
@@ -329,27 +343,25 @@ export const VideoListScreen: React.FC = () => {
             />
             <ListChecks size={13} className="text-slate-400 dark:text-[#92adc9]" />
           </div>
-          <div className="col-span-5 sm:col-span-4 md:col-span-3 lg:col-span-2 flex items-center gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
-            Nombre del Archivo
+          <div className="col-span-4 sm:col-span-3 lg:col-span-2 flex items-center gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
+            Archivo
             <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
-          <div className="col-span-3 hidden sm:flex md:col-span-2 items-center gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
-            Fecha de Subida
+          <div className="col-span-2 hidden sm:flex items-center gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
+            Fecha
             <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
-          <div className="hidden lg:flex lg:col-span-2 items-center gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
-            Fecha Inicio
+          <div className="col-span-2 hidden lg:flex items-center gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
+            Inicio
             <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
-          <div className="hidden lg:flex lg:col-span-2 items-center gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
-            Fecha Fin
+          <div className="col-span-2 hidden lg:flex items-center gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
+            Fin
             <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
-          <div className="col-span-1 hidden md:flex lg:hidden items-center justify-end gap-2 cursor-pointer hover:text-slate-700 dark:hover:text-white group">
-            Tamaño
-            <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-          </div>
-          <div className="col-span-3 sm:col-span-2 md:col-span-2 lg:col-span-1 flex items-center justify-start">Estatus</div>
+          <div className="col-span-1">Tamaño</div>
+          <div className="col-span-3 sm:col-span-2 lg:col-span-1">Estatus</div>
+          <div className="col-span-3 sm:col-span-3 lg:col-span-1 text-right">Acciones</div>
         </div>
         <div>
           {Array.isArray(paginatedVideos) && paginatedVideos.map((item) => (
@@ -365,22 +377,21 @@ export const VideoListScreen: React.FC = () => {
                   }}
                 />
               </div>
-              <div className="col-span-5 sm:col-span-4 md:col-span-3 lg:col-span-2 flex items-center gap-3 overflow-hidden">
+              <div className="col-span-4 sm:col-span-3 lg:col-span-2 flex items-center gap-2 overflow-hidden">
                 <StatusIcon status={item.status} />
                 <div className="flex flex-col min-w-0">
                   <span className="text-sm font-medium text-slate-900 dark:text-white truncate" title={item.filename}>{item.filename}</span>
-                  <span className="text-xs text-slate-500 dark:text-[#58728a] truncate">ID: {item.id}</span>
                 </div>
               </div>
-              <div className="col-span-3 hidden sm:flex md:col-span-2 text-xs text-slate-600 dark:text-[#92adc9] truncate" title={item.date}>{formatCaracasTime(item.date)}</div>
-              <div className="hidden lg:flex lg:col-span-2 text-xs text-slate-600 dark:text-[#92adc9] truncate" title={item.fechaInicio || undefined}>{formatCaracasTime(item.fechaInicio)}</div>
-              <div className="hidden lg:flex lg:col-span-2 text-xs text-slate-600 dark:text-[#92adc9] truncate" title={item.fechaFin || undefined}>{formatCaracasTime(item.fechaFin)}</div>
-              <div className="col-span-1 hidden md:flex lg:hidden justify-end text-xs text-slate-600 dark:text-[#92adc9] font-mono">{item.size}</div>
-              <div className="col-span-3 sm:col-span-2 md:col-span-2 lg:col-span-1 flex items-center gap-1.5 flex-wrap">
+              <div className="col-span-2 hidden sm:flex text-xs text-slate-600 dark:text-[#92adc9] truncate" title={item.date}>{formatCaracasTime(item.date)}</div>
+              <div className="col-span-2 hidden lg:flex text-xs text-slate-600 dark:text-[#92adc9] truncate" title={item.fechaInicio || undefined}>{formatCaracasTime(item.fechaInicio)}</div>
+              <div className="col-span-2 hidden lg:flex text-xs text-slate-600 dark:text-[#92adc9] truncate" title={item.fechaFin || undefined}>{formatCaracasTime(item.fechaFin)}</div>
+              <div className="col-span-1 text-xs text-slate-600 dark:text-[#92adc9] font-mono">{item.size}</div>
+              <div className="col-span-3 sm:col-span-2 lg:col-span-1 flex items-center gap-1.5 flex-wrap">
                 <OperativoBadge activo={item.activo} />
                 <VigenciaBadge item={item} />
               </div>
-              <div className="col-span-3 sm:col-span-2 md:col-span-2 flex items-center justify-center gap-1 whitespace-nowrap">
+              <div className="col-span-3 sm:col-span-3 lg:col-span-1 flex items-center justify-end gap-1 whitespace-nowrap">
                 <button
                   className="p-1.5 rounded text-blue-500 hover:text-blue-600 hover:bg-blue-500/10"
                   title="Editar vigencia"
@@ -458,7 +469,7 @@ export const VideoListScreen: React.FC = () => {
       </div>
 
       {deleteId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div id="delete-modal" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white dark:bg-[#16212b] rounded-lg p-6 shadow-xl w-full max-w-xs flex flex-col items-center">
             <p className="mb-4 text-center text-slate-800 dark:text-white">
               {deleteId === 'bulk'
@@ -494,7 +505,7 @@ export const VideoListScreen: React.FC = () => {
       )}
 
       {editItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div id="edit-modal" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white dark:bg-[#16212b] rounded-lg p-5 w-full max-w-md border border-slate-200 dark:border-slate-700">
             <h3 className="text-lg font-semibold mb-4 text-slate-900 dark:text-white">Editar vigencia</h3>
             <div className="space-y-3">

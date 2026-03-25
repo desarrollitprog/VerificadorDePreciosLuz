@@ -175,8 +175,9 @@ async def _send_banner_notification(banner: Publicidad, target_device_ids: List[
             await tablet_ws_manager.send_to_device(device_id, banner_info)
             logger.info(f"Enviado {command} a {device_id}: {banner.titulo}")
     else:
+        connections_count = len(tablet_ws_manager.active_connections)
+        logger.info(f"Broadcast {command}: {banner.titulo} - Conexiones activas: {connections_count}")
         await tablet_ws_manager.broadcast(banner_info)
-        logger.info(f"Broadcast {command}: {banner.titulo}")
 
 
 async def schedule_banner_notification(
@@ -1044,6 +1045,7 @@ class TabletWebSocketManager:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         ws_id = id(websocket)
+        logger.info(f"[WebSocket] Nueva conexión establecida. Total conexiones: {len(self.active_connections) + 1}")
         
         if ws_id in self.ping_tasks:
             self.ping_tasks[ws_id].cancel()
@@ -1064,6 +1066,7 @@ class TabletWebSocketManager:
 
     def disconnect(self, websocket: WebSocket):
         self.cancel_ping_task(websocket)
+        logger.info(f"[WebSocket] Conexión cerrada. Total conexiones restantes: {len(self.active_connections) - 1}")
         
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)

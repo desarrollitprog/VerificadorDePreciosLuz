@@ -13,7 +13,7 @@ const calendarStyles = `
   
   /* Header */
   .fc .fc-toolbar-title {
-    color: #0f172a;
+    color: #137fec;
     font-weight: 700;
     font-size: 1.25rem;
     letter-spacing: -0.02em;
@@ -59,11 +59,11 @@ const calendarStyles = `
   
   /* Today */
   .fc .fc-day-today {
-    background-color: rgba(99, 102, 241, 0.08) !important;
+    background-color: rgba(19, 127, 236, 0.1) !important;
   }
   
   .fc .fc-day-today .fc-daygrid-day-number {
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    background: #137fec;
     color: white;
     width: 32px;
     height: 32px;
@@ -72,7 +72,7 @@ const calendarStyles = `
     align-items: center;
     justify-content: center;
     font-weight: 700;
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+    box-shadow: 0 4px 12px rgba(19, 127, 236, 0.4);
   }
   
   /* Buttons */
@@ -98,10 +98,10 @@ const calendarStyles = `
   }
   
   .fc .fc-button-active {
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
+    background: #137fec !important;
     border-color: transparent !important;
     color: white !important;
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4) !important;
+    box-shadow: 0 4px 12px rgba(19, 127, 236, 0.4) !important;
   }
   
   .fc .fc-button-group {
@@ -145,7 +145,7 @@ const calendarStyles = `
   }
   
   .fc-more-link {
-    color: #6366f1 !important;
+    color: #137fec !important;
     font-weight: 600 !important;
     font-size: 0.7rem !important;
   }
@@ -167,7 +167,7 @@ const calendarStyles = `
 
   /* Dark Mode */
   .dark .fc .fc-toolbar-title {
-    color: #f1f5f9;
+    color: #137fec;
   }
   
   .dark .fc .fc-col-header-cell-cushion {
@@ -192,7 +192,7 @@ const calendarStyles = `
   }
   
   .dark .fc .fc-day-today {
-    background-color: rgba(99, 102, 241, 0.15) !important;
+    background-color: rgba(19, 127, 236, 0.15) !important;
   }
   
   .dark .fc .fc-button {
@@ -345,15 +345,8 @@ export const CalendarScreen: React.FC = () => {
       <div className="flex flex-col gap-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <span className="bg-gradient-to-r from-slate-800 to-slate-600 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
-              Programación
-            </span>
+          <h2 className="text-xl font-bold text-slate-800 dark:text-white">
+            Programación
           </h2>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 ml-13">
             Vista de anuncios programados por fecha de inicio
@@ -383,7 +376,7 @@ export const CalendarScreen: React.FC = () => {
       </div>
 
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-lg shadow-slate-200/50 dark:shadow-none border border-slate-200 dark:border-slate-800 p-4 relative overflow-hidden">
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>
+        <div className="absolute top-0 left-0 right-0 h-1 bg-primary"></div>
         {loading && (
           <div className="absolute top-6 right-6 z-10 flex items-center gap-2 bg-white dark:bg-slate-800 px-4 py-2 rounded-full shadow-lg border border-slate-200 dark:border-slate-700">
             <div className="w-4 h-4 rounded-full border-2 border-indigo-500/30 border-t-indigo-500 animate-spin"></div>

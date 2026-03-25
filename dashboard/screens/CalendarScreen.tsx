@@ -5,32 +5,26 @@ import interactionPlugin from '@fullcalendar/interaction';
 import { getVideos } from '../services/videoService';
 import { Video } from '../types';
 
-const calendarDarkStyles = `
-  .fc-theme-standard .fc-scrollgrid {
-    border-color: #334155;
-  }
-  .fc-theme-standard td, .fc-theme-standard th {
-    border-color: #334155;
-  }
+const calendarStyles = `
   .fc .fc-daygrid-day-number {
-    color: #94a3b8;
+    color: #000000;
     font-weight: 500;
   }
   .fc .fc-col-header-cell-cushion {
-    color: #e2e8f0;
+    color: #000000;
     font-weight: 600;
     font-size: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
   .fc .fc-daygrid-day-top {
-    color: #94a3b8;
+    color: #000000;
   }
   .fc .fc-day-today {
     background-color: rgba(59, 130, 246, 0.15) !important;
   }
   .fc .fc-day-today .fc-daygrid-day-number {
-    color: #60a5fa;
+    color: #2563eb;
     font-weight: 700;
   }
   .fc .fc-button-primary {
@@ -46,42 +40,32 @@ const calendarDarkStyles = `
     border-color: #2563eb;
   }
   .fc .fc-toolbar-title {
-    color: #e2e8f0;
+    color: #000000;
     font-weight: 600;
     font-size: 1.1rem;
   }
   .fc .fc-button {
-    color: #e2e8f0;
+    color: #000000;
   }
   .fc .fc-button-group > .fc-button {
-    background-color: #1e293b;
-    border-color: #334155;
-    color: #e2e8f0;
+    background-color: #f1f5f9;
+    border-color: #cbd5e1;
+    color: #000000;
     font-size: 0.75rem;
   }
   .fc .fc-button-group > .fc-button:hover {
-    background-color: #334155;
+    background-color: #e2e8f0;
   }
   .fc .fc-button-active {
     background-color: #3b82f6 !important;
     border-color: #3b82f6 !important;
   }
   .fc-daygrid-day-events {
-    color: #94a3b8;
+    color: #000000;
   }
   .fc-more-link {
     color: #3b82f6;
     font-weight: 500;
-  }
-  .fc-popover {
-    background-color: #1e293b;
-    border-color: #334155;
-    border-radius: 0.5rem;
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
-  }
-  .fc-popover-body {
-    color: #e2e8f0;
-    padding: 0.5rem;
   }
   .fc-event {
     border-radius: 0.25rem;
@@ -222,7 +206,7 @@ export const CalendarScreen: React.FC = () => {
 
   return (
     <>
-      <style>{calendarDarkStyles}</style>
+      <style>{calendarStyles}</style>
       <div className="flex flex-col gap-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>

@@ -585,17 +585,40 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         }
     }
 
-    // Sincroniza banners en segundo plano si están vencidos
+    // Sincroniza banners en segundo plano - fuer descarga inmediata cuando se recibe BANNER_INICIADO
     private fun syncBannersOnStart() {
         val service = api ?: return
         val baseUrl = backendBaseUrl ?: return
         scope.launch {
             try {
                 val repo = BannerRepository(this@ScanActivity, service, baseUrl)
-                repo.refreshIfStale(bannerMaxAgeMs, deviceId)
+                // Forzar descarga inmediata (maxAgeMs = 0) cuando se recibe BANNER_INICIADO
+                repo.refreshIfStale(0L, deviceId)
             } catch (e: Exception) {
                 Log.e(TAG, "Error al sincronizar banners", e)
             }
+        }
+    }
+
+    // Elimina el archivo local de un banner específico
+    private fun deleteBannerFile(bannerId: Int, url: String) {
+        try {
+            val ext = url.substringAfterLast('.', "")
+            val safeExt = if (ext.isBlank()) "bin" else ext
+            val fileName = "banner_$bannerId.$safeExt"
+            val bannersDir = File(filesDir, "banners")
+            val file = File(bannersDir, fileName)
+            if (file.exists()) {
+                if (file.delete()) {
+                    Log.i(TAG, "[BannerCleanup] Archivo eliminado: $fileName")
+                } else {
+                    Log.w(TAG, "[BannerCleanup] No se pudo eliminar: $fileName")
+                }
+            } else {
+                Log.d(TAG, "[BannerCleanup] Archivo no existe: $fileName")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "[BannerCleanup] Error al eliminar archivo del banner $bannerId", e)
         }
     }
 
@@ -1606,7 +1629,13 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                         } else if (command == "BANNER_FINALIZADO") {
                             val bannerId = message.optInt("banner_id", 0)
                             val titulo = message.optString("titulo", "")
+                            val bannerUrl = message.optString("url", "")
                             Log.i(TAG, "[WebSocket] BANNER_FINALIZADO recibido: id=$bannerId, titulo=$titulo")
+                            
+                            // Eliminar archivo local del banner que terminó
+                            if (bannerId > 0 && bannerUrl.isNotEmpty()) {
+                                deleteBannerFile(bannerId, bannerUrl)
+                            }
                             
                             // Recargar banners inmediatamente cuando un banner termina
                             uiHandler.post {
@@ -1687,7 +1716,13 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                         } else if (command == "BANNER_FINALIZADO") {
                             val bannerId = message.optInt("banner_id", 0)
                             val titulo = message.optString("titulo", "")
+                            val bannerUrl = message.optString("url", "")
                             Log.i(TAG, "[WebSocket] BANNER_FINALIZADO recibido (binario): id=$bannerId, titulo=$titulo")
+                            
+                            // Eliminar archivo local del banner que terminó
+                            if (bannerId > 0 && bannerUrl.isNotEmpty()) {
+                                deleteBannerFile(bannerId, bannerUrl)
+                            }
                             
                             uiHandler.post {
                                 syncBannersOnStart()

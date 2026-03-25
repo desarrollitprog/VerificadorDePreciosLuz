@@ -204,17 +204,22 @@ async def schedule_banner_notification(
             logger.info(f"Programando notificación de inicio para banner {banner_id} en {delay_inicio} segundos")
             await asyncio.sleep(delay_inicio)
             
-            # Obtener el banner actualizado de la BD para verificar si aún está activo
-            async for db in get_db_publicidad():
-                result = await db.execute(select(Publicidad).where(Publicidad.id == banner_id))
-                banner = result.scalars().first()
-                if banner and banner.activo:
-                    target_device_ids = None
-                    if banner.device_ids:
-                        target_device_ids = [d.strip() for d in banner.device_ids.split(",") if d.strip()]
-                    await _send_banner_notification(banner, target_device_ids, "BANNER_INICIADO")
-                    logger.info(f"Notificación de inicio enviada para banner {banner_id}")
-                break
+            # Verificar si ya fue notificado (evitar duplicados)
+            if banner_id in notified_banners_start:
+                logger.info(f"Banner {banner_id} ya notificado de inicio, saltando")
+            else:
+                # Obtener el banner actualizado de la BD para verificar si aún está activo
+                async for db in get_db_publicidad():
+                    result = await db.execute(select(Publicidad).where(Publicidad.id == banner_id))
+                    banner = result.scalars().first()
+                    if banner and banner.activo:
+                        target_device_ids = None
+                        if banner.device_ids:
+                            target_device_ids = [d.strip() for d in banner.device_ids.split(",") if d.strip()]
+                        await _send_banner_notification(banner, target_device_ids, "BANNER_INICIADO")
+                        notified_banners_start.add(banner_id)
+                        logger.info(f"Notificación de inicio enviada para banner {banner_id}")
+                    break
     
     # Programar notificación de fin
     if fecha_fin:
@@ -228,16 +233,21 @@ async def schedule_banner_notification(
             logger.info(f"Programando notificación de fin para banner {banner_id} en {delay_fin} segundos")
             await asyncio.sleep(delay_fin)
             
-            async for db in get_db_publicidad():
-                result = await db.execute(select(Publicidad).where(Publicidad.id == banner_id))
-                banner = result.scalars().first()
-                if banner:
-                    target_device_ids = None
-                    if banner.device_ids:
-                        target_device_ids = [d.strip() for d in banner.device_ids.split(",") if d.strip()]
-                    await _send_banner_notification(banner, target_device_ids, "BANNER_FINALIZADO")
-                    logger.info(f"Notificación de fin enviada para banner {banner_id}")
-                break
+            # Verificar si ya fue notificado (evitar duplicados)
+            if banner_id in notified_banners_end:
+                logger.info(f"Banner {banner_id} ya notificado de fin, saltando")
+            else:
+                async for db in get_db_publicidad():
+                    result = await db.execute(select(Publicidad).where(Publicidad.id == banner_id))
+                    banner = result.scalars().first()
+                    if banner:
+                        target_device_ids = None
+                        if banner.device_ids:
+                            target_device_ids = [d.strip() for d in banner.device_ids.split(",") if d.strip()]
+                        await _send_banner_notification(banner, target_device_ids, "BANNER_FINALIZADO")
+                        notified_banners_end.add(banner_id)
+                        logger.info(f"Notificación de fin enviada para banner {banner_id}")
+                    break
 
 
 @app.on_event("startup")

@@ -167,7 +167,7 @@ const calendarStyles = `
 
   /* Dark Mode */
   .dark .fc .fc-toolbar-title {
-    color: #137fec;
+    color: #f1f5f9;
   }
   
   .dark .fc .fc-col-header-cell-cushion {
@@ -183,12 +183,17 @@ const calendarStyles = `
     border-color: #334155 !important;
   }
   
+  .dark .fc .fc-day-other {
+    background-color: #0f172a !important;
+    opacity: 0.7;
+  }
+  
   .dark .fc .fc-daygrid-day:hover {
     background-color: #334155 !important;
   }
   
   .dark .fc .fc-day-other .fc-daygrid-day-number {
-    color: #475569;
+    color: #94a3b8;
   }
   
   .dark .fc .fc-day-today {
@@ -376,7 +381,7 @@ export const CalendarScreen: React.FC = () => {
       </div>
 
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-lg shadow-slate-200/50 dark:shadow-none border border-slate-200 dark:border-slate-800 p-4 relative overflow-hidden">
-        <div className="absolute top-0 left-0 right-0 h-1 bg-primary"></div>
+        <div className="absolute top-0 left-0 right-0 h-1 bg-primary dark:bg-slate-700"></div>
         {loading && (
           <div className="absolute top-6 right-6 z-10 flex items-center gap-2 bg-white dark:bg-slate-800 px-4 py-2 rounded-full shadow-lg border border-slate-200 dark:border-slate-700">
             <div className="w-4 h-4 rounded-full border-2 border-indigo-500/30 border-t-indigo-500 animate-spin"></div>

@@ -76,6 +76,16 @@ export interface SecondaryServerVideoCount {
   videos_actuales: number;
 }
 
+export interface DeviceContent {
+  device_id: string;
+  contenido: {
+    titulo: string;
+    url: string;
+    tipo: 'video' | 'image';
+    thumbnail?: string;
+  } | null;
+}
+
 function extractServers(data: any): any[] {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.servidores)) return data.servidores;
@@ -166,4 +176,14 @@ export async function getAuditoria(page = 1, limit = 20): Promise<{ items: Audit
     })),
     total: count || 0,
   };
+}
+
+export async function getDeviceContent(deviceId: string): Promise<DeviceContent> {
+  const response = await api.get(`/dispositivos/${encodeURIComponent(deviceId)}/contenido`);
+  return response.data as DeviceContent;
+}
+
+export async function restartDevice(deviceId: string): Promise<{ success: boolean; message: string }> {
+  const response = await api.post(`/dispositivos/${encodeURIComponent(deviceId)}/reiniciar`);
+  return response.data as { success: boolean; message: string };
 }

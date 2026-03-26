@@ -15,6 +15,14 @@ class Notificacion(Base):
     tipo = Column(String(50), nullable=False)
     descripcion = Column(String(500), nullable=True)
 
+    # Campos para relacionar con dispositivo y servidor
+    dispositivo_id = Column(String(100), nullable=True, index=True)
+    servidor_id = Column(Integer, nullable=True, index=True)
+
+    # Relaciones
+    dispositivo = relationship("Dispositivo", foreign_keys=[dispositivo_id], backref="notificaciones")
+    servidor = relationship("ServidorSecundario", foreign_keys=[servidor_id], backref="notificaciones")
+
     usuario_id = Column(
         Integer,
         ForeignKey("dbo.usuarios_dashboard.id", ondelete="SET NULL"),

@@ -1,4 +1,15 @@
 from datetime import datetime, timedelta, timezone
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
+
+
+def _to_venezuela_time(dt: datetime) -> datetime:
+    """Convierte datetime UTC a timezone de Venezuela (UTC-4)"""
+    if dt is None:
+        return None
+    return dt - timedelta(hours=4)
 from typing import Any, Optional
 import logging
 from fastapi import APIRouter, Depends, Query
@@ -133,23 +144,26 @@ async def obtener_auditoria(
         
         tipo_evento = "SESION_ACTIVA" if sesion.fin is None else "SESION_CERRADA"
         
+        # Determinar el tipo correcto basado en la descripción
         if sesion.fin is None:
             descripcion = f"Dispositivo '{disp_nombre or disp_codigo}' ({disp_codigo}) conectado al servidor '{srv_nombre or 'Desconocido'}'"
+            tipo_evento = "CONEXION_DISPOSITIVO"
         else:
             duracion_formatted = _format_duration(sesion.duracion_segundos)
             descripcion = f"Dispositivo '{disp_nombre or disp_codigo}' ({disp_codigo}) desconectado del servidor '{srv_nombre or 'Desconocido'}'. Duración: {duracion_formatted}"
+            tipo_evento = "DESCONEXION_DISPOSITIVO"
         
         items.append({
             "id": sesion.id,
-            "fecha": sesion.inicio.isoformat() if sesion.inicio else None,
+            "fecha": _to_venezuela_time(sesion.inicio).isoformat() if sesion.inicio else None,
             "tipo": tipo_evento,
             "descripcion": descripcion,
             "dispositivo_id": disp_codigo,
             "dispositivo_nombre": disp_nombre,
             "servidor_id": srv_id,
             "servidor_nombre": srv_nombre,
-            "sesion_inicio": sesion.inicio.isoformat() if sesion.inicio else None,
-            "sesion_fin": sesion.fin.isoformat() if sesion.fin else None,
+            "sesion_inicio": _to_venezuela_time(sesion.inicio).isoformat() if sesion.inicio else None,
+            "sesion_fin": _to_venezuela_time(sesion.fin).isoformat() if sesion.fin else None,
             "duracion_segundos": sesion.duracion_segundos,
             "usuario": None,
             "origen": "sesion",
@@ -175,39 +189,48 @@ async def obtener_auditoria(
     rows_notif = result_notif.scalars().all()
     
     for notif in rows_notif:
-        dispositivo_id = None
+        # Usar campos directas de la notificación si existen
+        dispositivo_id = notif.dispositivo_id
+        servidor_id = notif.servidor_id
         dispositivo_nombre = None
-        servidor_id = None
         servidor_nombre = None
+        
+        # Si no tiene dispositivo_id, intentar extraer de la descripción
+        if not dispositivo_id:
+            desc = notif.descripcion or ""
+            import re
+            
+            # Extraer dispositivo de descripciones tipo "Dispositivo 'nombre' (id)"
+            match_disp = re.search(r"Dispositivo\s+['\"]([^'\"]+)['\"]\s+\(([^)]+)\)", desc)
+            if match_disp:
+                dispositivo_nombre = match_disp.group(1)
+                dispositivo_id = match_disp.group(2)
+            
+            # Extraer servidor de descripciones tipo "servidor 'nombre' (ip)"
+            match_srv = re.search(r"servidor\s+['\"]([^'\"]+)['\"]\s+\(([^)]+)\)", desc, re.IGNORECASE)
+            if match_srv:
+                servidor_nombre = match_srv.group(1)
+        else:
+            # Obtener nombres de dispositivo y servidor desde la BD
+            if dispositivo_id:
+                stmt_disp = select(Dispositivo).where(Dispositivo.codigo_kiosko == dispositivo_id)
+                result_disp = await db.execute(stmt_disp)
+                disp = result_disp.scalars().first()
+                if disp:
+                    dispositivo_nombre = disp.nombre_amigable
+            
+            if servidor_id:
+                stmt_srv = select(ServidorSecundario).where(ServidorSecundario.id == servidor_id)
+                result_srv = await db.execute(stmt_srv)
+                srv = result_srv.scalars().first()
+                if srv:
+                    servidor_nombre = srv.nombre
         
         desc = notif.descripcion or ""
         
-        import re
-        
-        # Extraer dispositivo de descripciones tipo "Dispositivo 'nombre' (id)"
-        match_disp = re.search(r"Dispositivo\s+['\"]([^'\"]+)['\"]\s+\(([^)]+)\)", desc)
-        if match_disp:
-            dispositivo_nombre = match_disp.group(1)
-            dispositivo_id = match_disp.group(2)
-        
-        # Extraer servidor de descripciones tipo "servidor 'nombre' (ip)"
-        match_srv = re.search(r"servidor\s+['\"]([^'\"]+)['\"]\s+\(([^)]+)\)", desc, re.IGNORECASE)
-        if match_srv:
-            servidor_nombre = match_srv.group(1)
-        
-        # Para sincronizaciones forzadas - buscar "Servidores online: X"
-        match_sync = re.search(r"Servidores\s+online:\s+(\d+)", desc, re.IGNORECASE)
-        
-        # Para	subida de archivos - buscar "servidores: [lista]"
-        match_subida = re.search(r"servidores:\s*\[([^\]]+)\]", desc, re.IGNORECASE)
-        if match_subida:
-            servidores_en_desc = match_subida.group(1).strip()
-            if servidores_en_desc:
-                servidor_nombre = f"{servidores_en_desc} servidores"
-        
         items.append({
             "id": notif.id,
-            "fecha": notif.fecha_creacion.isoformat() if notif.fecha_creacion else None,
+            "fecha": _to_venezuela_time(notif.fecha_creacion).isoformat() if notif.fecha_creacion else None,
             "tipo": notif.tipo,
             "descripcion": desc,
             "dispositivo_id": dispositivo_id,

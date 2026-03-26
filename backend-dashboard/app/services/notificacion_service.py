@@ -11,6 +11,8 @@ async def registrar_accion(
     usuario_id: int,
     tipo: str,
     descripcion: str,
+    dispositivo_id: str = None,
+    servidor_id: int = None,
 ) -> Notificacion:
     """
     Inserta un registro de auditoría en la tabla Notificacion.
@@ -20,6 +22,8 @@ async def registrar_accion(
         usuario_id: ID del usuario que realizó la acción.
         tipo: Tipo de acción (ej. SUBIDA_MULTIMEDIA, BORRADO, CREAR_USUARIO).
         descripcion: Detalle de la acción (puede ser cadena vacía).
+        dispositivo_id: ID del dispositivo relacionado (opcional).
+        servidor_id: ID del servidor relacionado (opcional).
 
     Returns:
         La instancia Notificacion creada (con id y fecha_creacion tras el commit).
@@ -28,6 +32,8 @@ async def registrar_accion(
         usuario_id=usuario_id,
         tipo=tipo,
         descripcion=descripcion,
+        dispositivo_id=dispositivo_id,
+        servidor_id=servidor_id,
     )
     db.add(notificacion)
     await db.commit()

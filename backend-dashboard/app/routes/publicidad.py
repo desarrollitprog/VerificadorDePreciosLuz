@@ -451,11 +451,40 @@ async def upload_banner(
 
     user_id = current_user.get("user_id")
     if user_id is not None:
+        # Obtener nombres de dispositivos y servidores
+        dispositivos_info = ""
+        if selected_dispositivo_ids:
+            from sqlalchemy import select
+            stmt_disp = select(Dispositivo).where(Dispositivo.codigo_kiosko.in_(selected_dispositivo_ids))
+            result_disp = await db.execute(stmt_disp)
+            dispositivos = result_disp.scalars().all()
+            if dispositivos:
+                nombres_disp = [f"'{d.nombre_amigable or d.codigo_kiosko}' ({d.codigo_kiosko})" for d in dispositivos]
+                dispositivos_info = f" - Dispositivos: {', '.join(nombres_disp)}"
+        
+        servidores_info = ""
+        if selected_servidor_ids:
+            from sqlalchemy import select
+            stmt_srv = select(ServidorSecundario).where(ServidorSecundario.id.in_(selected_servidor_ids))
+            result_srv = await db.execute(stmt_srv)
+            servidores = result_srv.scalars().all()
+            if servidores:
+                nombres_srv = [f"'{s.nombre}' ({s.ip})" for s in servidores]
+                servidores_info = f" - Servidores: {', '.join(nombres_srv)}"
+        
+        descripcion = f"Archivo '{filename}' (Id: {nuevo_banner.IdPublicidad}){dispositivos_info}{servidores_info}"
+        
+        # Usar el primer dispositivo/servidor para los campos de auditoría
+        disp_id = selected_dispositivo_ids[0] if selected_dispositivo_ids else None
+        srv_id = selected_servidor_ids[0] if selected_servidor_ids else None
+        
         await registrar_accion(
             db,
             user_id,
             "SUBIDA_MULTIMEDIA",
-            f"Archivo subido: {filename}, IdPublicidad={nuevo_banner.IdPublicidad}",
+            descripcion,
+            dispositivo_id=disp_id,
+            servidor_id=srv_id,
         )
 
     return {

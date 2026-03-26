@@ -134,12 +134,20 @@ async def listar_banners(
             if banner.asignacion_todos:
                 dispositivos_count = total_dispositivos
             else:
+                dispositivo_ids = [asig.dispositivo_id for asig in banner.asignaciones]
+                dispositivos_mapa = {}
+                if dispositivo_ids:
+                    stmt_disp = select(Dispositivo).where(Dispositivo.codigo_kiosko.in_(dispositivo_ids))
+                    result_disp = await db.execute(stmt_disp)
+                    for disp in result_disp.scalars().all():
+                        dispositivos_mapa[disp.codigo_kiosko] = disp.nombre_amigable
+                
                 for asig in banner.asignaciones:
                     asignaciones.append({
                         "servidor_id": asig.servidor_id,
                         "servidor_nombre": asig.servidor.nombre if asig.servidor else None,
                         "dispositivo_id": asig.dispositivo_id,
-                        "dispositivo_nombre": None,
+                        "dispositivo_nombre": dispositivos_mapa.get(asig.dispositivo_id),
                         "dispositivo_codigo": asig.dispositivo_id,
                     })
                 dispositivos_count = len(asignaciones)

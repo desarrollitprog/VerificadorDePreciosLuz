@@ -1,9 +1,29 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Filter, ChevronLeft, ChevronRight, Calendar, Server, Monitor, Clock, X } from 'lucide-react';
+import { Search, Filter, ChevronLeft, ChevronRight, Calendar, Server, Monitor, Clock, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { getAuditoria, AuditoriaItem, AuditoriaFiltros } from '../services/auditoriaService';
 import { useNotification } from '../components/useNotification';
 
 const PAGE_SIZE = 20;
+
+function ExpandableDescription({ text, maxLength = 80 }: { text: string; maxLength?: number }) {
+  const [expanded, setExpanded] = useState(false);
+  
+  if (text.length <= maxLength) {
+    return <span>{text}</span>;
+  }
+  
+  return (
+    <div>
+      <span>{expanded ? text : text.substring(0, maxLength) + '...'}</span>
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="ml-1 text-primary hover:underline text-xs"
+      >
+        {expanded ? 'Ver menos' : 'Ver más'}
+      </button>
+    </div>
+  );
+}
 
 function formatDuration(seconds: number | null): string {
   if (!seconds) return '-';
@@ -284,8 +304,12 @@ export const AuditoriaScreen: React.FC = () => {
                           {item.servidor_nombre || '-'}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300 max-w-xs truncate" title={item.descripcion}>
-                        {item.descripcion}
+                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300 max-w-xs">
+                        {item.descripcion.length > 80 ? (
+                          <ExpandableDescription text={item.descripcion} maxLength={80} />
+                        ) : (
+                          item.descripcion
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap">
                         {formatDuration(item.duracion_segundos)}

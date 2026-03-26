@@ -52,7 +52,7 @@ function getBadgeByAction(actionBadge?: 'carga' | 'eliminacion') {
   return undefined;
 }
 
-export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
+export const GeneralNotifications: React.FC<GeneralNotificationsProps> = ({ onNavigate }) => {
   const [open, setOpen] = useState(false);
   const showNotification = useNotification();
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
@@ -61,6 +61,15 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const shownErrorNotificationIdsRef = useRef<Set<number>>(new Set());
   const [search, setSearch] = useState("");
+
+  const handleNavigate = (screen: Screen) => {
+    if (onNavigate) {
+      onNavigate(screen);
+    } else {
+      const event = new CustomEvent('navigate', { detail: screen });
+      window.dispatchEvent(event);
+    }
+  };
 
   const loadNotifications = async (markAsRead: boolean) => {
     if (markAsRead) setLoading(true);
@@ -238,7 +247,7 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
             <button
               onClick={() => {
                 setOpen(false);
-                onNavigate?.('auditoria');
+                handleNavigate('auditoria');
               }}
               className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium text-primary hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
             >

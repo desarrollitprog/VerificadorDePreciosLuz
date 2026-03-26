@@ -175,15 +175,45 @@ async def obtener_auditoria(
     rows_notif = result_notif.scalars().all()
     
     for notif in rows_notif:
+        dispositivo_id = None
+        dispositivo_nombre = None
+        servidor_id = None
+        servidor_nombre = None
+        
+        desc = notif.descripcion or ""
+        
+        import re
+        
+        # Extraer dispositivo de descripciones tipo "Dispositivo 'nombre' (id)"
+        match_disp = re.search(r"Dispositivo\s+['\"]([^'\"]+)['\"]\s+\(([^)]+)\)", desc)
+        if match_disp:
+            dispositivo_nombre = match_disp.group(1)
+            dispositivo_id = match_disp.group(2)
+        
+        # Extraer servidor de descripciones tipo "servidor 'nombre' (ip)"
+        match_srv = re.search(r"servidor\s+['\"]([^'\"]+)['\"]\s+\(([^)]+)\)", desc, re.IGNORECASE)
+        if match_srv:
+            servidor_nombre = match_srv.group(1)
+        
+        # Para sincronizaciones forzadas - buscar "Servidores online: X"
+        match_sync = re.search(r"Servidores\s+online:\s+(\d+)", desc, re.IGNORECASE)
+        
+        # Para	subida de archivos - buscar "servidores: [lista]"
+        match_subida = re.search(r"servidores:\s*\[([^\]]+)\]", desc, re.IGNORECASE)
+        if match_subida:
+            servidores_en_desc = match_subida.group(1).strip()
+            if servidores_en_desc:
+                servidor_nombre = f"{servidores_en_desc} servidores"
+        
         items.append({
             "id": notif.id,
             "fecha": notif.fecha_creacion.isoformat() if notif.fecha_creacion else None,
             "tipo": notif.tipo,
-            "descripcion": notif.descripcion or "",
-            "dispositivo_id": None,
-            "dispositivo_nombre": None,
-            "servidor_id": None,
-            "servidor_nombre": None,
+            "descripcion": desc,
+            "dispositivo_id": dispositivo_id,
+            "dispositivo_nombre": dispositivo_nombre,
+            "servidor_id": servidor_id,
+            "servidor_nombre": servidor_nombre,
             "sesion_inicio": None,
             "sesion_fin": None,
             "duracion_segundos": None,

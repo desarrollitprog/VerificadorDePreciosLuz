@@ -139,17 +139,12 @@ export const DashboardScreen: React.FC = () => {
           ip: s.ip,
           api_url: `http://${s.ip}:8000`,
           online: s.online,
-          dispositivos: s.dispositivos.map((d: any) => {
-            console.log('[DEBUG] Dispositivo raw:', d);
-            console.log('[DEBUG] device_id:', d.device_id, 'nombre_amigable:', d.nombre_amigable, 'nombre_mostrado:', d.nombre_mostrado);
-            return {
-              id: d.device_id,
-              codigo_kiosko: d.device_id,
-              nombre_amigable: d.nombre_amigable,
-              nombre_mostrado: d.nombre_mostrado,
-              online: d.online,
-            };
-          }),
+          dispositivos: s.dispositivos.map((d: any) => ({
+            id: d.device_id,
+            codigo_kiosko: d.device_id,
+            nombre_amigable: d.nombre_amigable,
+            online: d.online,
+          })),
         }));
         setServidores(mapped);
       } catch {

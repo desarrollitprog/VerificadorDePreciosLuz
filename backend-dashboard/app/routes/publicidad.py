@@ -510,7 +510,19 @@ async def eliminar_banner(
         banner = await db.get(Publicidad, id)
         if not banner:
             raise HTTPException(status_code=404, detail="Banner no encontrado.")
-        descripcion_audit = f"Banner eliminado: IdPublicidad={banner.IdPublicidad}, Titulo={banner.Titulo or ''}"
+        
+        # Obtener asignaciones para auditoría
+        asignaciones_stmt = select(PublicidadAsignacion).where(PublicidadAsignacion.publicidad_id == id)
+        result_asig = await db.execute(asignaciones_stmt)
+        asignaciones = result_asig.scalars().all()
+        
+        dispositivo_ids = [a.dispositivo_id for a in asignaciones if a.dispositivo_id]
+        servidor_ids = list(set([a.servidor_id for a in asignaciones if a.servidor_id]))
+        
+        disp_info = f", Dispositivos: {dispositivo_ids}" if dispositivo_ids else ""
+        srv_info = f", Servidores: {servidor_ids}" if servidor_ids else ", Asignado a: todos"
+        
+        descripcion_audit = f"Banner eliminado: IdPublicidad={banner.IdPublicidad}, Titulo={banner.Titulo or ''}{disp_info}{srv_info}"
         # Eliminar archivo físico si existe
         if banner.Url:
             filename = os.path.basename(banner.Url)
@@ -542,7 +554,9 @@ async def eliminar_banner(
         await db.commit()
         user_id = current_user.get("user_id")
         if user_id is not None:
-            await registrar_accion(db, user_id, "BORRADO_MULTIMEDIA", descripcion_audit)
+            disp_id = dispositivo_ids[0] if dispositivo_ids else None
+            srv_id = servidor_ids[0] if servidor_ids else None
+            await registrar_accion(db, user_id, "BORRADO_MULTIMEDIA", descripcion_audit, dispositivo_id=disp_id, servidor_id=srv_id)
         return {"success": True, "message": "Banner eliminado correctamente."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al eliminar banner: {str(e)}")
@@ -751,12 +765,26 @@ async def actualizar_banner_metadata(
 
     user_id = current_user.get("user_id") if current_user else None
     if user_id is not None:
+        # Obtener asignaciones para auditoría
+        asignaciones_stmt = select(PublicidadAsignacion).where(PublicidadAsignacion.publicidad_id == id)
+        result_asig = await db.execute(asignaciones_stmt)
+        asignaciones = result_asig.scalars().all()
+        
+        dispositivo_ids = [a.dispositivo_id for a in asignaciones if a.dispositivo_id]
+        servidor_ids = list(set([a.servidor_id for a in asignaciones if a.servidor_id]))
+        
+        disp_info = f", Dispositivos: {dispositivo_ids}" if dispositivo_ids else ""
+        srv_info = f", Servidores: {servidor_ids}" if servidor_ids else ", Asignado a: todos"
+        
         await registrar_accion(
             db,
             user_id,
             "EDICION_VIGENCIA_MULTIMEDIA",
-            f"Banner IdPublicidad={banner.IdPublicidad}, Activo={banner.Activo}, "
-            f"FechaInicio={banner.FechaInicio}, FechaFin={banner.FechaFin}",
+            f"Banner IdPublicidad={banner.IdPublicidad}, Titulo={banner.Titulo or ''}, "
+            f"Activo={banner.Activo}, FechaInicio={banner.FechaInicio}, FechaFin={banner.FechaFin}"
+            f"{disp_info}{srv_info}",
+            dispositivo_id=dispositivo_ids[0] if dispositivo_ids else None,
+            servidor_id=servidor_ids[0] if servidor_ids else None,
         )
 
     return {

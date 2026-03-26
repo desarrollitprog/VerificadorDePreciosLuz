@@ -363,7 +363,9 @@ async def _execute_force_sync_job(job_id: str, user_id: int | None, username: st
                         f"Sincronización forzada ejecutada por usuario {actor_name}. "
                         f"Servidores online: {len(online_servers)}, éxito: {success_count}, fallo: {failed_count}. "
                         f"Fallos: {resumen_fallos if resumen_fallos else 'ninguno'}"
-                    )
+                    ),
+                    dispositivo_id=None,
+                    servidor_id=None,
                 )
 
             await _set_job_state(
@@ -620,15 +622,24 @@ async def _execute_selective_sync_job(
 
             if user_id is not None:
                 actor_name = (username or "").strip() or "Sistema"
+                
+                disp_id = dispositivo_ids[0] if dispositivo_ids else None
+                srv_id = servidor_ids_a_buscar[0] if servidor_ids_a_buscar else None
+                
+                disp_info = f", Dispositivos: {dispositivo_ids}" if dispositivo_ids else ", Dispositivos: todos"
+                srv_info = f", Servidores: {servidor_ids_a_buscar}" if servidor_ids_a_buscar else ""
+                
                 await registrar_accion(
                     db,
                     user_id,
                     "SINCRONIZACION_SELECTIVA",
                     (
                         f"Sincronización selectiva ejecutada por usuario {actor_name}. "
-                        f"Servidores: {len(online_servers)}, éxito: {success_count}, fallo: {failed_count}. "
-                        f"Dispositivos: {len(dispositivo_ids) if dispositivo_ids else 'todos'}"
-                    )
+                        f"Servidores online: {len(online_servers)}, éxito: {success_count}, fallo: {failed_count}"
+                        f"{disp_info}{srv_info}"
+                    ),
+                    dispositivo_id=disp_id,
+                    servidor_id=srv_id,
                 )
 
             await _set_job_state(
@@ -804,8 +815,8 @@ async def status_detalle(
                         await registrar_accion(
                             db,
                             None,
-                            "CONEXION_DISPOSITIVO",
-                            f"Dispositivo '{dispositivo.nombre_amigable or codigo}' ({codigo}) conectado al servidor '{s.nombre}' ({s.ip})",
+                            "DESCONEXION_DISPOSITIVO",
+                            f"Dispositivo '{dispositivo.nombre_amigable or codigo}' ({codigo}) desconectado del servidor '{s.nombre}' ({s.ip})",
                             dispositivo_id=codigo,
                             servidor_id=s.id,
                         )

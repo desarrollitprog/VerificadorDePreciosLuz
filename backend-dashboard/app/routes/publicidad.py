@@ -454,7 +454,6 @@ async def upload_banner(
         # Obtener nombres de dispositivos y servidores
         dispositivos_info = ""
         if selected_dispositivo_ids:
-            from sqlalchemy import select
             stmt_disp = select(Dispositivo).where(Dispositivo.codigo_kiosko.in_(selected_dispositivo_ids))
             result_disp = await db.execute(stmt_disp)
             dispositivos = result_disp.scalars().all()
@@ -464,7 +463,6 @@ async def upload_banner(
         
         servidores_info = ""
         if selected_servidor_ids:
-            from sqlalchemy import select
             stmt_srv = select(ServidorSecundario).where(ServidorSecundario.id.in_(selected_servidor_ids))
             result_srv = await db.execute(stmt_srv)
             servidores = result_srv.scalars().all()

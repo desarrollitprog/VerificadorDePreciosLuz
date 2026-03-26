@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db_usuarios
-from app.dependencies import get_current_cliente
+from app.dependencies import get_current_cliente, get_current_admin
 from app.models.notificacion import Notificacion
 from app.models.dispositivo_sesion import DispositivoSesion
 from app.models.dispositivo import Dispositivo
@@ -82,7 +82,7 @@ def _format_duration(seconds: int) -> str:
 @router.get("/auditoria")
 async def obtener_auditoria(
     db: AsyncSession = Depends(get_db_usuarios),
-    current_user: dict = Depends(get_current_cliente),
+    current_user: dict = Depends(get_current_admin),
     busqueda: str = Query(None, description="Texto a buscar"),
     tipo: str = Query(None, description="Tipo de evento"),
     dispositivo_id: str = Query(None, description="ID del dispositivo"),

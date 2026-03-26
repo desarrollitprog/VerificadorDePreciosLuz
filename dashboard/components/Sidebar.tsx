@@ -115,22 +115,24 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, on
           </button>
         )}
 
-        {/* Auditoría - visible para todos los roles */}
-        <button 
-          onClick={() => { onNavigate('auditoria'); onClose(); }}
-          title="Historial de Auditoría"
-          className={`group relative flex items-center gap-3 px-3 justify-start py-3 rounded-lg transition-colors w-full text-left
-            ${currentScreen === 'auditoria' 
-              ? 'text-primary font-semibold' 
-              : 'text-slate-400 hover:bg-slate-800 hover:text-white font-medium'
-            }`}
-        >
-          {currentScreen === 'auditoria' && (
-            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full"></span>
-          )}
-          <History size={20} className={currentScreen === 'auditoria' ? 'text-primary' : 'text-slate-500 group-hover:text-white'} />
-          <span className="text-sm">Auditoría</span>
-        </button>
+        {/* Auditoría - solo ADMIN puede ver */}
+        {role === 'ADMIN' && (
+          <button 
+            onClick={() => { onNavigate('auditoria'); onClose(); }}
+            title="Historial de Auditoría"
+            className={`group relative flex items-center gap-3 px-3 justify-start py-3 rounded-lg transition-colors w-full text-left
+              ${currentScreen === 'auditoria' 
+                ? 'text-primary font-semibold' 
+                : 'text-slate-400 hover:bg-slate-800 hover:text-white font-medium'
+              }`}
+          >
+            {currentScreen === 'auditoria' && (
+              <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full"></span>
+            )}
+            <History size={20} className={currentScreen === 'auditoria' ? 'text-primary' : 'text-slate-500 group-hover:text-white'} />
+            <span className="text-sm">Auditoría</span>
+          </button>
+        )}
 
         <div className="my-2 border-t border-slate-800/30"></div>
 

@@ -404,9 +404,51 @@ export const DashboardScreen: React.FC = () => {
         return;
       }
 
-      await sincronizarServidores(syncServidorIds, syncDispositivoIds);
+      const start = await sincronizarServidores(syncServidorIds, syncDispositivoIds);
+      if (!start.success || !start.job_id) {
+        showNotification('No se pudo iniciar la sincronización', 'error');
+        return;
+      }
+
       showNotification('Sincronización iniciada correctamente', 'success');
+
+      const maxPolls = 90;
+      const pollDelayMs = 2000;
+      let finalStatus: any = null;
+
+      for (let i = 0; i < maxPolls; i++) {
+        await new Promise((resolve) => setTimeout(resolve, pollDelayMs));
+        const status = await getForceSyncJobStatus(start.job_id);
+        setSyncServerProgress(normalizeServerProgress(status.details || []));
+
+        if (status.status === 'COMPLETED' || status.status === 'FAILED') {
+          finalStatus = status;
+          break;
+        }
+      }
+
+      if (!finalStatus) {
+        showNotification('Sincronización en progreso', 'warning');
+        return;
+      }
+
       setLastSyncAt(formatCaracasTime(new Date()));
+
+      if (finalStatus.status === 'COMPLETED') {
+        const successCount = finalStatus.success_count ?? 0;
+        const failedCount = finalStatus.failed_count ?? 0;
+        const totalOnline = finalStatus.total_online ?? 0;
+        if (failedCount > 0) {
+          showNotification(
+            `Sincronización completada con fallos (${failedCount}/${totalOnline || successCount + failedCount}).`,
+            'error'
+          );
+        } else {
+          showNotification('Sincronización completada', 'success');
+        }
+      } else {
+        showNotification('Sincronización fallida', 'error');
+      }
     } catch (error: any) {
       showNotification('Error al ejecutar la sincronización', 'error');
     } finally {
@@ -1161,13 +1203,13 @@ export const DashboardScreen: React.FC = () => {
       {/* Edit Modal */}
       {isEditModalOpen && editingVideo && (
         <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 pt-20">
-          <div className="bg-white dark:bg-[#1c2936] rounded-xl shadow-2xl w-full max-w-md">
-            <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+          <div className="bg-white dark:bg-[#1c2936] rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-700 shrink-0">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">Editar Publicidad</h2>
               <p className="text-sm text-slate-500">Modifica los datos de la publicidad</p>
             </div>
             
-            <div className="p-4 space-y-4">
+            <div className="p-4 space-y-4 overflow-y-auto flex-1">
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                   Título

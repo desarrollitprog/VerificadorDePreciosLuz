@@ -25,6 +25,7 @@ class BackupIndexDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME,
         db.execSQL("CREATE TABLE ofertas_detalles (idEmpaque INTEGER, idOfertaxProductoxSucursal INTEGER, indActivo INTEGER)")
         db.execSQL("CREATE TABLE impuestos_producto (idProducto INTEGER, idTasaImpuesto INTEGER, indActivo INTEGER)")
         db.execSQL("CREATE TABLE tasas_impuesto (idTasaImpuesto INTEGER PRIMARY KEY, tasa REAL)")
+        db.execSQL("CREATE TABLE barras_asociadas (idBarraAsociada INTEGER, idProducto INTEGER, barra TEXT)")
 
         db.execSQL("CREATE INDEX idx_productos_sku ON productos(sku)")
         db.execSQL("CREATE INDEX idx_precios_producto ON precios(idProducto)")
@@ -33,6 +34,8 @@ class BackupIndexDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME,
         db.execSQL("CREATE INDEX idx_ofertas_sucursal_producto ON ofertas_sucursal(idOfertaxProducto)")
         db.execSQL("CREATE INDEX idx_ofertas_detalles_empaque ON ofertas_detalles(idEmpaque)")
         db.execSQL("CREATE INDEX idx_impuestos_producto ON impuestos_producto(idProducto)")
+        db.execSQL("CREATE INDEX idx_barras_asociadas_barra ON barras_asociadas(barra)")
+        db.execSQL("CREATE INDEX idx_barras_asociadas_producto ON barras_asociadas(idProducto)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -45,11 +48,12 @@ class BackupIndexDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME,
         db.execSQL("DROP TABLE IF EXISTS ofertas_detalles")
         db.execSQL("DROP TABLE IF EXISTS impuestos_producto")
         db.execSQL("DROP TABLE IF EXISTS tasas_impuesto")
+        db.execSQL("DROP TABLE IF EXISTS barras_asociadas")
         onCreate(db)
     }
 
     companion object {
         private const val DB_NAME = "backup_index.db"
-        private const val DB_VERSION = 4
+        private const val DB_VERSION = 5
     }
 }

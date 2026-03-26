@@ -53,21 +53,46 @@ class BackupIndexRepository(private val context: Context) {
 
     suspend fun rebuildIndex(updatedAt: String?) = withContext(Dispatchers.IO) {
         if (updatedAt.isNullOrBlank()) return@withContext
+        Log.i(TAG, "[INDEX] Iniciando reconstrucción del índice con updatedAt: $updatedAt")
         synchronized(dbLock) {
             dbHelper.writableDatabase.use { db ->
                 db.beginTransaction()
                 try {
+                    Log.i(TAG, "[INDEX] Limpiando tablas...")
                     clearTables(db)
+                    Log.i(TAG, "[INDEX] Insertando productos...")
                     insertProductos(db)
+                    Log.i(TAG, "[INDEX] Insertando precios...")
                     insertPrecios(db)
+                    Log.i(TAG, "[INDEX] Insertando ofertas...")
                     insertOfertas(db)
+                    Log.i(TAG, "[INDEX] Insertando ofertas_vigencia...")
                     insertOfertasVigencia(db)
+                    Log.i(TAG, "[INDEX] Insertando ofertas_sucursal...")
                     insertOfertasSucursal(db)
+                    Log.i(TAG, "[INDEX] Insertando ofertas_detalles...")
                     insertOfertasDetalles(db)
+                    Log.i(TAG, "[INDEX] Insertando impuestos_producto...")
                     insertImpuestosProducto(db)
+                    Log.i(TAG, "[INDEX] Insertando tasas_impuesto...")
                     insertTasasImpuesto(db)
+                    Log.i(TAG, "[INDEX] Insertando barras_asociadas...")
+                    insertBarrasAsociadas(db)
+                    
+                    // Log de conteos finales para verificar consistencia
+                    val finalCounts = mutableMapOf<String, Int>()
+                    listOf("productos", "precios", "ofertas", "ofertas_vigencia", "tasas_impuesto", "barras_asociadas").forEach { table ->
+                        db.rawQuery("SELECT COUNT(*) FROM $table", null).use { cursor ->
+                            if (cursor.moveToFirst()) {
+                                finalCounts[table] = cursor.getInt(0)
+                            }
+                        }
+                    }
+                    Log.i(TAG, "[INDEX] Conteo final de tablas: $finalCounts")
+                    
                     saveMeta(db, updatedAt)
                     db.setTransactionSuccessful()
+                    Log.i(TAG, "[INDEX] Índice reconstruido exitosamente")
                 } catch (e: Exception) {
                     Log.e(TAG, "Error reconstruyendo índice local", e)
                 } finally {
@@ -80,9 +105,8 @@ class BackupIndexRepository(private val context: Context) {
     fun lookupProductoOffline(sku: String): ProductoResponse? {
         synchronized(dbLock) {
             dbHelper.readableDatabase.use { db ->
-                // Log de conteos de tablas
                 val tableCounts = mutableMapOf<String, Int>()
-                listOf("productos", "precios", "ofertas", "ofertas_vigencia", "ofertas_sucursal", "ofertas_detalles").forEach { table ->
+                listOf("productos", "precios", "ofertas", "ofertas_vigencia", "ofertas_sucursal", "ofertas_detalles", "barras_asociadas").forEach { table ->
                     db.rawQuery("SELECT COUNT(*) FROM $table", null).use { cursor ->
                         if (cursor.moveToFirst()) {
                             tableCounts[table] = cursor.getInt(0)
@@ -91,7 +115,36 @@ class BackupIndexRepository(private val context: Context) {
                 }
                 Log.d(TAG, "[OFFLINE] Conteo de tablas: $tableCounts")
 
-                val producto = queryProducto(db, sku) ?: run {
+                // Normalizar código de barras (igual que el backend)
+                val codigosABuscar = BackupUtils.normalizarCodigoBarras(sku)
+                Log.d(TAG, "[OFFLINE] Codigos a buscar: $codigosABuscar")
+
+                var producto: ProductoRow? = null
+
+                // Paso 1: Buscar directamente por SKU
+                for (codigo in codigosABuscar) {
+                    producto = queryProducto(db, codigo)
+                    if (producto != null) {
+                        Log.d(TAG, "[OFFLINE] Producto encontrado por SKU directo: $codigo")
+                        break
+                    }
+                }
+
+                // Paso 2: Si no encuentra por SKU, buscar en barras_asociadas
+                if (producto == null) {
+                    for (codigo in codigosABuscar) {
+                        val idProducto = buscarIdProductoEnBarrasAsociadas(db, codigo)
+                        if (idProducto != null) {
+                            producto = queryProductoById(db, idProducto)
+                            if (producto != null) {
+                                Log.d(TAG, "[OFFLINE] Producto encontrado via barras_asociadas: codigo=$codigo, idProducto=$idProducto")
+                                break
+                            }
+                        }
+                    }
+                }
+
+                if (producto == null) {
                     Log.d(TAG, "[OFFLINE] Producto no encontrado para sku: $sku")
                     return null
                 }
@@ -268,31 +321,48 @@ class BackupIndexRepository(private val context: Context) {
         db.execSQL("DELETE FROM ofertas_detalles")
         db.execSQL("DELETE FROM impuestos_producto")
         db.execSQL("DELETE FROM tasas_impuesto")
+        db.execSQL("DELETE FROM barras_asociadas")
     }
 
     private fun insertProductos(db: android.database.sqlite.SQLiteDatabase) {
         val stmt = db.compileStatement("INSERT OR REPLACE INTO productos (sku, idProducto, nombre) VALUES (?, ?, ?)")
+        var insertedCount = 0
         BackupUtils.streamArray(context, FILE_PRODUCTOS) { item: BackupProducto ->
-            stmt.bindString(1, item.sku)
-            stmt.bindLong(2, item.idProducto.toLong())
-            stmt.bindString(3, item.nombre)
-            stmt.executeInsert()
-            stmt.clearBindings()
+            try {
+                stmt.bindString(1, item.sku)
+                stmt.bindLong(2, item.idProducto.toLong())
+                stmt.bindString(3, item.nombre)
+                stmt.executeInsert()
+                stmt.clearBindings()
+                insertedCount++
+            } catch (e: Exception) {
+                Log.w(TAG, "Error insertando producto: sku=${item.sku}, idProducto=${item.idProducto}, error=${e.message}")
+            }
         }
+        Log.i(TAG, "[INDEX] Productos insertados: $insertedCount")
     }
 
     private fun insertPrecios(db: android.database.sqlite.SQLiteDatabase) {
         val stmt = db.compileStatement("INSERT INTO precios (idProducto, idEmpaque, costoBase, pvpBase, pvpConversion, indIva) VALUES (?, ?, ?, ?, ?, ?)")
+        var insertedCount = 0
+        var skippedCount = 0
         BackupUtils.streamArray(context, FILE_PRECIOS) { item: BackupPrecio ->
-            stmt.bindLong(1, item.idProducto.toLong())
-            stmt.bindLong(2, item.idEmpaque.toLong())
-            stmt.bindOrNull(3, item.costoBase)
-            stmt.bindOrNull(4, item.pvpBase)
-            stmt.bindOrNull(5, item.pvpConversion)
-            stmt.bindOrNull(6, item.indIva?.let { if (it) 1 else 0 })
-            stmt.executeInsert()
-            stmt.clearBindings()
+            try {
+                stmt.bindLong(1, item.idProducto.toLong())
+                stmt.bindLong(2, item.idEmpaque.toLong())
+                stmt.bindOrNull(3, item.costoBase)
+                stmt.bindOrNull(4, item.pvpBase)
+                stmt.bindOrNull(5, item.pvpConversion)
+                stmt.bindOrNull(6, item.indIva?.let { if (it) 1 else 0 })
+                stmt.executeInsert()
+                stmt.clearBindings()
+                insertedCount++
+            } catch (e: Exception) {
+                skippedCount++
+                Log.w(TAG, "Error insertando precio: idProducto=${item.idProducto}, idEmpaque=${item.idEmpaque}, error=${e.message}")
+            }
         }
+        Log.i(TAG, "[INDEX] Precios insertados: $insertedCount, omitidos: $skippedCount")
     }
 
     private fun insertOfertas(db: android.database.sqlite.SQLiteDatabase) {
@@ -366,6 +436,17 @@ class BackupIndexRepository(private val context: Context) {
         }
     }
 
+    private fun insertBarrasAsociadas(db: android.database.sqlite.SQLiteDatabase) {
+        val stmt = db.compileStatement("INSERT OR REPLACE INTO barras_asociadas (idBarraAsociada, idProducto, barra) VALUES (?, ?, ?)")
+        BackupUtils.streamArray(context, FILE_BARRAS_ASOCIADAS) { item: BackupBarrasAsociadas ->
+            stmt.bindLong(1, item.idBarraAsociada.toLong())
+            stmt.bindLong(2, item.idProducto.toLong())
+            stmt.bindString(3, item.barra)
+            stmt.executeInsert()
+            stmt.clearBindings()
+        }
+    }
+
     private fun saveMeta(db: android.database.sqlite.SQLiteDatabase, updatedAt: String) {
         val values = ContentValues().apply {
             put("key", "updatedAt")
@@ -382,6 +463,27 @@ class BackupIndexRepository(private val context: Context) {
                 sku = cursor.getString(1),
                 nombre = cursor.getString(2)
             )
+        }
+    }
+
+    private fun queryProductoById(db: android.database.sqlite.SQLiteDatabase, idProducto: Int): ProductoRow? {
+        db.rawQuery("SELECT idProducto, sku, nombre FROM productos WHERE idProducto = ? LIMIT 1", arrayOf(idProducto.toString())).use { cursor ->
+            if (!cursor.moveToFirst()) return null
+            return ProductoRow(
+                idProducto = cursor.getInt(0),
+                sku = cursor.getString(1),
+                nombre = cursor.getString(2)
+            )
+        }
+    }
+
+    private fun buscarIdProductoEnBarrasAsociadas(db: android.database.sqlite.SQLiteDatabase, barra: String): Int? {
+        db.rawQuery(
+            "SELECT idProducto FROM barras_asociadas WHERE barra = ? AND IndActivo = 1 LIMIT 1",
+            arrayOf(barra)
+        ).use { cursor ->
+            if (!cursor.moveToFirst()) return null
+            return cursor.getInt(0)
         }
     }
 
@@ -467,5 +569,6 @@ class BackupIndexRepository(private val context: Context) {
         private const val FILE_OFERTAS_DETALLES = "backup_ofertas_detalles.json"
         private const val FILE_IMPUESTOS = "backup_impuestos.json"
         private const val FILE_TASAS = "backup_tasas.json"
+        private const val FILE_BARRAS_ASOCIADAS = "backup_barras_asociadas.json"
     }
 }

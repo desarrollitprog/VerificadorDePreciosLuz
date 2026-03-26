@@ -24,6 +24,7 @@ data class BackupResponse(
     @SerializedName("ofertas_detalles") val ofertasDetalles: List<BackupOfertaDetalle> = emptyList(),
     @SerializedName("impuestos_producto") val impuestosProducto: List<BackupImpuestoProducto> = emptyList(),
     @SerializedName("tasas_impuesto") val tasasImpuesto: List<BackupTasaImpuesto> = emptyList(),
+    @SerializedName("barras_asociadas") val barrasAsociadas: List<BackupBarrasAsociadas> = emptyList(),
 )
 
 data class BackupProducto(
@@ -85,6 +86,17 @@ data class BackupImpuestoProducto(
 data class BackupTasaImpuesto(
     @SerializedName("IdTasaImpuesto") val idTasaImpuesto: Int,
     @SerializedName("Tasa") val tasa: Double?,
+)
+
+data class BackupBarrasAsociadas(
+    @SerializedName("IdBarraAsociada") val idBarraAsociada: Int,
+    @SerializedName("IdProducto") val idProducto: Int,
+    @SerializedName("IdEmpaque") val idEmpaque: Int?,
+    @SerializedName("Barra") val barra: String,
+    @JsonAdapter(BooleanIntAdapter::class)
+    @SerializedName("IndActivo") val indActivo: Int?,
+    @JsonAdapter(BooleanIntAdapter::class)
+    @SerializedName("IndVisible") val indVisible: Int?,
 )
 
 class BooleanIntAdapter : JsonDeserializer<Int?> {

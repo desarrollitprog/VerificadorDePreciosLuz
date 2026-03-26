@@ -26,6 +26,7 @@ class BackupRepository(
         private const val FILE_OFERTAS_DETALLES = "backup_ofertas_detalles.json"
         private const val FILE_IMPUESTOS = "backup_impuestos.json"
         private const val FILE_TASAS = "backup_tasas.json"
+        private const val FILE_BARRAS_ASOCIADAS = "backup_barras_asociadas.json"
     }
 
     interface BackupProgressListener {
@@ -59,10 +60,11 @@ class BackupRepository(
         val ofertasDetalles = mutableListOf<BackupOfertaDetalle>()
         val impuestosProducto = mutableListOf<BackupImpuestoProducto>()
         val tasasImpuesto = mutableListOf<BackupTasaImpuesto>()
+        val barrasAsociadas = mutableListOf<BackupBarrasAsociadas>()
         var updatedAt: String? = null
         val sections = listOf(
             "productos", "precios", "ofertas", "ofertas_vigencia", "ofertas_sucursal",
-            "ofertas_detalles", "impuestos_producto", "tasas_impuesto"
+            "ofertas_detalles", "impuestos_producto", "tasas_impuesto", "barras_asociadas"
         )
         val limit = 1000
         var maxFechaModifica: String? = null
@@ -120,6 +122,7 @@ class BackupRepository(
                         "ofertas_detalles" -> { ofertasDetalles.addAll(page.ofertasDetalles); totalItems += page.ofertasDetalles.size }
                         "impuestos_producto" -> { impuestosProducto.addAll(page.impuestosProducto); totalItems += page.impuestosProducto.size }
                         "tasas_impuesto" -> { tasasImpuesto.addAll(page.tasasImpuesto); totalItems += page.tasasImpuesto.size }
+                        "barras_asociadas" -> { barrasAsociadas.addAll(page.barrasAsociadas); totalItems += page.barrasAsociadas.size }
                     }
                     val received = countSectionItems(page, section)
                     progressListener?.onProgress(section, offset, received, totalItems)
@@ -147,6 +150,7 @@ class BackupRepository(
             ofertasDetalles = ofertasDetalles,
             impuestosProducto = impuestosProducto,
             tasasImpuesto = tasasImpuesto,
+            barrasAsociadas = barrasAsociadas,
         )
     }
 
@@ -160,19 +164,39 @@ class BackupRepository(
             "ofertas_detalles" -> page.ofertasDetalles.size
             "impuestos_producto" -> page.impuestosProducto.size
             "tasas_impuesto" -> page.tasasImpuesto.size
+            "barras_asociadas" -> page.barrasAsociadas.size
             else -> 0
         }
     }
 
     fun saveBackup(backup: BackupResponse) {
+        val delayMs = 4000L  // 4 segundos entre cada sección
+        
         writeSection(FILE_PRODUCTOS, backup.productos)
+        Thread.sleep(delayMs)
+        
         writeSection(FILE_PRECIOS, backup.precios)
+        Thread.sleep(delayMs)
+        
         writeSection(FILE_OFERTAS, backup.ofertas)
+        Thread.sleep(delayMs)
+        
         writeSection(FILE_OFERTAS_VIGENCIA, backup.ofertasVigencia)
+        Thread.sleep(delayMs)
+        
         writeSection(FILE_OFERTAS_SUCURSAL, backup.ofertasSucursal)
+        Thread.sleep(delayMs)
+        
         writeSection(FILE_OFERTAS_DETALLES, backup.ofertasDetalles)
+        Thread.sleep(delayMs)
+        
         writeSection(FILE_IMPUESTOS, backup.impuestosProducto)
+        Thread.sleep(delayMs)
+        
         writeSection(FILE_TASAS, backup.tasasImpuesto)
+        Thread.sleep(delayMs)
+        
+        writeSection(FILE_BARRAS_ASOCIADAS, backup.barrasAsociadas)
         writeMeta(backup.updatedAt)
     }
 
@@ -204,6 +228,7 @@ class BackupRepository(
                         ofertasDetalles = readSection<BackupOfertaDetalle>(FILE_OFERTAS_DETALLES),
                         impuestosProducto = readSection<BackupImpuestoProducto>(FILE_IMPUESTOS),
                         tasasImpuesto = readSection<BackupTasaImpuesto>(FILE_TASAS),
+                        barrasAsociadas = readSection<BackupBarrasAsociadas>(FILE_BARRAS_ASOCIADAS),
                     )
                 }
             } catch (e: Exception) {
@@ -452,20 +477,37 @@ class BackupRepository(
         val dir = context.filesDir
         val target = File(dir, fileName)
         val temp = File(dir, "$fileName.tmp")
-        try {
-            temp.writer().use { writer ->
-                writeBlock(writer)
-                writer.flush()
+        val maxRetries = 3
+        val delayMs = 500L
+        
+        for (attempt in 1..maxRetries) {
+            try {
+                temp.writer().use { writer ->
+                    writeBlock(writer)
+                    writer.flush()
+                }
+                if (target.exists()) {
+                    target.delete()
+                }
+                if (!temp.renameTo(target)) {
+                    if (attempt == maxRetries) {
+                        throw IllegalStateException("No se pudo reemplazar $fileName tras $maxRetries intentos")
+                    }
+                    Log.w("BackupRepository", "Reintento $attempt/$maxRetries para $fileName")
+                    Thread.sleep(delayMs)
+                    continue
+                }
+                Log.d("BackupRepository", "Escritura exitosa de $fileName en intento $attempt")
+                return
+            } catch (e: Exception) {
+                Log.w("BackupRepository", "Error intento $attempt para $fileName: ${e.message}")
+                try { temp.delete() } catch (_: Exception) {}
+                if (attempt == maxRetries) {
+                    Log.e("BackupRepository", "Error guardando $fileName de forma atómica tras $maxRetries intentos", e)
+                    throw e
+                }
+                try { Thread.sleep(delayMs) } catch (_: Exception) {}
             }
-            if (target.exists()) {
-                target.delete()
-            }
-            if (!temp.renameTo(target)) {
-                throw IllegalStateException("No se pudo reemplazar $fileName")
-            }
-        } catch (e: Exception) {
-            Log.e("BackupRepository", "Error guardando $fileName de forma atómica", e)
-            temp.delete()
         }
     }
 

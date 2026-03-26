@@ -52,6 +52,7 @@ import com.example.verificadordepreciosluz.data.network.ProductoResponse
 import com.example.verificadordepreciosluz.data.local.BackupRepository
 import com.example.verificadordepreciosluz.data.local.BackupResponse
 import com.example.verificadordepreciosluz.data.local.BackupIndexRepository
+import com.example.verificadordepreciosluz.data.local.BackupUtils
 import com.example.verificadordepreciosluz.data.local.BannerRepository
 import com.example.verificadordepreciosluz.data.local.BannerCacheItem
 import com.example.verificadordepreciosluz.databinding.ActivityScanBinding
@@ -565,12 +566,29 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                     return@launch
                 }
                 isDownloading = true  // Bloquear salida durante descarga
+                
+                // Pausar carrusel antes de descargar backup
+                uiHandler.post {
+                    stopStandbyCarousel()
+                    binding.standbyOverlay.visibility = View.GONE
+                    Log.d(TAG, "Backup: carrusel pausado antes de descarga")
+                }
+                
                 val repo = BackupRepository(this@ScanActivity, service)
                 val result = repo.downloadAndSaveBackup(this@ScanActivity)
                 Log.i(TAG, "Resultado backup en ScanActivity: ${result.isSuccess}")
                 offlineBackup = loadOfflineBackup()
                 setBackupReady(offlineBackup != null)
                 isDownloading = false  // Permitir salida después de descarga
+                
+                // Reiniciar carrusel solo si el backup fue exitoso
+                if (result.isSuccess) {
+                    uiHandler.post {
+                        startStandbyCarousel()
+                        Log.d(TAG, "Backup: carrusel iniciado tras descarga exitosa")
+                    }
+                }
+                
                 scope.launch {
                     BackupIndexRepository(this@ScanActivity).ensureIndex(offlineBackup?.updatedAt)
                 }
@@ -578,6 +596,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             } catch (e: Exception) {
                 Log.e(TAG, "Error al sincronizar backup", e)
                 isDownloading = false  // Permitir salida en caso de error
+                // Reiniciar carrusel aunque haya error
+                uiHandler.post { startStandbyCarousel() }
             } finally {
                 hideProgress()
                 isDownloading = false
@@ -961,11 +981,28 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                     return@launch
                 }
                 isDownloading = true  // Bloquear salida durante descarga
+                
+                // Pausar carrusel antes de descargar backup
+                uiHandler.post {
+                    stopStandbyCarousel()
+                    binding.standbyOverlay.visibility = View.GONE
+                    Log.d(TAG, "Backup: carrusel pausado antes de resincronización")
+                }
+                
                 val repo = BackupRepository(this@ScanActivity, service)
-                repo.downloadAndSaveBackup(this@ScanActivity)
+                val result = repo.downloadAndSaveBackup(this@ScanActivity)
                 offlineBackup = loadOfflineBackup()
                 setBackupReady(offlineBackup != null)
                 isDownloading = false  // Permitir salida después de descarga
+                
+                // Reiniciar carrusel solo si el backup fue exitoso
+                if (result.isSuccess) {
+                    uiHandler.post {
+                        startStandbyCarousel()
+                        Log.d(TAG, "Backup: carrusel iniciado tras resincronización exitosa")
+                    }
+                }
+                
                 scope.launch {
                     BackupIndexRepository(this@ScanActivity).ensureIndex(offlineBackup?.updatedAt)
                 }
@@ -973,6 +1010,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             } catch (_: Exception) {
                 // En caso de fallo, mantener el respaldo existente
                 isDownloading = false
+                // Reiniciar carrusel aunque haya error
+                uiHandler.post { startStandbyCarousel() }
             } finally {
                 hideProgress()
                 isDownloading = false
@@ -1009,38 +1048,26 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         }
     }
 
-    // 2.4) Validar antigüedad del respaldo local (máx 24h)
+    // 2.4) Validar antigüedad del respaldo local (máx 12h)
     private fun isBackupStale(backup: BackupResponse?): Boolean {
-        val updatedAtMillis = parseIsoToMillis(backup?.updatedAt) ?: return true
+        val updatedAtMillis = BackupUtils.parseIsoToMillis(backup?.updatedAt) ?: return true
         return System.currentTimeMillis() - updatedAtMillis > backupMaxAgeMs
     }
 
     // 2.3) Formatear fecha ISO a formato legible local (dd/MM/yyyy HH:mm)
     private fun formatIsoToReadable(value: String?): String? {
-        if (value.isNullOrBlank()) return null
+        val millis = BackupUtils.parseIsoToMillis(value) ?: return null
         return try {
-            val clean = value.replace("Z", "").substringBefore(".")
-            val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
-            sdf.timeZone = TimeZone.getTimeZone("UTC")
-            val date = sdf.parse(clean) ?: return null
             val out = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
-            out.format(date)
+            out.format(java.util.Date(millis))
         } catch (_: Exception) {
             null
         }
     }
 
-    // 3) Parsear fechas ISO a milisegundos (maneja Z y milisegundos)
+    // 3) Parsear fechas ISO a milisegundos (usa BackupUtils que maneja múltiples formatos)
     private fun parseIsoToMillis(value: String?): Long? {
-        if (value.isNullOrBlank()) return null
-        val clean = value.replace("Z", "").substringBefore(".")
-        return try {
-            val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
-            sdf.timeZone = TimeZone.getTimeZone("UTC")
-            sdf.parse(clean)?.time
-        } catch (_: Exception) {
-            null
-        }
+        return BackupUtils.parseIsoToMillis(value)
     }
 
     private fun onBarcodeDetected(code: String) {

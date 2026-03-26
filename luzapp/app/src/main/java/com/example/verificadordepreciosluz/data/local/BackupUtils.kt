@@ -18,10 +18,24 @@ object BackupUtils {
     val gson = Gson()
 
     @JvmStatic
+    fun normalizarCodigoBarras(codigo: String): List<String> {
+        val codigoLimpio = codigo.trim()
+        val variantes = mutableListOf(codigoLimpio)
+        
+        if (codigoLimpio.all { it.isDigit() } && codigoLimpio.length < 13) {
+            val cerosFaltantes = "0".repeat(13 - codigoLimpio.length)
+            variantes.add(cerosFaltantes + codigoLimpio)
+        }
+        
+        return variantes
+    }
+
+    @JvmStatic
     fun parseIsoToMillis(value: String?): Long? {
         if (value.isNullOrBlank()) return null
         val formatters = listOf(
-            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSX"),
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSSX"),  // 6 dígitos microsegundos
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSX"),    // 3 dígitos milisegundos
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssX"),
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS"),
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"),
@@ -30,7 +44,7 @@ object BackupUtils {
         for (formatter in formatters) {
             try {
                 val result = when (formatter) {
-                    formatters[4] -> {
+                    formatters[5] -> {
                         val localDate = LocalDate.parse(value, formatter)
                         localDate.atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
                     }

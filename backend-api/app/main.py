@@ -539,6 +539,7 @@ async def backup_data(
         "ofertas_detalles",
         "impuestos_producto",
         "tasas_impuesto",
+        "barras_asociadas",
     }
     if section not in allowed_sections:
         raise HTTPException(status_code=400, detail="Sección de backup inválida")
@@ -553,6 +554,7 @@ async def backup_data(
     ofertas_detalles: list[models.OfertasxProductosxSucursalesDetalles] = []
     impuestos_producto: list[models.ProductosXImpuestos] = []
     tasas_impuesto: list[models.TasaImpuesto] = []
+    barras_asociadas: list[models.BarrasAsociadas] = []
 
     # Soporte incremental solo para precios (ejemplo)
     if section == "productos":
@@ -623,6 +625,15 @@ async def backup_data(
                 .limit(limit)
             )
         ).scalars().all()
+    elif section == "barras_asociadas":
+        barras_asociadas = (
+            await db.execute(
+                select(models.BarrasAsociadas)
+                .order_by(models.BarrasAsociadas.IdBarraAsociada)
+                .offset(offset)
+                .limit(limit)
+            )
+        ).scalars().all()
 
     def _count_for_section() -> int:
         if section == "productos":
@@ -641,6 +652,8 @@ async def backup_data(
             return len(impuestos_producto)
         if section == "tasas_impuesto":
             return len(tasas_impuesto)
+        if section == "barras_asociadas":
+            return len(barras_asociadas)
         return 0
 
     count = _count_for_section()
@@ -726,6 +739,17 @@ async def backup_data(
                 "Tasa": float(t.Tasa) if t.Tasa is not None else None,
             }
             for t in tasas_impuesto
+        ],
+        "barras_asociadas": [
+            {
+                "IdBarraAsociada": b.IdBarraAsociada,
+                "IdProducto": b.IdProducto,
+                "IdEmpaque": b.IdEmpaque,
+                "Barra": b.Barra,
+                "IndActivo": b.IndActivo,
+                "IndVisible": b.IndVisible,
+            }
+            for b in barras_asociadas
         ],
     }
 

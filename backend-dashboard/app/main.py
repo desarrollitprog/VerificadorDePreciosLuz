@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request
-from app.routes import publicidad, auth, monitoreo, usuarios, notificaciones
+from app.routes import publicidad, auth, monitoreo, usuarios, notificaciones, auditoria
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import logging
@@ -51,4 +51,5 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(usuarios.router, prefix="/api")
 app.include_router(monitoreo.router, prefix="/api")
 app.include_router(notificaciones.router, prefix="/api")
+app.include_router(auditoria.router, prefix="/api")
 app.mount("/static", StaticFiles(directory="static"), name="static")

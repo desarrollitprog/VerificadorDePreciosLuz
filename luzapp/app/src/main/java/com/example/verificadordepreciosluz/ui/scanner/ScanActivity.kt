@@ -1142,10 +1142,14 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             try {
                 val backup = offlineBackup ?: loadOfflineBackup()
                 if (backup == null) {
+                    Log.w(TAG, "[OFFLINE] showOutOfService: backup == null")
                     uiHandler.post { showOutOfService() }
                     return@launch
                 }
-                if (isBackupStale(backup)) {
+                val isStale = isBackupStale(backup)
+                Log.d(TAG, "[OFFLINE] Backup updatedAt: ${backup.updatedAt}, isStale: $isStale")
+                if (isStale) {
+                    Log.w(TAG, "[OFFLINE] showOutOfService: backup stale (más de 12h)")
                     uiHandler.post { showOutOfService() }
                     return@launch
                 }

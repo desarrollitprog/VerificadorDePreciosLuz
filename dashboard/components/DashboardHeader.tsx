@@ -14,6 +14,7 @@ export const Header: React.FC<HeaderProps> = ({ currentScreen }) => {
       case 'list': return 'Biblioteca de Videos';
       case 'servers': return 'Servidores';
       case 'users': return 'Gestión de Usuarios';
+      case 'auditoria': return 'Auditoría';
       default: return 'Panel Principal';
     }
   };
@@ -22,6 +23,11 @@ export const Header: React.FC<HeaderProps> = ({ currentScreen }) => {
   const toggleDark = () => {
     document.documentElement.classList.toggle('dark');
     setIsDark(document.documentElement.classList.contains('dark'));
+  };
+
+  const navigateTo = (screen: Screen) => {
+    const event = new CustomEvent('navigate', { detail: screen });
+    window.dispatchEvent(event);
   };
 
   return (
@@ -40,7 +46,7 @@ export const Header: React.FC<HeaderProps> = ({ currentScreen }) => {
             {isDark ? <Sun size={18} /> : <Moon size={18} />}
           </div>
         </button>
-        <GeneralNotifications />
+        <GeneralNotifications onNavigate={navigateTo} />
       </div>
     </header>
   );

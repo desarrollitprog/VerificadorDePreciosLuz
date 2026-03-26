@@ -1,10 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Bell, AlertTriangle } from 'lucide-react';
+import { Bell, AlertTriangle, ChevronRight } from 'lucide-react';
 import { useNotification } from './useNotification';
 import { deleteReadNotificaciones, fetchNotificaciones, markNotificacionesRead, Notificacion } from '../services/notificacionesService';
 import { toNotificationViewModel } from '../services/notificacionesPresentation';
+import { Screen } from '../types';
 
-interface GeneralNotificationsProps {}
+interface GeneralNotificationsProps {
+  onNavigate?: (screen: Screen) => void;
+}
 
 // Formatea una fecha a la hora de Caracas (UTC-4)
 function formatCaracasTime(dateString: string | Date): Date {
@@ -230,6 +233,18 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = () => {
                   );
                 })
             )}
+          </div>
+          <div className="p-3 border-t border-slate-200 dark:border-slate-800">
+            <button
+              onClick={() => {
+                setOpen(false);
+                onNavigate?.('auditoria');
+              }}
+              className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium text-primary hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+            >
+              Ver historial completo
+              <ChevronRight size={16} />
+            </button>
           </div>
         </div>
       )}

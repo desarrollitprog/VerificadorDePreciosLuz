@@ -6,6 +6,7 @@ import { DashboardScreen } from './screens/DashboardScreen';
 import { VideoListScreen } from './screens/VideoListScreen';
 import { UsersScreen } from './screens/UsersScreen';
 import { CalendarScreen } from './screens/CalendarScreen';
+import { AuditoriaScreen } from './screens/AuditoriaScreen';
 
 import { Screen } from './types';
 import Sidebar from './components/Sidebar';
@@ -21,6 +22,19 @@ export default function App() {
   const toggleSidebar = () => {
     setIsSidebarOpen((prev) => !prev);
   };
+
+  const handleNavigate = (screen: Screen) => {
+    setCurrentScreen(screen);
+  };
+
+  useEffect(() => {
+    const handleNavigateEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<Screen>;
+      setCurrentScreen(customEvent.detail);
+    };
+    window.addEventListener('navigate', handleNavigateEvent as EventListener);
+    return () => window.removeEventListener('navigate', handleNavigateEvent as EventListener);
+  }, []);
 
   useEffect(() => {
     if (currentScreen === 'login') {
@@ -63,6 +77,8 @@ export default function App() {
         return <UsersScreen />;
       case 'calendar':
         return <CalendarScreen />;
+      case 'auditoria':
+        return <AuditoriaScreen />;
       default:
         return <LoginScreen onLogin={() => setCurrentScreen('dashboard')} />;
     }
@@ -76,7 +92,7 @@ export default function App() {
         <div className="flex min-h-screen w-full overflow-hidden bg-background-light dark:bg-background-dark text-slate-900 dark:text-white">
           <Sidebar 
             currentScreen={currentScreen} 
-            onNavigate={setCurrentScreen} 
+            onNavigate={handleNavigate} 
             isOpen={isSidebarOpen}
             onClose={() => setIsSidebarOpen(false)}
             onLogout={() => {

@@ -37,7 +37,6 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
 import androidx.activity.OnBackPressedCallback
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -159,10 +158,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         }
     }
 
-    private val requestPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
-            if (isGranted) startCamera() else finishWithMessage("Permiso de cámara denegado")
-        }
+    // Cámara opcional: se inicia solo si el permiso ya está concedido
+    // Si no hay permiso, se usa solo el escánero externo (USB HID)
     companion object { private const val TAG = "ScanActivity" }
 
     // Declarar backupReady como propiedad de la clase, antes de cualquier uso
@@ -337,11 +334,26 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         })
     }
 
+    private var cameraAvailable: Boolean = false  // Flag para saber si la cámara está activa
+
     private fun ensurePermissionAndStart() {
+        // Cámara es opcional: solo se inicia si el permiso ya está concedido
+        // Si no hay permiso, simplemente no se inicia (el escánero USB externo sigue funcionando)
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            Log.d(TAG, "Cámara: permiso concedido, iniciando cámara...")
+            cameraAvailable = true
             startCamera()
         } else {
-            requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+            Log.d(TAG, "Cámara: sin permiso, modo solo escánero externo")
+            cameraAvailable = false
+            // No solicitar permiso - el escánero USB externo funciona sin cámara
+        }
+    }
+
+    private fun resumeCameraIfAvailable() {
+        // Solo reiniciar la cámara si está disponible (permiso concedido)
+        if (cameraAvailable && ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            startCamera()
         }
     }
 
@@ -1516,7 +1528,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             }, 500) // 500ms de delay
         }
         
-        startCamera()
+        resumeCameraIfAvailable()  // Solo reiniciar cámara si está disponible
         binding.etMockCode.requestFocus()
     }
 

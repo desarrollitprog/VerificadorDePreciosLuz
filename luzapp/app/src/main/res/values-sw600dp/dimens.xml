@@ -12,7 +12,7 @@
     <dimen name="text_size_precio_bs">50sp</dimen>
     
     <!-- BCV -->
-    <dimen name="text_size_bcv">30sp</dimen>
+    <dimen name="text_size_bcv">28sp</dimen>
     
     <!-- Paddings y margins -->
     <dimen name="padding_card">12dp</dimen>

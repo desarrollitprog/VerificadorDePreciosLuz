@@ -11,22 +11,12 @@ import {
 } from '../services/monitoreoService';
 
 
-// Formatea una fecha a la hora de Caracas (UTC-4) sin depender de la hora local del sistema
-// El backend envía fechas en hora Venezuela (sin timezone), JavaScript las interpreta como UTC
-// Por eso restamos 4 horas antes de convertir
+// Formatea una fecha a la hora de Caracas (UTC-4)
+// Agrega 'Z' al string si no lo tiene para forzar interpretación UTC correcta
 function formatCaracasTime(dateString: string | Date): string {
-  let date: Date;
-  if (typeof dateString === 'string') {
-    // El string viene sin timezone (hora Venezuela), JavaScript lo interpreta como UTC
-    // Crear fecha y restar 4 horas para compensar
-    const parsed = new Date(dateString);
-    // Restar 4 horas (UTC-4) para convertir de UTC a hora Venezuela
-    parsed.setHours(parsed.getHours() - 4);
-    date = parsed;
-  } else {
-    date = new Date(dateString.getTime());
-  }
-  return date.toLocaleString('es-VE', { timeZone: 'America/Caracas' });
+  const dateStr = typeof dateString === 'string' ? dateString : dateString.toISOString();
+  const utcDate = new Date(dateStr.endsWith('Z') ? dateStr : dateStr + 'Z');
+  return utcDate.toLocaleString('es-VE', { timeZone: 'America/Caracas' });
 }
 
 type SyncServerProgress = {

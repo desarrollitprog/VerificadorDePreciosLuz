@@ -44,6 +44,7 @@
             android:name="android.app.device_admin"
             android:resource="@xml/device_admin_policies" />
     </receiver>
+
         <meta-data
             android:name="preloaded_fonts"
             android:resource="@array/preloaded_fonts" />

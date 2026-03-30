@@ -290,24 +290,24 @@
                         android:layout_height="wrap_content"
                         android:layout_marginBottom="10dp"
                         android:ellipsize="end"
-                        android:fontFamily="@font/rubik_semibold"
+                        android:fontFamily="@font/montserrat_bold"
                         android:gravity="center"
                         android:maxLines="2"
                         android:textColor="#555555"
                         android:textSize="@dimen/text_size_nombre"
-                        android:textStyle="bold|italic" />
+                        android:textStyle="bold"/>
 
                     <TextView
                         android:id="@+id/tvPriceLabel"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginBottom="4dp"
-                        android:fontFamily="@font/rubik_semibold"
+                        android:fontFamily="@font/montserrat_black"
                         android:letterSpacing="0.1"
                         android:text="@string/price_label"
                         android:textColor="#999999"
                         android:textSize="35sp"
-                        android:textStyle="bold|italic" />
+                        android:textStyle="bold"/>
 
                     <LinearLayout
                         android:layout_width="wrap_content"
@@ -320,20 +320,20 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginEnd="4dp"
-                            android:fontFamily="@font/rubik_semibold"
+                            android:fontFamily="@font/montserrat_black"
                             android:text="@string/currency_symbol"
                             android:textColor="@color/verde_luz"
                             android:textSize="50sp"
-                            android:textStyle="bold|italic" />
+                            android:textStyle="bold"/>
 
                         <TextView
                             android:id="@+id/tvPrecioDolar"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:fontFamily="@font/rubik_semibold"
+                            android:fontFamily="@font/montserrat_black"
                             android:textColor="@color/verde_luz"
                             android:textSize="@dimen/text_size_precio_usd"
-                            android:textStyle="bold|italic" />
+                            android:textStyle="bold"/>
 
                     </LinearLayout>
 
@@ -342,20 +342,20 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
-                        android:fontFamily="@font/rubik_semibold"
+                        android:fontFamily="@font/montserrat_medium"
                         android:textColor="@color/rojo_luz_logo"
                         android:textSize="@dimen/text_size_precio_bs"
-                        android:textStyle="bold|italic" />
+                        android:textStyle="bold"/>
 
                     <TextView
                         android:id="@+id/tvIva"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:fontFamily="@font/rubik_semibold"
+                        android:fontFamily="@font/montserrat_medium"
                         android:textColor="#555555"
                         android:textSize="30sp"
-                        android:textStyle="bold|italic" />
+                        android:textStyle="bold"/>
 
                 </LinearLayout>
 
@@ -379,11 +379,11 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginBottom="8dp"
-                        android:maxWidth="700dp"
+                        android:background="@drawable/bg_bcv"
                         android:drawableStart="@drawable/ic_bcv_white_bg"
                         android:drawablePadding="5dp"
                         android:gravity="center"
-                        android:background="@drawable/bg_bcv"
+                        android:maxWidth="700dp"
                         android:paddingHorizontal="16dp"
                         android:paddingVertical="8dp"
                         android:textColor="@android:color/white"

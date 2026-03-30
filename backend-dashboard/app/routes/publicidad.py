@@ -30,6 +30,20 @@ from ..services.replicacion_service import (
 router = APIRouter()
 
 
+def _to_utc_iso(dt):
+    """Convierte un datetime a UTC y retorna como ISO string.
+    Asume que los datetime naive (sin timezone) están en hora de Venezuela (UTC-4).
+    """
+    if dt is None:
+        return None
+    # Si el datetime no tiene timezone, asumir que es hora de Venezuela (UTC-4)
+    # y convertir a UTC sumando 4 horas
+    if dt.tzinfo is None:
+        dt_utc = dt + timedelta(hours=4)
+        return dt_utc.isoformat()
+    return dt.isoformat()
+
+
 def get_venezuela_now():
     return datetime.now(timezone(timedelta(hours=-4))).replace(tzinfo=None)
 
@@ -173,10 +187,10 @@ async def listar_banners(
                     "Tipo": banner.Tipo,
                     "Url": banner.Url,
                     "Activo": banner.Activo,
-                    "FechaInicio": banner.FechaInicio.isoformat() if banner.FechaInicio else None,
-                    "FechaFin": banner.FechaFin.isoformat() if banner.FechaFin else None,
+                    "FechaInicio": _to_utc_iso(banner.FechaInicio),
+                    "FechaFin": _to_utc_iso(banner.FechaFin),
                     "DuracionSeg": banner.DuracionSeg,
-                    "UpdatedAt": banner.UpdatedAt.isoformat() if banner.UpdatedAt else None,
+                    "UpdatedAt": _to_utc_iso(banner.UpdatedAt),
                     "size_bytes": size_bytes,
                     "size_human": size_human,
                     "asignacion_todos": banner.asignacion_todos,

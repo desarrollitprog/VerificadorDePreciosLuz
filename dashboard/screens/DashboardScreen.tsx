@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNotification } from '../components/useNotification';
 import { Search, UploadCloud, MoreVertical, Eye, Trash, Film, Plus, Server, Smartphone, ChevronDown, ChevronRight } from 'lucide-react';
 import { getVideos, uploadMedia, deleteVideo, sincronizarServidores, updateBannerMetadata, updateBannerAsignations, FileMetadata } from '../services/videoService';
@@ -12,8 +12,20 @@ import {
 
 
 // Formatea una fecha a la hora de Caracas (UTC-4) sin depender de la hora local del sistema
+// El backend envía fechas en hora Venezuela (sin timezone), JavaScript las interpreta como UTC
+// Por eso restamos 4 horas antes de convertir
 function formatCaracasTime(dateString: string | Date): string {
-  const date = typeof dateString === 'string' ? new Date(dateString) : new Date(dateString.getTime());
+  let date: Date;
+  if (typeof dateString === 'string') {
+    // El string viene sin timezone (hora Venezuela), JavaScript lo interpreta como UTC
+    // Crear fecha y restar 4 horas para compensar
+    const parsed = new Date(dateString);
+    // Restar 4 horas (UTC-4) para convertir de UTC a hora Venezuela
+    parsed.setHours(parsed.getHours() - 4);
+    date = parsed;
+  } else {
+    date = new Date(dateString.getTime());
+  }
   return date.toLocaleString('es-VE', { timeZone: 'America/Caracas' });
 }
 
@@ -62,13 +74,33 @@ export const DashboardScreen: React.FC = () => {
     const [uploadStatuses, setUploadStatuses] = useState<Array<'pending' | 'uploading' | 'success' | 'error'>>([]);
   const showNotification = useNotification();
   const [preview, setPreview] = useState<{url: string, tipo: string, titulo: string} | null>(null);
-  const handlePreview = (video: Video) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  
+  const handlePreview = useCallback((video: Video) => {
     setPreview({ url: video.url, tipo: video.tipo, titulo: video.titulo || video.filename });
     setTimeout(() => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }, 50);
-  };
-  const closePreview = () => setPreview(null);
+  }, []);
+  
+  const closePreview = useCallback(() => setPreview(null), []);
+  
+  // Efecto para precargar video 15 segundos antes de reproducir
+  useEffect(() => {
+    if (preview && preview.tipo === 'video' && videoRef.current) {
+      const videoEl = videoRef.current;
+      videoEl.load();
+      videoEl.play().catch(() => {});
+      
+      const preloadInterval = setInterval(() => {
+        if (videoEl.readyState >= 2) {
+          clearInterval(preloadInterval);
+        }
+      }, 500);
+      
+      return () => clearInterval(preloadInterval);
+    }
+  }, [preview]);
   const [videos, setVideos] = useState<Video[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -750,19 +782,6 @@ export const DashboardScreen: React.FC = () => {
                       <Eye size={14} />
                       Reproducir
                     </button>
-                    {preview && (
-                      <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 pt-20">
-                        <div className="bg-white dark:bg-[#1c2936] rounded-lg shadow-lg p-6 max-w-lg w-full relative">
-                          <button onClick={closePreview} className="absolute top-2 right-2 text-slate-500 hover:text-red-500 text-xl font-bold">&times;</button>
-                          <div className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">{preview.titulo}</div>
-                          {preview.tipo === 'image' ? (
-                            <img src={preview.url} alt={preview.titulo} className="max-h-[60vh] w-auto mx-auto rounded" />
-                          ) : (
-                            <video src={preview.url} controls autoPlay className="max-h-[60vh] w-auto mx-auto rounded" />
-                          )}
-                        </div>
-                      </div>
-                    )}
                     <button className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors text-xs font-medium" onClick={() => handleDelete(video.id)}>
                       <Trash size={14} />
                       Borrar
@@ -1413,6 +1432,28 @@ export const DashboardScreen: React.FC = () => {
                 {isSavingEdit ? 'Guardando...' : 'Guardar'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Modal - Fuera del map para evitar re-renders innecesarios */}
+      {preview && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 pt-20" onClick={closePreview}>
+          <div className="bg-white dark:bg-[#1c2936] rounded-lg shadow-lg p-6 max-w-lg w-full relative" onClick={e => e.stopPropagation()}>
+            <button onClick={closePreview} className="absolute top-2 right-2 text-slate-500 hover:text-red-500 text-xl font-bold">&times;</button>
+            <div className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">{preview.titulo}</div>
+            {preview.tipo === 'image' ? (
+              <img src={preview.url} alt={preview.titulo} className="max-h-[60vh] w-auto mx-auto rounded" />
+            ) : (
+              <video 
+                ref={videoRef}
+                src={preview.url} 
+                controls 
+                autoPlay 
+                preload="none"
+                className="max-h-[60vh] w-auto mx-auto rounded" 
+              />
+            )}
           </div>
         </div>
       )}

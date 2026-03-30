@@ -302,7 +302,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginBottom="4dp"
-                        android:fontFamily="@font/montserrat_black"
+                        android:fontFamily="@font/montserrat_bold"
                         android:letterSpacing="0.1"
                         android:text="@string/price_label"
                         android:textColor="#999999"
@@ -342,7 +342,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
-                        android:fontFamily="@font/montserrat_medium"
+                        android:fontFamily="@font/montserrat_extrabold"
                         android:textColor="@color/rojo_luz_logo"
                         android:textSize="@dimen/text_size_precio_bs"
                         android:textStyle="bold"/>
@@ -352,10 +352,10 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:fontFamily="@font/montserrat_medium"
+                        android:fontFamily="@font/montserrat_bold"
                         android:textColor="#555555"
                         android:textSize="30sp"
-                        android:textStyle="bold"/>
+                        android:textStyle="bold" />
 
                 </LinearLayout>
 

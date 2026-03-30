@@ -11,12 +11,10 @@ import {
 } from '../services/monitoreoService';
 
 
-// Formatea una fecha a la hora de Caracas (UTC-4)
-// Agrega 'Z' al string si no lo tiene para forzar interpretación UTC correcta
+// Formatea una fecha a la hora de Caracas (UTC-4) sin depender de la hora local del sistema
 function formatCaracasTime(dateString: string | Date): string {
-  const dateStr = typeof dateString === 'string' ? dateString : dateString.toISOString();
-  const utcDate = new Date(dateStr.endsWith('Z') ? dateStr : dateStr + 'Z');
-  return utcDate.toLocaleString('es-VE', { timeZone: 'America/Caracas' });
+  const date = typeof dateString === 'string' ? new Date(dateString) : new Date(dateString.getTime());
+  return date.toLocaleString('es-VE', { timeZone: 'America/Caracas' });
 }
 
 type SyncServerProgress = {

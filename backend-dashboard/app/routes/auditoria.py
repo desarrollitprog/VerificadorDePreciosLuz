@@ -179,7 +179,7 @@ async def obtener_auditoria(
         sesion_limit = sesion_total - offset
     
     if sesion_limit > 0:
-        sesion_query = sesion_query.offset(sesion_offset).limit(sesion_limit)
+        sesion_query = sesion_query.order_by(DispositivoSesion.inicio.desc()).offset(sesion_offset).limit(sesion_limit)
     
     sesion_result = await db.execute(sesion_query)
     sesion_rows = sesion_result.all()
@@ -202,7 +202,7 @@ async def obtener_auditoria(
     )
     
     if remaining_limit > 0:
-        notif_query = notif_query.offset(remaining_offset).limit(remaining_limit)
+        notif_query = notif_query.order_by(Notificacion.fecha_creacion.desc()).offset(remaining_offset).limit(remaining_limit)
     
     notif_result = await db.execute(notif_query)
     notif_rows = notif_result.all()

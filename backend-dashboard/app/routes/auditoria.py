@@ -95,9 +95,19 @@ async def obtener_auditoria(
     if servidor_id:
         sesion_conditions.append(ServidorSecundario.id == servidor_id)
     if fecha_desde:
-        sesion_conditions.append(DispositivoSesion.inicio >= fecha_desde)
+        sesion_conditions.append(
+            case(
+                (DispositivoSesion.fin.is_(None), DispositivoSesion.inicio),
+                else_=DispositivoSesion.fin
+            ) >= fecha_desde
+        )
     if fecha_hasta:
-        sesion_conditions.append(DispositivoSesion.inicio <= fecha_hasta)
+        sesion_conditions.append(
+            case(
+                (DispositivoSesion.fin.is_(None), DispositivoSesion.inicio),
+                else_=DispositivoSesion.fin
+            ) <= fecha_hasta
+        )
     
     sesion_count_query = (
         select(func.count(DispositivoSesion.id))
@@ -145,7 +155,10 @@ async def obtener_auditoria(
     sesion_query = (
         select(
             DispositivoSesion.id,
-            DispositivoSesion.inicio.label("fecha"),
+            case(
+                (DispositivoSesion.fin.is_(None), DispositivoSesion.inicio),
+                else_=DispositivoSesion.fin
+            ).label("fecha"),
             case(
                 (DispositivoSesion.fin.is_(None), "CONEXION_DISPOSITIVO"),
                 else_="DESCONEXION_DISPOSITIVO"

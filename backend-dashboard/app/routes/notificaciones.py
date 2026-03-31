@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import and_, delete, func
+from sqlalchemy import and_, delete, func, literal
 from sqlalchemy.exc import IntegrityError
 from app.models import Notificacion, NotificacionLeida
 from app.models.usuario import Usuario
@@ -107,42 +107,38 @@ async def marcar_notificaciones_leidas(
     if user_id is None:
         return {"success": False, "updated": 0}
 
-    all_ids_result = await db.execute(select(Notificacion.id))
-    all_ids = all_ids_result.scalars().all()
+    subquery_not_leidas = (
+        select(Notificacion.id)
+        .outerjoin(
+            NotificacionLeida,
+            and_(
+                NotificacionLeida.notificacion_id == Notificacion.id,
+                NotificacionLeida.usuario_id == user_id
+            )
+        )
+        .where(NotificacionLeida.id.is_(None))
+    ).subquery()
 
-    if not all_ids:
-        return {"success": True, "updated": 0}
-
-    read_ids_result = await db.execute(
-        select(NotificacionLeida.notificacion_id).where(
-            NotificacionLeida.usuario_id == user_id,
+    insert_stmt = (
+        NotificacionLeida.__table__.insert()
+        .from_select(
+            ['usuario_id', 'notificacion_id'],
+            select(
+                literal(user_id).label('usuario_id'),
+                subquery_not_leidas.c.id.label('notificacion_id')
+            )
         )
     )
-    read_ids = set(read_ids_result.scalars().all())
 
-    to_mark = [
-        NotificacionLeida(usuario_id=user_id, notificacion_id=notification_id)
-        for notification_id in all_ids
-        if notification_id not in read_ids
-    ]
-
-    if to_mark:
-        db.add_all(to_mark)
     try:
+        result = await db.execute(insert_stmt)
         await db.commit()
+        updated = result.rowcount or 0
     except IntegrityError:
         await db.rollback()
-        # Si hubo solicitudes concurrentes, la restricción única puede dispararse;
-        # tratamos el endpoint como idempotente y devolvemos éxito.
-        return {
-            "success": True,
-            "updated": 0,
-        }
+        return {"success": True, "updated": 0}
 
-    return {
-        "success": True,
-        "updated": len(to_mark),
-    }
+    return {"success": True, "updated": updated}
 
 
 @router.delete("/notificaciones/leidas")

@@ -102,6 +102,12 @@ export const AuditoriaScreen: React.FC = () => {
       };
 
       const response = await getAuditoria(filtros);
+      console.log("DEBUG auditoria response:", response.items.slice(0, 3).map(item => ({
+        id: item.id,
+        tipo: item.tipo,
+        sesion_fin: item.sesion_fin,
+        descripcion: item.descripcion
+      })));
       setItems(response.items);
       setTotal(response.total);
       setPage(response.page);

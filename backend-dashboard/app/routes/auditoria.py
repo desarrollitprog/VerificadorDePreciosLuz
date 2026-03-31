@@ -251,7 +251,6 @@ async def obtener_auditoria(
     
     for row in sesion_rows:
         sesion_fin_val = row.sesion_fin
-        logger.info(f"DEBUG: sesion id={row.id}, sesion_fin={sesion_fin_val}, dispositivo_id={row.dispositivo_id}")
         sesion_tipo = "DESCONEXION_DISPOSITIVO" if sesion_fin_val is not None else "CONEXION_DISPOSITIVO"
         items.append({
             "id": row.id,

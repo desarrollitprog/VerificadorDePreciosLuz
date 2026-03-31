@@ -161,7 +161,7 @@ async def obtener_auditoria(
                 else_=DispositivoSesion.fin
             ).label("fecha"),
             case(
-                (DispositivoSesion.fin == None, "CONEXION_DISPOSITIVO"),
+                (func.coalesce(DispositivoSesion.fin, "2099-01-01") == "2099-01-01", "CONEXION_DISPOSITIVO"),
                 else_="DESCONEXION_DISPOSITIVO"
             ).label("tipo"),
             case(
@@ -250,10 +250,11 @@ async def obtener_auditoria(
     items = []
     
     for row in sesion_rows:
+        sesion_tipo = "DESCONEXION_DISPOSITIVO" if row.sesion_fin else "CONEXION_DISPOSITIVO"
         items.append({
             "id": row.id,
             "fecha": _to_venezuela_time(row.fecha).isoformat() if row.fecha else None,
-            "tipo": row.tipo,
+            "tipo": sesion_tipo,
             "descripcion": row.descripcion,
             "dispositivo_id": row.dispositivo_id,
             "dispositivo_nombre": row.dispositivo_nombre,

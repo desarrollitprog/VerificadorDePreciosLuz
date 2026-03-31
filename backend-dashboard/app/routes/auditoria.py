@@ -250,7 +250,9 @@ async def obtener_auditoria(
     items = []
     
     for row in sesion_rows:
-        sesion_tipo = "DESCONEXION_DISPOSITIVO" if row.sesion_fin else "CONEXION_DISPOSITIVO"
+        sesion_fin_val = row.sesion_fin
+        logger.info(f"DEBUG: sesion id={row.id}, sesion_fin={sesion_fin_val}, dispositivo_id={row.dispositivo_id}")
+        sesion_tipo = "DESCONEXION_DISPOSITIVO" if sesion_fin_val is not None else "CONEXION_DISPOSITIVO"
         items.append({
             "id": row.id,
             "fecha": _to_venezuela_time(row.fecha).isoformat() if row.fecha else None,
@@ -261,7 +263,7 @@ async def obtener_auditoria(
             "servidor_id": row.servidor_id,
             "servidor_nombre": row.servidor_nombre,
             "sesion_inicio": _to_venezuela_time(row.sesion_inicio).isoformat() if row.sesion_inicio else None,
-            "sesion_fin": _to_venezuela_time(row.sesion_fin).isoformat() if row.sesion_fin else None,
+            "sesion_fin": _to_venezuela_time(sesion_fin_val).isoformat() if sesion_fin_val else None,
             "duracion_segundos": row.duracion_segundos,
             "usuario": row.usuario,
             "origen": row.origen,

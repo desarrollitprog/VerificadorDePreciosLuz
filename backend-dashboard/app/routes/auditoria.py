@@ -1,10 +1,10 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Optional
 import logging
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import select, func, or_, literal_column, union_all, case
+from sqlalchemy import select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db_usuarios
@@ -17,10 +17,6 @@ from app.models.servidor_secundario import ServidorSecundario
 
 router = APIRouter(tags=["auditoria"])
 logger = logging.getLogger("uvicorn.error")
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
 
 
 def _to_venezuela_time(dt: datetime) -> datetime:
@@ -72,44 +68,96 @@ async def obtener_auditoria(
 ):
     """
     Obtiene el historial de auditoría combinando notificaciones y sesiones de dispositivos.
-    Optimizado: usa paginación SQL nativa en lugar de filtrar en Python.
+    Optimizado: consultas separadas con paginación SQL.
     """
     offset = (page - 1) * limit
     
-    sesion_descripcion = case(
-        (DispositivoSesion.fin.is_(None),
-         func.concat(
-             "Dispositivo '",
-             func.coalesce(Dispositivo.nombre_amigable, Dispositivo.codigo_kiosko),
-             "' (",
-             Dispositivo.codigo_kiosko,
-             ") conectado al servidor '",
-             func.coalesce(ServidorSecundario.nombre, "Desconocido"),
-             "'"
-         )),
-        else_=func.concat(
-            "Dispositivo '",
-            func.coalesce(Dispositivo.nombre_amigable, Dispositivo.codigo_kiosko),
-            "' (",
-            Dispositivo.codigo_kiosko,
-            ") desconectado del servidor '",
-            func.coalesce(ServidorSecundario.nombre, "Desconocido"),
-            "'. Duración: ",
-            DispositivoSesion.duracion_segundos
+    sesion_conditions = []
+    if tipo:
+        sesion_conditions.append(
+            case(
+                (DispositivoSesion.fin.is_(None), "CONEXION_DISPOSITIVO"),
+                else_="DESCONEXION_DISPOSITIVO"
+            ) == tipo
         )
-    )
+    if dispositivo_id:
+        sesion_conditions.append(Dispositivo.codigo_kiosko == dispositivo_id)
+    if servidor_id:
+        sesion_conditions.append(ServidorSecundario.id == servidor_id)
+    if fecha_desde:
+        sesion_conditions.append(DispositivoSesion.inicio >= fecha_desde)
+    if fecha_hasta:
+        sesion_conditions.append(DispositivoSesion.inicio <= fecha_hasta)
     
-    sesion_tipo = case(
-        (DispositivoSesion.fin.is_(None), "CONEXION_DISPOSITIVO"),
-        else_="DESCONEXION_DISPOSITIVO"
+    sesion_count_query = (
+        select(func.count(DispositivoSesion.id))
+        .select_from(DispositivoSesion)
+        .outerjoin(Dispositivo, Dispositivo.codigo_kiosko == DispositivoSesion.dispositivo_id)
+        .outerjoin(ServidorSecundario, ServidorSecundario.id == Dispositivo.servidor_id)
     )
+    if sesion_conditions:
+        sesion_count_query = sesion_count_query.where(*sesion_conditions)
+    sesion_count_result = await db.execute(sesion_count_query)
+    sesion_total = sesion_count_result.scalar() or 0
+    
+    notif_conditions = []
+    if tipo:
+        notif_conditions.append(Notificacion.tipo == tipo)
+    if dispositivo_id:
+        notif_conditions.append(Notificacion.dispositivo_id == dispositivo_id)
+    if servidor_id:
+        notif_conditions.append(Notificacion.servidor_id == servidor_id)
+    if fecha_desde:
+        notif_conditions.append(Notificacion.fecha_creacion >= fecha_desde)
+    if fecha_hasta:
+        notif_conditions.append(Notificacion.fecha_creacion <= fecha_hasta)
+    if busqueda:
+        busqueda_lower = busqueda.lower()
+        notif_conditions.append(
+            func.lower(func.coalesce(Notificacion.descripcion, "")).like(f"%{busqueda_lower}%")
+        )
+    
+    notif_count_query = (
+        select(func.count(Notificacion.id))
+        .select_from(Notificacion)
+    )
+    if notif_conditions:
+        notif_count_query = notif_count_query.where(*notif_conditions)
+    notif_count_result = await db.execute(notif_count_query)
+    notif_total = notif_count_result.scalar() or 0
+    
+    total = sesion_total + notif_total
     
     sesion_query = (
         select(
             DispositivoSesion.id,
             DispositivoSesion.inicio.label("fecha"),
-            sesion_tipo.label("tipo"),
-            sesion_descripcion.label("descripcion"),
+            case(
+                (DispositivoSesion.fin.is_(None), "CONEXION_DISPOSITIVO"),
+                else_="DESCONEXION_DISPOSITIVO"
+            ).label("tipo"),
+            case(
+                (DispositivoSesion.fin.is_(None),
+                 func.concat(
+                     "Dispositivo '",
+                     func.coalesce(Dispositivo.nombre_amigable, Dispositivo.codigo_kiosko),
+                     "' (",
+                     Dispositivo.codigo_kiosko,
+                     ") conectado al servidor '",
+                     func.coalesce(ServidorSecundario.nombre, "Desconocido"),
+                     "'"
+                 )),
+                else_=func.concat(
+                    "Dispositivo '",
+                    func.coalesce(Dispositivo.nombre_amigable, Dispositivo.codigo_kiosko),
+                    "' (",
+                    Dispositivo.codigo_kiosko,
+                    ") desconectado del servidor '",
+                    func.coalesce(ServidorSecundario.nombre, "Desconocido"),
+                    "'. Duración: ",
+                    DispositivoSesion.duracion_segundos
+                )
+            ).label("descripcion"),
             Dispositivo.codigo_kiosko.label("dispositivo_id"),
             Dispositivo.nombre_amigable.label("dispositivo_nombre"),
             ServidorSecundario.id.label("servidor_id"),
@@ -117,13 +165,34 @@ async def obtener_auditoria(
             DispositivoSesion.inicio.label("sesion_inicio"),
             DispositivoSesion.fin.label("sesion_fin"),
             DispositivoSesion.duracion_segundos,
-            literal_column("NULL").label("usuario"),
-            literal_column("'sesion'").label("origen"),
+            None.label("usuario"),
+            "sesion".label("origen"),
         )
         .select_from(DispositivoSesion)
         .outerjoin(Dispositivo, Dispositivo.codigo_kiosko == DispositivoSesion.dispositivo_id)
         .outerjoin(ServidorSecundario, ServidorSecundario.id == Dispositivo.servidor_id)
+        .order_by(DispositivoSesion.inicio.desc())
     )
+    if sesion_conditions:
+        sesion_query = sesion_query.where(*sesion_conditions)
+    
+    sesion_offset = offset
+    sesion_limit = limit
+    
+    if offset >= sesion_total:
+        sesion_offset = 0
+        sesion_limit = 0
+    elif offset + limit > sesion_total:
+        sesion_limit = sesion_total - offset
+    
+    if sesion_limit > 0:
+        sesion_query = sesion_query.offset(sesion_offset).limit(sesion_limit)
+    
+    sesion_result = await db.execute(sesion_query)
+    sesion_rows = sesion_result.all()
+    
+    remaining_offset = max(0, offset - sesion_total)
+    remaining_limit = limit - len(sesion_rows)
     
     notif_query = (
         select(
@@ -135,67 +204,29 @@ async def obtener_auditoria(
             Dispositivo.nombre_amigable.label("dispositivo_nombre"),
             Notificacion.servidor_id,
             ServidorSecundario.nombre.label("servidor_nombre"),
-            literal_column("NULL").label("sesion_inicio"),
-            literal_column("NULL").label("sesion_fin"),
-            literal_column("NULL").label("duracion_segundos"),
-            func.cast(Notificacion.usuario_id, literal_column("VARCHAR(50)")).label("usuario"),
-            literal_column("'notificacion'").label("origen"),
+            None.label("sesion_inicio"),
+            None.label("sesion_fin"),
+            None.label("duracion_segundos"),
+            func.cast(Notificacion.usuario_id, str).label("usuario"),
+            "notificacion".label("origen"),
         )
         .select_from(Notificacion)
         .outerjoin(Dispositivo, Dispositivo.codigo_kiosko == Notificacion.dispositivo_id)
         .outerjoin(ServidorSecundario, ServidorSecundario.id == Notificacion.servidor_id)
+        .order_by(Notificacion.fecha_creacion.desc())
     )
+    if notif_conditions:
+        notif_query = notif_query.where(*notif_conditions)
     
-    combined = (
-        union_all(sesion_query, notif_query)
-        .subquery()
-    )
+    if remaining_limit > 0:
+        notif_query = notif_query.offset(remaining_offset).limit(remaining_limit)
     
-    filters = []
-    if busqueda:
-        filters.append(
-            or_(
-                func.lower(combined.c.descripcion).like(f"%{busqueda.lower()}%"),
-                func.lower(combined.c.tipo).like(f"%{busqueda.lower()}%"),
-                func.lower(func.coalesce(combined.c.dispositivo_id, "")).like(f"%{busqueda.lower()}%"),
-                func.lower(func.coalesce(combined.c.dispositivo_nombre, "")).like(f"%{busqueda.lower()}%"),
-                func.lower(func.coalesce(combined.c.servidor_nombre, "")).like(f"%{busqueda.lower()}%")
-            )
-        )
-    if tipo:
-        filters.append(combined.c.tipo == tipo)
-    if dispositivo_id:
-        filters.append(combined.c.dispositivo_id == dispositivo_id)
-    if servidor_id:
-        filters.append(combined.c.servidor_id == servidor_id)
-    if fecha_desde:
-        filters.append(combined.c.fecha >= fecha_desde)
-    if fecha_hasta:
-        filters.append(combined.c.fecha <= fecha_hasta)
-    
-    count_query = select(func.count()).select_from(combined)
-    if filters:
-        count_query = count_query.where(*filters)
-    total_result = await db.execute(count_query)
-    total = total_result.scalar() or 0
-    
-    query = (
-        select(combined)
-        .order_by(combined.c.fecha.desc())
-        .offset(offset)
-        .limit(limit)
-    )
-    if filters:
-        query = query.where(*filters)
-    
-    result = await db.execute(query)
-    rows = result.all()
+    notif_result = await db.execute(notif_query)
+    notif_rows = notif_result.all()
     
     items = []
-    for row in rows:
-        sesion_inicio = row.sesion_inicio
-        sesion_fin = row.sesion_fin
-        
+    
+    for row in sesion_rows:
         items.append({
             "id": row.id,
             "fecha": _to_venezuela_time(row.fecha).isoformat() if row.fecha else None,
@@ -205,12 +236,31 @@ async def obtener_auditoria(
             "dispositivo_nombre": row.dispositivo_nombre,
             "servidor_id": row.servidor_id,
             "servidor_nombre": row.servidor_nombre,
-            "sesion_inicio": _to_venezuela_time(sesion_inicio).isoformat() if sesion_inicio else None,
-            "sesion_fin": _to_venezuela_time(sesion_fin).isoformat() if sesion_fin else None,
+            "sesion_inicio": _to_venezuela_time(row.sesion_inicio).isoformat() if row.sesion_inicio else None,
+            "sesion_fin": _to_venezuela_time(row.sesion_fin).isoformat() if row.sesion_fin else None,
             "duracion_segundos": row.duracion_segundos,
             "usuario": row.usuario,
             "origen": row.origen,
         })
+    
+    for row in notif_rows:
+        items.append({
+            "id": row.id,
+            "fecha": _to_venezuela_time(row.fecha).isoformat() if row.fecha else None,
+            "tipo": row.tipo,
+            "descripcion": row.descripcion,
+            "dispositivo_id": row.dispositivo_id,
+            "dispositivo_nombre": row.dispositivo_nombre,
+            "servidor_id": row.servidor_id,
+            "servidor_nombre": row.servidor_nombre,
+            "sesion_inicio": None,
+            "sesion_fin": None,
+            "duracion_segundos": None,
+            "usuario": row.usuario,
+            "origen": row.origen,
+        })
+    
+    items.sort(key=lambda x: x.get("fecha") or "", reverse=True)
     
     return {
         "success": True,

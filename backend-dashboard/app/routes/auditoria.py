@@ -4,7 +4,7 @@ import logging
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import select, func, case
+from sqlalchemy import select, func, case, or_
 from sqlalchemy.sql import literal_column
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -77,7 +77,11 @@ async def obtener_auditoria(
     if busqueda:
         busqueda_lower = busqueda.lower()
         sesion_conditions.append(
-            func.lower(func.coalesce(Dispositivo.codigo_kiosko, "")).like(f"%{busqueda_lower}%")
+            or_(
+                func.lower(func.coalesce(Dispositivo.codigo_kiosko, "")).like(f"%{busqueda_lower}%"),
+                func.lower(func.coalesce(Dispositivo.nombre_amigable, "")).like(f"%{busqueda_lower}%"),
+                func.lower(func.coalesce(ServidorSecundario.nombre, "")).like(f"%{busqueda_lower}%")
+            )
         )
     if tipo:
         sesion_conditions.append(
@@ -107,6 +111,15 @@ async def obtener_auditoria(
     sesion_total = sesion_count_result.scalar() or 0
     
     notif_conditions = []
+    if busqueda:
+        busqueda_lower = busqueda.lower()
+        notif_conditions.append(
+            or_(
+                func.lower(func.coalesce(Notificacion.descripcion, "")).like(f"%{busqueda_lower}%"),
+                func.lower(func.coalesce(Notificacion.tipo, "")).like(f"%{busqueda_lower}%"),
+                func.lower(func.coalesce(Notificacion.dispositivo_id, "")).like(f"%{busqueda_lower}%")
+            )
+        )
     if tipo:
         notif_conditions.append(Notificacion.tipo == tipo)
     if dispositivo_id:
@@ -117,11 +130,6 @@ async def obtener_auditoria(
         notif_conditions.append(Notificacion.fecha_creacion >= fecha_desde)
     if fecha_hasta:
         notif_conditions.append(Notificacion.fecha_creacion <= fecha_hasta)
-    if busqueda:
-        busqueda_lower = busqueda.lower()
-        notif_conditions.append(
-            func.lower(func.coalesce(Notificacion.descripcion, "")).like(f"%{busqueda_lower}%")
-        )
     
     notif_count_query = (
         select(func.count(Notificacion.id))

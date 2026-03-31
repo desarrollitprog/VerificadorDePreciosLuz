@@ -55,6 +55,7 @@ function formatDate(dateStr: string | null): string {
 
 function getTypeBadge(tipo: string) {
   const tipoUpper = tipo.toUpperCase();
+  console.log("DEBUG getTypeBadge input:", tipo, "tipoUpper:", tipoUpper);
   
   if (tipoUpper.includes('CONEXION') || tipoUpper.includes('SESION_ACTIVA')) {
     return { label: 'Conexión', classes: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' };

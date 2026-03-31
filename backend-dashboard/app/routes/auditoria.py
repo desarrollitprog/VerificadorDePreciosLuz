@@ -179,6 +179,9 @@ async def obtener_auditoria(
         .outerjoin(ServidorSecundario, ServidorSecundario.id == Dispositivo.servidor_id)
     )
     
+    if sesion_conditions:
+        sesion_query = sesion_query.where(*sesion_conditions)
+    
     sesion_offset = offset
     sesion_limit = limit
     
@@ -210,6 +213,9 @@ async def obtener_auditoria(
         )
         .select_from(Notificacion)
     )
+    
+    if notif_conditions:
+        notif_query = notif_query.where(*notif_conditions)
     
     if remaining_limit > 0:
         notif_query = notif_query.order_by(Notificacion.fecha_creacion.desc()).offset(remaining_offset).limit(remaining_limit)

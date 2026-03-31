@@ -74,6 +74,11 @@ async def obtener_auditoria(
     offset = (page - 1) * limit
     
     sesion_conditions = []
+    if busqueda:
+        busqueda_lower = busqueda.lower()
+        sesion_conditions.append(
+            func.lower(func.coalesce(Dispositivo.codigo_kiosko, "")).like(f"%{busqueda_lower}%")
+        )
     if tipo:
         sesion_conditions.append(
             case(
@@ -112,6 +117,11 @@ async def obtener_auditoria(
         notif_conditions.append(Notificacion.fecha_creacion >= fecha_desde)
     if fecha_hasta:
         notif_conditions.append(Notificacion.fecha_creacion <= fecha_hasta)
+    if busqueda:
+        busqueda_lower = busqueda.lower()
+        notif_conditions.append(
+            func.lower(func.coalesce(Notificacion.descripcion, "")).like(f"%{busqueda_lower}%")
+        )
     
     notif_count_query = (
         select(func.count(Notificacion.id))

@@ -14,6 +14,7 @@ from app.models.notificacion import Notificacion
 from app.models.dispositivo_sesion import DispositivoSesion
 from app.models.dispositivo import Dispositivo
 from app.models.servidor_secundario import ServidorSecundario
+from app.models.usuario import Usuario
 
 
 router = APIRouter(tags=["auditoria"])
@@ -86,7 +87,7 @@ async def obtener_auditoria(
     if tipo:
         sesion_conditions.append(
             case(
-                (DispositivoSesion.fin.is_(None), "CONEXION_DISPOSITIVO"),
+                (DispositivoSesion.fin == None, "CONEXION_DISPOSITIVO"),
                 else_="DESCONEXION_DISPOSITIVO"
             ) == tipo
         )
@@ -97,14 +98,14 @@ async def obtener_auditoria(
     if fecha_desde:
         sesion_conditions.append(
             case(
-                (DispositivoSesion.fin.is_(None), DispositivoSesion.inicio),
+                (DispositivoSesion.fin == None, DispositivoSesion.inicio),
                 else_=DispositivoSesion.fin
             ) >= fecha_desde
         )
     if fecha_hasta:
         sesion_conditions.append(
             case(
-                (DispositivoSesion.fin.is_(None), DispositivoSesion.inicio),
+                (DispositivoSesion.fin == None, DispositivoSesion.inicio),
                 else_=DispositivoSesion.fin
             ) <= fecha_hasta
         )
@@ -156,15 +157,15 @@ async def obtener_auditoria(
         select(
             DispositivoSesion.id,
             case(
-                (DispositivoSesion.fin.is_(None), DispositivoSesion.inicio),
+                (DispositivoSesion.fin == None, DispositivoSesion.inicio),
                 else_=DispositivoSesion.fin
             ).label("fecha"),
             case(
-                (DispositivoSesion.fin.is_(None), "CONEXION_DISPOSITIVO"),
+                (DispositivoSesion.fin == None, "CONEXION_DISPOSITIVO"),
                 else_="DESCONEXION_DISPOSITIVO"
             ).label("tipo"),
             case(
-                (DispositivoSesion.fin.is_(None),
+                (DispositivoSesion.fin == None,
                  func.concat(
                      "Dispositivo '",
                      func.coalesce(Dispositivo.nombre_amigable, Dispositivo.codigo_kiosko),
@@ -230,9 +231,11 @@ async def obtener_auditoria(
             Notificacion.dispositivo_id,
             Notificacion.servidor_id,
             Notificacion.usuario_id,
+            Usuario.nombre_usuario.label("usuario_nombre"),
             literal_column("'notificacion'").label("origen"),
         )
         .select_from(Notificacion)
+        .outerjoin(Usuario, Usuario.id == Notificacion.usuario_id)
     )
     
     if notif_conditions:
@@ -264,7 +267,7 @@ async def obtener_auditoria(
         })
     
     for row in notif_rows:
-        usuario_str = str(row.usuario_id) if row.usuario_id else None
+        usuario_str = row.usuario_nombre if row.usuario_nombre else (str(row.usuario_id) if row.usuario_id else None)
         items.append({
             "id": row.id,
             "fecha": _to_venezuela_time(row.fecha).isoformat() if row.fecha else None,

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Filter, ChevronLeft, ChevronRight, Calendar, Server, Monitor, Clock, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, Filter, ChevronLeft, ChevronRight, Calendar, Server, Monitor, Clock, X, ChevronDown, ChevronUp, User } from 'lucide-react';
 import { getAuditoria, AuditoriaItem, AuditoriaFiltros } from '../services/auditoriaService';
 import { useNotification } from '../components/useNotification';
 
@@ -258,6 +258,10 @@ export const AuditoriaScreen: React.FC = () => {
                   Descripción
                 </th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  <User size={14} className="inline mr-1" />
+                  Usuario
+                </th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Duración
                 </th>
               </tr>
@@ -265,7 +269,7 @@ export const AuditoriaScreen: React.FC = () => {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
                     <div className="flex items-center justify-center gap-2">
                       <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
                       Cargando...
@@ -274,7 +278,7 @@ export const AuditoriaScreen: React.FC = () => {
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
                     No hay registros de auditoría
                   </td>
                 </tr>
@@ -310,6 +314,9 @@ export const AuditoriaScreen: React.FC = () => {
                         ) : (
                           item.descripcion
                         )}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">
+                        {item.usuario || '-'}
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap">
                         {formatDuration(item.duracion_segundos)}

@@ -112,11 +112,6 @@ async def obtener_auditoria(
         notif_conditions.append(Notificacion.fecha_creacion >= fecha_desde)
     if fecha_hasta:
         notif_conditions.append(Notificacion.fecha_creacion <= fecha_hasta)
-    if busqueda:
-        busqueda_lower = busqueda.lower()
-        notif_conditions.append(
-            func.lower(func.coalesce(Notificacion.descripcion, "")).like(f"%{busqueda_lower}%")
-        )
     
     notif_count_query = (
         select(func.count(Notificacion.id))
@@ -172,10 +167,7 @@ async def obtener_auditoria(
         .select_from(DispositivoSesion)
         .outerjoin(Dispositivo, Dispositivo.codigo_kiosko == DispositivoSesion.dispositivo_id)
         .outerjoin(ServidorSecundario, ServidorSecundario.id == Dispositivo.servidor_id)
-        .order_by(DispositivoSesion.inicio.desc())
     )
-    if sesion_conditions:
-        sesion_query = sesion_query.where(*sesion_conditions)
     
     sesion_offset = offset
     sesion_limit = limit
@@ -202,22 +194,12 @@ async def obtener_auditoria(
             Notificacion.tipo,
             func.coalesce(Notificacion.descripcion, "").label("descripcion"),
             Notificacion.dispositivo_id,
-            Dispositivo.nombre_amigable.label("dispositivo_nombre"),
             Notificacion.servidor_id,
-            ServidorSecundario.nombre.label("servidor_nombre"),
-            literal_column("NULL").label("sesion_inicio"),
-            literal_column("NULL").label("sesion_fin"),
-            literal_column("NULL").label("duracion_segundos"),
-            func.cast(Notificacion.usuario_id, str).label("usuario"),
+            Notificacion.usuario_id,
             literal_column("'notificacion'").label("origen"),
         )
         .select_from(Notificacion)
-        .outerjoin(Dispositivo, Dispositivo.codigo_kiosko == Notificacion.dispositivo_id)
-        .outerjoin(ServidorSecundario, ServidorSecundario.id == Notificacion.servidor_id)
-        .order_by(Notificacion.fecha_creacion.desc())
     )
-    if notif_conditions:
-        notif_query = notif_query.where(*notif_conditions)
     
     if remaining_limit > 0:
         notif_query = notif_query.offset(remaining_offset).limit(remaining_limit)
@@ -245,19 +227,20 @@ async def obtener_auditoria(
         })
     
     for row in notif_rows:
+        usuario_str = str(row.usuario_id) if row.usuario_id else None
         items.append({
             "id": row.id,
             "fecha": _to_venezuela_time(row.fecha).isoformat() if row.fecha else None,
             "tipo": row.tipo,
             "descripcion": row.descripcion,
             "dispositivo_id": row.dispositivo_id,
-            "dispositivo_nombre": row.dispositivo_nombre,
+            "dispositivo_nombre": None,
             "servidor_id": row.servidor_id,
-            "servidor_nombre": row.servidor_nombre,
+            "servidor_nombre": None,
             "sesion_inicio": None,
             "sesion_fin": None,
             "duracion_segundos": None,
-            "usuario": row.usuario,
+            "usuario": usuario_str,
             "origen": row.origen,
         })
     

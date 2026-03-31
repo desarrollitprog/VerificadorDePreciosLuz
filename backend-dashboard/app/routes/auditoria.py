@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy import select, func, case
+from sqlalchemy.sql import literal_column
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db_usuarios
@@ -165,8 +166,8 @@ async def obtener_auditoria(
             DispositivoSesion.inicio.label("sesion_inicio"),
             DispositivoSesion.fin.label("sesion_fin"),
             DispositivoSesion.duracion_segundos,
-            None.label("usuario"),
-            "sesion".label("origen"),
+            literal_column("NULL").label("usuario"),
+            literal_column("'sesion'").label("origen"),
         )
         .select_from(DispositivoSesion)
         .outerjoin(Dispositivo, Dispositivo.codigo_kiosko == DispositivoSesion.dispositivo_id)
@@ -204,11 +205,11 @@ async def obtener_auditoria(
             Dispositivo.nombre_amigable.label("dispositivo_nombre"),
             Notificacion.servidor_id,
             ServidorSecundario.nombre.label("servidor_nombre"),
-            None.label("sesion_inicio"),
-            None.label("sesion_fin"),
-            None.label("duracion_segundos"),
+            literal_column("NULL").label("sesion_inicio"),
+            literal_column("NULL").label("sesion_fin"),
+            literal_column("NULL").label("duracion_segundos"),
             func.cast(Notificacion.usuario_id, str).label("usuario"),
-            "notificacion".label("origen"),
+            literal_column("'notificacion'").label("origen"),
         )
         .select_from(Notificacion)
         .outerjoin(Dispositivo, Dispositivo.codigo_kiosko == Notificacion.dispositivo_id)

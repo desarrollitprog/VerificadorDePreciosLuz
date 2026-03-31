@@ -220,6 +220,7 @@ async def sync_status(
         usuario_id=None,
         tipo="SYNC_FAILED",
         descripcion=descripcion,
+        dispositivo_id=body.device_id,
     )
     return {"success": True, "message": "Notificación de sincronización registrada", "duplicated": False}
 
@@ -260,6 +261,7 @@ async def playback_status(
         usuario_id=None,
         tipo="PLAYBACK_FAILED",
         descripcion=descripcion,
+        dispositivo_id=body.device_id,
     )
     return {
         "success": True,
@@ -291,6 +293,7 @@ async def banner_status(
         usuario_id=None,
         tipo=tipo,
         descripcion=descripcion,
+        dispositivo_id=body.device_id,
     )
     return {
         "success": True,

@@ -777,12 +777,6 @@ async def status_detalle(
                         )
                         db.add(sesion)
                         await db.flush()
-                        await registrar_accion(
-                            db,
-                            None,
-                            "CONEXION_DISPOSITIVO",
-                            f"Dispositivo '{dispositivo.nombre_amigable or codigo}' ({codigo}) conectado al servidor '{s.nombre}' ({s.ip})"
-                        )
                 else:
                     estaba_online = dispositivo.online
                     ahora_online = bool(info.get("online", False))
@@ -794,12 +788,6 @@ async def status_detalle(
                         )
                         db.add(sesion)
                         await db.flush()
-                        await registrar_accion(
-                            db,
-                            None,
-                            "CONEXION_DISPOSITIVO",
-                            f"Dispositivo '{dispositivo.nombre_amigable or codigo}' ({codigo}) conectado al servidor '{s.nombre}' ({s.ip})"
-                        )
                     elif estaba_online and not ahora_online:
                         stmt_sesion = select(DispositivoSesion).where(
                             DispositivoSesion.dispositivo_id == codigo,
@@ -812,14 +800,6 @@ async def status_detalle(
                             duracion = int((now - sesion_activa.inicio).total_seconds())
                             sesion_activa.duracion_segundos = duracion
                             await db.flush()
-                        await registrar_accion(
-                            db,
-                            None,
-                            "DESCONEXION_DISPOSITIVO",
-                            f"Dispositivo '{dispositivo.nombre_amigable or codigo}' ({codigo}) desconectado del servidor '{s.nombre}' ({s.ip})",
-                            dispositivo_id=codigo,
-                            servidor_id=s.id,
-                        )
                     
                     dispositivo.online = ahora_online
                     dispositivo.servidor_id = s.id
@@ -838,14 +818,6 @@ async def status_detalle(
                             duracion = int((now - sesion_activa.inicio).total_seconds())
                             sesion_activa.duracion_segundos = duracion
                             await db.flush()
-                            await registrar_accion(
-                                db,
-                                None,
-                                "DESCONEXION_DISPOSITIVO",
-                                f"Dispositivo '{dispositivo.nombre_amigable or dispositivo.codigo_kiosko}' ({dispositivo.codigo_kiosko}) desconectado del servidor '{s.nombre}' ({s.ip}). Duración: {duracion} segundos",
-                                dispositivo_id=dispositivo.codigo_kiosko,
-                                servidor_id=s.id,
-                            )
                     dispositivo.online = False
         else:
             for dispositivo in dispositivo_por_codigo.values():
@@ -862,12 +834,6 @@ async def status_detalle(
                             duracion = int((now - sesion_activa.inicio).total_seconds())
                             sesion_activa.duracion_segundos = duracion
                             await db.flush()
-                            await registrar_accion(
-                                db,
-                                None,
-                                "DESCONEXION_DISPOSITIVO",
-                                f"Dispositivo '{dispositivo.nombre_amigable or dispositivo.codigo_kiosko}' ({dispositivo.codigo_kiosko}) desconectado del servidor '{s.nombre}' ({s.ip}). Duración: {duracion} segundos"
-                            )
                     dispositivo.online = False
 
         dispositivos: list[dict[str, Any]] = []

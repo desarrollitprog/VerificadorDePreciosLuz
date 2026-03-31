@@ -55,13 +55,12 @@ function formatDate(dateStr: string | null): string {
 
 function getTypeBadge(tipo: string) {
   const tipoUpper = tipo.toUpperCase();
-  console.log("DEBUG getTypeBadge input:", tipo, "tipoUpper:", tipoUpper);
   
-  if (tipoUpper.includes('CONEXION') || tipoUpper.includes('SESION_ACTIVA')) {
-    return { label: 'Conexión', classes: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' };
-  }
   if (tipoUpper.includes('DESCONEXION') || tipoUpper.includes('SESION_CERRADA')) {
     return { label: 'Desconexión', classes: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' };
+  }
+  if (tipoUpper.includes('CONEXION') || tipoUpper.includes('SESION_ACTIVA')) {
+    return { label: 'Conexión', classes: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' };
   }
   if (tipoUpper.includes('SYNC') || tipoUpper.includes('SINCRONIZACION')) {
     return { label: 'Sincronización', classes: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' };
@@ -103,12 +102,6 @@ export const AuditoriaScreen: React.FC = () => {
       };
 
       const response = await getAuditoria(filtros);
-      console.log("DEBUG auditoria response:", response.items.slice(0, 3).map(item => ({
-        id: item.id,
-        tipo: item.tipo,
-        sesion_fin: item.sesion_fin,
-        descripcion: item.descripcion
-      })));
       setItems(response.items);
       setTotal(response.total);
       setPage(response.page);

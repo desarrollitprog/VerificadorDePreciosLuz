@@ -698,7 +698,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         // Si ya tenemos del día de hoy, mostrar cache y salir
         if (cachedDate == today && (cachedUsd > 0f || cachedEur > 0f)) {
             Log.d(TAG, "BCV: mostrando datos cacheados")
-            mostrarTasaBCV(cachedUsd, cachedEur)
+            uiHandler.post {
+                mostrarTasaBCV(cachedUsd, cachedEur)
+            }
             return
         }
 
@@ -1378,6 +1380,28 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             val formatter = DecimalFormat("#,##0.##", symbols)
             val precioBsFormateado = formatter.format(precioBs)
             binding.tvPrecioBsOferta.text = "Bs $precioBsFormateado"
+            
+            // Reducir tamaño si el texto supera 25 caracteres (usando tamaños del XML)
+            val tamanoNombreOferta = resources.getDimension(R.dimen.text_size_nombre_oferta) / resources.displayMetrics.scaledDensity
+            val tamanoNombreReducido = tamanoNombreOferta * 0.8f
+            if (producto.nombre.length > 25) {
+                binding.tvNombreOferta.textSize = tamanoNombreReducido
+            }
+            
+            val tamanoPrecioOferta = resources.getDimension(R.dimen.text_size_precio_oferta) / resources.displayMetrics.scaledDensity
+            val tamanoPrecioOfertaReducido = tamanoPrecioOferta * 0.8f
+            val precioOfertaText = String.format(Locale.US, "$%.2f", producto.pvpOferta)
+            if (precioOfertaText.length > 25) {
+                binding.tvPrecioOferta.textSize = tamanoPrecioOfertaReducido
+            }
+            
+            val tamanoPrecioBsOferta = resources.getDimension(R.dimen.text_size_precio_bs_oferta) / resources.displayMetrics.scaledDensity
+            val tamanoPrecioBsOfertaReducido = tamanoPrecioBsOferta * 0.8f
+            val precioBsOfertaText = "Bs $precioBsFormateado"
+            if (precioBsOfertaText.length > 25) {
+                binding.tvPrecioBsOferta.textSize = tamanoPrecioBsOfertaReducido
+            }
+            
             // Puedes agregar aquí lógica para IVA, total ref, etc.
         } else {
             // Mostrar diseño normal

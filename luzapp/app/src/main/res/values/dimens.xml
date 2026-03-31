@@ -4,7 +4,8 @@
     <!-- Textos ofertas -->
     <dimen name="text_size_nombre_oferta">110sp</dimen>
     <dimen name="text_size_precio_oferta">170sp</dimen>
-    <dimen name="text_size_precio_bs_oferta">80sp</dimen>
+    <dimen name="text_size_precio_bs_oferta">50sp</dimen>
+    <dimen name="text_size_currency">125sp</dimen>
     
     <!-- Textos normal -->
     <dimen name="text_size_nombre">120sp</dimen>
@@ -12,7 +13,7 @@
     <dimen name="text_size_precio_bs">80sp</dimen>
     
     <!-- BCV -->
-    <dimen name="text_size_bcv">90dp</dimen>
+    <dimen name="text_size_bcv">90sp</dimen>
     
     <!-- Paddings y margins -->
     <dimen name="padding_card">16dp</dimen>

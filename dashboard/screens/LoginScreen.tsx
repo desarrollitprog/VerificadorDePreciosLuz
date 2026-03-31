@@ -114,7 +114,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   };
 
   return (
-    <div className="relative min-h-screen flex flex-col items-center justify-center p-4 overflow-hidden bg-background-light dark:bg-[#101922]">
+    <div className="relative min-h-screen flex flex-col items-center justify-center p-4 overflow-hidden bg-background-light dark:bg-[#101922]" translate="no">
       {/* Background Decoration */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-primary/20 blur-[120px] rounded-full mix-blend-screen opacity-40 animate-pulse"></div>
@@ -122,17 +122,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 brightness-100 contrast-150"></div>
       </div>
 
-      <div className="relative z-10 w-full max-w-md transform rounded-xl border border-slate-200/50 bg-white/95 p-8 shadow-lg transition-all dark:border-slate-800/50 dark:bg-[#182430]/95 backdrop-blur-sm">
+      <div className="relative z-10 w-full max-w-md transform rounded-xl border border-slate-200/50 bg-white/95 p-8 shadow-lg transition-all dark:border-slate-800/50 dark:bg-[#182430]/95 backdrop-blur-sm" translate="no">
         <div className="mb-8 text-center">
           <div className="mb-4 flex justify-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/20 text-primary">
               <Video size={28} />
             </div>
           </div>
-          <h1 className="mb-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+          <h1 className="mb-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-white" translate="no">
             VERIFICADOR DE PRECIOS LUZ
           </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
+          <p className="text-sm text-slate-500 dark:text-slate-400" translate="no">
             BIENVENIDOS, POR FAVOR INGRESA TUS CREDENCIALES 
           </p>
         </div>
@@ -301,7 +301,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
         </div>*/}
       </div>
 
-      <p className="mt-8 text-center text-xs text-slate-400 dark:text-slate-600">
+      <p className="mt-8 text-center text-xs text-slate-400 dark:text-slate-600" translate="no">
         © 2026 Verificador de Precios Luz. Todos los derechos reservados.
       </p>
     </div>

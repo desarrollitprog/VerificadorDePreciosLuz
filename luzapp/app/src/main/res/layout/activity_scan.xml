@@ -248,42 +248,55 @@
                     app:layout_constraintStart_toEndOf="@id/imageSection"
                     app:layout_constraintTop_toTopOf="parent" />
 
-                <!-- Sección de contenido (derecha) -->
-                <LinearLayout
+                <!-- Sección de contenido (derecha) - FrameLayout con fondo -->
+                <FrameLayout
                     android:id="@+id/infoGroup"
                     android:layout_width="0dp"
                     android:layout_height="0dp"
-                    android:gravity="center"
-                    android:orientation="vertical"
-                    android:padding="12dp"
                     app:layout_constraintBottom_toBottomOf="parent"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toEndOf="@id/divider"
                     app:layout_constraintTop_toTopOf="parent">
 
-                    <!-- Indicador de tasa BCV (alineado a la derecha) -->
+                    <!-- Fondo que se estira para llenar el espacio -->
+                    <ImageView
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:src="@drawable/bg_tarjeta_normal" />
+
+                    <!-- Capa blanca semitransparente ENCIMA del fondo -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="#B3FFFFFF" />
+
+                    <!-- Barra BCV - ancho completo sin padding del contenedor -->
                     <TextView
                         android:id="@+id/cardDolarBc"
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:layout_marginEnd="8dp"
-                        android:maxWidth="700dp"
+                        android:layout_gravity="top"
+                        android:layout_marginTop="30dp"
                         android:drawableStart="@drawable/ic_bcv_white_bg"
-                        android:drawablePadding="5dp"
-                        android:gravity="end"
+                        android:drawablePadding="8dp"
+                        android:gravity="center_vertical"
                         android:background="@drawable/bg_bcv"
                         android:paddingHorizontal="16dp"
-                        android:paddingVertical="8dp"
+                        android:paddingVertical="12dp"
                         android:textColor="@android:color/white"
                         android:textSize="@dimen/text_size_bcv"
                         android:textStyle="bold"
                         android:visibility="gone"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="parent"
-                        app:layout_constraintWidth_max="wrap"
                         tools:text="USD: Bs 451,51" />
 
+                    <!-- Contenido sobre todo -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:gravity="center"
+                        android:orientation="vertical"
+                        android:padding="12dp">
                     <TextView
                         android:id="@+id/tvNombre"
                         android:layout_width="wrap_content"
@@ -323,7 +336,7 @@
                             android:fontFamily="@font/montserrat_black"
                             android:text="@string/currency_symbol"
                             android:textColor="@color/verde_luz"
-                            android:textSize="50sp"
+                            android:textSize="@dimen/text_size_currency"
                             android:textStyle="bold"/>
 
                         <TextView
@@ -343,7 +356,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
                         android:fontFamily="@font/montserrat_extrabold"
-                        android:textColor="@color/rojo_luz_logo"
+                        android:textColor="@color/oferta_text_black"
                         android:textSize="@dimen/text_size_precio_bs"
                         android:textStyle="bold"/>
 
@@ -357,41 +370,54 @@
                         android:textSize="30sp"
                         android:textStyle="bold" />
 
-                </LinearLayout>
+                    </LinearLayout>
 
-                <!-- CONTENEDOR DE OFERTA: todos los elementos de oferta en un LinearLayout vertical -->
-                <LinearLayout
+                </FrameLayout>
+
+                <!-- CONTENEDOR DE OFERTA: todos los elementos de oferta en un FrameLayout -->
+                <FrameLayout
                     android:id="@+id/ofertaGroup"
                     android:layout_width="0dp"
                     android:layout_height="0dp"
-                    android:background="@color/oferta_yellow"
-                    android:gravity="center"
-                    android:orientation="vertical"
-                    android:padding="16dp"
                     android:visibility="gone"
                     app:layout_constraintBottom_toBottomOf="parent"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="@id/divider"
                     app:layout_constraintTop_toTopOf="parent">
 
+                    <!-- Fondo que se estira para llenar el espacio -->
+                    <ImageView
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:src="@drawable/bg_tarjeta_oferta" />
+
+                    <!-- Barra BCV oferta - ancho completo sin padding del contenedor -->
                     <TextView
                         android:id="@+id/tvBcvOferta"
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginBottom="8dp"
+                        android:layout_gravity="top"
+                        android:layout_marginTop="30dp"
                         android:background="@drawable/bg_bcv"
                         android:drawableStart="@drawable/ic_bcv_white_bg"
-                        android:drawablePadding="5dp"
-                        android:gravity="center"
-                        android:maxWidth="700dp"
+                        android:drawablePadding="8dp"
+                        android:gravity="center_vertical"
                         android:paddingHorizontal="16dp"
-                        android:paddingVertical="8dp"
+                        android:paddingVertical="12dp"
                         android:textColor="@android:color/white"
                         android:textSize="@dimen/text_size_bcv"
                         android:textStyle="bold"
                         android:visibility="gone"
-                        app:layout_constraintWidth_max="wrap"
                         tools:text="USD: Bs 451,51" />
+
+                    <!-- Contenido encima -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:gravity="center"
+                        android:orientation="vertical"
+                        android:padding="16dp">
 
                     <TextView
                         android:id="@+id/tvNombreOferta"
@@ -400,12 +426,12 @@
                         android:layout_marginTop="8dp"
                         android:layout_marginBottom="4dp"
                         android:ellipsize="end"
-                        android:fontFamily="@font/rubik_semibold"
+                        android:fontFamily="@font/montserrat_bold"
                         android:gravity="center"
                         android:maxLines="3"
                         android:textColor="@color/oferta_text_black"
                         android:textSize="@dimen/text_size_nombre_oferta"
-                        android:textStyle="bold|italic" />
+                        android:textStyle="bold" />
 
                     <TextView
                         android:id="@+id/tvTotalRef"
@@ -413,11 +439,11 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
                         android:layout_marginBottom="4dp"
-                        android:fontFamily="@font/rubik_semibold"
+                        android:fontFamily="@font/montserrat_black"
                         android:text="@string/total_ref"
                         android:textColor="@color/oferta_text_black"
                         android:textSize="30sp"
-                        android:textStyle="bold|italic" />
+                        android:textStyle="bold" />
 
                     <TextView
                         android:id="@+id/tvPrecioOferta"
@@ -425,33 +451,36 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:layout_marginBottom="4dp"
-                        android:fontFamily="@font/rubik_semibold"
+                        android:fontFamily="@font/montserrat_black"
                         android:textColor="@color/oferta_text_black"
                         android:textSize="@dimen/text_size_precio_oferta"
-                        android:textStyle="bold|italic" />
+                        android:textStyle="bold" />
 
                     <TextView
                         android:id="@+id/tvPrecioBsOferta"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:fontFamily="@font/rubik_semibold"
+                        android:fontFamily="@font/montserrat_extrabold"
                         android:gravity="center"
                         android:textColor="@color/oferta_text_black"
                         android:textSize="@dimen/text_size_precio_bs_oferta"
-                        android:textStyle="bold|italic" />
+                        android:textStyle="bold" />
 
                     <TextView
                         android:id="@+id/tvIvaOferta"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:fontFamily="@font/rubik_semibold"
+                        android:fontFamily="@font/montserrat_bold"
                         android:text="@string/iva_incluido"
                         android:textColor="@color/oferta_text_black"
                         android:textSize="30sp"
-                        android:textStyle="bold|italic" />
-                </LinearLayout>
+                        android:textStyle="bold" />
+
+                    </LinearLayout>
+
+                </FrameLayout>
 
             </androidx.constraintlayout.widget.ConstraintLayout>
 

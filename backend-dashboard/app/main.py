@@ -61,9 +61,10 @@ async def websocket_notificaciones(websocket: WebSocket):
     from app.dependencies import get_user_from_token
     
     token = websocket.query_params.get("token")
-    logger.info(f"WebSocket solicitado con token: {token[:20]}..." if token else "WebSocket sin token")
+    logger.info(f"WebSocket solicitado con token: {token[:30]}..." if token else "WebSocket sin token")
     
     if not token:
+        logger.warning("WebSocket cerrado: sin token")
         await websocket.close(code=4001)
         return
     
@@ -73,6 +74,7 @@ async def websocket_notificaciones(websocket: WebSocket):
         logger.info(f"WebSocket autenticado para user_id: {user_id}")
         
         if not user_id:
+            logger.warning("WebSocket cerrado: user_id no válido")
             await websocket.close(code=4001)
             return
         
@@ -82,6 +84,7 @@ async def websocket_notificaciones(websocket: WebSocket):
                 await websocket.receive_text()
         except WebSocketDisconnect:
             manager.disconnect(websocket, user_id)
+            logger.info(f"WebSocket desconectado: user_id={user_id}")
     except Exception as e:
         logger.error(f"Error en WebSocket: {e}")
         await websocket.close(code=4001)

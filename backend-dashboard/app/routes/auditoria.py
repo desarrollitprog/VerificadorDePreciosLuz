@@ -182,8 +182,8 @@ async def obtener_auditoria(
                     Dispositivo.codigo_kiosko,
                     ") desconectado del servidor '",
                     func.coalesce(ServidorSecundario.nombre, "Desconocido"),
-                    "'. Duración: ",
-                    DispositivoSesion.duracion_segundos
+                    "'. Se conectó el ",
+                    DispositivoSesion.inicio
                 )
             ).label("descripcion"),
             Dispositivo.codigo_kiosko.label("dispositivo_id"),

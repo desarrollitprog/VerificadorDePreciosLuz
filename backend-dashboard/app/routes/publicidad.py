@@ -68,6 +68,7 @@ class BannerMetadataBody(BaseModel):
     activo: Optional[bool] = None
     fecha_inicio: Optional[datetime] = None
     fecha_fin: Optional[datetime] = None
+    titulo: Optional[str] = None
 
 
 class AsignacionCreate(BaseModel):
@@ -737,11 +738,14 @@ async def actualizar_banner_metadata(
     prev_activo = banner.Activo
     prev_inicio = banner.FechaInicio
     prev_fin = banner.FechaFin
+    prev_titulo = banner.Titulo
 
     if body.activo is not None:
         banner.Activo = body.activo
     banner.FechaInicio = fecha_inicio
     banner.FechaFin = fecha_fin
+    if body.titulo is not None:
+        banner.Titulo = body.titulo
 
     await db.commit()
     await db.refresh(banner)

@@ -3,6 +3,7 @@ import { useNotification } from '../components/useNotification';
 import { Search, UploadCloud, MoreVertical, Eye, Trash, Film, Plus, Server, Smartphone, ChevronDown, ChevronRight } from 'lucide-react';
 import { getVideos, uploadMedia, deleteVideo, sincronizarServidores, updateBannerMetadata, updateBannerAsignations, FileMetadata } from '../services/videoService';
 import { Video, Servidor } from '../types';
+import { ServerDeviceSelector } from '../components/ServerDeviceSelector';
 import {
   getForceSyncJobStatus,
   getSecondaryServersVideoCounts,
@@ -100,7 +101,7 @@ export const DashboardScreen: React.FC = () => {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [currentEditIndex, setCurrentEditIndex] = useState<number | null>(null);
   const [servidores, setServidores] = useState<Servidor[]>([]);
-  const [expandedServers, setExpandedServers] = useState<number[]>([]);
+  const [uploadExpandedServers, setUploadExpandedServers] = useState<number[]>([]);
 
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncServerProgress, setSyncServerProgress] = useState<SyncServerProgress[]>([]);
@@ -917,117 +918,59 @@ export const DashboardScreen: React.FC = () => {
                           </span>
                         </label>
                         {!fileMetadatas[idx]?.asignacionTodos && (
-                          <div className="space-y-2">
-                            <p className="text-xs font-medium text-slate-600 dark:text-slate-400 flex items-center gap-1">
-                              <Server size={12} />
-                              Seleccionar servidores:
-                            </p>
-                            <div className="max-h-32 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-lg p-2 space-y-1">
-                              {servidores.length === 0 ? (
-                                <p className="text-xs text-slate-500">No hay servidores disponibles</p>
-                              ) : (
-                                servidores.map(srv => (
-                                  <div key={srv.id}>
-                                    <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 p-1.5 rounded">
-                                      <input
-                                        type="checkbox"
-                                        checked={(fileMetadatas[idx]?.servidorIds || []).includes(Number(srv.id))}
-                                        onChange={(e) => {
-                                          e.stopPropagation();
-                                          const servidorId = Number(srv.id);
-                                          setFileMetadatas(prevMetas => {
-                                            const newMetas = [...prevMetas];
-                                            const currentIds = [...(newMetas[idx]?.servidorIds || [])];
-                                            if (currentIds.includes(servidorId)) {
-                                              newMetas[idx] = {
-                                                ...newMetas[idx],
-                                                asignacionTodos: false,
-                                                servidorIds: currentIds.filter(id => id !== servidorId)
-                                              };
-                                            } else {
-                                              newMetas[idx] = {
-                                                ...newMetas[idx],
-                                                asignacionTodos: false,
-                                                servidorIds: [...currentIds, servidorId]
-                                              };
-                                            }
-                                            return newMetas;
-                                          });
-                                        }}
-                                        className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
-                                      />
-                                      <span className="text-sm text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                                        <Server size={12} />
-                                        {srv.nombre}
-                                        <span className={`text-[10px] px-1 py-0.5 rounded ${srv.online ? 'bg-emerald-500/10 text-emerald-500' : 'bg-slate-500/10 text-slate-500'}`}>
-                                          {srv.online ? 'Online' : 'Offline'}
-                                        </span>
-                                      </span>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setExpandedServers(prev =>
-                                            prev.includes(srv.id)
-                                              ? prev.filter(id => id !== srv.id)
-                                              : [...prev, srv.id]
-                                          );
-                                        }}
-                                        className="ml-auto p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded"
-                                      >
-                                        {expandedServers.includes(srv.id) ? (
-                                          <ChevronDown size={14} className="text-slate-500" />
-                                        ) : (
-                                          <ChevronRight size={14} className="text-slate-500" />
-                                        )}
-                                      </button>
-                                    </label>
-                                    {expandedServers.includes(srv.id) && srv.dispositivos && srv.dispositivos.length > 0 && (
-                                      <div className="ml-6 mt-1 space-y-0.5">
-                                        {srv.dispositivos.map(disp => (
-                                        <label key={`${srv.id}-${disp.id}`} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 p-1 rounded">
-                                          <input
-                                            type="checkbox"
-                                            checked={(fileMetadatas[idx]?.dispositivoIds || []).includes(disp.id)}
-                                            onChange={(e) => {
-                                              e.stopPropagation();
-                                              const dispositivoId = disp.id;
-                                              setFileMetadatas(prevMetas => {
-                                                const newMetas = [...prevMetas];
-                                                const currentIds = [...(newMetas[idx]?.dispositivoIds || [])];
-                                                if (currentIds.includes(dispositivoId)) {
-                                                  newMetas[idx] = {
-                                                    ...newMetas[idx],
-                                                    asignacionTodos: false,
-                                                    dispositivoIds: currentIds.filter(id => id !== dispositivoId)
-                                                  };
-                                                } else {
-                                                  newMetas[idx] = {
-                                                    ...newMetas[idx],
-                                                    asignacionTodos: false,
-                                                    dispositivoIds: [...currentIds, dispositivoId]
-                                                  };
-                                                }
-                                                return newMetas;
-                                              });
-                                            }}
-                                            className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
-                                          />
-                                          <span className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1">
-                                            <Smartphone size={10} />
-                                            {disp.nombre_amigable || disp.codigo_kiosko}
-                                          </span>
-                                        </label>
-                                      ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                ))
-                              )}
-                            </div>
-                            <p className="text-[10px] text-slate-500">
-                              Seleccionados: {fileMetadatas[idx]?.servidorIds.length || 0} servidores, {fileMetadatas[idx]?.dispositivoIds.length || 0} dispositivos
-                            </p>
-                          </div>
+                          <ServerDeviceSelector
+                            servidores={servidores}
+                            selectedServidorIds={fileMetadatas[idx]?.servidorIds || []}
+                            selectedDispositivoIds={fileMetadatas[idx]?.dispositivoIds || []}
+                            onServidorChange={(servidorId, checked) => {
+                              setFileMetadatas(prevMetas => {
+                                const newMetas = [...prevMetas];
+                                const currentIds = [...(newMetas[idx]?.servidorIds || [])];
+                                if (checked) {
+                                  newMetas[idx] = {
+                                    ...newMetas[idx],
+                                    asignacionTodos: false,
+                                    servidorIds: [...currentIds, servidorId]
+                                  };
+                                } else {
+                                  newMetas[idx] = {
+                                    ...newMetas[idx],
+                                    asignacionTodos: false,
+                                    servidorIds: currentIds.filter(id => id !== servidorId)
+                                  };
+                                }
+                                return newMetas;
+                              });
+                            }}
+                            onDispositivoChange={(dispositivoId, checked) => {
+                              setFileMetadatas(prevMetas => {
+                                const newMetas = [...prevMetas];
+                                const currentIds = [...(newMetas[idx]?.dispositivoIds || [])];
+                                if (checked) {
+                                  newMetas[idx] = {
+                                    ...newMetas[idx],
+                                    asignacionTodos: false,
+                                    dispositivoIds: [...currentIds, dispositivoId]
+                                  };
+                                } else {
+                                  newMetas[idx] = {
+                                    ...newMetas[idx],
+                                    asignacionTodos: false,
+                                    dispositivoIds: currentIds.filter(id => id !== dispositivoId)
+                                  };
+                                }
+                                return newMetas;
+                              });
+                            }}
+                            expandedServidores={uploadExpandedServers}
+                            onToggleExpand={(id) => {
+                              setUploadExpandedServers(prev =>
+                                prev.includes(id)
+                                  ? prev.filter(srvId => srvId !== id)
+                                  : [...prev, id]
+                              );
+                            }}
+                          />
                         )}
                       </div>
                       {/* Feedback por archivo */}
@@ -1090,92 +1033,35 @@ export const DashboardScreen: React.FC = () => {
               </label>
               
               {!syncAllDevices && (
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-slate-600 dark:text-slate-400 flex items-center gap-1">
-                    <Server size={12} />
-                    Seleccionar servidores:
-                  </p>
-                  <div className="max-h-32 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-lg p-2 space-y-1">
-                    {servidores.length === 0 ? (
-                      <p className="text-xs text-slate-500">No hay servidores disponibles</p>
-                    ) : (
-                      servidores.map(srv => (
-                        <div key={srv.id}>
-                          <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 p-1.5 rounded">
-                            <input
-                              type="checkbox"
-                              checked={syncServidorIds.includes(Number(srv.id))}
-                              onChange={e => {
-                                e.stopPropagation();
-                                const servidorId = Number(srv.id);
-                                setSyncServidorIds(prev => {
-                                  if (prev.includes(servidorId)) {
-                                    return prev.filter(id => id !== servidorId);
-                                  }
-                                  return [...prev, servidorId];
-                                });
-                              }}
-                              className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
-                            />
-                            <span className="text-sm text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                              <Server size={12} />
-                              {srv.nombre}
-                              <span className={`text-[10px] px-1 py-0.5 rounded ${srv.online ? 'bg-emerald-500/10 text-emerald-500' : 'bg-slate-500/10 text-slate-500'}`}>
-                                {srv.online ? 'Online' : 'Offline'}
-                              </span>
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSyncExpandedServers(prev =>
-                                  prev.includes(srv.id)
-                                    ? prev.filter(id => id !== srv.id)
-                                    : [...prev, srv.id]
-                                );
-                              }}
-                              className="ml-auto p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded"
-                            >
-                              {syncExpandedServers.includes(srv.id) ? (
-                                <ChevronDown size={14} className="text-slate-500" />
-                              ) : (
-                                <ChevronRight size={14} className="text-slate-500" />
-                              )}
-                            </button>
-                          </label>
-                          {syncExpandedServers.includes(srv.id) && srv.dispositivos && srv.dispositivos.length > 0 && (
-                            <div className="ml-6 mt-1 space-y-0.5">
-                              {srv.dispositivos.map(disp => (
-                                <label key={`${srv.id}-${disp.id}`} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 p-1 rounded">
-                                  <input
-                                    type="checkbox"
-                                    checked={syncDispositivoIds.includes(disp.id)}
-                                    onChange={e => {
-                                      e.stopPropagation();
-                                      setSyncDispositivoIds(prev => {
-                                        if (prev.includes(disp.id)) {
-                                          return prev.filter(id => id !== disp.id);
-                                        }
-                                        return [...prev, disp.id];
-                                      });
-                                    }}
-                                    className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
-                                  />
-                                  <span className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1">
-                                    <Smartphone size={10} />
-                                    {disp.nombre_amigable || disp.codigo_kiosko}
-                                  </span>
-                                </label>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                  <p className="text-[10px] text-slate-500">
-                    Seleccionados: {syncServidorIds.length} servidores, {syncDispositivoIds.length} dispositivos
-                  </p>
-                </div>
+                <ServerDeviceSelector
+                  servidores={servidores}
+                  selectedServidorIds={syncServidorIds}
+                  selectedDispositivoIds={syncDispositivoIds}
+                  onServidorChange={(id, checked) => {
+                    setSyncServidorIds(prev => {
+                      if (checked) {
+                        return [...prev, id];
+                      }
+                      return prev.filter(srvId => srvId !== id);
+                    });
+                  }}
+                  onDispositivoChange={(id, checked) => {
+                    setSyncDispositivoIds(prev => {
+                      if (checked) {
+                        return [...prev, id];
+                      }
+                      return prev.filter(dispId => dispId !== id);
+                    });
+                  }}
+                  expandedServidores={syncExpandedServers}
+                  onToggleExpand={(id) => {
+                    setSyncExpandedServers(prev =>
+                      prev.includes(id)
+                        ? prev.filter(srvId => srvId !== id)
+                        : [...prev, id]
+                    );
+                  }}
+                />
               )}
             </div>
 
@@ -1288,82 +1174,35 @@ export const DashboardScreen: React.FC = () => {
                 </label>
                 
                 {!editAsignacionTodos && (
-                  <div className="space-y-2 max-h-40 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-lg p-2">
-                    {servidores.length === 0 ? (
-                      <p className="text-xs text-slate-500">No hay servidores disponibles</p>
-                    ) : (
-                      servidores.map(srv => (
-                        <div key={srv.id}>
-                          <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 p-1.5 rounded">
-                            <input
-                              type="checkbox"
-                              checked={editServidorIds.includes(Number(srv.id))}
-                              onChange={e => {
-                                e.stopPropagation();
-                                const servidorId = Number(srv.id);
-                                if (e.target.checked) {
-                                  setEditServidorIds([...editServidorIds, servidorId]);
-                                } else {
-                                  setEditServidorIds(editServidorIds.filter(id => id !== servidorId));
-                                }
-                              }}
-                              className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
-                            />
-                            <span className="text-sm text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                              <Server size={12} />
-                              {srv.nombre}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditExpandedServers(prev =>
-                                  prev.includes(srv.id)
-                                    ? prev.filter(id => id !== srv.id)
-                                    : [...prev, srv.id]
-                                );
-                              }}
-                              className="ml-auto p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded"
-                            >
-                              {editExpandedServers.includes(srv.id) ? (
-                                <ChevronDown size={14} className="text-slate-500" />
-                              ) : (
-                                <ChevronRight size={14} className="text-slate-500" />
-                              )}
-                            </button>
-                          </label>
-                          {editExpandedServers.includes(srv.id) && srv.dispositivos && srv.dispositivos.length > 0 && (
-                            <div className="ml-6 mt-1 space-y-0.5">
-                              {srv.dispositivos.map(disp => (
-                                <label key={`${srv.id}-${disp.id}`} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 p-1 rounded">
-                                  <input
-                                    type="checkbox"
-                                    checked={editDispositivoIds.includes(disp.id)}
-                                    onChange={e => {
-                                      e.stopPropagation();
-                                      if (e.target.checked) {
-                                        setEditDispositivoIds([...editDispositivoIds, disp.id]);
-                                      } else {
-                                        setEditDispositivoIds(editDispositivoIds.filter(id => id !== disp.id));
-                                      }
-                                    }}
-                                    className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
-                                  />
-                                  <span className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1">
-                                    <Smartphone size={10} />
-                                    {disp.nombre_amigable || disp.codigo_kiosko}
-                                  </span>
-                                </label>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))
-                    )}
-                  </div>
+                  <ServerDeviceSelector
+                    servidores={servidores}
+                    selectedServidorIds={editServidorIds}
+                    selectedDispositivoIds={editDispositivoIds}
+                    onServidorChange={(id, checked) => {
+                      if (checked) {
+                        setEditServidorIds([...editServidorIds, id]);
+                      } else {
+                        setEditServidorIds(editServidorIds.filter(srvId => srvId !== id));
+                      }
+                    }}
+                    onDispositivoChange={(id, checked) => {
+                      if (checked) {
+                        setEditDispositivoIds([...editDispositivoIds, id]);
+                      } else {
+                        setEditDispositivoIds(editDispositivoIds.filter(dispId => dispId !== id));
+                      }
+                    }}
+                    expandedServidores={editExpandedServers}
+                    onToggleExpand={(id) => {
+                      setEditExpandedServers(prev =>
+                        prev.includes(id)
+                          ? prev.filter(srvId => srvId !== id)
+                          : [...prev, id]
+                      );
+                    }}
+                    maxHeight="max-h-40"
+                  />
                 )}
-                <p className="text-[10px] text-slate-500 mt-2">
-                  Seleccionados: {editServidorIds.length} servidores, {editDispositivoIds.length} dispositivos
-                </p>
               </div>
             </div>
 
@@ -1390,6 +1229,7 @@ export const DashboardScreen: React.FC = () => {
                     // Actualizar metadata
                     await updateBannerMetadata(editingVideo.id, {
                       activo: editFormData.activo,
+                      titulo: editFormData.titulo || '',
                       fechaInicio: editFormData.fechaInicio || null,
                       fechaFin: editFormData.fechaFin || null,
                     });

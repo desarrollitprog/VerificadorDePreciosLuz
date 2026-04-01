@@ -5,6 +5,7 @@ export interface UpdateBannerMetadataPayload {
   activo?: boolean;
   fechaInicio?: string | null;
   fechaFin?: string | null;
+  titulo?: string;
 }
 
 export interface UploadMediaPayload {

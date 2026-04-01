@@ -1130,3 +1130,105 @@ async def obtener_estado_sincronizacion(
         "job_id": job_id,
         **job,
     }
+
+
+@router.delete("/dispositivos/{device_id}")
+async def eliminar_dispositivo(
+    device_id: str,
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_admin),
+):
+    stmt = select(Dispositivo).where(Dispositivo.codigo_kiosko == device_id)
+    result = await db.execute(stmt)
+    dispositivo = result.scalars().first()
+    result.close()
+
+    if not dispositivo:
+        raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
+
+    # Eliminar asignaciones de publicidad relacionadas
+    from app.models.asignacion import PublicidadAsignacion
+    from sqlalchemy import delete as sql_delete
+
+    stmt_asig = sql_delete(PublicidadAsignacion).where(
+        PublicidadAsignacion.dispositivo_id == device_id
+    )
+    await db.execute(stmt_asig)
+
+    # Eliminar sesiones relacionadas
+    stmt_ses = sql_delete(DispositivoSesion).where(
+        DispositivoSesion.dispositivo_id == device_id
+    )
+    await db.execute(stmt_ses)
+
+    servidor_id = dispositivo.servidor_id
+    nombre_para_log = dispositivo.nombre_amigable or dispositivo.codigo_kiosko
+
+    await db.delete(dispositivo)
+    await db.commit()
+
+    user_id = current_user.get("user_id") if current_user else None
+    if user_id is not None:
+        try:
+            await registrar_accion(
+                db,
+                user_id,
+                "ELIMINAR_DISPOSITIVO",
+                f"Dispositivo '{nombre_para_log}' ({device_id}) eliminado",
+                dispositivo_id=device_id,
+                servidor_id=servidor_id,
+            )
+        except Exception as e:
+            logger.warning("No se pudo registrar auditoría de eliminación de dispositivo %s: %s", device_id, e)
+
+    return {"success": True, "message": f"Dispositivo {device_id} eliminado correctamente"}
+
+
+@router.delete("/servidores/{server_id}")
+async def eliminar_servidor(
+    server_id: int,
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_admin),
+):
+    stmt = select(ServidorSecundario).where(ServidorSecundario.id == server_id)
+    result = await db.execute(stmt)
+    servidor = result.scalars().first()
+    result.close()
+
+    if not servidor:
+        raise HTTPException(status_code=404, detail="Servidor no encontrado")
+
+    nombre_para_log = servidor.nombre
+    ip_para_log = servidor.ip
+
+    # Eliminar asignaciones de publicidad relacionadas (CASCADE ya lo hace, pero por seguridad)
+    from app.models.asignacion import PublicidadAsignacion
+    from sqlalchemy import delete as sql_delete
+
+    stmt_asig = sql_delete(PublicidadAsignacion).where(
+        PublicidadAsignacion.servidor_id == server_id
+    )
+    await db.execute(stmt_asig)
+
+    # Desvincular dispositivos (SET NULL en servidor_id)
+    stmt_disp = Dispositivo.__table__.update().where(
+        Dispositivo.servidor_id == server_id
+    ).values(servidor_id=None)
+    await db.execute(stmt_disp)
+
+    await db.delete(servidor)
+    await db.commit()
+
+    user_id = current_user.get("user_id") if current_user else None
+    if user_id is not None:
+        try:
+            await registrar_accion(
+                db,
+                user_id,
+                "ELIMINAR_SERVIDOR",
+                f"Servidor '{nombre_para_log}' ({ip_para_log}) eliminado",
+            )
+        except Exception as e:
+            logger.warning("No se pudo registrar auditoría de eliminación de servidor %s: %s", server_id, e)
+
+    return {"success": True, "message": f"Servidor {server_id} eliminado correctamente"}

@@ -255,10 +255,8 @@ async def obtener_auditoria(
         descripcion = row.descripcion
         if sesion_fin_val is not None and row.sesion_inicio:
             inicio_venezuela = _to_venezuela_time(row.sesion_inicio)
-            descripcion = row.descripcion.replace(
-                "Se conectó el " + str(row.sesion_inicio),
-                "Se conectó el " + inicio_venezuela.strftime("%Y-%m-%d %H:%M:%S")
-            )
+            inicio_str = inicio_venezuela.strftime("%Y-%m-%d %H:%M:%S")
+            descripcion = f"Dispositivo '{row.dispositivo_nombre or row.dispositivo_id}' ({row.dispositivo_id}) desconectado del servidor '{row.servidor_nombre or 'Desconocido'}'. Se conectó el {inicio_str}"
         items.append({
             "id": row.id,
             "fecha": _to_venezuela_time(row.fecha).isoformat() if row.fecha else None,

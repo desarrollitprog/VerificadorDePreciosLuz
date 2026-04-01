@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db_usuarios
 from app.dependencies import get_current_admin
 from app.models.notificacion import Notificacion
+from app.models.notificacion_leida import NotificacionLeida
 from app.models.dispositivo_sesion import DispositivoSesion
 from app.models.dispositivo import Dispositivo
 from app.models.servidor_secundario import ServidorSecundario
@@ -237,9 +238,17 @@ async def obtener_auditoria(
             Notificacion.usuario_id,
             Usuario.nombre_usuario.label("usuario_nombre"),
             literal_column("'notificacion'").label("origen"),
+            NotificacionLeida.id.label("leida_id"),
         )
         .select_from(Notificacion)
         .outerjoin(Usuario, Usuario.id == Notificacion.usuario_id)
+        .outerjoin(
+            NotificacionLeida,
+            and_(
+                NotificacionLeida.notificacion_id == Notificacion.id,
+                NotificacionLeida.usuario_id == user_id
+            )
+        )
     )
     
     if notif_conditions:
@@ -275,6 +284,7 @@ async def obtener_auditoria(
             "duracion_segundos": row.duracion_segundos,
             "usuario": row.usuario,
             "origen": row.origen,
+            "leida": None,
         })
     
     for row in notif_rows:
@@ -293,6 +303,7 @@ async def obtener_auditoria(
             "duracion_segundos": None,
             "usuario": usuario_str,
             "origen": row.origen,
+            "leida": row.leida_id is not None,
         })
     
     items.sort(key=lambda x: x.get("fecha") or "", reverse=True)

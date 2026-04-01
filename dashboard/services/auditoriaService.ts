@@ -14,6 +14,7 @@ export interface AuditoriaItem {
   duracion_segundos: number | null;
   usuario: string | null;
   origen: 'sesion' | 'notificacion';
+  leida?: boolean | null;
 }
 
 export interface AuditoriaResponse {
@@ -50,4 +51,9 @@ export async function getAuditoria(filtros: AuditoriaFiltros = {}): Promise<Audi
 
   const response = await api.get(`/auditoria?${params.toString()}`);
   return response.data as AuditoriaResponse;
+}
+
+export async function markNotificacionRead(notificacionId: number): Promise<{ success: boolean; message: string }> {
+  const response = await api.patch<{ success: boolean; message: string }>(`/notificaciones/${notificacionId}/marcar-leida`);
+  return response.data;
 }

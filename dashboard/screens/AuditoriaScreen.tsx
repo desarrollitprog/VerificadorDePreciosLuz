@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Search, Filter, ChevronLeft, ChevronRight, Calendar, Server, Monitor, Clock, X, ChevronDown, ChevronUp, User, RotateCcw } from 'lucide-react';
-import { getAuditoria, AuditoriaItem, AuditoriaFiltros } from '../services/auditoriaService';
+import { Search, Filter, ChevronLeft, ChevronRight, Calendar, Server, Monitor, Clock, X, ChevronDown, ChevronUp, User, RotateCcw, Check, Circle } from 'lucide-react';
+import { getAuditoria, markNotificacionRead, AuditoriaItem, AuditoriaFiltros } from '../services/auditoriaService';
 import { useNotification } from '../components/useNotification';
 
 const PAGE_SIZE = 20;
@@ -119,6 +119,20 @@ export const AuditoriaScreen: React.FC = () => {
 
   const handleRefresh = () => {
     fetchAuditoria(page);
+  };
+
+  const handleMarkAsRead = async (item: AuditoriaItem) => {
+    if (item.origen !== 'notificacion' || item.leida === true) return;
+    
+    try {
+      await markNotificacionRead(item.id);
+      setItems(prev => prev.map(i => 
+        i.id === item.id && i.origen === 'notificacion' ? { ...i, leida: true } : i
+      ));
+      showNotification('Notificación marcada como leída', 'success', 2000);
+    } catch (error) {
+      showNotification('Error al marcar notificación', 'error', 4000);
+    }
   };
 
   const handleSearch = () => {
@@ -276,12 +290,15 @@ export const AuditoriaScreen: React.FC = () => {
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Duración
                 </th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  Estado
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
                     <div className="flex items-center justify-center gap-2">
                       <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
                       Cargando...
@@ -297,8 +314,11 @@ export const AuditoriaScreen: React.FC = () => {
               ) : (
                 items.map((item) => {
                   const badge = getTypeBadge(item.tipo);
+                  const isLeida = item.leida === true;
+                  const isNotificacion = item.origen === 'notificacion';
+                  
                   return (
-                    <tr key={`${item.origen}-${item.id}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                    <tr key={`${item.origen}-${item.id}`} className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors ${isLeida ? 'bg-slate-50 dark:bg-slate-900/30' : ''}`}>
                       <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap">
                         {formatDate(item.fecha)}
                       </td>
@@ -332,6 +352,17 @@ export const AuditoriaScreen: React.FC = () => {
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap">
                         {formatDuration(item.duracion_segundos)}
+                      </td>
+                      <td className="px-4 py-3">
+                        {isNotificacion && (
+                          <button
+                            onClick={() => handleMarkAsRead(item)}
+                            title={isLeida ? 'Leída' : 'Marcar como leída'}
+                            className={`p-1.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors ${isLeida ? 'text-green-500' : 'text-blue-400'}`}
+                          >
+                            {isLeida ? <Check size={16} /> : <Circle size={16} />}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );

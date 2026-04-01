@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Bell, AlertTriangle, ChevronRight } from 'lucide-react';
+import { Bell, AlertTriangle, ChevronRight, Check, Circle } from 'lucide-react';
 import { useNotification } from './useNotification';
-import { deleteReadNotificaciones, fetchNotificaciones, markNotificacionesRead, Notificacion } from '../services/notificacionesService';
+import { deleteReadNotificaciones, fetchNotificaciones, markNotificacionesRead, markNotificacionRead, Notificacion } from '../services/notificacionesService';
 import { toNotificationViewModel } from '../services/notificacionesPresentation';
 import { Screen } from '../types';
 
@@ -212,14 +212,38 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = ({ onNa
                   const exactTime = utcDate.toLocaleString('es-VE', { timeZone: 'America/Caracas' });
                   const relativeTime = getRelativeTimeLabel(n.fecha_creacion);
                   const nombreUsuario = n.nombre_usuario || 'Desconocido';
+                  const isLeida = n.leida === true;
+                  
+                  const handleMarkAsRead = async (e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    if (!isLeida) {
+                      try {
+                        await markNotificacionRead(n.id);
+                        setNotificaciones(prev => prev.map(notif => 
+                          notif.id === n.id ? { ...notif, leida: true } : notif
+                        ));
+                        setUnreadCount(prev => Math.max(0, prev - 1));
+                      } catch (err) {
+                        // Silent fail
+                      }
+                    }
+                  };
+                  
                   return (
                     <div
                       key={n.id}
-                      className={`px-4 py-3 border-b last:border-b-0 border-slate-100 dark:border-slate-800 ${isError ? 'bg-red-50 dark:bg-red-900/30' : ''}`}
+                      className={`px-4 py-3 border-b last:border-b-0 border-slate-100 dark:border-slate-800 ${isLeida ? 'bg-slate-50 dark:bg-slate-900/50' : 'bg-white dark:bg-[#111a22]'} ${isError ? 'bg-red-50 dark:bg-red-900/30' : ''}`}
                     >
                       <div className="flex items-center gap-2 mb-1 justify-between">
                         <div className="text-xs text-slate-500" title={exactTime}>{relativeTime} · {exactTime}</div>
                         <div className="flex items-center gap-2">
+                          <button
+                            onClick={handleMarkAsRead}
+                            title={isLeida ? 'Marcar como no leída' : 'Marcar como leída'}
+                            className={`p-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors ${isLeida ? 'text-green-500' : 'text-blue-400'}`}
+                          >
+                            {isLeida ? <Check size={14} /> : <Circle size={14} />}
+                          </button>
                           {actionBadge && (
                             <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${actionBadge.classes}`}>{actionBadge.label}</span>
                           )}
@@ -232,9 +256,8 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = ({ onNa
                         </div>
                       </div>
                       <div className="text-xs text-primary font-semibold mb-1">Usuario: {nombreUsuario}</div>
-                      <div className={`text-sm font-medium ${isError ? 'text-red-700 dark:text-red-400' : 'text-slate-900 dark:text-white'}`}>{view.title}</div>
-                      <div className={`text-sm ${isError ? 'text-red-800 dark:text-red-200' : 'text-slate-700 dark:text-slate-300'}`}>{view.message}</div>
-                      {/* Mostrar detalle técnico solo si existe y es distinto del mensaje principal */}
+                      <div className={`text-sm font-medium ${isError ? 'text-red-700 dark:text-red-400' : isLeida ? 'text-slate-600 dark:text-slate-400' : 'text-slate-900 dark:text-white'}`}>{view.title}</div>
+                      <div className={`text-sm ${isError ? 'text-red-800 dark:text-red-200' : isLeida ? 'text-slate-500 dark:text-slate-500' : 'text-slate-700 dark:text-slate-300'}`}>{view.message}</div>
                       {view.detail && view.detail !== view.message && (
                         <div className="text-xs text-slate-500 mt-1">Detalle técnico: {view.detail}</div>
                       )}

@@ -26,8 +26,8 @@ app.add_middleware(
 	CORSMiddleware,
 	allow_origins=allowed_origins,
 	allow_credentials=True,
-	allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-	allow_headers=["Authorization", "Content-Type", "X-API-KEY"],
+	allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "GET"],
+	allow_headers=["Authorization", "Content-Type", "X-API-KEY", "Upgrade"],
 )
 
 
@@ -61,6 +61,8 @@ async def websocket_notificaciones(websocket: WebSocket):
     from app.dependencies import get_user_from_token
     
     token = websocket.query_params.get("token")
+    logger.info(f"WebSocket solicitado con token: {token[:20]}..." if token else "WebSocket sin token")
+    
     if not token:
         await websocket.close(code=4001)
         return
@@ -68,6 +70,8 @@ async def websocket_notificaciones(websocket: WebSocket):
     try:
         user_data = await get_user_from_token(token)
         user_id = user_data.get("user_id")
+        logger.info(f"WebSocket autenticado para user_id: {user_id}")
+        
         if not user_id:
             await websocket.close(code=4001)
             return

@@ -4,7 +4,7 @@ import logging
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import select, func, case, or_
+from sqlalchemy import select, func, case, or_, literal
 from sqlalchemy.sql import literal_column
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -166,15 +166,15 @@ async def obtener_auditoria(
             ).label("tipo"),
             case(
                 (DispositivoSesion.fin == None,
-                 func.concat(
-                     "Dispositivo '",
-                     func.coalesce(Dispositivo.nombre_amigable, Dispositivo.codigo_kiosko),
-                     "' (",
-                     Dispositivo.codigo_kiosko,
-                     ") conectado al servidor '",
-                     func.coalesce(ServidorSecundario.nombre, "Desconocido"),
-                     "'"
-                 )),
+                  func.concat(
+                      "Dispositivo '",
+                      func.coalesce(Dispositivo.nombre_amigable, Dispositivo.codigo_kiosko),
+                      "' (",
+                      Dispositivo.codigo_kiosko,
+                      ") conectado al servidor '",
+                      func.coalesce(ServidorSecundario.nombre, "Desconocido"),
+                      "'"
+                  )),
                 else_=func.concat(
                     "Dispositivo '",
                     func.coalesce(Dispositivo.nombre_amigable, Dispositivo.codigo_kiosko),
@@ -252,11 +252,18 @@ async def obtener_auditoria(
     for row in sesion_rows:
         sesion_fin_val = row.sesion_fin
         sesion_tipo = "DESCONEXION_DISPOSITIVO" if sesion_fin_val is not None else "CONEXION_DISPOSITIVO"
+        descripcion = row.descripcion
+        if sesion_fin_val is not None and row.sesion_inicio:
+            inicio_venezuela = _to_venezuela_time(row.sesion_inicio)
+            descripcion = row.descripcion.replace(
+                "Se conectó el " + str(row.sesion_inicio),
+                "Se conectó el " + inicio_venezuela.strftime("%Y-%m-%d %H:%M:%S")
+            )
         items.append({
             "id": row.id,
             "fecha": _to_venezuela_time(row.fecha).isoformat() if row.fecha else None,
             "tipo": sesion_tipo,
-            "descripcion": row.descripcion,
+            "descripcion": descripcion,
             "dispositivo_id": row.dispositivo_id,
             "dispositivo_nombre": row.dispositivo_nombre,
             "servidor_id": row.servidor_id,

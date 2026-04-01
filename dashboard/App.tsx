@@ -14,7 +14,6 @@ import { Header } from './components/DashboardHeader';
 import { ServerDashboard } from './components/ServerDashboard';
 import { getTokenExpiryMs, hasValidToken, logout } from './services/tokenUtils';
 import { LayoutGrid } from 'lucide-react';
-import { websocketService } from './services/websocketService';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>(() => (hasValidToken() ? 'dashboard' : 'login'));
@@ -62,13 +61,6 @@ export default function App() {
     }, delay);
 
     return () => window.clearTimeout(timeout);
-  }, [currentScreen]);
-
-  useEffect(() => {
-    if (currentScreen !== 'login' && hasValidToken()) {
-      websocketService.connect();
-      return () => websocketService.disconnect();
-    }
   }, [currentScreen]);
 
   const renderScreen = () => {

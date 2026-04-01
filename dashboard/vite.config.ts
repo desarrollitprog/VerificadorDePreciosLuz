@@ -20,12 +20,6 @@ export default defineConfig(({ mode }) => {
             changeOrigin: true,
             secure: false,
           },
-          '/ws': {
-            target: apiUrl,
-            changeOrigin: true,
-            secure: false,
-            ws: true,
-          },
         },
       },
       plugins: [],

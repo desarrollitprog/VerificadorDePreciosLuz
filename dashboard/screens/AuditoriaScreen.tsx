@@ -1,8 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Search, Filter, ChevronLeft, ChevronRight, Calendar, Server, Monitor, Clock, X, ChevronDown, ChevronUp, User } from 'lucide-react';
+import { Search, Filter, ChevronLeft, ChevronRight, Calendar, Server, Monitor, Clock, X, ChevronDown, ChevronUp, User, RotateCcw } from 'lucide-react';
 import { getAuditoria, AuditoriaItem, AuditoriaFiltros } from '../services/auditoriaService';
 import { useNotification } from '../components/useNotification';
-import { websocketService, NotificacionWebSocket } from '../services/websocketService';
 
 const PAGE_SIZE = 20;
 
@@ -118,16 +117,9 @@ export const AuditoriaScreen: React.FC = () => {
     fetchAuditoria();
   }, []);
 
-  useEffect(() => {
-    const unsubscribe = websocketService.subscribe((notificacion: NotificacionWebSocket['data']) => {
-      showNotification(`Nueva actividad: ${notificacion.tipo} - ${notificacion.descripcion}`, 'info', 5000);
-      fetchAuditoria();
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, []);
+  const handleRefresh = () => {
+    fetchAuditoria(page);
+  };
 
   const handleSearch = () => {
     setPage(1);
@@ -190,6 +182,14 @@ export const AuditoriaScreen: React.FC = () => {
             className="px-4 h-10 rounded-lg bg-primary text-white text-sm font-semibold hover:opacity-90"
           >
             Buscar
+          </button>
+          <button
+            onClick={handleRefresh}
+            className="px-4 h-10 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 text-sm font-medium"
+            title="Actualizar datos"
+          >
+            <RotateCcw size={16} />
+            Actualizar
           </button>
         </div>
 

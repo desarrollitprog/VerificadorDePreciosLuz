@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request
 from app.routes import publicidad, auth, monitoreo, usuarios, notificaciones, auditoria
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,8 +26,8 @@ app.add_middleware(
 	CORSMiddleware,
 	allow_origins=allowed_origins,
 	allow_credentials=True,
-	allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "GET"],
-	allow_headers=["Authorization", "Content-Type", "X-API-KEY", "Upgrade"],
+	allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+	allow_headers=["Authorization", "Content-Type", "X-API-KEY"],
 )
 
 
@@ -53,38 +53,3 @@ app.include_router(monitoreo.router, prefix="/api")
 app.include_router(notificaciones.router, prefix="/api")
 app.include_router(auditoria.router, prefix="/api")
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
-
-@app.websocket("/ws/notificaciones")
-async def websocket_notificaciones(websocket: WebSocket):
-    from app.services.websocket_manager import manager
-    from app.dependencies import get_user_from_token
-    
-    token = websocket.query_params.get("token")
-    logger.info(f"WebSocket solicitado con token: {token[:30]}..." if token else "WebSocket sin token")
-    
-    if not token:
-        logger.warning("WebSocket cerrado: sin token")
-        await websocket.close(code=4001)
-        return
-    
-    try:
-        user_data = await get_user_from_token(token)
-        user_id = user_data.get("user_id")
-        logger.info(f"WebSocket autenticado para user_id: {user_id}")
-        
-        if not user_id:
-            logger.warning("WebSocket cerrado: user_id no válido")
-            await websocket.close(code=4001)
-            return
-        
-        await manager.connect(websocket, user_id)
-        try:
-            while True:
-                await websocket.receive_text()
-        except WebSocketDisconnect:
-            manager.disconnect(websocket, user_id)
-            logger.info(f"WebSocket desconectado: user_id={user_id}")
-    except Exception as e:
-        logger.error(f"Error en WebSocket: {e}")
-        await websocket.close(code=4001)

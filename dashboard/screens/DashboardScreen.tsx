@@ -92,6 +92,8 @@ export const DashboardScreen: React.FC = () => {
   }, [preview]);
   const [videos, setVideos] = useState<Video[]>([]);
   const [search, setSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const videosPerPage = 12;
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -126,6 +128,8 @@ export const DashboardScreen: React.FC = () => {
     fechaFin: '',
   });
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [deletingVideoId, setDeletingVideoId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; videoId: string | null; titulo: string }>({ open: false, videoId: null, titulo: '' });
   const [editAsignacionTodos, setEditAsignacionTodos] = useState(true);
   const [editServidorIds, setEditServidorIds] = useState<number[]>([]);
   const [editDispositivoIds, setEditDispositivoIds] = useState<string[]>([]);
@@ -212,6 +216,9 @@ export const DashboardScreen: React.FC = () => {
     setFileMetadatas([]);
     setIsUploadModalOpen(false);
     setCurrentEditIndex(null);
+    setUploadExpandedServers([]);
+    setUploadStatuses([]);
+    setExpandedFiles([]);
   };
 
   const handleUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -345,16 +352,29 @@ export const DashboardScreen: React.FC = () => {
     setUploading(false);
   };
 
-  const handleDelete = async (videoId: string) => {
+  const handleDeleteClick = (videoId: string, titulo: string) => {
+    setConfirmDelete({ open: true, videoId, titulo });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!confirmDelete.videoId) return;
     setError(null);
+    setDeletingVideoId(confirmDelete.videoId);
+    setConfirmDelete({ open: false, videoId: null, titulo: '' });
     try {
-      await deleteVideo(videoId);
-      setVideos(videos.filter(v => v.id !== videoId));
+      await deleteVideo(confirmDelete.videoId);
+      setVideos(videos.filter(v => v.id !== confirmDelete.videoId));
       showNotification('Archivo borrado correctamente', 'success');
     } catch (err: any) {
       setError('Error deleting video');
       showNotification('Error al borrar archivo', 'error');
+    } finally {
+      setDeletingVideoId(null);
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setConfirmDelete({ open: false, videoId: null, titulo: '' });
   };
 
   const handleForceSync = async () => {
@@ -490,11 +510,20 @@ export const DashboardScreen: React.FC = () => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input
               type="text"
-              className="pl-10 pr-4 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-500 focus:ring-2 focus:ring-primary w-full sm:w-64 transition-all"
+              className="pl-10 pr-8 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-500 focus:ring-2 focus:ring-primary w-full sm:w-64 transition-all"
               placeholder="Buscar Videos..."
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              >
+                ×
+              </button>
+            )}
           </div>
           <button
             className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition disabled:opacity-50"
@@ -654,8 +683,12 @@ export const DashboardScreen: React.FC = () => {
                 v.id?.toString().includes(searchLower)
               );
             });
+            // Calcular paginación
+            const totalPages = Math.ceil(filteredVideos.length / videosPerPage);
+            const startIndex = (currentPage - 1) * videosPerPage;
+            const paginatedVideos = filteredVideos.slice(startIndex, startIndex + videosPerPage);
             // Renderizar tarjetas
-            return filteredVideos.length > 0 ? filteredVideos.map((video) => (
+            return paginatedVideos.length > 0 ? paginatedVideos.map((video) => (
               <div key={video.id} className="group relative bg-white dark:bg-[#1c2936] rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 hover:border-primary/40 transition-all hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-900/10 dark:hover:shadow-black/30 flex flex-col">
                 {/* Thumbnail */}
                 <div className="aspect-video bg-slate-800 relative overflow-hidden">
@@ -771,9 +804,15 @@ export const DashboardScreen: React.FC = () => {
                       <Eye size={14} />
                       Reproducir
                     </button>
-                    <button className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors text-xs font-medium" onClick={() => handleDelete(video.id)}>
-                      <Trash size={14} />
-                      Borrar
+                    <button className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors text-xs font-medium disabled:opacity-50" onClick={() => handleDeleteClick(video.id, video.titulo || video.filename)} disabled={deletingVideoId === video.id}>
+                      {deletingVideoId === video.id ? (
+                        <>Borrando...</>
+                      ) : (
+                        <>
+                          <Trash size={14} />
+                          Borrar
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -783,6 +822,54 @@ export const DashboardScreen: React.FC = () => {
             );
           })()}
         </div>
+        
+        {/* Pagination */}
+        {(() => {
+          const filteredVideos = videos.filter(v => {
+            const searchLower = search.toLowerCase();
+            return (
+              v.titulo?.toLowerCase().includes(searchLower) ||
+              v.filename?.toLowerCase().includes(searchLower) ||
+              v.id?.toString().includes(searchLower)
+            );
+          });
+          const totalPages = Math.ceil(filteredVideos.length / videosPerPage);
+          if (totalPages <= 1) return null;
+          return (
+            <div className="flex items-center justify-center gap-2 mt-6">
+              <button
+                type="button"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
+              >
+                Anterior
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                <button
+                  key={page}
+                  type="button"
+                  onClick={() => setCurrentPage(page)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    currentPage === page
+                      ? 'bg-primary text-white'
+                      : 'border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  {page}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
+              >
+                Siguiente
+              </button>
+            </div>
+          );
+        })()}
       </div>
 
       {isUploadModalOpen && (
@@ -1073,6 +1160,7 @@ export const DashboardScreen: React.FC = () => {
                   setSyncAllDevices(true);
                   setSyncServidorIds([]);
                   setSyncDispositivoIds([]);
+                  setSyncExpandedServers([]);
                 }}
                 className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
               >
@@ -1215,6 +1303,7 @@ export const DashboardScreen: React.FC = () => {
                   setEditAsignacionTodos(true);
                   setEditServidorIds([]);
                   setEditDispositivoIds([]);
+                  setEditExpandedServers([]);
                 }}
                 disabled={isSavingEdit}
                 className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
@@ -1224,6 +1313,12 @@ export const DashboardScreen: React.FC = () => {
               <button
                 type="button"
                 onClick={async () => {
+                  const fechaInicio = editFormData.fechaInicio;
+                  const fechaFin = editFormData.fechaFin;
+                  if (fechaInicio && fechaFin && new Date(fechaInicio) > new Date(fechaFin)) {
+                    showNotification('La fecha de inicio no puede ser mayor a la fecha fin', 'warning');
+                    return;
+                  }
                   setIsSavingEdit(true);
                   try {
                     // Actualizar metadata
@@ -1245,6 +1340,10 @@ export const DashboardScreen: React.FC = () => {
                     showNotification('Publicidad actualizada correctamente', 'success');
                     setIsEditModalOpen(false);
                     setEditingVideo(null);
+                    setEditAsignacionTodos(true);
+                    setEditServidorIds([]);
+                    setEditDispositivoIds([]);
+                    setEditExpandedServers([]);
                     // Refresh videos
                     const data = await getVideos();
                     setVideos(data);
@@ -1258,6 +1357,34 @@ export const DashboardScreen: React.FC = () => {
                 className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-semibold disabled:opacity-60"
               >
                 {isSavingEdit ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Delete Modal */}
+      {confirmDelete.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-[#1c2936] rounded-xl shadow-2xl w-full max-w-sm p-6">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Confirmar eliminación</h3>
+            <p className="text-sm text-slate-500 mb-4">
+              ¿Estás seguro de que deseas eliminar <strong className="text-slate-700 dark:text-slate-300">{confirmDelete.titulo}</strong>? Esta acción no se puede deshacer.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={handleDeleteCancel}
+                className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteConfirm}
+                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold"
+              >
+                Eliminar
               </button>
             </div>
           </div>

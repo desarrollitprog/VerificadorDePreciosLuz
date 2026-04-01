@@ -999,9 +999,11 @@ class TabletWebSocketManager:
         self.active_connections: list[WebSocket] = []
         self.device_map: dict[str, WebSocket] = {}  # device_id -> WebSocket
         self.ping_tasks: dict[int, asyncio.Task] = {}  # id(websocket) -> Task
+        self.pending_pong: dict[int, asyncio.Event] = {}  # id(websocket) -> Event (set by main loop when pong arrives)
 
     async def start_ping_loop(self, websocket: WebSocket):
         ws_id = id(websocket)
+        self.pending_pong[ws_id] = asyncio.Event()
 
         async def ping_sender():
             while True:
@@ -1016,8 +1018,16 @@ class TabletWebSocketManager:
                             logger.error(f"[Heartbeat] Redis error para {device_id}: {e}")
 
                     try:
-                        pong_waiter = await websocket.ping()
-                        await asyncio.wait_for(pong_waiter, timeout=WEBSOCKET_PONG_TIMEOUT)
+                        import time
+                        self.pending_pong[ws_id].clear()
+                        await websocket.send_json({
+                            "type": "ping",
+                            "timestamp": int(time.time())
+                        })
+                        await asyncio.wait_for(
+                            self.pending_pong[ws_id].wait(),
+                            timeout=WEBSOCKET_PONG_TIMEOUT
+                        )
                     except asyncio.TimeoutError:
                         logger.warning(
                             f"[Ping] No se recibió pong del dispositivo {device_id or 'desconocido'} "
@@ -1074,7 +1084,9 @@ class TabletWebSocketManager:
             if device_id:
                 old_ws = self.device_map.get(device_id)
                 if old_ws and old_ws is not websocket:
+                    old_ws_id = id(old_ws)
                     self.cancel_ping_task(old_ws)
+                    self.pending_pong.pop(old_ws_id, None)
                     try:
                         await old_ws.close(code=1001, reason="Replaced by new connection")
                     except Exception:
@@ -1090,7 +1102,9 @@ class TabletWebSocketManager:
         self.active_connections.append(websocket)
 
     def disconnect(self, websocket: WebSocket):
+        ws_id = id(websocket)
         self.cancel_ping_task(websocket)
+        self.pending_pong.pop(ws_id, None)
         logger.info(f"[WebSocket] Conexión cerrada. Total conexiones restantes: {len(self.active_connections) - 1}")
 
         if websocket in self.active_connections:
@@ -1496,6 +1510,7 @@ async def websocket_tablet(websocket: WebSocket):
     await tablet_ws_manager.connect(websocket)
     if websocket.client_state.name != "CONNECTED":
         return
+    ws_id = id(websocket)
     asyncio.create_task(tablet_ws_manager.start_ping_loop(websocket))
     try:
         while True:
@@ -1503,9 +1518,22 @@ async def websocket_tablet(websocket: WebSocket):
             try:
                 import json
                 msg = json.loads(data)
-                device_id = msg.get("device_id") or tablet_ws_manager.get_device_id(websocket)
-                if device_id and device_state_store is not None:
+            except Exception:
+                continue
+
+            if msg.get("type") == "pong":
+                event = tablet_ws_manager.pending_pong.get(ws_id)
+                if event:
+                    event.set()
+                continue
+
+            device_id = msg.get("device_id") or tablet_ws_manager.get_device_id(websocket)
+            if device_id and device_state_store is not None:
+                try:
                     await device_state_store.upsert_heartbeat(device_id=device_id)
+                except Exception:
+                    pass
+            try:
                 await process_sync_confirmation(websocket, msg)
             except Exception as e:
                 logging.error(f"Error procesando mensaje de confirmación: {e}")

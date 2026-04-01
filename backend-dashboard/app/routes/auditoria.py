@@ -4,7 +4,7 @@ import logging
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import select, func, case, or_, literal
+from sqlalchemy import select, func, case, or_, literal, and_
 from sqlalchemy.sql import literal_column
 from sqlalchemy.ext.asyncio import AsyncSession
 

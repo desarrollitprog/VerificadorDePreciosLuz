@@ -75,6 +75,8 @@ async def obtener_auditoria(
     """
     offset = (page - 1) * limit
     
+    user_id = current_user.get("user_id") if current_user else None
+    
     sesion_conditions = []
     if busqueda:
         busqueda_lower = busqueda.lower()

@@ -4,6 +4,7 @@ Servicio de auditoría: registra acciones en la tabla Notificacion.
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.notificacion import Notificacion
+from app.services.websocket_manager import manager
 
 
 async def registrar_accion(
@@ -38,4 +39,17 @@ async def registrar_accion(
     db.add(notificacion)
     await db.commit()
     await db.refresh(notificacion)
+
+    await manager.broadcast_to_all({
+        "type": "nueva_notificacion",
+        "data": {
+            "id": notificacion.id,
+            "tipo": notificacion.tipo,
+            "descripcion": notificacion.descripcion,
+            "dispositivo_id": notificacion.dispositivo_id,
+            "servidor_id": notificacion.servidor_id,
+            "fecha_creacion": notificacion.fecha_creacion.isoformat() if notificacion.fecha_creacion else None,
+        }
+    })
+
     return notificacion

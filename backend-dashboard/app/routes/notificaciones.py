@@ -19,6 +19,9 @@ async def listar_notificaciones(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     solo_no_leidas: bool = Query(False),
+    tipo: str = Query(None),
+    fecha_desde: datetime = Query(None),
+    fecha_hasta: datetime = Query(None),
     db: AsyncSession = Depends(get_db_usuarios),
     current_user: dict = Depends(get_current_cliente),
 ):
@@ -33,6 +36,14 @@ async def listar_notificaciones(
             "unread_count": 0,
         }
 
+    conditions = []
+    if tipo:
+        conditions.append(Notificacion.tipo == tipo)
+    if fecha_desde:
+        conditions.append(Notificacion.fecha_creacion >= fecha_desde)
+    if fecha_hasta:
+        conditions.append(Notificacion.fecha_creacion <= fecha_hasta)
+
     unread_count_stmt = (
         select(func.count(Notificacion.id))
         .select_from(Notificacion)
@@ -45,16 +56,18 @@ async def listar_notificaciones(
         )
         .where(NotificacionLeida.notificacion_id.is_(None))
     )
+    if conditions:
+        unread_count_stmt = unread_count_stmt.where(*conditions)
     unread_count_result = await db.execute(unread_count_stmt)
     unread_count = int(unread_count_result.scalar() or 0)
 
     stmt = (
         select(Notificacion, Usuario.nombre_usuario.label("nombre_usuario"))
         .outerjoin(Usuario, Usuario.id == Notificacion.usuario_id)
-        .order_by(Notificacion.fecha_creacion.desc())
-        .offset(offset)
-        .limit(limit)
     )
+    if conditions:
+        stmt = stmt.where(*conditions)
+    stmt = stmt.order_by(Notificacion.fecha_creacion.desc()).offset(offset).limit(limit)
     if solo_no_leidas:
         stmt = stmt.outerjoin(
             NotificacionLeida,
@@ -139,6 +152,42 @@ async def marcar_notificaciones_leidas(
         return {"success": True, "updated": 0}
 
     return {"success": True, "updated": updated}
+
+
+@router.patch("/notificaciones/{notificacion_id}/marcar-leida")
+async def marcar_notificacion_leida(
+    notificacion_id: int,
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_cliente),
+):
+    user_id = current_user.get("user_id") if current_user else None
+    if user_id is None:
+        return {"success": False, "message": "Usuario no autenticado"}
+
+    stmt_check = select(Notificacion).where(Notificacion.id == notificacion_id)
+    result = await db.execute(stmt_check)
+    notificacion = result.scalars().first()
+    if not notificacion:
+        return {"success": False, "message": "Notificación no encontrada"}
+
+    stmt_check_leida = select(NotificacionLeida).where(
+        NotificacionLeida.notificacion_id == notificacion_id,
+        NotificacionLeida.usuario_id == user_id
+    )
+    result_leida = await db.execute(stmt_check_leida)
+    leida_existe = result_leida.scalars().first()
+
+    if leida_existe:
+        return {"success": True, "message": "Notificación ya была marcada como leída"}
+
+    nueva_leida = NotificacionLeida(
+        notificacion_id=notificacion_id,
+        usuario_id=user_id
+    )
+    db.add(nueva_leida)
+    await db.commit()
+
+    return {"success": True, "message": "Notificación marcada como leída"}
 
 
 @router.delete("/notificaciones/leidas")

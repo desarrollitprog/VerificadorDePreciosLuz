@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Search, Filter, ChevronLeft, ChevronRight, Calendar, Server, Monitor, Clock, X, ChevronDown, ChevronUp, User } from 'lucide-react';
 import { getAuditoria, AuditoriaItem, AuditoriaFiltros } from '../services/auditoriaService';
 import { useNotification } from '../components/useNotification';
+import { websocketService, NotificacionWebSocket } from '../services/websocketService';
 
 const PAGE_SIZE = 20;
 
@@ -115,6 +116,17 @@ export const AuditoriaScreen: React.FC = () => {
 
   useEffect(() => {
     fetchAuditoria();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = websocketService.subscribe((notificacion: NotificacionWebSocket['data']) => {
+      showNotification(`Nueva actividad: ${notificacion.tipo} - ${notificacion.descripcion}`, 'info', 5000);
+      fetchAuditoria();
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const handleSearch = () => {

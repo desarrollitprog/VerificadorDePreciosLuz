@@ -5,9 +5,9 @@ Dependencias de seguridad:
 """
 import os
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status, WebSocket
 
-from app.routes.auth import get_current_user
+from app.routes.auth import get_current_user, verificar_token_jwt
 
 
 def get_current_admin(current_user: dict = Depends(get_current_user)):
@@ -29,6 +29,30 @@ def get_current_cliente(current_user: dict = Depends(get_current_user)):
             detail="Se requiere rol de cliente o administrador",
         )
     return current_user
+
+
+async def get_user_from_token(token: str) -> dict:
+    """
+    Extrae información del usuario desde un token JWT.
+    Uso: WebSocket authentication.
+    """
+    payload = verificar_token_jwt(token)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido o expirado",
+        )
+    user_id = payload.get("user_id")
+    rol = payload.get("rol")
+    if rol not in ("CLIENTE", "ADMIN"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Se requiere rol de cliente o administrador",
+        )
+    return {
+        "user_id": int(user_id) if user_id is not None else None,
+        "rol": rol,
+    }
 
 
 def validar_api_key(x_api_key: str = Header(..., alias="X-API-KEY")):

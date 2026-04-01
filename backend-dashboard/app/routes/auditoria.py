@@ -81,7 +81,11 @@ async def obtener_auditoria(
             or_(
                 func.lower(func.coalesce(Dispositivo.codigo_kiosko, "")).like(f"%{busqueda_lower}%"),
                 func.lower(func.coalesce(Dispositivo.nombre_amigable, "")).like(f"%{busqueda_lower}%"),
-                func.lower(func.coalesce(ServidorSecundario.nombre, "")).like(f"%{busqueda_lower}%")
+                func.lower(func.coalesce(ServidorSecundario.nombre, "")).like(f"%{busqueda_lower}%"),
+                case(
+                    (DispositivoSesion.fin == None, "CONEXION_DISPOSITIVO"),
+                    else_="DESCONEXION_DISPOSITIVO"
+                ).like(f"%{busqueda_lower}%")
             )
         )
     if tipo:

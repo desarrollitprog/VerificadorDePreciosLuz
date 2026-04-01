@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from app.routes import publicidad, auth, monitoreo, usuarios, notificaciones, auditoria
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -53,3 +53,31 @@ app.include_router(monitoreo.router, prefix="/api")
 app.include_router(notificaciones.router, prefix="/api")
 app.include_router(auditoria.router, prefix="/api")
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+@app.websocket("/ws/notificaciones")
+async def websocket_notificaciones(websocket: WebSocket):
+    from app.services.websocket_manager import manager
+    from app.dependencies import get_user_from_token
+    
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=4001)
+        return
+    
+    try:
+        user_data = await get_user_from_token(token)
+        user_id = user_data.get("user_id")
+        if not user_id:
+            await websocket.close(code=4001)
+            return
+        
+        await manager.connect(websocket, user_id)
+        try:
+            while True:
+                await websocket.receive_text()
+        except WebSocketDisconnect:
+            manager.disconnect(websocket, user_id)
+    except Exception as e:
+        logger.error(f"Error en WebSocket: {e}")
+        await websocket.close(code=4001)

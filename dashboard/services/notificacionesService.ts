@@ -41,6 +41,11 @@ export async function markNotificacionesRead(): Promise<MarkReadResponse> {
   return response.data;
 }
 
+export async function markNotificacionRead(notificacionId: number): Promise<{ success: boolean; message: string }> {
+  const response = await api.patch<{ success: boolean; message: string }>(`/notificaciones/${notificacionId}/marcar-leida`);
+  return response.data;
+}
+
 export async function deleteReadNotificaciones(): Promise<DeleteReadResponse> {
   const response = await api.delete<DeleteReadResponse>('/notificaciones/leidas');
   return response.data;

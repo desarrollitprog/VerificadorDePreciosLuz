@@ -1232,3 +1232,88 @@ async def eliminar_servidor(
             logger.warning("No se pudo registrar auditoría de eliminación de servidor %s: %s", server_id, e)
 
     return {"success": True, "message": f"Servidor {server_id} eliminado correctamente"}
+
+
+RESTART_TIMEOUT = 60  # segundos para esperar confirmación de reinicio
+
+
+@router.post("/dispositivos/{device_id}/reiniciar")
+async def reiniciar_dispositivo(
+    device_id: str,
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_cliente),
+):
+    """
+    Reinicia un dispositivo específico.
+    1. Busca el servidor donde está el dispositivo
+    2. Llama al backend-api del servidor para enviar el comando
+    3. Espera confirmación (timeout 60s)
+    """
+    # 1. Buscar el dispositivo y su servidor
+    stmt_disp = select(Dispositivo).where(Dispositivo.codigo_kiosko == device_id)
+    result_disp = await db.execute(stmt_disp)
+    dispositivo = result_disp.scalars().first()
+    
+    if not dispositivo:
+        raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
+    
+    if not dispositivo.servidor_id:
+        raise HTTPException(status_code=400, detail="El dispositivo no está asociado a ningún servidor")
+    
+    # 2. Obtener la IP del servidor
+    stmt_srv = select(ServidorSecundario).where(ServidorSecundario.id == dispositivo.servidor_id)
+    result_srv = await db.execute(stmt_srv)
+    servidor = result_srv.scalars().first()
+    
+    if not servidor:
+        raise HTTPException(status_code=404, detail="Servidor del dispositivo no encontrado")
+    
+    servidor_ip = servidor.ip
+    
+    logger.info(f"[REINICIAR] Intentando reiniciar dispositivo {device_id} en servidor {servidor_ip}")
+    
+    # 3. Llamar al backend-api del servidor
+    api_url = f"http://{servidor_ip}:8000/api/comandos/{device_id}"
+    logger.info(f"[REINICIAR] Llamando a: {api_url}")
+    
+    try:
+        async with httpx.AsyncClient(timeout=RESTART_TIMEOUT) as client:
+            logger.info(f"[REINICIAR] Enviando comando REINICIAR...")
+            response = await client.post(
+                api_url,
+                json={"comando": "REINICIAR"},
+            )
+            logger.info(f"[REINICIAR] Respuesta recibida: status={response.status_code}")
+            result = response.json()
+            logger.info(f"[REINICIAR] Resultado: {result}")
+            
+            # 4. Registrar en auditoría
+            user_id = current_user.get("user_id") if current_user else None
+            actor_name = current_user.get("nombre_usuario") or current_user.get("usuario") or "Sistema"
+            
+            if result.get("success"):
+                await registrar_accion(
+                    db,
+                    user_id,
+                    "REINICIAR_DISPOSITIVO",
+                    f"Dispositivo {device_id} reiniciado exitosamente por {actor_name}",
+                    dispositivo_id=device_id,
+                    servidor_id=servidor.id,
+                )
+            else:
+                await registrar_accion(
+                    db,
+                    user_id,
+                    "REINICIAR_DISPOSITIVO_FALLO",
+                    f"Error al reiniciar {device_id}: {result.get('message', 'Error desconocido')}",
+                    dispositivo_id=device_id,
+                    servidor_id=servidor.id,
+                )
+            
+            return result
+            
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail=f"Timeout esperando confirmación del dispositivo ({RESTART_TIMEOUT}s)")
+    except Exception as e:
+        logger.error(f"Error al reiniciar dispositivo {device_id}: %s", e)
+        raise HTTPException(status_code=500, detail=f"Error al comunicarse con el servidor: {str(e)}")

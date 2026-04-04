@@ -17,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.example.verificadordepreciosluz.data.local.BackupRepository
+import com.example.verificadordepreciosluz.util.UpdateChecker
 import retrofit2.HttpException
 import java.io.IOException
 
@@ -27,6 +28,8 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        UpdateChecker.check(this)
 
         // 2. Cargamos la IP si ya fue guardada anteriormente (Persistencia)
         val sharedPref = getSharedPreferences("ConfigLuz", MODE_PRIVATE)

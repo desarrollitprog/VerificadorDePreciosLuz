@@ -6,4 +6,10 @@
     </style>
 
     <style name="Theme.VerificadorDePreciosLuz" parent="Base.Theme.VerificadorDePreciosLuz" />
+
+    <style name="Theme.VerificadorDePreciosLuz.Dialog" parent="Theme.Material3.DayNight.Dialog.Alert">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsFloating">true</item>
+        <item name="colorPrimary">@color/verde_luz</item>
+    </style>
 </resources>

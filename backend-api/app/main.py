@@ -260,6 +260,17 @@ async def start_device_monitor():
     except Exception as e:
         logger.error("No se pudo inicializar DeviceStateStore: %s", e)
 
+    # Inicializar DeviceRegistry (para compartir dispositivos entre workers)
+    try:
+        from app.services.device_registry import device_registry, DeviceRegistry
+        global_device_registry = await DeviceRegistry.create(ttl_seconds=300)
+        # Reemplazar el módulo global
+        import app.services.device_registry
+        app.services.device_registry.device_registry = global_device_registry
+        logger.info("DeviceRegistry inicializado con Redis")
+    except Exception as e:
+        logger.error("No se pudo inicializar DeviceRegistry: %s", e)
+
     try:
         device_command_bus = await DeviceCommandBus.create()
         device_bus_listener_task = asyncio.create_task(_start_device_bus_listener())
@@ -274,6 +285,39 @@ async def start_device_monitor():
 @app.on_event("shutdown")
 async def shutdown_device_state_store():
     global device_state_store, device_command_bus, device_bus_listener_task, banner_check_task
+    logger.info("[Shutdown] Iniciando cierre graceful...")
+    
+    # 1. Notificar a todos los dispositivos (graceful shutdown)
+    try:
+        await tablet_ws_manager.broadcast({
+            "type": "SERVER_SHUTDOWN",
+            "message": "Server restarting"
+        })
+        logger.info("[Shutdown] Broadcast de cierre enviado a dispositivos")
+        await asyncio.sleep(2)  # Dar tiempo a que se envíen los mensajes
+    except Exception as e:
+        logger.warning(f"[Shutdown] Error en broadcast: {e}")
+    
+    # 2. Cancelar tarea de cleanup periódico
+    if tablet_ws_manager._cleanup_task is not None:
+        tablet_ws_manager._cleanup_task.cancel()
+        tablet_ws_manager._cleanup_task = None
+        logger.info("[Shutdown] Tarea de cleanup cancelada")
+    
+    # 3. Cerrar todas las conexiones WebSocket
+    for ws in tablet_ws_manager.active_connections.copy():
+        try:
+            await ws.close(code=1001, reason="Server shutdown")
+        except Exception:
+            pass
+    
+    # 4. Limpiar tareas de ping
+    for ws_id, task in list(tablet_ws_manager.ping_tasks.items()):
+        task.cancel()
+    tablet_ws_manager.ping_tasks.clear()
+    
+    logger.info("[Shutdown] WebSockets cerrados")
+    
     if banner_check_task is not None:
         banner_check_task.cancel()
         banner_check_task = None
@@ -289,6 +333,8 @@ async def shutdown_device_state_store():
     if device_state_store is not None:
         await device_state_store.close()
         device_state_store = None
+    
+    logger.info("[Shutdown] Cierre completo")
 
 
 # Paso 1: Buscar producto y precio base (async)
@@ -934,6 +980,94 @@ async def fuerza_sync(
     }
 
 
+class ComandoBody(BaseModel):
+    comando: str
+
+
+COMMAND_TIMEOUT = 60  # segundos para esperar confirmación de reinicio
+
+
+command_ack_waiters: dict[str, asyncio.Event] = {}
+command_ack_payloads: dict[str, dict] = {}
+
+
+@app.post("/api/comandos/{device_id}")
+async def enviar_comando_a_dispositivo(
+    device_id: str,
+    body: ComandoBody,
+):
+    """
+    Envía un comando a un dispositivo específico vía WebSocket.
+    Soporta: REINICIAR
+    Espera confirmación del dispositivo (timeout 60s).
+    """
+    comando = body.comando.upper()
+    
+    if comando not in ("REINICIAR",):
+        raise HTTPException(status_code=400, detail=f"Comando no soportado: {comando}")
+    
+    # Publicar comando en Redis (via pub/sub) - similar a sincronización
+    # Los workers con el WebSocket del dispositivo conectado lo recibirán y enviarán
+    logger.info(f"[COMMAND] Publicando comando '{comando}' para dispositivo {device_id}")
+    
+    # Preparar waiters para confirmación
+    ack_key = f"command:{device_id}:{comando}"
+    waiter = asyncio.Event()
+    command_ack_waiters[ack_key] = waiter
+    command_ack_payloads.pop(ack_key, None)
+    
+    try:
+        # Enviar comando vía Redis pub/sub (mismo mecanismo que sincronización)
+        send_ok = False
+        logger.info(f"[COMMAND] device_command_bus disponible: {device_command_bus is not None}")
+        if device_command_bus is not None:
+            logger.info(f"[COMMAND] Publicando comando via Redis bus...")
+            await device_command_bus.publish_command(
+                device_id=device_id,
+                command=comando,
+                payload={},
+            )
+            send_ok = True
+        else:
+            logger.info(f"[COMMAND] Enviando comando directamente via send_to_device...")
+            await tablet_ws_manager.send_to_device(device_id, {"command": comando})
+            send_ok = True
+        
+        if not send_ok:
+            return {
+                "success": False,
+                "status": "SEND_FAILED",
+                "message": "No se pudo enviar comando al dispositivo",
+            }
+        
+        # Esperar confirmación
+        try:
+            await asyncio.wait_for(waiter.wait(), timeout=COMMAND_TIMEOUT)
+            ack = command_ack_payloads.pop(ack_key, {})
+            status = str(ack.get("status", "")).upper()
+            
+            if status in ("RECEIVED", "COMPLETED", "SUCCESS", "DONE"):
+                return {
+                    "success": True,
+                    "status": status,
+                    "message": f"Comando {comando} ejecutado correctamente",
+                }
+            else:
+                return {
+                    "success": False,
+                    "status": status,
+                    "message": ack.get("reason") or f"Comando falló con estado: {status}",
+                }
+        except asyncio.TimeoutError:
+            return {
+                "success": False,
+                "status": "TIMEOUT",
+                "message": f"El dispositivo no confirmó el comando en {COMMAND_TIMEOUT} segundos",
+            }
+    finally:
+        command_ack_waiters.pop(ack_key, None)
+
+
 @app.get("/api/fuerza-sync/{job_id}")
 async def fuerza_sync_status(job_id: str):
     job = await _get_force_sync_job_state(job_id)
@@ -1000,6 +1134,10 @@ class TabletWebSocketManager:
         self.device_map: dict[str, WebSocket] = {}  # device_id -> WebSocket
         self.ping_tasks: dict[int, asyncio.Task] = {}  # id(websocket) -> Task
         self.pending_pong: dict[int, asyncio.Event] = {}  # id(websocket) -> Event (set by main loop when pong arrives)
+        self._lock = asyncio.Lock()  # Protege acceso concurrente a estructuras compartidas
+        self._message_queues: dict[str, asyncio.Queue] = {}  # device_id -> Cola de mensajes pendientes
+        self._cleanup_task: asyncio.Task | None = None  # Tarea de cleanup periódico
+        self._started = False  # Indica si el manager ya inició
 
     async def start_ping_loop(self, websocket: WebSocket):
         ws_id = id(websocket)
@@ -1037,14 +1175,19 @@ class TabletWebSocketManager:
                             await websocket.close(code=1001, reason="Ping timeout")
                         except Exception:
                             pass
-                        self.disconnect(websocket)
+                        await self.disconnect(websocket)
                         return
                     except Exception as e:
                         if "not connected" in str(e).lower() or "closed" in str(e).lower():
-                            self.disconnect(websocket)
+                            await self.disconnect(websocket)
                             return
                         logger.error(f"[Ping] Error enviando ping: {e}")
                         return
+                    
+                    # Actualizar TTL en Redis cuando el dispositivo responde al ping
+                    if device_id:
+                        from app.services.device_registry import extend_device_ttl
+                        asyncio.create_task(extend_device_ttl(device_id))
 
                 except asyncio.CancelledError:
                     logger.info(f"[Ping] Tarea de ping cancelada para websocket {ws_id}")
@@ -1064,6 +1207,11 @@ class TabletWebSocketManager:
             logger.info(f"[Ping] Tarea de ping cancelada para websocket {ws_id}")
 
     async def connect(self, websocket: WebSocket):
+        # Iniciar tarea de cleanup periódico si no está corriendo
+        if not self._started:
+            self.start_cleanup_task()
+            self._started = True
+        
         if len(self.active_connections) >= MAX_WS_CONNECTIONS:
             logger.warning("[WebSocket] Límite de conexiones alcanzado. Rechazando.")
             await websocket.close(code=1013, reason="Too many connections")
@@ -1076,45 +1224,84 @@ class TabletWebSocketManager:
             self.ping_tasks[ws_id].cancel()
             del self.ping_tasks[ws_id]
 
+        device_id = None
         try:
             data = await asyncio.wait_for(websocket.receive_text(), timeout=10)
             import json
             msg = json.loads(data)
+            logger.info(f"[WebSocket] Primer mensaje recibido: {msg}")
             device_id = msg.get("device_id")
-            if device_id:
-                old_ws = self.device_map.get(device_id)
-                if old_ws and old_ws is not websocket:
-                    old_ws_id = id(old_ws)
-                    self.cancel_ping_task(old_ws)
-                    self.pending_pong.pop(old_ws_id, None)
-                    try:
-                        await old_ws.close(code=1001, reason="Replaced by new connection")
-                    except Exception:
-                        pass
-                    if old_ws in self.active_connections:
-                        self.active_connections.remove(old_ws)
-                    logger.info(f"[WebSocket] Conexión anterior de {device_id} cerrada por reconexión")
-                self.device_map[device_id] = websocket
-                if device_state_store is not None:
+            logger.info(f"[WebSocket] device_id del mensaje: {device_id}")
+            
+            if not device_id:
+                logger.warning("[WebSocket] device_id no proporcionado, cerrando conexión")
+                await websocket.close(code=1008, reason="Missing device_id")
+                return
+                
+            # Registrar en Redis (para que todos los workers vean el dispositivo)
+            from app.services.device_registry import register_device
+            await register_device(device_id)
+            
+            # Purga de conexión vieja
+            old_ws = self.device_map.get(device_id)
+            if old_ws and old_ws is not websocket:
+                await self._safe_disconnect(old_ws)
+                logger.info(f"[WebSocket] Conexión anterior de {device_id} cerrada por reconexión")
+            
+            self.device_map[device_id] = websocket
+            logger.info(f"[WebSocket] device_map actualizado: {device_id} -> websocket")
+            
+            # Actualizar heartbeat en Redis
+            if device_state_store is not None:
+                try:
                     await device_state_store.upsert_heartbeat(device_id=device_id)
-        except Exception:
-            pass
+                except Exception as e:
+                    logger.error(f"[Heartbeat] Error actualizando estado para {device_id}: {e}")
+            
+            # Flush de cola de mensajes pendientes
+            if device_id in self._message_queues:
+                asyncio.create_task(self.flush_message_queue(device_id, websocket))
+                
+        except asyncio.TimeoutError:
+            logger.warning("[WebSocket] Timeout esperando IDENTIFY (10s)")
+            await websocket.close(code=1008, reason="Identification timeout")
+            return
+        except json.JSONDecodeError as e:
+            logger.warning(f"[WebSocket] IDENTIFY no es JSON válido: {e}")
+            await websocket.close(code=1008, reason="Invalid identification format")
+            return
+        except Exception as e:
+            logger.error(f"[WebSocket] Error al procesar identificación: {e}")
+            await websocket.close(code=1008, reason="Identification failed")
+            return
+        
         self.active_connections.append(websocket)
 
-    def disconnect(self, websocket: WebSocket):
-        ws_id = id(websocket)
-        self.cancel_ping_task(websocket)
-        self.pending_pong.pop(ws_id, None)
-        logger.info(f"[WebSocket] Conexión cerrada. Total conexiones restantes: {len(self.active_connections) - 1}")
+    async def disconnect(self, websocket: WebSocket):
+        async with self._lock:
+            ws_id = id(websocket)
+            self.cancel_ping_task(websocket)
+            self.pending_pong.pop(ws_id, None)
+            
+            if websocket in self.active_connections:
+                self.active_connections.remove(websocket)
+                logger.info(f"[WebSocket] Conexión cerrada. Total conexiones restantes: {len(self.active_connections)}")
 
-        if websocket in self.active_connections:
-            self.active_connections.remove(websocket)
+            # Eliminar cola de mensajes si existe
+            device_id = None
+            for k, v in list(self.device_map.items()):
+                if v is websocket:
+                    device_id = k
+                    del self.device_map[k]
+                    self._message_queues.pop(k, None)
+                    break
 
-        for k, v in list(self.device_map.items()):
-            if v is websocket:
+            # Marcar offline en Redis
+            if device_id:
                 if device_state_store is not None:
-                    asyncio.create_task(device_state_store.mark_offline(k))
-                del self.device_map[k]
+                    asyncio.create_task(device_state_store.mark_offline(device_id))
+                from app.services.device_registry import unregister_device
+                asyncio.create_task(unregister_device(device_id))
 
     async def broadcast(self, message: dict):
         dead = []
@@ -1125,17 +1312,26 @@ class TabletWebSocketManager:
                 logger.warning(f"[WS] Error en broadcast: {e}")
                 dead.append(connection)
         for ws in dead:
-            self.disconnect(ws)
+            await self.disconnect(ws)
 
     async def send_to_device(self, device_id: str, message: dict):
         ws = self.device_map.get(device_id)
         if ws:
             try:
                 await ws.send_json(message)
+                return True
             except Exception as e:
                 logger.warning(f"[WS] Error enviando a {device_id}: {e}")
-                self.disconnect(ws)
+                await self.disconnect(ws)
                 raise
+        
+        # Cola para cuando el dispositivo se reconecte
+        if device_id not in self._message_queues:
+            self._message_queues[device_id] = asyncio.Queue()
+        if self._message_queues[device_id].qsize() < 10:
+            self._message_queues[device_id].put_nowait(message)
+            logger.info(f"[WS] Mensaje encolado para {device_id} (cola: {self._message_queues[device_id].qsize()})")
+        return False
 
     async def send_to_websocket(self, websocket: WebSocket, message: dict) -> bool:
         try:
@@ -1149,6 +1345,86 @@ class TabletWebSocketManager:
             if ws is websocket:
                 return device_id
         return None
+
+    async def flush_message_queue(self, device_id: str, websocket: WebSocket) -> int:
+        """Entrega mensajes pendientes de la cola al dispositivo. Retorna cantidad entregada."""
+        if device_id not in self._message_queues:
+            return 0
+        
+        queue = self._message_queues.pop(device_id)
+        delivered = 0
+        
+        while not queue.empty():
+            try:
+                msg = queue.get_nowait()
+                await websocket.send_json(msg)
+                delivered += 1
+            except Exception as e:
+                logger.warning(f"[WS] Error entregando mensaje de cola a {device_id}: {e}")
+                break
+        
+        if delivered > 0:
+            logger.info(f"[WS] {delivered} mensajes entregados de la cola a {device_id}")
+        return delivered
+
+    async def cleanup_dead_connections(self):
+        """Limpia conexiones en estado inválido. Se llama periódicamente."""
+        async with self._lock:
+            dead = []
+            for ws in self.active_connections:
+                if ws.client_state.name != "CONNECTED":
+                    dead.append(ws)
+            
+            for ws in dead:
+                logger.info(f"[WS] Limpiando conexión muerta: {id(ws)}")
+                await self._safe_disconnect(ws)
+            
+            if dead:
+                logger.info(f"[WS] Cleanup: {len(dead)} conexiones muertas removidas")
+
+    async def _safe_disconnect(self, websocket: WebSocket):
+        """Desconecta sin lock (para uso interno desde cleanup)."""
+        try:
+            ws_id = id(websocket)
+            self.cancel_ping_task(websocket)
+            self.pending_pong.pop(ws_id, None)
+            
+            if websocket in self.active_connections:
+                self.active_connections.remove(websocket)
+            
+            device_id = None
+            for k, v in list(self.device_map.items()):
+                if v is websocket:
+                    device_id = k
+                    del self.device_map[k]
+                    self._message_queues.pop(k, None)
+                    break
+            
+            if device_id:
+                if device_state_store is not None:
+                    asyncio.create_task(device_state_store.mark_offline(device_id))
+                from app.services.device_registry import unregister_device
+                asyncio.create_task(unregister_device(device_id))
+        except Exception as e:
+            logger.error(f"[WS] Error en _safe_disconnect: {e}")
+
+    def start_cleanup_task(self):
+        """Inicia la tarea de cleanup periódico si no está corriendo."""
+        if self._cleanup_task is None or self._cleanup_task.done():
+            self._cleanup_task = asyncio.create_task(self._periodic_cleanup())
+            logger.info("[WS] Tarea de cleanup periódico iniciada")
+
+    async def _periodic_cleanup(self):
+        """Cleanup periódico cada 60 segundos."""
+        while True:
+            try:
+                await asyncio.sleep(60)
+                await self.cleanup_dead_connections()
+            except asyncio.CancelledError:
+                logger.info("[WS] Tarea de cleanup cancelada")
+                break
+            except Exception as e:
+                logger.error(f"[WS] Error en cleanup periódico: {e}")
 
     def get_connected_targets(self) -> list[tuple[str | None, WebSocket]]:
         targets: list[tuple[str | None, WebSocket]] = []
@@ -1195,14 +1471,32 @@ async def _on_bus_command(device_id: str, command: str, payload: dict):
         return
     if command == "WIPE_AND_RESYNC":
         await tablet_ws_manager.send_to_device(device_id, {"command": "WIPE_AND_RESYNC"})
+    elif command == "REINICIAR":
+        await tablet_ws_manager.send_to_device(device_id, {"command": "REINICIAR"})
 
 
 async def _on_bus_confirmation(device_id: str, command: str, status: str, reason: str):
     if not device_id:
         return
-    if command != "WIPE_AND_RESYNC":
+    
+    # Manejar confirmación de WIPE_AND_RESYNC
+    if command == "WIPE_AND_RESYNC":
+        await _apply_sync_confirmation(device_id=device_id, status=status, reason=reason)
         return
-    await _apply_sync_confirmation(device_id=device_id, status=status, reason=reason)
+    
+    # Manejar confirmación de REINICIAR
+    if command == "REINICIAR":
+        ack_key = f"command:{device_id}:{command}"
+        command_ack_payloads[ack_key] = {
+            "device_id": device_id,
+            "command": command,
+            "status": status,
+            "reason": reason,
+        }
+        waiter = command_ack_waiters.get(ack_key)
+        if waiter:
+            waiter.set()
+        return
 
 
 async def _start_device_bus_listener():
@@ -1389,6 +1683,32 @@ async def process_sync_confirmation(websocket: WebSocket, msg: dict):
     if command == "BANNER_FINALIZADO" and status == "SUCCESS":
         banner_id = msg.get("banner_id")
         await notify_dashboard_banner_finalizado(device_id, banner_id)
+        return
+    
+    # Manejar confirmación de REINICIAR
+    if command == "REINICIAR":
+        ack_key = f"command:{device_id}:{command}"
+        command_ack_payloads[ack_key] = {
+            "device_id": device_id,
+            "command": command,
+            "status": status,
+            "reason": reason,
+        }
+        waiter = command_ack_waiters.get(ack_key)
+        if waiter:
+            waiter.set()
+        
+        # También publicar en Redis si está disponible
+        if device_command_bus is not None:
+            try:
+                await device_command_bus.publish_confirmation(
+                    device_id=device_id,
+                    command="REINICIAR",
+                    status=status,
+                    reason=reason,
+                )
+            except Exception as e:
+                logging.error("Error publicando confirmación de REINICIAR en bus: %s", e)
         return
     
     # Manejar confirmación de WIPE_AND_RESYNC (original)

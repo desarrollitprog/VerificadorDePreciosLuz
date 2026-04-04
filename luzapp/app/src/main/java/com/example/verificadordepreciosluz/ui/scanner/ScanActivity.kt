@@ -149,7 +149,12 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         }
 
         override fun onLost(network: Network) {
+            Log.w(TAG, "[Network] Conexión perdida")
+            // Cerrar WebSocket inmediatamente para evitar zombies
+            tabletWebSocket?.close(1001, "Network lost")
+            tabletWebSocket = null
             handleNetworkChange(false)
+            reconnectTabletWebSocket()
         }
 
         override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
@@ -167,6 +172,18 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
     private var tabletWebSocket: WebSocket? = null
     private var wsClient: OkHttpClient? = null
+    
+    // WebSocket reconnection - exponential backoff
+    private var wsReconnectAttempts = 0
+    private var wsLastReconnectTime = 0L
+    private var wsReconnectDelay = 5000L
+    private val maxReconnectDelay = 60_000L
+    private var isReconnecting = false
+    private val reconnectRunnable = Runnable {
+        isReconnecting = false
+        wsReconnectAttempts++
+        startTabletWebSocket()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -1529,8 +1546,12 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         job.cancel()
         scope.cancel()
         dolarBcJob?.cancel()
+        // Cleanup de reconnect handler para evitar memory leak
+        uiHandler.removeCallbacks(reconnectRunnable)
         tabletWebSocket?.close(1000, "Activity destroyed")
+        tabletWebSocket = null
         wsClient?.dispatcher?.executorService?.shutdown()
+        wsClient = null
     }
 
     override fun onPause() {
@@ -1600,11 +1621,21 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         val wsUrl = cleanBaseUrl.replace("http://", "ws://").replace("https://", "wss://") + "/ws/tablet"
         Log.i(TAG, "[WebSocket] Intentando conectar a: $wsUrl")
         try {
-            wsClient = OkHttpClient()
+            wsClient = OkHttpClient.Builder()
+                .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(0, java.util.concurrent.TimeUnit.SECONDS)
+                .writeTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                .pingInterval(30, java.util.concurrent.TimeUnit.SECONDS)
+                .retryOnConnectionFailure(false)
+                .build()
             val request = Request.Builder().url(wsUrl).build()
             val wsListener = object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: okhttp3.Response) {
                     Log.i(TAG, "[WebSocket] Conexión abierta: $wsUrl")
+                    // Reset exponential backoff al conectar exitosamente
+                    wsReconnectAttempts = 0
+                    wsReconnectDelay = 5000L
+                    isReconnecting = false
                     try {
                         val identifyMsg = org.json.JSONObject()
                         identifyMsg.put("type", "IDENTIFY")
@@ -1711,6 +1742,53 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                 // Confirmar al backend que el banner fue recibido
                                 sendSyncConfirmation(webSocket, command, "SUCCESS")
                             }
+                        } else if (command == "REINICIAR") {
+                            Log.i(TAG, "[WebSocket] ==== REINICIAR COMMAND RECEIVED ====")
+                            Log.i(TAG, "[WebSocket] Comando REINICIAR recibido. Ejecutando reinicio del dispositivo...")
+                            try {
+                                val pkgName = applicationContext.packageName
+                                Log.i(TAG, "[WebSocket] Verificando si es Device Owner: $pkgName")
+                                // Usar DevicePolicyManager para reiniciar (requiere Device Owner)
+                                if (dpm.isDeviceOwnerApp(pkgName)) {
+                                    Log.i(TAG, "[WebSocket] ES Device Owner - ejecutando reinicio automático")
+                                    sendSyncConfirmation(webSocket, command, "RECEIVED")
+                                    Log.i(TAG, "[WebSocket] Confirmación RECEIVED enviada, ejecutando reinicio...")
+                                    uiHandler.postDelayed({
+                                        try {
+                                            dpm.reboot(adminComponent)
+                                        } catch (e: Exception) {
+                                            Log.e(TAG, "[WebSocket] Error al ejecutar reinicio: ${e.message}")
+                                            sendSyncConfirmation(webSocket, command, "FAILED", "Error al reiniciar: ${e.message}")
+                                        }
+                                    }, 2000)
+                                } else {
+                                    // No es Device Owner: mostrar diálogo
+                                    Log.i(TAG, "[WebSocket] NO es Device Owner - mostrando diálogo...")
+                                    sendSyncConfirmation(webSocket, command, "RECEIVED")
+                                    runOnUiThread {
+                                        try {
+                                            Log.i(TAG, "[WebSocket] Intentando mostrar diálogo...")
+                                            val alertDialog = android.app.AlertDialog.Builder(this@ScanActivity)
+                                                .setTitle("Reinicio solicitado")
+                                                .setMessage("El servidor ha solicitado el reinicio del dispositivo.\n\nPor favor, mantén presionado el botón de Encendido para reiniciar.")
+                                                .setPositiveButton("Aceptar") { _, _ ->
+                                                    Log.i(TAG, "[WebSocket] Usuario presionó Aceptar")
+                                                    sendSyncConfirmation(webSocket, command, "COMPLETED")
+                                                }
+                                                .setCancelable(false)
+                                                .create()
+                                            alertDialog.show()
+                                            Log.i(TAG, "[WebSocket] Diálogo mostrado correctamente")
+                                        } catch (e: Exception) {
+                                            Log.e(TAG, "[WebSocket] Error al mostrar diálogo: ${e.message}")
+                                            sendSyncConfirmation(webSocket, command, "FAILED", "Error: ${e.message}")
+                                        }
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "[WebSocket] Error preparando reinicio: ${e.message}")
+                                sendSyncConfirmation(webSocket, command, "FAILED", "Error: ${e.message}")
+                            }
                         } else {
                             Log.i(TAG, "[WebSocket] Comando recibido no reconocido: $command")
                         }
@@ -1797,7 +1875,47 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                 // Confirmar al backend que el banner fue recibido
                                 sendSyncConfirmation(webSocket, command, "SUCCESS")
                             }
-
+                        } else if (command == "REINICIAR") {
+                            Log.i(TAG, "[WebSocket] Comando REINICIAR recibido (binario). Ejecutando reinicio del dispositivo...")
+                            try {
+                                val pkgName = applicationContext.packageName
+                                if (dpm.isDeviceOwnerApp(pkgName)) {
+                                    Log.i(TAG, "[WebSocket] ES Device Owner (binario) - ejecutando reinicio")
+                                    sendSyncConfirmation(webSocket, command, "RECEIVED")
+                                    Log.i(TAG, "[WebSocket] Confirmación RECEIVED enviada (binario), ejecutando reinicio...")
+                                    uiHandler.postDelayed({
+                                        try {
+                                            dpm.reboot(adminComponent)
+                                        } catch (e: Exception) {
+                                            Log.e(TAG, "[WebSocket] Error al ejecutar reinicio (binario): ${e.message}")
+                                            sendSyncConfirmation(webSocket, command, "FAILED", "Error al reiniciar: ${e.message}")
+                                        }
+                                    }, 2000)
+                                } else {
+                                    Log.i(TAG, "[WebSocket] NO es Device Owner (binario) - mostrando diálogo...")
+                                    sendSyncConfirmation(webSocket, command, "RECEIVED")
+                                    runOnUiThread {
+                                        try {
+                                            val alertDialog = android.app.AlertDialog.Builder(this@ScanActivity)
+                                                .setTitle("Reinicio solicitado")
+                                                .setMessage("El servidor ha solicitado el reinicio del dispositivo.\n\nPor favor, mantén presionado el botón de Encendido para reiniciar.")
+                                                .setPositiveButton("Aceptar") { _, _ ->
+                                                    Log.i(TAG, "[WebSocket] Usuario presionó Aceptar (binario)")
+                                                    sendSyncConfirmation(webSocket, command, "COMPLETED")
+                                                }
+                                                .setCancelable(false)
+                                                .create()
+                                            alertDialog.show()
+                                        } catch (e: Exception) {
+                                            Log.e(TAG, "[WebSocket] Error al mostrar diálogo (binario): ${e.message}")
+                                            sendSyncConfirmation(webSocket, command, "FAILED", "Error: ${e.message}")
+                                        }
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "[WebSocket] Error preparando reinicio (binario): ${e.message}")
+                                sendSyncConfirmation(webSocket, command, "FAILED", "Error: ${e.message}")
+                            }
                         } else {
                             Log.i(TAG, "[WebSocket] Comando recibido no reconocido (binario): $command")
                         }
@@ -1821,8 +1939,27 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     }
 
     private fun reconnectTabletWebSocket() {
-        // Espera 5 segundos y reconecta
-        uiHandler.postDelayed({ startTabletWebSocket() }, 5000)
+        val now = System.currentTimeMillis()
+        
+        // Reset si pasaron más de 5 minutos desde el último intento
+        if (now - wsLastReconnectTime > 5 * 60 * 1000) {
+            wsReconnectAttempts = 0
+            wsReconnectDelay = 5000L
+        }
+        wsLastReconnectTime = now
+        
+        if (isReconnecting) return
+        isReconnecting = true
+        
+        // Exponential backoff con jitter (±20%)
+        val baseDelay = minOf(1000L * (1 shl wsReconnectAttempts), maxReconnectDelay)
+        val jitter = (baseDelay * 0.2 * Math.random()).toLong()
+        val delay = baseDelay + jitter
+        
+        Log.i(TAG, "[WebSocket] Reconectando en ${delay}ms (intento ${wsReconnectAttempts + 1}, base=${baseDelay}ms)")
+        
+        uiHandler.removeCallbacks(reconnectRunnable)
+        uiHandler.postDelayed(reconnectRunnable, delay)
     }
 
     private fun sendSyncConfirmation(
@@ -1831,20 +1968,40 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         status: String,
         reason: String? = null,
     ) {
-        try {
-            val confirmMsg = org.json.JSONObject()
-            confirmMsg.put("type", "CONFIRMATION")
-            confirmMsg.put("command", command)
-            confirmMsg.put("device_id", deviceId)
-            confirmMsg.put("status", status)
-            if (!reason.isNullOrBlank()) {
-                confirmMsg.put("reason", reason)
-            }
-            webSocket.send(confirmMsg.toString())
-            Log.i(TAG, "[WebSocket] Confirmación enviada: status=$status command=$command")
-        } catch (e: Exception) {
-            Log.e(TAG, "[WebSocket] Error enviando confirmación status=$status command=$command", e)
+        scope.launch {
+            sendSyncConfirmationWithRetry(webSocket, command, status, reason)
         }
+    }
+    
+    private suspend fun sendSyncConfirmationWithRetry(
+        webSocket: WebSocket,
+        command: String,
+        status: String,
+        reason: String? = null,
+        maxRetries: Int = 3
+    ): Boolean {
+        repeat(maxRetries) { attempt ->
+            try {
+                val confirmMsg = org.json.JSONObject()
+                confirmMsg.put("type", "CONFIRMATION")
+                confirmMsg.put("command", command)
+                confirmMsg.put("device_id", deviceId)
+                confirmMsg.put("status", status)
+                if (!reason.isNullOrBlank()) {
+                    confirmMsg.put("reason", reason)
+                }
+                webSocket.send(confirmMsg.toString())
+                Log.i(TAG, "[WebSocket] Confirmación enviada: status=$status command=$command")
+                return true
+            } catch (e: Exception) {
+                Log.e(TAG, "[WebSocket] Confirmación failed (attempt ${attempt + 1}/$maxRetries): ${e.message}")
+                if (attempt < maxRetries - 1) {
+                    delay(1000L shl attempt)  // Exponential backoff: 1s, 2s, 4s
+                }
+            }
+        }
+        Log.e(TAG, "[WebSocket] Confirmación falló después de $maxRetries intentos: status=$status command=$command")
+        return false
     }
 
     private fun showOutOfService() {
@@ -1870,7 +2027,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
     private fun isDeviceOwner(): Boolean {
         return try {
-            dpm.isDeviceOwnerApp(packageName)
+            dpm.isDeviceOwnerApp(applicationContext.packageName)
         } catch (e: Exception) {
             Log.e(TAG, "Error checking device owner", e)
             false
@@ -1880,19 +2037,19 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private fun enableKioskMode() {
         Log.i(TAG, "Intentando activar modo kiosco...")
         Log.i(TAG, "isDeviceOwner: ${isDeviceOwner()}")
-        
+
         try {
             // Intentar agregar la app a lock task packages si es device owner
             if (isDeviceOwner()) {
                 try {
-                    dpm.setLockTaskPackages(adminComponent, arrayOf(packageName))
+                    dpm.setLockTaskPackages(adminComponent, arrayOf(applicationContext.packageName))
                     Log.i(TAG, "Lock task packages configurados")
                 } catch (e: Exception) {
                     Log.w(TAG, "No se pudieron configurar lock task packages: ${e.message}")
                 }
             }
             
-            val isPermitted = dpm.isLockTaskPermitted(packageName)
+            val isPermitted = dpm.isLockTaskPermitted(applicationContext.packageName)
             Log.i(TAG, "isLockTaskPermitted: $isPermitted")
             
             if (isPermitted) {

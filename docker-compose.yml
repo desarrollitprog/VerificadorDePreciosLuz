@@ -41,6 +41,8 @@ services:
     container_name: dashboard-frontend
     ports:
       - "80:80"
+    volumes:
+      - ./updates:/usr/share/nginx/html/updates:ro
     depends_on:
       - dashboard-backend
     restart: always

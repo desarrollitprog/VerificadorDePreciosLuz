@@ -64,8 +64,13 @@ def get_ip_address() -> str:
 
     # Filtrar IPs internas de Docker (172.16.0.0/12)
     if ip.startswith("172."):
-        # Buscar otra IP LAN válida
-        import netifaces
+        # Buscar otra IP LAN válida; si netifaces no está disponible, no romper el heartbeat.
+        try:
+            import netifaces
+        except ImportError:
+            logging.warning("netifaces no está instalado; se usará IP detectada por socket")
+            return ip
+
         for iface in netifaces.interfaces():
             addrs = netifaces.ifaddresses(iface).get(netifaces.AF_INET, [])
             for addr in addrs:

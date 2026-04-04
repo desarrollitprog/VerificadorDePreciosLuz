@@ -1237,6 +1237,67 @@ async def eliminar_servidor(
 RESTART_TIMEOUT = 60  # segundos para esperar confirmación de reinicio
 
 
+@router.get("/dispositivos/{device_id}/contenido")
+async def get_device_content(
+    device_id: str,
+    db: AsyncSession = Depends(get_db_usuarios),
+):
+    """
+    Obtiene el contenido que se está reproduciendo actualmente en el dispositivo.
+    Consulta al backend-api del servidor donde está el dispositivo.
+    """
+    # 1. Buscar el dispositivo y su servidor
+    stmt_disp = select(Dispositivo).where(Dispositivo.codigo_kiosko == device_id)
+    result_disp = await db.execute(stmt_disp)
+    dispositivo = result_disp.scalars().first()
+    
+    if not dispositivo:
+        raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
+    
+    if not dispositivo.servidor_id:
+        return {
+            "device_id": device_id,
+            "contenido": None,
+            "message": "Dispositivo no asociado a servidor"
+        }
+    
+    # 2. Obtener la IP del servidor
+    stmt_srv = select(ServidorSecundario).where(ServidorSecundario.id == dispositivo.servidor_id)
+    result_srv = await db.execute(stmt_srv)
+    servidor = result_srv.scalars().first()
+    
+    if not servidor:
+        return {
+            "device_id": device_id,
+            "contenido": None,
+            "message": "Servidor del dispositivo no encontrado"
+        }
+    
+    servidor_ip = servidor.ip
+    
+    # 3. Llamar al backend-api para obtener el contenido
+    api_url = f"http://{servidor_ip}:8000/api/device-playing/{device_id}"
+    
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(api_url)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return {
+                    "device_id": device_id,
+                    "contenido": None,
+                    "message": "Error al obtener contenido del servidor"
+                }
+    except Exception as e:
+        logger.error(f"Error al obtener contenido del dispositivo {device_id}: %s", e)
+        return {
+            "device_id": device_id,
+            "contenido": None,
+            "message": f"Error de conexión: {str(e)}"
+        }
+
+
 @router.post("/dispositivos/{device_id}/reiniciar")
 async def reiniciar_dispositivo(
     device_id: str,

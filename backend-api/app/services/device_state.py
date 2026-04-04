@@ -116,3 +116,32 @@ class DeviceStateStore:
         except Exception as e:
             logger.error(f"[Redis] get_all_status falló definitivamente: {e}")
             return {}
+
+    async def update_playing_content(self, device_id: str, content: dict | None) -> None:
+        async def _do_update():
+            key = f"device:playing:{device_id}"
+            if content is None:
+                await self.redis.delete(key)
+            else:
+                import json
+                await self.redis.set(key, json.dumps(content), ex=self.heartbeat_ttl)
+        
+        try:
+            await self._retry_operation(_do_update, operation_name=f"update_playing_content({device_id})")
+        except Exception as e:
+            logger.error(f"[Redis] update_playing_content({device_id}) falló: {e}")
+
+    async def get_playing_content(self, device_id: str) -> dict | None:
+        async def _do_get():
+            key = f"device:playing:{device_id}"
+            data = await self.redis.get(key)
+            if data:
+                import json
+                return json.loads(data)
+            return None
+        
+        try:
+            return await self._retry_operation(_do_get, operation_name=f"get_playing_content({device_id})")
+        except Exception as e:
+            logger.error(f"[Redis] get_playing_content({device_id}) falló: {e}")
+            return None

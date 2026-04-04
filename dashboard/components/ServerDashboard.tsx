@@ -37,6 +37,7 @@ export function ServerDashboard() {
 
   // Modal de previsualización
   const [previewModal, setPreviewModal] = useState<{ deviceId: string; content: DeviceContent | null; loading: boolean } | null>(null);
+  const [previewInterval, setPreviewInterval] = useState<NodeJS.Timeout | null>(null);
 
   // Modal de reinicio
   const [restartModal, setRestartModal] = useState<{ deviceId: string; deviceName: string } | null>(null);
@@ -75,6 +76,15 @@ export function ServerDashboard() {
     interval = setInterval(fetchStatus, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // Cleanup del intervalo de preview al desmontar
+  useEffect(() => {
+    return () => {
+      if (previewInterval) {
+        clearInterval(previewInterval);
+      }
+    };
+  }, [previewInterval]);
 
   const openRenameServerModal = (server: ServerStatusDetail) => {
     setRenameModal({ type: 'server', server });
@@ -136,6 +146,17 @@ export function ServerDashboard() {
     try {
       const content = await getDeviceContent(deviceId);
       setPreviewModal({ deviceId, content, loading: false });
+      
+      // Actualizar contenido cada 5 segundos
+      const interval = setInterval(async () => {
+        try {
+          const newContent = await getDeviceContent(deviceId);
+          setPreviewModal(prev => prev && prev.deviceId === deviceId ? { ...prev, content: newContent } : prev);
+        } catch (e) {
+          console.error('Error actualizando contenido:', e);
+        }
+      }, 5000);
+      setPreviewInterval(interval);
     } catch {
       showNotification('Error al obtener contenido del dispositivo', 'error');
       setPreviewModal(null);
@@ -143,6 +164,10 @@ export function ServerDashboard() {
   };
 
   const closePreviewModal = () => {
+    if (previewInterval) {
+      clearInterval(previewInterval);
+      setPreviewInterval(null);
+    }
     setPreviewModal(null);
   };
 
@@ -359,6 +384,7 @@ export function ServerDashboard() {
                 <div className="p-4">
                   <div className="flex items-start justify-between gap-2">
                     <ServerCard
+                      className="flex-1"
                       nombre={s.nombre}
                       ip={s.ip}
                       online={s.online}

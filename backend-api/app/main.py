@@ -849,6 +849,18 @@ PLAYBACK_FORWARD_CACHE: dict[str, float] = {}
 PLAYBACK_FORWARD_LOCK = asyncio.Lock()
 
 
+class PlayingContent(BaseModel):
+    titulo: str | None = None
+    url: str
+    tipo: str  # "video" o "image"
+    duracion: int | None = None
+
+
+class PlayingNowBody(BaseModel):
+    device_id: str
+    content: PlayingContent | None = None
+
+
 class PlaybackStatusBody(BaseModel):
     device_id: str
     video_name: str
@@ -1112,6 +1124,61 @@ async def playback_status(body: PlaybackStatusBody):
         "message": "Notificación de playback reenviada al dashboard",
         "duplicated": False,
     }
+
+
+@app.post("/api/playing-now")
+async def playing_now(body: PlayingNowBody):
+    """
+    Recibe notificación del kiosk sobre qué contenido se está reproduciendo.
+    Guarda en Redis para que el dashboard pueda consultarlo.
+    """
+    if not body.device_id:
+        raise HTTPException(status_code=400, detail="device_id requerido")
+    
+    logger.info(f"[PLAYING_NOW] Recibido de {body.device_id}: {body.content}")
+    
+    if device_state_store is not None:
+        try:
+            await device_state_store.update_playing_content(
+                device_id=body.device_id,
+                content=body.content,
+            )
+            return {"success": True, "message": "Contenido actualizado"}
+        except Exception as e:
+            logger.error(f"[PLAYING_NOW] Error guardando en Redis: {e}")
+            raise HTTPException(status_code=500, detail=f"Error guardando contenido: {e}")
+    else:
+        logger.warning(f"[PLAYING_NOW] device_state_store no disponible")
+        return {"success": False, "message": "Redis no disponible"}
+
+
+@app.get("/api/device-playing/{device_id}")
+async def get_device_playing(device_id: str):
+    """
+    Endpoint para que el dashboard consulte qué contenido se está reproduciendo.
+    """
+    if device_state_store is not None:
+        try:
+            content = await device_state_store.get_playing_content(device_id)
+            return {
+                "device_id": device_id,
+                "contenido": content,
+            }
+        except Exception as e:
+            logger.error(f"[DEVICE_PLAYING] Error obteniendo contenido: {e}")
+            return {
+                "device_id": device_id,
+                "contenido": None,
+                "message": f"Error: {str(e)}"
+            }
+    else:
+        return {
+            "device_id": device_id,
+            "contenido": None,
+            "message": "Redis no disponible"
+        }
+
+
 # WebSocket manager para tabletas
 
 # --- Reintentos automáticos y mapeo device_id <-> WebSocket ---
@@ -1846,7 +1913,20 @@ async def websocket_tablet(websocket: WebSocket):
                 if event:
                     event.set()
                 continue
-
+            
+            # Manejar PLAYING_NOW - contenido que se está reproduciendo
+            if msg.get("type") == "PLAYING_NOW":
+                device_id = msg.get("device_id") or tablet_ws_manager.get_device_id(websocket)
+                content = msg.get("content")
+                logger.info(f"[PLAYING_NOW] Recibido de {device_id}: {content}")
+                if device_id and device_state_store is not None and content:
+                    try:
+                        await device_state_store.update_playing_content(device_id, content)
+                        logger.info(f"[PLAYING_NOW] Contenido guardado en Redis para {device_id}")
+                    except Exception as e:
+                        logger.error(f"[PLAYING_NOW] Error guardando contenido: {e}")
+                continue
+            
             device_id = msg.get("device_id") or tablet_ws_manager.get_device_id(websocket)
             if device_id and device_state_store is not None:
                 try:

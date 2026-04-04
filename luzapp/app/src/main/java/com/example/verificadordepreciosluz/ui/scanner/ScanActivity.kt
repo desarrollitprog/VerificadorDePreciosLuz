@@ -878,6 +878,10 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         binding.standbyImage.visibility = View.GONE
         binding.standbyVideo.visibility = View.GONE
         releaseStandbyBitmap()
+        
+        // Notificar al servidor qué contenido se está reproduciendo
+        notifyPlayingNow(item)
+        
         if (item.tipo == "video") {
             binding.standbyVideo.visibility = View.VISIBLE
             binding.standbyVideo.setOnCompletionListener {
@@ -2002,6 +2006,36 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         }
         Log.e(TAG, "[WebSocket] Confirmación falló después de $maxRetries intentos: status=$status command=$command")
         return false
+    }
+
+    private fun notifyPlayingNow(item: BannerCacheItem) {
+        try {
+            val playingMsg = org.json.JSONObject()
+            playingMsg.put("type", "PLAYING_NOW")
+            playingMsg.put("device_id", deviceId)
+            
+            val content = org.json.JSONObject()
+            content.put("titulo", item.titulo ?: java.io.File(item.localPath).name)
+            content.put("url", item.remoteUrl)
+            content.put("tipo", item.tipo)
+            item.duracionSeg?.let { content.put("duracion", it) }
+            
+            playingMsg.put("content", content)
+            
+            // Enviar via WebSocket si está disponible
+            tabletWebSocket?.let { ws ->
+                try {
+                    ws.send(playingMsg.toString())
+                    Log.i(TAG, "[WebSocket] PLAYING_NOW enviado: ${item.tipo} - ${item.titulo ?: item.localPath}")
+                } catch (e: Exception) {
+                    Log.e(TAG, "[WebSocket] Error enviando PLAYING_NOW: ${e.message}")
+                }
+            } ?: run {
+                Log.w(TAG, "[WebSocket] WebSocket no disponible para PLAYING_NOW")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "[WebSocket] Error preparando PLAYING_NOW: ${e.message}")
+        }
     }
 
     private fun showOutOfService() {

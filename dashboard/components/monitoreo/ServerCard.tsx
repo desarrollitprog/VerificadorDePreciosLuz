@@ -7,6 +7,7 @@ interface ServerCardProps {
   online: boolean;
   porcentaje_uso: number;
   onRename?: () => void;
+  className?: string;
 }
 
 const getBarColor = (porcentaje: number) => {
@@ -15,12 +16,11 @@ const getBarColor = (porcentaje: number) => {
   return 'bg-emerald-500';
 };
 
-const ServerCard: React.FC<ServerCardProps> = ({ nombre, ip, online, porcentaje_uso, onRename }) => {
+const ServerCard: React.FC<ServerCardProps> = ({ nombre, ip, online, porcentaje_uso, onRename, className = "" }) => {
 
   return (
     <div 
-      className={`
-        relative overflow-hidden rounded-xl border-l-4 bg-white dark:bg-slate-900 
+      className={`${className} relative overflow-hidden rounded-xl border-l-4 bg-white dark:bg-slate-900 
         shadow-sm hover:shadow-md transition-all duration-200
         ${online 
           ? 'border-l-emerald-500 dark:border-l-emerald-600' 

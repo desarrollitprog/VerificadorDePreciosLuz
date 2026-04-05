@@ -1629,7 +1629,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
                 .readTimeout(0, java.util.concurrent.TimeUnit.SECONDS)
                 .writeTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-                .pingInterval(30, java.util.concurrent.TimeUnit.SECONDS)
+                .pingInterval(60, java.util.concurrent.TimeUnit.SECONDS)
                 .retryOnConnectionFailure(false)
                 .build()
             val request = Request.Builder().url(wsUrl).build()

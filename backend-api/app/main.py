@@ -278,6 +278,15 @@ async def start_device_monitor():
     except Exception as e:
         logger.error("No se pudo inicializar DeviceCommandBus: %s", e)
 
+    # Inicializar CommandAcker (para confirmaciones de comandos via Redis)
+    try:
+        from app.services.command_acker import command_acker, CommandAcker
+        global command_acker
+        command_acker = await CommandAcker.create(ttl=90)
+        logger.info("CommandAcker inicializado con Redis (TTL=90s)")
+    except Exception as e:
+        logger.warning("CommandAcker no disponible: %s", e)
+
     banner_check_task = asyncio.create_task(_check_banners_starting())
     logger.info("Banner check task iniciada")
 
@@ -1028,53 +1037,85 @@ async def enviar_comando_a_dispositivo(
     command_ack_waiters[ack_key] = waiter
     command_ack_payloads.pop(ack_key, None)
     
-    try:
-        # Enviar comando vía Redis pub/sub (mismo mecanismo que sincronización)
-        send_ok = False
-        logger.info(f"[COMMAND] device_command_bus disponible: {device_command_bus is not None}")
-        if device_command_bus is not None:
-            logger.info(f"[COMMAND] Publicando comando via Redis bus...")
-            await device_command_bus.publish_command(
-                device_id=device_id,
-                command=comando,
-                payload={},
+    # Validar que Redis esté disponible
+    if device_command_bus is None:
+        logger.error(f"[COMMAND] Redis no disponible para enviar comando a {device_id}")
+        raise HTTPException(
+            status_code=503, 
+            detail="Sistema de comandos no disponible. Verifique que Redis esté activo."
+        )
+    
+    # Validar que el dispositivo esté registrado en Redis (conectado recientemente)
+    from app.services.device_registry import device_registry
+    if device_registry:
+        is_registered = await device_registry.is_device_registered(device_id)
+        if not is_registered:
+            logger.warning(f"[COMMAND] Dispositivo {device_id} no registrado o desconectado")
+            raise HTTPException(
+                status_code=409, 
+                detail=f"Dispositivo {device_id} no está conectado. Espere a que se reconecte."
             )
-            send_ok = True
-        else:
-            logger.info(f"[COMMAND] Enviando comando directamente via send_to_device...")
-            await tablet_ws_manager.send_to_device(device_id, {"command": comando})
-            send_ok = True
+    
+    try:
+        # Enviar comando vía Redis pub/sub
+        logger.info(f"[COMMAND] Publicando comando '{comando}' via Redis bus...")
+        await device_command_bus.publish_command(
+            device_id=device_id,
+            command=comando,
+            payload={},
+        )
         
-        if not send_ok:
-            return {
-                "success": False,
-                "status": "SEND_FAILED",
-                "message": "No se pudo enviar comando al dispositivo",
-            }
+        # Esperar confirmación via polling a Redis
+        ack = {}
+        logger.info(f"[COMMAND] Esperando confirmación para {device_id} via polling (timeout={COMMAND_TIMEOUT}s)")
         
-        # Esperar confirmación
-        try:
-            await asyncio.wait_for(waiter.wait(), timeout=COMMAND_TIMEOUT)
-            ack = command_ack_payloads.pop(ack_key, {})
-            status = str(ack.get("status", "")).upper()
+        for _ in range(COMMAND_TIMEOUT):
+            await asyncio.sleep(1)
             
-            if status in ("RECEIVED", "COMPLETED", "SUCCESS", "DONE"):
-                return {
-                    "success": True,
-                    "status": status,
-                    "message": f"Comando {comando} ejecutado correctamente",
-                }
-            else:
-                return {
-                    "success": False,
-                    "status": status,
-                    "message": ack.get("reason") or f"Comando falló con estado: {status}",
-                }
-        except asyncio.TimeoutError:
+            # 1. Intentar obtener de Redis
+            if command_acker:
+                redis_ack = await command_acker.get_confirmation(device_id, comando)
+                if redis_ack:
+                    logger.info(f"[COMMAND] Confirmación recibida de Redis para {device_id}: {redis_ack.get('status')}")
+                    ack = redis_ack
+                    await command_acker.delete_confirmation(device_id, comando)
+                    break
+            
+            # 2. Verificar dict local (backward compatibility)
+            local_ack = command_ack_payloads.get(ack_key)
+            if local_ack:
+                logger.info(f"[COMMAND] Confirmación recibida del dict local para {device_id}: {local_ack.get('status')}")
+                ack = local_ack
+                command_ack_payloads.pop(ack_key, None)
+                break
+                
+            # 3. Verificar si hay waiter seteado (trabaja con el mecanismo original)
+            if command_ack_waiters.get(ack_key) and command_ack_payloads.get(ack_key):
+                ack = command_ack_payloads.pop(ack_key, {})
+                logger.info(f"[COMMAND] Confirmación via waiter para {device_id}: {ack.get('status')}")
+                break
+        
+        status = str(ack.get("status", "")).upper()
+        
+        if not status:
+            logger.warning(f"[COMMAND] Timeout esperando confirmación para {device_id}")
             return {
                 "success": False,
                 "status": "TIMEOUT",
                 "message": f"El dispositivo no confirmó el comando en {COMMAND_TIMEOUT} segundos",
+            }
+        
+        if status in ("RECEIVED", "COMPLETED", "SUCCESS", "DONE"):
+            return {
+                "success": True,
+                "status": status,
+                "message": f"Comando {comando} ejecutado correctamente",
+            }
+        else:
+            return {
+                "success": False,
+                "status": status,
+                "message": ack.get("reason") or f"Comando falló con estado: {status}",
             }
     finally:
         command_ack_waiters.pop(ack_key, None)
@@ -1191,8 +1232,8 @@ sync_ack_waiters: dict[str, asyncio.Event] = {}
 sync_ack_payloads: dict[str, dict] = {}
 
 # --- Configuración de Ping WebSocket ---
-WEBSOCKET_PING_INTERVAL = int(os.getenv("WEBSOCKET_PING_INTERVAL", "30"))
-WEBSOCKET_PONG_TIMEOUT = int(os.getenv("WEBSOCKET_PONG_TIMEOUT", "10"))
+WEBSOCKET_PING_INTERVAL = int(os.getenv("WEBSOCKET_PING_INTERVAL", "60"))  # 60s (antes 30s) - mejor para conexiones 12h+
+WEBSOCKET_PONG_TIMEOUT = int(os.getenv("WEBSOCKET_PONG_TIMEOUT", "30"))    # 30s (antes 10s) - más tiempo para respuesta
 MAX_WS_CONNECTIONS = int(os.getenv("MAX_WS_CONNECTIONS", "100"))
 
 class TabletWebSocketManager:
@@ -1393,10 +1434,13 @@ class TabletWebSocketManager:
                 raise
         
         # Cola para cuando el dispositivo se reconecte
+        import time
         if device_id not in self._message_queues:
             self._message_queues[device_id] = asyncio.Queue()
         if self._message_queues[device_id].qsize() < 10:
-            self._message_queues[device_id].put_nowait(message)
+            # Agregar timestamp para cleanup de mensajes antiguos
+            message_with_ts = {**message, "enqueued_at": time.time()}
+            self._message_queues[device_id].put_nowait(message_with_ts)
             logger.info(f"[WS] Mensaje encolado para {device_id} (cola: {self._message_queues[device_id].qsize()})")
         return False
 
@@ -1487,11 +1531,67 @@ class TabletWebSocketManager:
             try:
                 await asyncio.sleep(60)
                 await self.cleanup_dead_connections()
+                await self._cleanup_old_queues()
             except asyncio.CancelledError:
                 logger.info("[WS] Tarea de cleanup cancelada")
                 break
             except Exception as e:
                 logger.error(f"[WS] Error en cleanup periódico: {e}")
+
+    async def _cleanup_old_queues(self):
+        """Limpia colas de mensajes antiguos o de dispositivos desconectados."""
+        cleaned = 0
+        import time
+        cutoff_time = time.time() - 300  # 5 minutos
+        
+        async with self._lock:
+            for device_id in list(self._message_queues.keys()):
+                queue = self._message_queues[device_id]
+                
+                # Verificar si el dispositivo aún está conectado
+                is_connected = device_id in self.device_map
+                
+                # Limpiar si no está conectado O si hay mensajes muy antiguos
+                if not is_connected:
+                    queue_size = queue.qsize()
+                    if queue_size > 0:
+                        # Vaciar la cola
+                        while not queue.empty():
+                            try:
+                                queue.get_nowait()
+                            except asyncio.QueueEmpty:
+                                break
+                        logger.info(f"[WS] Cola limpiada para dispositivo desconectado {device_id}: {queue_size} mensajes removidos")
+                        cleaned += queue_size
+                    self._message_queues.pop(device_id, None)
+                else:
+                    # Verificar mensajes antiguos en cola (más de 5 minutos)
+                    messages_to_remove = []
+                    temp_queue = asyncio.Queue()
+                    while not queue.empty():
+                        try:
+                            msg = queue.get_nowait()
+                            msg_time = msg.get("enqueued_at", 0)
+                            if msg_time > 0 and msg_time < cutoff_time:
+                                # Mensaje muy antiguo, descartar
+                                cleaned += 1
+                            else:
+                                temp_queue.put_nowait(msg)
+                        except asyncio.QueueEmpty:
+                            break
+                    
+                    # Recargar mensajes válidos
+                    while not temp_queue.empty():
+                        try:
+                            queue.put_nowait(temp_queue.get_nowait())
+                        except asyncio.QueueFull:
+                            break
+                    
+                    if cleaned > 0:
+                        logger.info(f"[WS] {cleaned} mensajes antiguos limpiados de cola {device_id}")
+        
+        if cleaned > 0:
+            logger.info(f"[WS] Total de mensajes/colas limpiados: {cleaned}")
 
     def get_connected_targets(self) -> list[tuple[str | None, WebSocket]]:
         targets: list[tuple[str | None, WebSocket]] = []
@@ -1518,6 +1618,11 @@ tablet_ws_manager = TabletWebSocketManager()
 async def _apply_sync_confirmation(device_id: str, status: str, reason: str = ""):
     ack_key = f"device:{device_id}"
     normalized_status = str(status or "").upper()
+    
+    logger.info(f"[ACKER] Confirmación WIPE_AND_RESYNC de {device_id}: status={normalized_status}")
+    
+    # NO guardamos en Redis aquí - ya se hizo en process_sync_confirmation
+    # Solo actualizamos el dict local para backward compatibility
 
     sync_ack_payloads[ack_key] = {
         "device_id": device_id,
@@ -1553,6 +1658,22 @@ async def _on_bus_confirmation(device_id: str, command: str, status: str, reason
     
     # Manejar confirmación de REINICIAR
     if command == "REINICIAR":
+        logger.info(f"[ACKER] Confirmación REINICIAR via bus de {device_id}: status={status}")
+        
+        # GUARDAR EN REDIS para que cualquier worker pueda procesarla
+        global command_acker
+        if command_acker:
+            try:
+                await command_acker.save_confirmation(
+                    device_id=device_id,
+                    command=command,
+                    status=status,
+                    reason=reason
+                )
+            except Exception as e:
+                logger.error(f"[ACKER] Error guardando confirmación en Redis: {e}")
+        
+        # Mantener backward compatibility
         ack_key = f"command:{device_id}:{command}"
         command_ack_payloads[ack_key] = {
             "device_id": device_id,
@@ -1671,8 +1792,36 @@ async def orchestrate_forced_sync_sequential(
         sent += 1
 
         try:
-            await asyncio.wait_for(waiter.wait(), timeout=SYNC_ACK_TIMEOUT)
-            ack = sync_ack_payloads.pop(ack_key, {})
+            # Polling a Redis para confirmación
+            ack = {}
+            logger.info(f"[SYNC] Esperando confirmación para {device_id} via polling (timeout={SYNC_ACK_TIMEOUT}s)")
+            
+            for _ in range(SYNC_ACK_TIMEOUT):
+                await asyncio.sleep(1)
+                
+                # 1. Intentar obtener de Redis
+                if command_acker:
+                    redis_ack = await command_acker.get_confirmation(device_id, "WIPE_AND_RESYNC")
+                    if redis_ack:
+                        logger.info(f"[SYNC] Confirmación recibida de Redis para {device_id}: {redis_ack.get('status')}")
+                        ack = redis_ack
+                        await command_acker.delete_confirmation(device_id, "WIPE_AND_RESYNC")
+                        break
+                
+                # 2. Verificar dict local (backward compatibility)
+                local_ack = sync_ack_payloads.get(ack_key)
+                if local_ack:
+                    logger.info(f"[SYNC] Confirmación recibida del dict local para {device_id}: {local_ack.get('status')}")
+                    ack = local_ack
+                    sync_ack_payloads.pop(ack_key, None)
+                    break
+                    
+                # 3. Verificar si hay waiter seteado
+                if sync_ack_waiters.get(ack_key) and sync_ack_payloads.get(ack_key):
+                    ack = sync_ack_payloads.pop(ack_key, {})
+                    logger.info(f"[SYNC] Confirmación via waiter para {device_id}: {ack.get('status')}")
+                    break
+            
             status = str(ack.get("status", "")).upper()
             ok = status in ("RECEIVED", "SUCCESS", "DONE")
             if ok:
@@ -1754,6 +1903,22 @@ async def process_sync_confirmation(websocket: WebSocket, msg: dict):
     
     # Manejar confirmación de REINICIAR
     if command == "REINICIAR":
+        logger.info(f"[ACKER] Confirmación REINICIAR recibida de {device_id}: status={status}")
+        
+        # GUARDAR EN REDIS para que cualquier worker pueda procesarla
+        global command_acker
+        if command_acker:
+            try:
+                await command_acker.save_confirmation(
+                    device_id=device_id,
+                    command=command,
+                    status=status,
+                    reason=reason
+                )
+            except Exception as e:
+                logger.error(f"[ACKER] Error guardando confirmación REINICIAR en Redis: {e}")
+        
+        # Mantener backward compatibility con dict local
         ack_key = f"command:{device_id}:{command}"
         command_ack_payloads[ack_key] = {
             "device_id": device_id,
@@ -1765,35 +1930,29 @@ async def process_sync_confirmation(websocket: WebSocket, msg: dict):
         if waiter:
             waiter.set()
         
-        # También publicar en Redis si está disponible
-        if device_command_bus is not None:
-            try:
-                await device_command_bus.publish_confirmation(
-                    device_id=device_id,
-                    command="REINICIAR",
-                    status=status,
-                    reason=reason,
-                )
-            except Exception as e:
-                logging.error("Error publicando confirmación de REINICIAR en bus: %s", e)
+        # NO publicamos al bus aquí - ya guardamos en Redis directamente
+        # El bus es solo para el caso fallback (cuando no hay WebSocket directo)
         return
     
     # Manejar confirmación de WIPE_AND_RESYNC (original)
     if command != "WIPE_AND_RESYNC":
         return
 
-    if device_command_bus is not None:
+    # Guardar en Redis directamente (NO publicar al bus para evitar duplicados)
+    # Solo guardamos aquí - NO en _apply_sync_confirmation para evitar duplicados
+    logger.info(f"[ACKER] Confirmación WIPE_AND_RESYNC de {device_id}: status={status}")
+    if command_acker:
         try:
-            await device_command_bus.publish_confirmation(
+            await command_acker.save_confirmation(
                 device_id=device_id,
                 command="WIPE_AND_RESYNC",
                 status=status,
-                reason=reason,
+                reason=reason
             )
-            return
         except Exception as e:
-            logging.error("Error publicando confirmación en bus: %s", e)
+            logger.error(f"[ACKER] Error guardando confirmación SYNC en Redis: {e}")
 
+    # Actualizar dict local (para backward compatibility)
     await _apply_sync_confirmation(device_id=device_id, status=status, reason=reason)
 
 # Endpoint WebSocket para tabletas
@@ -1938,10 +2097,10 @@ async def websocket_tablet(websocket: WebSocket):
             except Exception as e:
                 logging.error(f"Error procesando mensaje de confirmación: {e}")
     except WebSocketDisconnect:
-        tablet_ws_manager.disconnect(websocket)
+        await tablet_ws_manager.disconnect(websocket)
     except Exception as e:
         logger.error(f"[WebSocket] Error inesperado en endpoint: {e}")
-        tablet_ws_manager.disconnect(websocket)
+        await tablet_ws_manager.disconnect(websocket)
 
 app.include_router(consultas)
 app.include_router(publicidad)

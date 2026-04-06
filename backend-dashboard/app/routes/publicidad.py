@@ -972,6 +972,8 @@ async def reemplazar_asignaciones_banner(
         banner.asignacion_todos = asignacion_todos
         await db.commit()
         
+        target_dispositivo_ids = None
+        
         # Si no es asignacion_todos, crear nuevas asignaciones
         if not asignacion_todos:
             parsed_servidor_ids = []
@@ -1009,6 +1011,32 @@ async def reemplazar_asignaciones_banner(
                     db.add(nueva_asignacion)
                 
                 await db.commit()
+                
+                # Guardar dispositivo_ids para replicación
+                target_dispositivo_ids = [d.codigo_kiosko for d in dispositivos]
+        
+        # Replicar archivo a los dispositivos seleccionados
+        if banner.Url:
+            try:
+                file_path = os.path.join("uploads", banner.Url) if not os.path.isabs(banner.Url) else banner.Url
+                if os.path.exists(file_path):
+                    replicacion_resultados = await replicar_archivo_a_todas_las_apis(
+                        file_path=file_path,
+                        IdPublicidadRemoto=banner.IdPublicidad,
+                        titulo=banner.Titulo,
+                        tipo=banner.Tipo,
+                        prioridad=banner.Prioridad,
+                        fecha_inicio=banner.FechaInicio.isoformat() if banner.FechaInicio else None,
+                        fecha_fin=banner.FechaFin.isoformat() if banner.FechaFin else None,
+                        duracion_seg=banner.DuracionSeg,
+                        activo=banner.Activo,
+                        dispositivo_ids=target_dispositivo_ids
+                    )
+                    print(f"[DEBUG] Replicación de asignaciones completada: {replicacion_resultados}")
+                else:
+                    print(f"[WARNING] Archivo no encontrado para replicación: {file_path}")
+            except Exception as e:
+                print(f"[ERROR] Error en replicación de asignaciones: {str(e)}")
         
         return {"success": True, "message": "Asignaciones actualizadas correctamente."}
     except Exception as e:

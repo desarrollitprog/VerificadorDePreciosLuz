@@ -1,4 +1,4 @@
-from fastapi import UploadFile, File, Form, APIRouter, HTTPException, status, Depends, Query
+from fastapi import UploadFile, File, Form, APIRouter, HTTPException, status, Depends, Query, Path
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, and_, func, cast, Date
 from ..database import get_db_publicidad
@@ -209,6 +209,75 @@ async def replicar_archivo(
         "url": url,
         "id": nuevo_banner.id
     }
+
+
+@router.put("/banners/{banner_id}")
+async def actualizar_banner(
+    banner_id: int = Path(..., description="ID del banner a actualizar"),
+    titulo: str = Form(None),
+    tipo: str = Form(None),
+    activo: bool = Form(None),
+    prioridad: int = Form(None),
+    fecha_inicio: str = Form(None),
+    fecha_fin: str = Form(None),
+    duracion_seg: int = Form(None),
+    dispositivo_ids: str = Form(None),
+    db: AsyncSession = Depends(get_db_publicidad)
+):
+    """
+    Actualiza un banner existente (metadatos y device_ids).
+    """
+    from ..models.publicidad import Publicidad
+    
+    banner = await db.get(Publicidad, banner_id)
+    if not banner:
+        raise HTTPException(status_code=404, detail="Banner no encontrado")
+    
+    try:
+        # Actualizar campos si se proporcionan
+        if titulo is not None:
+            banner.titulo = titulo
+        if tipo is not None:
+            banner.tipo = tipo
+        if activo is not None:
+            banner.activo = activo
+        if prioridad is not None:
+            banner.prioridad = prioridad
+        if duracion_seg is not None:
+            banner.duracion_seg = duracion_seg
+        
+        if fecha_inicio:
+            banner.fecha_inicio = datetime.fromisoformat(fecha_inicio)
+        if fecha_fin:
+            banner.fecha_fin = datetime.fromisoformat(fecha_fin)
+        
+        if dispositivo_ids is not None:
+            banner.device_ids = dispositivo_ids
+        
+        await db.commit()
+        await db.refresh(banner)
+        
+        print(f"[DEBUG] Banner {banner_id} actualizado. device_ids: {banner.device_ids}")
+        
+        # Notificar a los dispositivos si el banner está activo y tiene fecha de inicio pasada
+        if banner.activo and banner.fecha_inicio:
+            now = get_venezuela_now_naive()
+            if banner.fecha_inicio <= now:
+                await _notify_banner_iniciado_inmediato(banner, banner.device_ids)
+                print(f"[DEBUG] Notificación de actualización enviada para banner ID={banner.id}")
+        
+        return {
+            "success": True,
+            "message": "Banner actualizado correctamente",
+            "banner": {
+                "id": banner.id,
+                "titulo": banner.titulo,
+                "device_ids": banner.device_ids,
+                "activo": banner.activo
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al actualizar banner: {str(e)}")
 
 @router.post("/replicar-archivos")
 async def replicar_archivos_batch(

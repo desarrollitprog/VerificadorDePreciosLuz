@@ -23,7 +23,8 @@ from ..services.replicacion_service import (
     Borrado_a_todas_las_apis,
     actualizar_estado_a_todas_las_apis,
     actualizar_metadata_a_todas_las_apis,
-    sync_a_servidor
+    sync_a_servidor,
+    actualizar_banner_en_todas_las_apis
 )
 
 
@@ -1015,28 +1016,23 @@ async def reemplazar_asignaciones_banner(
                 # Guardar dispositivo_ids para replicación
                 target_dispositivo_ids = [d.codigo_kiosko for d in dispositivos]
         
-        # Replicar archivo a los dispositivos seleccionados
-        if banner.Url:
+        # Actualizar banner en backend-api con los nuevos dispositivo_ids
+        if banner.IdPublicidad:
             try:
-                file_path = os.path.join("uploads", banner.Url) if not os.path.isabs(banner.Url) else banner.Url
-                if os.path.exists(file_path):
-                    replicacion_resultados = await replicar_archivo_a_todas_las_apis(
-                        file_path=file_path,
-                        IdPublicidadRemoto=banner.IdPublicidad,
-                        titulo=banner.Titulo,
-                        tipo=banner.Tipo,
-                        prioridad=banner.Prioridad,
-                        fecha_inicio=banner.FechaInicio.isoformat() if banner.FechaInicio else None,
-                        fecha_fin=banner.FechaFin.isoformat() if banner.FechaFin else None,
-                        duracion_seg=banner.DuracionSeg,
-                        activo=banner.Activo,
-                        dispositivo_ids=target_dispositivo_ids
-                    )
-                    print(f"[DEBUG] Replicación de asignaciones completada: {replicacion_resultados}")
-                else:
-                    print(f"[WARNING] Archivo no encontrado para replicación: {file_path}")
+                update_result = await actualizar_banner_en_todas_las_apis(
+                    banner_id=banner.IdPublicidad,
+                    titulo=banner.Titulo,
+                    tipo=banner.Tipo,
+                    activo=banner.Activo,
+                    prioridad=banner.Prioridad,
+                    fecha_inicio=banner.FechaInicio.isoformat() if banner.FechaInicio else None,
+                    fecha_fin=banner.FechaFin.isoformat() if banner.FechaFin else None,
+                    duracion_seg=banner.DuracionSeg,
+                    dispositivo_ids=target_dispositivo_ids
+                )
+                print(f"[DEBUG] Actualización de banner en backend-api completada: {update_result}")
             except Exception as e:
-                print(f"[ERROR] Error en replicación de asignaciones: {str(e)}")
+                print(f"[ERROR] Error al actualizar banner en backend-api: {str(e)}")
         
         return {"success": True, "message": "Asignaciones actualizadas correctamente."}
     except Exception as e:

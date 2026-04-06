@@ -308,6 +308,96 @@ async def replicar_archivo_a_api_especifica(
     )
 
 
+async def actualizar_banner_en_api(
+    api_url: str,
+    banner_id: int,
+    titulo: str = None,
+    tipo: str = None,
+    activo: bool = None,
+    prioridad: int = None,
+    fecha_inicio: str = None,
+    fecha_fin: str = None,
+    duracion_seg: int = None,
+    dispositivo_ids: list = None,
+    timeout: int = 30
+) -> dict:
+    """
+    Actualiza un banner existente en una API específica.
+    """
+    data = {}
+    if titulo is not None:
+        data["titulo"] = titulo
+    if tipo is not None:
+        data["tipo"] = tipo
+    if activo is not None:
+        data["activo"] = activo
+    if prioridad is not None:
+        data["prioridad"] = prioridad
+    if fecha_inicio is not None:
+        data["fecha_inicio"] = fecha_inicio
+    if fecha_fin is not None:
+        data["fecha_fin"] = fecha_fin
+    if duracion_seg is not None:
+        data["duracion_seg"] = duracion_seg
+    if dispositivo_ids is not None:
+        data["dispositivo_ids"] = ",".join(str(d) for d in dispositivo_ids)
+    
+    if not data:
+        return {"success": True, "message": "No hay datos para actualizar"}
+    
+    update_url = api_url.rstrip('/') + f'/banners/{banner_id}'
+    print(f"[DEBUG] Actualizando banner {banner_id} en {update_url}")
+    print(f"[DEBUG] Datos a actualizar: {data}")
+    
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.put(update_url, data=data)
+            print(f"[DEBUG] Respuesta de actualización: {response.status_code} - {response.text}")
+            response.raise_for_status()
+            return response.json()
+    except Exception as e:
+        print(f"[ERROR] Error al actualizar banner en API: {str(e)}")
+        raise
+
+
+async def actualizar_banner_en_todas_las_apis(
+    banner_id: int,
+    titulo: str = None,
+    tipo: str = None,
+    activo: bool = None,
+    prioridad: int = None,
+    fecha_inicio: str = None,
+    fecha_fin: str = None,
+    duracion_seg: int = None,
+    dispositivo_ids: list = None,
+    timeout: int = 30
+) -> list:
+    """
+    Actualiza un banner existente en todas las APIs de replicación.
+    """
+    api_urls = get_api_urls()
+    resultados = []
+    for api_url in api_urls:
+        try:
+            resp = await actualizar_banner_en_api(
+                api_url=api_url,
+                banner_id=banner_id,
+                titulo=titulo,
+                tipo=tipo,
+                activo=activo,
+                prioridad=prioridad,
+                fecha_inicio=fecha_inicio,
+                fecha_fin=fecha_fin,
+                duracion_seg=duracion_seg,
+                dispositivo_ids=dispositivo_ids,
+                timeout=timeout
+            )
+            resultados.append({"api_url": api_url, "success": True, "response": resp})
+        except Exception as e:
+            resultados.append({"api_url": api_url, "success": False, "error": str(e)})
+    return resultados
+
+
 async def replicar_a_servidores(
     file_path: str,
     servidores: list,

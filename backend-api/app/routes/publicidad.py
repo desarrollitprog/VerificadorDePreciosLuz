@@ -213,7 +213,7 @@ async def replicar_archivo(
 
 @router.put("/banners/{banner_id}")
 async def actualizar_banner(
-    banner_id: int = Path(..., description="ID del banner a actualizar"),
+    banner_id: int = Path(..., description="ID del banner a actualizar (puede ser ID local o IdPublicidadRemoto)"),
     titulo: str = Form(None),
     tipo: str = Form(None),
     activo: bool = Form(None),
@@ -226,12 +226,21 @@ async def actualizar_banner(
 ):
     """
     Actualiza un banner existente (metadatos y device_ids).
+    Si no encuentra por ID directo, busca por IdPublicidadRemoto.
     """
     from ..models.publicidad import Publicidad
     
+    # Primero buscar por ID directo
     banner = await db.get(Publicidad, banner_id)
+    
+    # Si no encuentra, buscar por IdPublicidadRemoto (ID del dashboard)
     if not banner:
-        raise HTTPException(status_code=404, detail="Banner no encontrado")
+        stmt = select(Publicidad).where(Publicidad.IdPublicidadRemoto == banner_id)
+        result = await db.execute(stmt)
+        banner = result.scalars().first()
+    
+    if not banner:
+        raise HTTPException(status_code=404, detail=f"Banner no encontrado (ID: {banner_id})")
     
     try:
         # Actualizar campos si se proporcionan

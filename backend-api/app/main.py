@@ -1687,7 +1687,11 @@ async def _on_bus_command(device_id: str, command: str, payload: dict):
     if command == "WIPE_AND_RESYNC":
         await tablet_ws_manager.send_to_device(device_id, {"command": "WIPE_AND_RESYNC"})
     elif command == "REINICIAR":
-        await tablet_ws_manager.send_to_device(device_id, {"command": "REINICIAR"})
+        # Incluir payload (scheduled_at, recurring) si existe
+        message = {"command": "REINICIAR"}
+        if payload:
+            message.update(payload)
+        await tablet_ws_manager.send_to_device(device_id, message)
 
 
 async def _on_bus_confirmation(device_id: str, command: str, status: str, reason: str):

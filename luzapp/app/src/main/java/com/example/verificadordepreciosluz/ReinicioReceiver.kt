@@ -1,14 +1,14 @@
-package com.example.verificadordepreciosluz
+package com.example.verificadordepreciosluz.ui.scanner
 
 import android.app.admin.DevicePolicyManager
 import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import com.example.verificadordepreciosluz.ui.scanner.MyDeviceAdminReceiver
 
 class ReinicioReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -36,14 +36,13 @@ class ReinicioReceiver : BroadcastReceiver() {
                 val handler = Handler(Looper.getMainLooper())
                 handler.postDelayed({
                     try {
-                        val app = context.applicationContext as? android.app.Application
                         val scanActivityClass = Class.forName("com.example.verificadordepreciosluz.ui.scanner.ScanActivity")
                         val method = scanActivityClass.getMethod("programarReinicioRecurrente")
                         method.invoke(null)
                     } catch (e: Exception) {
                         Log.e("ReinicioReceiver", "Error al reprogramar: ${e.message}")
                     }
-                }, 60000) // esperar 1 minuto después del reinicio
+                }, 60000)
             }
         } catch (e: Exception) {
             Log.e("ReinicioReceiver", "Error al verificar recurrente: ${e.message}")

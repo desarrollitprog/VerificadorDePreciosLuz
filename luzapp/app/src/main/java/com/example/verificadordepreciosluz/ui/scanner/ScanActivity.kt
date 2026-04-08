@@ -2,6 +2,8 @@
 
 package com.example.verificadordepreciosluz.ui.scanner
 
+import com.example.verificadordepreciosluz.ui.scanner.ReinicioReceiver
+
 import android.Manifest
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
@@ -2183,7 +2185,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             val minuto = partes[1].toInt()
             
             val calendar = java.util.Calendar.getInstance()
-            val ahora = calendar.timeInMillis()
+            val nowMillis = calendar.timeInMillis
             
             calendar.set(java.util.Calendar.HOUR_OF_DAY, hora)
             calendar.set(java.util.Calendar.MINUTE, minuto)
@@ -2191,11 +2193,15 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             calendar.set(java.util.Calendar.MILLISECOND, 0)
             
             // Si ya pasó la hora hoy, programar para mañana
-            if (calendar.timeInMillis() <= ahora) {
+            if (calendar.timeInMillis <= nowMillis) {
                 calendar.add(java.util.Calendar.DAY_OF_YEAR, 1)
             }
             
-            val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val alarmManager = getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager
+            if (alarmManager == null) {
+                Log.e(TAG, "[Reinicio] AlarmManager no disponible")
+                return
+            }
             
             val intent = Intent(this, ReinicioReceiver::class.java)
             val pendingIntent = android.app.PendingIntent.getBroadcast(
@@ -2205,16 +2211,32 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
             )
             
+            // Verificar permiso de alarms exactos (Android 12+)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                if (!alarmManager.canScheduleExactAlarms()) {
+                    Log.w(TAG, "[Reinicio] No hay permiso para alarms exactos, intentando de todas formas")
+                }
+            }
+            
             // Usar setExactAndAllowWhileIdle para Android 6+
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    calendar.timeInMillis,
-                    pendingIntent
-                )
-            } else {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    alarmManager.setExactAndAllowWhileIdle(
+                        android.app.AlarmManager.RTC_WAKEUP,
+                        calendar.timeInMillis,
+                        pendingIntent
+                    )
+                } else {
+                    alarmManager.setExactAndAllowWhileIdle(
+                        android.app.AlarmManager.RTC_WAKEUP,
+                        calendar.timeInMillis,
+                        pendingIntent
+                    )
+                }
+            } catch (e: SecurityException) {
+                Log.w(TAG, "[Reinicio] SecurityException: usando set() como fallback")
+                alarmManager.set(
+                    android.app.AlarmManager.RTC_WAKEUP,
                     calendar.timeInMillis,
                     pendingIntent
                 )

@@ -1403,9 +1403,11 @@ async def programar_reinicio_masivo(
     from datetime import datetime, timedelta, timezone
     
     # 1. Obtener lista de dispositivos
-    if body.device_ids:
-        dispositivos_ids = body.device_ids
-    else:
+    # Si device_ids tiene elementos específicos, usarlos; si está vacía, obtener todos de BD
+    dispositivos_ids = body.device_ids if body.device_ids and len(body.device_ids) > 0 else []
+    
+    if not dispositivos_ids:
+        # Obtener todos los dispositivos de la base de datos
         stmt = select(Dispositivo.codigo_kiosko)
         result = await db.execute(stmt)
         dispositivos_ids = [row[0] for row in result.fetchall()]
@@ -1413,7 +1415,7 @@ async def programar_reinicio_masivo(
     if not dispositivos_ids:
         raise HTTPException(status_code=400, detail="No hay dispositivos disponibles")
     
-    logger.info(f"[PROGRAMAR_REINICIO] Programando para {len(dispositivos_ids) + 1} dispositivos, hour={body.hour}, recurring={body.recurring}")
+    logger.info(f"[PROGRAMAR_REINICIO] Programando para {len(dispositivos_ids)} dispositivos, hour={body.hour}, recurring={body.recurring}")
     
     # 2. Calcular scheduled_at
     now = datetime.now(timezone.utc)

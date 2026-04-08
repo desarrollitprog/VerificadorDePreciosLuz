@@ -1378,3 +1378,129 @@ async def reiniciar_dispositivo(
     except Exception as e:
         logger.error(f"Error al reiniciar dispositivo {device_id}: %s", e)
         raise HTTPException(status_code=500, detail=f"Error al comunicarse con el servidor: {str(e)}")
+
+
+class ProgramarReinicioBody(BaseModel):
+    device_ids: list[str] = []  # vacío = todos los dispositivos
+    hour: str  # formato "06:35"
+    recurring: bool = True
+
+
+@router.post("/dispositivos/programar-reinicio")
+async def programar_reinicio_masivo(
+    body: ProgramarReinicioBody,
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_cliente),
+):
+    """
+    Programa reinicio masivo para uno o todos los dispositivos.
+    
+    Lógica:
+    - Si device_ids vacío: obtener todos los dispositivos de BD
+    - Calcular scheduled_at basado en hour + fecha actual/mañana
+    - Si recurring=True: configurar para ejecutarse diariamente
+    """
+    from datetime import datetime, timedelta, timezone
+    
+    # 1. Obtener lista de dispositivos
+    if body.device_ids:
+        dispositivos_ids = body.device_ids
+    else:
+        stmt = select(Dispositivo.codigo_kiosko)
+        result = await db.execute(stmt)
+        dispositivos_ids = [row[0] for row in result.fetchall()]
+    
+    if not dispositivos_ids:
+        raise HTTPException(status_code=400, detail="No hay dispositivos disponibles")
+    
+    logger.info(f"[PROGRAMAR_REINICIO] Programando para {len(dispositivos_ids) + 1} dispositivos, hour={body.hour}, recurring={body.recurring}")
+    
+    # 2. Calcular scheduled_at
+    now = datetime.now(timezone.utc)
+    hour_parts = body.hour.split(':')
+    
+    if len(hour_parts) != 2:
+        raise HTTPException(status_code=400, detail="Formato de hora inválido. Use HH:MM")
+    
+    target_hour = int(hour_parts[0])
+    target_minute = int(hour_parts[1])
+    
+    # Crear datetime objetivo
+    target_datetime = now.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
+    
+    # Si la hora objetivo ya pasó hoy, programar para mañana
+    if target_datetime <= now:
+        target_datetime += timedelta(days=1)
+    
+    scheduled_at = target_datetime.isoformat()
+    
+    logger.info(f"[PROGRAMAR_REINICIO] scheduled_at calculado: {scheduled_at}")
+    
+    # 3. Enviar comando a cada dispositivo
+    resultados = {
+        "total": len(dispositivos_ids),
+        "enviados": 0,
+        "fallidos": 0,
+        "details": []
+    }
+    
+    for device_id in dispositivos_ids:
+        try:
+            # Buscar servidor del dispositivo
+            stmt_disp = select(Dispositivo).where(Dispositivo.codigo_kiosko == device_id)
+            result_disp = await db.execute(stmt_disp)
+            dispositivo = result_disp.scalars().first()
+            
+            if not dispositivo or not dispositivo.servidor_id:
+                resultados["fallidos"] += 1
+                resultados["details"].append({"device_id": device_id, "status": "error", "message": "Dispositivo sin servidor"})
+                continue
+            
+            stmt_srv = select(ServidorSecundario).where(ServidorSecundario.id == dispositivo.servidor_id)
+            result_srv = await db.execute(stmt_srv)
+            servidor = result_srv.scalars().first()
+            
+            if not servidor:
+                resultados["fallidos"] += 1
+                resultados["details"].append({"device_id": device_id, "status": "error", "message": "Servidor no encontrado"})
+                continue
+            
+            servidor_ip = servidor.ip
+            
+            # Llamar al backend-api del servidor
+            api_url = f"http://{servidor_ip}:8000/api/comandos/{device_id}"
+            
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.post(
+                    api_url,
+                    json={
+                        "comando": "REINICIAR",
+                        "scheduled_at": scheduled_at,
+                        "recurring": body.recurring
+                    }
+                )
+                
+                if response.status_code == 200:
+                    resultados["enviados"] += 1
+                    resultados["details"].append({"device_id": device_id, "status": "enviado", "scheduled_at": scheduled_at})
+                else:
+                    resultados["fallidos"] += 1
+                    resultados["details"].append({"device_id": device_id, "status": "error", "message": f"HTTP {response.status_code}"})
+                    
+        except Exception as e:
+            logger.error(f"[PROGRAMAR_REINICIO] Error con {device_id}: {e}")
+            resultados["fallidos"] += 1
+            resultados["details"].append({"device_id": device_id, "status": "error", "message": str(e)})
+    
+    # 4. Registrar en auditoría
+    user_id = current_user.get("user_id") if current_user else None
+    actor_name = current_user.get("nombre_usuario") or current_user.get("usuario") or "Sistema"
+    
+    await registrar_accion(
+        db,
+        user_id,
+        "PROGRAMAR_REINICIO_MASIVO",
+        f"Reinicio programado por {actor_name}: {len(dispositivos_ids)} dispositivos, hour={body.hour}, recurring={body.recurring}",
+    )
+    
+    return resultados

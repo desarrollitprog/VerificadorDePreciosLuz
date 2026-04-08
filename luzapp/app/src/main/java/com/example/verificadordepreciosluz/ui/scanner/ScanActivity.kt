@@ -35,7 +35,6 @@ import android.graphics.BitmapFactory
 import android.graphics.Rect
 import java.text.SimpleDateFormat
 import java.util.Locale
-import java.util.TimeZone
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.*
@@ -83,7 +82,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
-import org.json.JSONObject
 
 @OptIn(ExperimentalGetImage::class)
 class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListener {
@@ -215,6 +213,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         // Inicializar Device Policy Manager para modo kiosco
         dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
         adminComponent = ComponentName(this, com.example.verificadordepreciosluz.ui.scanner.MyDeviceAdminReceiver::class.java)
+        
+        // Programar reinicio recurrente si está configurado
+        programarReinicioRecurrente()
 
         val forceOffline = intent.getBooleanExtra("force_offline_mode", false)
         val hasNetwork = NetworkUtils.isNetworkAvailable(this)
@@ -1748,22 +1749,56 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                             }
                         } else if (command == "REINICIAR") {
                             Log.i(TAG, "[WebSocket] ==== REINICIAR COMMAND RECEIVED ====")
-                            Log.i(TAG, "[WebSocket] Comando REINICIAR recibido. Ejecutando reinicio del dispositivo...")
+                            val scheduledAt = message.optString("scheduled_at", "")
+                            val isRecurring = message.optBoolean("recurring", false)
+                            Log.i(TAG, "[WebSocket] scheduled_at=$scheduledAt, recurring=$isRecurring")
+                            
                             try {
                                 val pkgName = applicationContext.packageName
                                 Log.i(TAG, "[WebSocket] Verificando si es Device Owner: $pkgName")
-                                // Usar DevicePolicyManager para reiniciar (requiere Device Owner)
+                                
+                                // Guardar configuración recurrente si aplica
+                                if (dpm.isDeviceOwnerApp(pkgName)) {
+                                    if (isRecurring) {
+                                        Log.i(TAG, "[WebSocket] Guardando configuración de reinicio recurrente")
+                                        val prefs = getSharedPreferences("reinicio_config", Context.MODE_PRIVATE)
+                                        prefs.edit()
+                                            .putString("hora_reinicio", scheduledAt.substring(11, 16)) // extraer HH:mm
+                                            .putBoolean("recurrente", true)
+                                            .apply()
+                                        Log.i(TAG, "[WebSocket] Configuración guardada: hora=${scheduledAt.substring(11, 16)}, recurrente=true")
+                                    }
+                                }
+                                
+                                // Si hay scheduled_at, calcular delay
+                                if (scheduledAt.isNotEmpty()) {
+                                    try {
+                                        val targetTime = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).parse(scheduledAt)
+                                        val now = System.currentTimeMillis()
+                                        val delay = targetTime.time - now
+                                        
+                                        if (delay > 0) {
+                                            Log.i(TAG, "[WebSocket] Programando reinicio para dentro de ${delay/1000/60} minutos")
+                                            sendSyncConfirmation(webSocket, command, "RECEIVED")
+                                            uiHandler.postDelayed({
+                                                ejecutarReinicio(dpm, adminComponent, webSocket, command)
+                                            }, delay)
+                                            return
+                                        } else {
+                                            Log.i(TAG, "[WebSocket] La hora programada ya pasó, ejecutando inmediatamente")
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.e(TAG, "[WebSocket] Error parseando scheduled_at: ${e.message}")
+                                    }
+                                }
+                                
+                                // Reinicio inmediato o sin scheduled_at
                                 if (dpm.isDeviceOwnerApp(pkgName)) {
                                     Log.i(TAG, "[WebSocket] ES Device Owner - ejecutando reinicio automático")
                                     sendSyncConfirmation(webSocket, command, "RECEIVED")
                                     Log.i(TAG, "[WebSocket] Confirmación RECEIVED enviada, ejecutando reinicio...")
                                     uiHandler.postDelayed({
-                                        try {
-                                            dpm.reboot(adminComponent)
-                                        } catch (e: Exception) {
-                                            Log.e(TAG, "[WebSocket] Error al ejecutar reinicio: ${e.message}")
-                                            sendSyncConfirmation(webSocket, command, "FAILED", "Error al reiniciar: ${e.message}")
-                                        }
+                                        ejecutarReinicio(dpm, adminComponent, webSocket, command)
                                     }, 2000)
                                 } else {
                                     // No es Device Owner: mostrar diálogo
@@ -2110,6 +2145,84 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             Log.i(TAG, "Kiosk mode disabled")
         } catch (e: Exception) {
             Log.e(TAG, "Error disabling kiosk mode", e)
+        }
+    }
+
+    private fun ejecutarReinicio(
+        dpm: DevicePolicyManager,
+        adminComponent: ComponentName,
+        webSocket: WebSocket?,
+        command: String
+    ) {
+        try {
+            dpm.reboot(adminComponent)
+            Log.i(TAG, "Reinicio ejecutado correctamente")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error al ejecutar reinicio: ${e.message}")
+            if (webSocket != null) {
+                sendSyncConfirmation(webSocket, command, "FAILED", "Error al reiniciar: ${e.message}")
+            }
+        }
+    }
+
+    private fun programarReinicioRecurrente() {
+        try {
+            val prefs = getSharedPreferences("reinicio_config", Context.MODE_PRIVATE)
+            val horaReinicio = prefs.getString("hora_reinicio", null)
+            val esRecurrente = prefs.getBoolean("recurrente", false)
+            
+            if (horaReinicio == null || !esRecurrente) {
+                Log.i(TAG, "[Reinicio] No hay configuración de reinicio recurrente")
+                return
+            }
+            
+            Log.i(TAG, "[Reinicio] Programando reinicio recurrente a las $horaReinicio")
+            
+            val partes = horaReinicio.split(":")
+            val hora = partes[0].toInt()
+            val minuto = partes[1].toInt()
+            
+            val calendar = java.util.Calendar.getInstance()
+            val ahora = calendar.timeInMillis()
+            
+            calendar.set(java.util.Calendar.HOUR_OF_DAY, hora)
+            calendar.set(java.util.Calendar.MINUTE, minuto)
+            calendar.set(java.util.Calendar.SECOND, 0)
+            calendar.set(java.util.Calendar.MILLISECOND, 0)
+            
+            // Si ya pasó la hora hoy, programar para mañana
+            if (calendar.timeInMillis() <= ahora) {
+                calendar.add(java.util.Calendar.DAY_OF_YEAR, 1)
+            }
+            
+            val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            
+            val intent = Intent(this, ReinicioReceiver::class.java)
+            val pendingIntent = android.app.PendingIntent.getBroadcast(
+                this,
+                1001,
+                intent,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            )
+            
+            // Usar setExactAndAllowWhileIdle para Android 6+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    calendar.timeInMillis,
+                    pendingIntent
+                )
+            } else {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    calendar.timeInMillis,
+                    pendingIntent
+                )
+            }
+            
+            Log.i(TAG, "[Reinicio] Alarm programado para ${calendar.time}")
+        } catch (e: Exception) {
+            Log.e(TAG, "[Reinicio] Error al programar reinicio recurrente: ${e.message}")
         }
     }
 }

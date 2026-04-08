@@ -205,3 +205,26 @@ export async function deleteServer(serverId: string): Promise<{ success: boolean
   const response = await api.delete(`/servidores/${encodeURIComponent(serverId)}`);
   return response.data as { success: boolean; message: string };
 }
+
+export interface ScheduleRestartParams {
+  device_ids: string[];  // vacío = todos
+  hour: string;          // formato "06:35"
+  recurring: boolean;
+}
+
+export interface ScheduleRestartResult {
+  total: number;
+  enviados: number;
+  fallidos: number;
+  details: Array<{
+    device_id: string;
+    status: string;
+    scheduled_at?: string;
+    message?: string;
+  }>;
+}
+
+export async function scheduleRestart(params: ScheduleRestartParams): Promise<ScheduleRestartResult> {
+  const response = await api.post('/dispositivos/programar-reinicio', params);
+  return response.data as ScheduleRestartResult;
+}

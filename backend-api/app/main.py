@@ -1004,6 +1004,8 @@ async def fuerza_sync(
 
 class ComandoBody(BaseModel):
     comando: str
+    scheduled_at: str | None = None  # formato ISO 8601: "2026-04-09T06:35:00Z"
+    recurring: bool = False
 
 
 COMMAND_TIMEOUT = 60  # segundos para esperar confirmación de reinicio
@@ -1028,15 +1030,44 @@ async def enviar_comando_a_dispositivo(
     if comando not in ("REINICIAR",):
         raise HTTPException(status_code=400, detail=f"Comando no soportado: {comando}")
     
-    # Publicar comando en Redis (via pub/sub) - similar a sincronización
-    # Los workers con el WebSocket del dispositivo conectado lo recibirán y enviarán
-    logger.info(f"[COMMAND] Publicando comando '{comando}' para dispositivo {device_id}")
+    # Preparar payload adicional para comandos programados
+    scheduled_at = body.scheduled_at
+    is_recurring = body.recurring
+    
+    # Manejar scheduled_at - calcular delay si es programa
+    scheduled_at_datetime = None
+    delay_seconds = 0
+    
+    if scheduled_at:
+        try:
+            from datetime import datetime, timezone
+            scheduled_at_datetime = datetime.fromisoformat(scheduled_at.replace('Z', '+00:00'))
+            now = datetime.now(timezone.utc)
+            
+            if scheduled_at_datetime.tzinfo is None:
+                scheduled_at_datetime = scheduled_at_datetime.replace(tzinfo=timezone.utc)
+            
+            if scheduled_at_datetime > now:
+                delay_seconds = (scheduled_at_datetime - now).total_seconds()
+                logger.info(f"[COMMAND] Comando programado para {scheduled_at} (delay: {delay_seconds}s)")
+            else:
+                logger.warning(f"[COMMAND] scheduled_at está en el pasado, ejecutando inmediatamente")
+                scheduled_at = None  # Ignorar si está en el pasado
+        except Exception as e:
+            logger.error(f"[COMMAND] Error parseando scheduled_at: {e}")
+            scheduled_at = None
+    
+    # Preparar payload para el dispositivo
+    command_payload = {}
+    if scheduled_at:
+        command_payload["scheduled_at"] = scheduled_at
+    if is_recurring:
+        command_payload["recurring"] = True
+    
+    logger.info(f"[COMMAND] Payload del comando: {command_payload}")
     
     # Preparar waiters para confirmación
     ack_key = f"command:{device_id}:{comando}"
-    waiter = asyncio.Event()
-    command_ack_waiters[ack_key] = waiter
-    command_ack_payloads.pop(ack_key, None)
     
     # Validar que Redis esté disponible
     if device_command_bus is None:
@@ -1074,7 +1105,7 @@ async def enviar_comando_a_dispositivo(
         await device_command_bus.publish_command(
             device_id=device_id,
             command=comando,
-            payload={},
+            payload=command_payload,
         )
         
         # Esperar confirmación via polling a Redis

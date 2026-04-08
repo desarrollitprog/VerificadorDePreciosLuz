@@ -6,6 +6,7 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <application
         android:name=".App"
@@ -34,6 +35,11 @@
     <receiver android:name=".BootReceiver" android:enabled="true" android:exported="true">
         <intent-filter>
             <action android:name="android.intent.action.BOOT_COMPLETED" />
+        </intent-filter>
+    </receiver>
+    <receiver android:name=".ReinicioReceiver" android:enabled="true" android:exported="false">
+        <intent-filter>
+            <action android:name="com.example.verificadordepreciosluz.REINICIO" />
         </intent-filter>
     </receiver>
     <receiver

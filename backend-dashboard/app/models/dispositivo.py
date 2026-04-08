@@ -11,6 +11,8 @@ class Dispositivo(Base):
     codigo_kiosko = Column(String(100), unique=True, nullable=False, index=True)
     nombre_amigable = Column(String(120), nullable=True)
     online = Column(Boolean, default=False, nullable=False)
+    hora_reinicio = Column(String(5), nullable=True)  # formato "06:35"
+    reinicio_recurrente = Column(Boolean, default=False, nullable=False)
 
     servidor_id = Column(
         Integer,

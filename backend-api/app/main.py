@@ -1004,7 +1004,8 @@ async def fuerza_sync(
 
 class ComandoBody(BaseModel):
     comando: str
-    scheduled_at: str | None = None  # formato ISO 8601: "2026-04-09T06:35:00Z"
+    hour: str | None = None  # formato "06:35" - el dispositivo calcula la próxima occurrence
+    scheduled_at: str | None = None  # formato ISO 8601 (legacy, para backward compatibility)
     recurring: bool = False
 
 
@@ -1030,39 +1031,22 @@ async def enviar_comando_a_dispositivo(
     if comando not in ("REINICIAR",):
         raise HTTPException(status_code=400, detail=f"Comando no soportado: {comando}")
     
-    # Preparar payload adicional para comandos programados
-    scheduled_at = body.scheduled_at
+    # Preparar payload para comandos programados
+    # El dispositivo calcula la próxima occurrence en su timezone local
     is_recurring = body.recurring
-    
-    # Manejar scheduled_at - calcular delay si es programa
-    scheduled_at_datetime = None
-    delay_seconds = 0
-    
-    if scheduled_at:
-        try:
-            from datetime import datetime, timezone
-            scheduled_at_datetime = datetime.fromisoformat(scheduled_at.replace('Z', '+00:00'))
-            now = datetime.now(timezone.utc)
-            
-            if scheduled_at_datetime.tzinfo is None:
-                scheduled_at_datetime = scheduled_at_datetime.replace(tzinfo=timezone.utc)
-            
-            if scheduled_at_datetime > now:
-                delay_seconds = (scheduled_at_datetime - now).total_seconds()
-                logger.info(f"[COMMAND] Comando programado para {scheduled_at} (delay: {delay_seconds}s)")
-            else:
-                logger.warning(f"[COMMAND] scheduled_at está en el pasado, ejecutando inmediatamente")
-                scheduled_at = None  # Ignorar si está en el pasado
-        except Exception as e:
-            logger.error(f"[COMMAND] Error parseando scheduled_at: {e}")
-            scheduled_at = None
     
     # Preparar payload para el dispositivo
     command_payload = {}
-    if scheduled_at:
-        command_payload["scheduled_at"] = scheduled_at
-    if is_recurring:
-        command_payload["recurring"] = True
+    if body.hour:
+        # Nuevo formato: enviar solo hour y recurring
+        command_payload["hour"] = body.hour
+        command_payload["recurring"] = is_recurring
+        logger.info(f"[COMMAND] Payload con hour: {body.hour}, recurring: {is_recurring}")
+    elif body.scheduled_at:
+        # Legacy: scheduled_at para backward compatibility
+        command_payload["scheduled_at"] = body.scheduled_at
+        command_payload["recurring"] = is_recurring
+        logger.info(f"[COMMAND] Payload legacy con scheduled_at: {body.scheduled_at}")
     
     logger.info(f"[COMMAND] Payload del comando: {command_payload}")
     

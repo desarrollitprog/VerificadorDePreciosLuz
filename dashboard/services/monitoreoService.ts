@@ -11,6 +11,8 @@ export interface DeviceStatus {
   ultima_duracion?: number | null;
   tiempo_acumulado?: number | null;
   server_id?: string | null;
+  hora_reinicio?: string | null;
+  reinicio_recurrente?: boolean;
 }
 
 export interface ServerStatus {

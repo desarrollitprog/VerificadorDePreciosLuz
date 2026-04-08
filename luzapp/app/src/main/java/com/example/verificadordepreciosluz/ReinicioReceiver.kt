@@ -1,13 +1,15 @@
 package com.example.verificadordepreciosluz.ui.scanner
 
-import android.app.admin.DevicePolicyManager
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
 import com.example.verificadordepreciosluz.ui.scanner.MyDeviceAdminReceiver
 
 class ReinicioReceiver : BroadcastReceiver() {
@@ -33,19 +35,53 @@ class ReinicioReceiver : BroadcastReceiver() {
             
             if (horaReinicio != null && esRecurrente) {
                 Log.i("ReinicioReceiver", "Reprogramando reinicio recurrente para mañana...")
-                val handler = Handler(Looper.getMainLooper())
-                handler.postDelayed({
-                    try {
-                        val scanActivityClass = Class.forName("com.example.verificadordepreciosluz.ui.scanner.ScanActivity")
-                        val method = scanActivityClass.getMethod("programarReinicioRecurrente")
-                        method.invoke(null)
-                    } catch (e: Exception) {
-                        Log.e("ReinicioReceiver", "Error al reprogramar: ${e.message}")
-                    }
-                }, 60000)
+                reprogramarReinicio(context, horaReinicio)
             }
         } catch (e: Exception) {
             Log.e("ReinicioReceiver", "Error al verificar recurrente: ${e.message}")
+        }
+    }
+    
+    private fun reprogramarReinicio(context: Context, horaReinicio: String) {
+        try {
+            val partes = horaReinicio.split(":")
+            if (partes.size != 2) return
+            
+            val hora = partes[0].toInt()
+            val minuto = partes[1].toInt()
+            
+            val calendar = java.util.Calendar.getInstance()
+            calendar.add(java.util.Calendar.DAY_OF_YEAR, 1)
+            calendar.set(java.util.Calendar.HOUR_OF_DAY, hora)
+            calendar.set(java.util.Calendar.MINUTE, minuto)
+            calendar.set(java.util.Calendar.SECOND, 0)
+            calendar.set(java.util.Calendar.MILLISECOND, 0)
+            
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val intent = Intent(context, ReinicioReceiver::class.java)
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                1001,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            
+            try {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    calendar.timeInMillis,
+                    pendingIntent
+                )
+                Log.i("ReinicioReceiver", "Alarm reprogramado para mañana a las $horaReinicio")
+            } catch (e: SecurityException) {
+                alarmManager.set(
+                    AlarmManager.RTC_WAKEUP,
+                    calendar.timeInMillis,
+                    pendingIntent
+                )
+            }
+        } catch (e: Exception) {
+            Log.e("ReinicioReceiver", "Error al reprogramar: ${e.message}")
         }
     }
 }

@@ -1752,8 +1752,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                         } else if (command == "REINICIAR") {
                             Log.i(TAG, "[WebSocket] ==== REINICIAR COMMAND RECEIVED ====")
                             val scheduledAt = message.optString("scheduled_at", "")
+                            val targetHour = message.optString("hour", "") // formato "06:35"
                             val isRecurring = message.optBoolean("recurring", false)
-                            Log.i(TAG, "[WebSocket] scheduled_at=$scheduledAt, recurring=$isRecurring")
+                            Log.i(TAG, "[WebSocket] hour=$targetHour, scheduled_at=$scheduledAt, recurring=$isRecurring")
                             
                             try {
                                 val pkgName = applicationContext.packageName
@@ -1761,40 +1762,62 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                 
                                 // Guardar configuración recurrente si aplica
                                 if (dpm.isDeviceOwnerApp(pkgName)) {
-                                    if (isRecurring) {
+                                    val prefs = getSharedPreferences("reinicio_config", Context.MODE_PRIVATE)
+                                    
+                                    if (isRecurring && targetHour.isNotEmpty()) {
                                         Log.i(TAG, "[WebSocket] Guardando configuración de reinicio recurrente")
-                                        val prefs = getSharedPreferences("reinicio_config", Context.MODE_PRIVATE)
                                         prefs.edit()
-                                            .putString("hora_reinicio", scheduledAt.substring(11, 16)) // extraer HH:mm
+                                            .putString("hora_reinicio", targetHour)
                                             .putBoolean("recurrente", true)
                                             .apply()
-                                        Log.i(TAG, "[WebSocket] Configuración guardada: hora=${scheduledAt.substring(11, 16)}, recurrente=true")
+                                        Log.i(TAG, "[WebSocket] Configuración guardada: hora=$targetHour, recurrente=true")
+                                    } else if (!isRecurring) {
+                                        prefs.edit()
+                                            .putBoolean("recurrente", false)
+                                            .apply()
                                     }
                                 }
                                 
-                                // Si hay scheduled_at, calcular delay
-                                if (scheduledAt.isNotEmpty()) {
+                                // Si hay hour, calcular delay en timezone del dispositivo
+                                if (targetHour.isNotEmpty()) {
+                                    val delay = calcularProximaReinicio(targetHour)
+                                    
+                                    if (delay > 0) {
+                                        Log.i(TAG, "[WebSocket] Programando reinicio para dentro de ${delay/1000/60} minutos")
+                                        sendSyncConfirmation(webSocket, command, "RECEIVED")
+                                        uiHandler.postDelayed({
+                                            ejecutarReinicio(dpm, adminComponent, webSocket, command)
+                                        }, delay)
+                                        return
+                                    } else {
+                                        Log.i(TAG, "[WebSocket] La hora programada ya pasó hoy, ejecutando inmediatamente")
+                                    }
+                                } else if (scheduledAt.isNotEmpty()) {
+                                    // Legacy: usar scheduled_at para backward compatibility
                                     try {
-                                        val targetTime = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).parse(scheduledAt)
-                                        val now = System.currentTimeMillis()
-                                        val delay = targetTime.time - now
+                                        val normalizedAt = scheduledAt.replace("+00:00", "+0000").replace("+00", "+0000")
+                                        val isoFormat = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.US)
+                                        val targetTime = isoFormat.parse(normalizedAt)
                                         
-                                        if (delay > 0) {
-                                            Log.i(TAG, "[WebSocket] Programando reinicio para dentro de ${delay/1000/60} minutos")
-                                            sendSyncConfirmation(webSocket, command, "RECEIVED")
-                                            uiHandler.postDelayed({
-                                                ejecutarReinicio(dpm, adminComponent, webSocket, command)
-                                            }, delay)
-                                            return
-                                        } else {
-                                            Log.i(TAG, "[WebSocket] La hora programada ya pasó, ejecutando inmediatamente")
+                                        if (targetTime != null) {
+                                            val now = System.currentTimeMillis()
+                                            val delayLegacy = targetTime.time - now
+                                            
+                                            if (delayLegacy > 0) {
+                                                Log.i(TAG, "[WebSocket] Programando reinicio legacy para dentro de ${delayLegacy/1000/60} minutos")
+                                                sendSyncConfirmation(webSocket, command, "RECEIVED")
+                                                uiHandler.postDelayed({
+                                                    ejecutarReinicio(dpm, adminComponent, webSocket, command)
+                                                }, delayLegacy)
+                                                return
+                                            }
                                         }
                                     } catch (e: Exception) {
                                         Log.e(TAG, "[WebSocket] Error parseando scheduled_at: ${e.message}")
                                     }
                                 }
                                 
-                                // Reinicio inmediato o sin scheduled_at
+                                // Reinicio inmediato o sin hour
                                 if (dpm.isDeviceOwnerApp(pkgName)) {
                                     Log.i(TAG, "[WebSocket] ES Device Owner - ejecutando reinicio automático")
                                     sendSyncConfirmation(webSocket, command, "RECEIVED")
@@ -2246,5 +2269,31 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         } catch (e: Exception) {
             Log.e(TAG, "[Reinicio] Error al programar reinicio recurrente: ${e.message}")
         }
+    }
+
+    private fun calcularProximaReinicio(horaTarget: String): Long {
+        // Formato horaTarget: "06:35"
+        val partes = horaTarget.split(":")
+        if (partes.size != 2) return 0
+        
+        val hora = partes[0].toIntOrNull() ?: return 0
+        val minuto = partes[1].toIntOrNull() ?: return 0
+        
+        val calendar = java.util.Calendar.getInstance()
+        val ahora = System.currentTimeMillis()
+        
+        val targetCalendar = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, hora)
+            set(java.util.Calendar.MINUTE, minuto)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        
+        // Si ya pasó la hora hoy, programar para mañana
+        if (targetCalendar.timeInMillis <= ahora) {
+            targetCalendar.add(java.util.Calendar.DAY_OF_YEAR, 1)
+        }
+        
+        return targetCalendar.timeInMillis - ahora
     }
 }

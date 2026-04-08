@@ -886,6 +886,8 @@ async def status_detalle(
                     "ultima_duracion": ultima_duracion,
                     "tiempo_acumulado": tiempo_acumulado,
                     "server_id": runtime_info.get("server_id"),
+                    "hora_reinicio": dispositivo.hora_reinicio,
+                    "reinicio_recurrente": dispositivo.reinicio_recurrente if hasattr(dispositivo, 'reinicio_recurrente') else False,
                 }
             )
 
@@ -1417,28 +1419,12 @@ async def programar_reinicio_masivo(
     
     logger.info(f"[PROGRAMAR_REINICIO] Programando para {len(dispositivos_ids)} dispositivos, hour={body.hour}, recurring={body.recurring}")
     
-    # 2. Calcular scheduled_at
-    now = datetime.now(timezone.utc)
+    # Validar formato de hora
     hour_parts = body.hour.split(':')
-    
     if len(hour_parts) != 2:
         raise HTTPException(status_code=400, detail="Formato de hora inválido. Use HH:MM")
     
-    target_hour = int(hour_parts[0])
-    target_minute = int(hour_parts[1])
-    
-    # Crear datetime objetivo
-    target_datetime = now.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
-    
-    # Si la hora objetivo ya pasó hoy, programar para mañana
-    if target_datetime <= now:
-        target_datetime += timedelta(days=1)
-    
-    scheduled_at = target_datetime.isoformat()
-    
-    logger.info(f"[PROGRAMAR_REINICIO] scheduled_at calculado: {scheduled_at}")
-    
-    # 3. Enviar comando a cada dispositivo
+    # 3. Enviar comando a cada dispositivo (el dispositivo calcular la próxima occurrence)
     resultados = {
         "total": len(dispositivos_ids),
         "enviados": 0,
@@ -1477,7 +1463,7 @@ async def programar_reinicio_masivo(
                     api_url,
                     json={
                         "comando": "REINICIAR",
-                        "scheduled_at": scheduled_at,
+                        "hour": body.hour,
                         "recurring": body.recurring
                     }
                 )
@@ -1485,6 +1471,11 @@ async def programar_reinicio_masivo(
                 if response.status_code == 200:
                     resultados["enviados"] += 1
                     resultados["details"].append({"device_id": device_id, "status": "enviado", "scheduled_at": scheduled_at})
+                    
+                    # Guardar hora de reinicio en la BD
+                    dispositivo.hora_reinicio = body.hour
+                    dispositivo.reinicio_recurrente = body.recurring
+                    await db.commit()
                 else:
                     resultados["fallidos"] += 1
                     resultados["details"].append({"device_id": device_id, "status": "error", "message": f"HTTP {response.status_code}"})

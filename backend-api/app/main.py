@@ -1046,16 +1046,27 @@ async def enviar_comando_a_dispositivo(
             detail="Sistema de comandos no disponible. Verifique que Redis esté activo."
         )
     
-    # Validar que el dispositivo esté registrado en Redis (conectado recientemente)
-    from app.services.device_registry import device_registry
-    if device_registry:
-        is_registered = await device_registry.is_device_registered(device_id)
-        if not is_registered:
-            logger.warning(f"[COMMAND] Dispositivo {device_id} no registrado o desconectado")
-            raise HTTPException(
-                status_code=409, 
-                detail=f"Dispositivo {device_id} no está conectado. Espere a que se reconecte."
-            )
+    # Validar que el dispositivo esté conectado
+    # Primero verificar en memoria (device_map) - más confiable
+    ws = tablet_ws_manager.device_map.get(device_id)
+    if ws:
+        logger.info(f"[COMMAND] Dispositivo {device_id} encontrado en memoria (este servidor)")
+    else:
+        # Fallback: verificar en Redis (device_state) - cubre caso de dispositivo en otro servidor
+        logger.info(f"[COMMAND] Dispositivo {device_id} no encontrado en memoria, verificando Redis...")
+        if device_state_store:
+            all_status = await device_state_store.get_all_status()
+            is_online = all_status.get(device_id, {}).get("online", False)
+            if not is_online:
+                logger.warning(f"[COMMAND] Dispositivo {device_id} no registrado o desconectado")
+                raise HTTPException(
+                    status_code=409, 
+                    detail=f"Dispositivo {device_id} no está conectado. Espere a que se reconecte."
+                )
+            logger.info(f"[COMMAND] Dispositivo {device_id} encontrado en Redis (otro servidor)")
+        else:
+            # Si no hay device_state_store, permitir el intento (comando se perderá pero no se rechaza prematuramente)
+            logger.warning(f"[COMMAND] device_state_store no disponible, intentando enviar comando...")
     
     try:
         # Enviar comando vía Redis pub/sub

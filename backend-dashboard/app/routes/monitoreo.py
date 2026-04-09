@@ -732,9 +732,7 @@ async def status_detalle(
     """
     Devuelve servidores + dispositivos conectados (consultando /devices/status por IP).
     """
-    logger.info("status-detalle: solicitud recibida, device count=%s", len(dispositivos_db))
-    for d in list(dispositivos_db)[:3]:
-        logger.info("status-detalle: device %s hora_reinicio=%s", d.codigo_kiosko, d.hora_reinicio)
+    logger.info("status-detalle: solicitud recibida")
     now = _utcnow()
     umbral = now - timedelta(minutes=HEARTBEAT_OFFLINE_MINUTES)
 

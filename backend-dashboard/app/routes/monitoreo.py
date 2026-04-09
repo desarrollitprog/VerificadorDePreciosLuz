@@ -746,6 +746,8 @@ async def status_detalle(
     for d in dispositivos_db:
         if d.hora_reinicio:
             logger.info("status-detalle: device %s tiene hora_reinicio=%s", d.codigo_kiosko, d.hora_reinicio)
+        logger.info("status-detalle: DB device %s, hora_reinicio=%s, reinicio_recurrente=%s", 
+            d.codigo_kiosko, d.hora_reinicio, getattr(d, 'reinicio_recurrente', 'NO ATTR'))
     
     dispositivo_por_codigo: dict[str, Dispositivo] = {
         d.codigo_kiosko: d for d in dispositivos_db
@@ -891,8 +893,8 @@ async def status_detalle(
                     "ultima_duracion": ultima_duracion,
                     "tiempo_acumulado": tiempo_acumulado,
                     "server_id": runtime_info.get("server_id"),
-                    "hora_reinicio": dispositivo.hora_reinicio,
-                    "reinicio_recurrente": getattr(dispositivo, 'reinicio_recurrente', False),
+                    "hora_reinicio": dispositivo.hora_reinicio if dispositivo else None,
+                    "reinicio_recurrente": getattr(dispositivo, 'reinicio_recurrente', False) if dispositivo else False,
                 }
             )
 

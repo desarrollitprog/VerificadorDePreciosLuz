@@ -1439,6 +1439,8 @@ async def programar_reinicio_masivo(
             result_disp = await db.execute(stmt_disp)
             dispositivo = result_disp.scalars().first()
             
+            logger.info(f"[PROGRAMAR_REINICIO] Procesando {device_id}, hora_reinicio_actual={dispositivo.hora_reinicio if dispositivo else 'None'}")
+            
             if not dispositivo or not dispositivo.servidor_id:
                 resultados["fallidos"] += 1
                 resultados["details"].append({"device_id": device_id, "status": "error", "message": "Dispositivo sin servidor"})
@@ -1470,12 +1472,16 @@ async def programar_reinicio_masivo(
                 
                 if response.status_code == 200:
                     resultados["enviados"] += 1
-                    resultados["details"].append({"device_id": device_id, "status": "enviado", "scheduled_at": scheduled_at})
+                    resultados["details"].append({"device_id": device_id, "status": "enviado", "hour": body.hour, "recurring": body.recurring})
                     
                     # Guardar hora de reinicio en la BD
                     dispositivo.hora_reinicio = body.hour
                     dispositivo.reinicio_recurrente = body.recurring
+                    await db.flush()
+                    await db.refresh(dispositivo)
                     await db.commit()
+                    
+                    logger.info(f"[PROGRAMAR_REINICIO] Guardado en BD: {device_id} hora={body.hour} recurrente={body.recurring}")
                 else:
                     resultados["fallidos"] += 1
                     resultados["details"].append({"device_id": device_id, "status": "error", "message": f"HTTP {response.status_code}"})

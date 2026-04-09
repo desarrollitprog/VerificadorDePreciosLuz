@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
+import kotlin.random.Random
 
 class DolarRepository {
     
@@ -56,9 +57,18 @@ class DolarRepository {
             try {
                 Log.d(TAG, ">>> Intento $attempt/$MAX_RETRIES usando OkHttp")
                 
+                // Cache busting: agregar parametro aleatorio para evitar cache
+                val cacheBuster = Random.nextLong(999999)
+                val urlConCacheBuster = "$DOLAR_API_URL?_cb=$cacheBuster"
+                
                 val request = Request.Builder()
-                    .url(DOLAR_API_URL)
+                    .url(urlConCacheBuster)
                     .addHeader("Accept", "application/json")
+                    .addHeader("Cache-Control", "no-cache, no-store, must-revalidate")
+                    .addHeader("Pragma", "no-cache")
+                    .addHeader("Expires", "0")
+                    .addHeader("If-None-Match", "")
+                    .addHeader("If-Modified-Since", "0")
                     .build()
                 
                 unsafeClient.newCall(request).execute().use { response ->

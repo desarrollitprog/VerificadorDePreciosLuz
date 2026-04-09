@@ -19,8 +19,8 @@ interface UpdateApiService {
 }
 
 object UpdateService {
-    private const val BASE_URL = "http://luzcadash.ddns.net"
-    private const val UPDATE_PATH = "/updates/version.json"
+    private const val BASE_URL = "https://luzapp.netlify.app"
+    private const val UPDATE_PATH = "/version.json"
 
     private val client: OkHttpClient by lazy {
         val logging = HttpLoggingInterceptor().apply {
@@ -82,7 +82,7 @@ object UpdateService {
     }
 
     fun getUpdateUrl(updateInfo: UpdateInfo): String {
-        return updateInfo.downloadUrl.ifEmpty { "$BASE_URL/updates/app-release.apk" }
+        return updateInfo.downloadUrl.ifEmpty { "$BASE_URL/luzapp.apk" }
     }
 
     fun getChecksum(updateInfo: UpdateInfo): String {

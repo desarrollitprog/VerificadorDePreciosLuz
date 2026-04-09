@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import android.util.Log
 import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
@@ -57,6 +58,7 @@ class UpdateDialog(
     }
 
     private fun downloadUpdate() {
+        Log.d("UpdateDialog", "Iniciando descarga, URL: ${UpdateService.getUpdateUrl(updateInfo)}")
         tvStatus?.text = "Descargando..."
         findViewById<TextView>(R.id.btnUpdateNow).isEnabled = false
 
@@ -66,15 +68,19 @@ class UpdateDialog(
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 downloadFile(downloadUrl, targetFile)
+                Log.d("UpdateDialog", "Descarga completada, verificando checksum...")
                 
                 withContext(Dispatchers.Main) {
                     if (verifyChecksum(targetFile)) {
+                        Log.d("UpdateDialog", "Checksum verificado, iniciando instalación")
                         installApk(targetFile)
                     } else {
+                        Log.e("UpdateDialog", "Error de verificación checksum")
                         showError("Error de verificación")
                     }
                 }
             } catch (e: Exception) {
+                Log.e("UpdateDialog", "Error en descarga: ${e.message}")
                 withContext(Dispatchers.Main) {
                     showError("Error: ${e.message}")
                 }
@@ -132,18 +138,22 @@ class UpdateDialog(
 
     private fun installApk(file: File) {
         try {
+            Log.d("UpdateDialog", "Instalando APK desde: ${file.absolutePath}")
             val uri = FileProvider.getUriForFile(
                 context,
                 "${context.packageName}.fileprovider",
                 file
             )
+            Log.d("UpdateDialog", "URI generado: $uri")
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, "application/vnd.android.package-archive")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             context.startActivity(intent)
+            Log.d("UpdateDialog", "Intent de instalación enviado")
             dismiss()
         } catch (e: Exception) {
+            Log.e("UpdateDialog", "Error instalando APK: ${e.message}")
             showError("No se pudo iniciar la instalación")
         }
     }

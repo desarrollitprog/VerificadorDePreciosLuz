@@ -732,7 +732,6 @@ async def status_detalle(
     """
     Devuelve servidores + dispositivos conectados (consultando /devices/status por IP).
     """
-    logger.info("status-detalle: solicitud recibida")
     now = _utcnow()
     umbral = now - timedelta(minutes=HEARTBEAT_OFFLINE_MINUTES)
 
@@ -742,13 +741,6 @@ async def status_detalle(
 
     dispositivos_result = await db.execute(select(Dispositivo))
     dispositivos_db = list(dispositivos_result.scalars().all())
-    logger.info("status-detalle: %s dispositivos encontrados", len(dispositivos_db))
-    for d in dispositivos_db:
-        if d.hora_reinicio:
-            logger.info("status-detalle: device %s tiene hora_reinicio=%s", d.codigo_kiosko, d.hora_reinicio)
-        logger.info("status-detalle: DB device %s, hora_reinicio=%s, reinicio_recurrente=%s", 
-            d.codigo_kiosko, d.hora_reinicio, getattr(d, 'reinicio_recurrente', 'NO ATTR'))
-    
     dispositivo_por_codigo: dict[str, Dispositivo] = {
         d.codigo_kiosko: d for d in dispositivos_db
     }
@@ -844,11 +836,9 @@ async def status_detalle(
                     dispositivo.online = False
 
         dispositivos: list[dict[str, Any]] = []
-        logger.info("LOOP: iterating %s dispositivos for servidor %s", len(dispositivo_por_codigo), s.id)
         for dispositivo in dispositivo_por_codigo.values():
             if dispositivo.servidor_id != s.id:
                 continue
-            logger.info("LOOP: processing device %s, hora_reinicio=%s", dispositivo.codigo_kiosko, getattr(dispositivo, 'hora_reinicio', 'N/A'))
 
             runtime_info = runtime_por_codigo.get(dispositivo.codigo_kiosko, {})
             is_online = bool(dispositivo.online) and online
@@ -899,7 +889,6 @@ async def status_detalle(
                     "reinicio_recurrente": getattr(dispositivo, 'reinicio_recurrente', False),
                 }
             )
-            logger.info("APPEND: device %s hora_reinicio=%s", dispositivo.codigo_kiosko, getattr(dispositivo, 'hora_reinicio', None))
 
         dispositivos.sort(key=lambda d: (d["nombre_mostrado"] or "").lower())
         dispositivos_online = sum(1 for d in dispositivos if d.get("online"))
@@ -921,11 +910,6 @@ async def status_detalle(
         )
 
     await db.commit()
-    # Debug: verificar que los datos se retornan
-    for s in lista:
-        for d in s.get("dispositivos", []):
-            if d.get("hora_reinicio"):
-                logger.info("RETORNANDO device %s hora_reinicio=%s", d.get("device_id"), d.get("hora_reinicio"))
     logger.info("status-detalle: respuesta generada para %s servidores", len(lista))
 
     return {"success": True, "servidores": lista}

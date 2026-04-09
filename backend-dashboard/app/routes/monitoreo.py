@@ -893,10 +893,11 @@ async def status_detalle(
                     "ultima_duracion": ultima_duracion,
                     "tiempo_acumulado": tiempo_acumulado,
                     "server_id": runtime_info.get("server_id"),
-                    "hora_reinicio": dispositivo.hora_reinicio if dispositivo else None,
-                    "reinicio_recurrente": getattr(dispositivo, 'reinicio_recurrente', False) if dispositivo else False,
+                    "hora_reinicio": getattr(dispositivo, 'hora_reinicio', None),
+                    "reinicio_recurrente": getattr(dispositivo, 'reinicio_recurrente', False),
                 }
             )
+            logger.info("APPEND: device %s hora_reinicio=%s", dispositivo.codigo_kiosko, getattr(dispositivo, 'hora_reinicio', None))
 
         dispositivos.sort(key=lambda d: (d["nombre_mostrado"] or "").lower())
         dispositivos_online = sum(1 for d in dispositivos if d.get("online"))

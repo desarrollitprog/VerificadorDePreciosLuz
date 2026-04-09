@@ -127,6 +127,8 @@ export async function getServersStatusWithDevices(): Promise<ServerStatusDetail[
           ultima_duracion: d.ultima_duracion ?? null,
           tiempo_acumulado: d.tiempo_acumulado ?? null,
           server_id: d.server_id ?? null,
+          hora_reinicio: d.hora_reinicio ?? null,
+          reinicio_recurrente: d.reinicio_recurrente ?? false,
         }))
       : [],
   }));

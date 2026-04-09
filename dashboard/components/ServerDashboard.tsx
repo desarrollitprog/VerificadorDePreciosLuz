@@ -79,7 +79,16 @@ export function ServerDashboard() {
     setError(null);
     try {
       const data = await getServersStatusWithDevices();
-      setServidores(Array.isArray(data) ? data : []);
+      // Debug: verificar que llega
+      console.log('fetchStatus data:', JSON.stringify(data).substring(0, 500));
+      const servidoresData = Array.isArray(data) ? data : [];
+      // Debug devices
+      for (const s of servidoresData) {
+        for (const d of s.dispositivos || []) {
+          console.log('device:', d.device_id, 'hora_reinicio:', d.hora_reinicio);
+        }
+      }
+      setServidores(servidoresData);
     } catch {
       setServidores([]);
       setError('Error al conectar con el servicio de monitoreo');

@@ -916,6 +916,11 @@ async def status_detalle(
         )
 
     await db.commit()
+    # Debug: verificar que los datos se retornan
+    for s in lista:
+        for d in s.get("dispositivos", []):
+            if d.get("hora_reinicio"):
+                logger.info("RETORNANDO device %s hora_reinicio=%s", d.get("device_id"), d.get("hora_reinicio"))
     logger.info("status-detalle: respuesta generada para %s servidores", len(lista))
 
     return {"success": True, "servidores": lista}

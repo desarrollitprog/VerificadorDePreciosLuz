@@ -733,6 +733,10 @@ async def status_detalle(
     Devuelve servidores + dispositivos conectados (consultando /devices/status por IP).
     """
     logger.info("status-detalle: solicitud recibida")
+    # Log debug para ver datos de reinicio
+    for d in dispositivos_db:
+        if d.hora_reinicio:
+            logger.info("status-detalle: device %s tiene hora_reinicio=%s", d.codigo_kiosko, d.hora_reinicio)
     now = _utcnow()
     umbral = now - timedelta(minutes=HEARTBEAT_OFFLINE_MINUTES)
 
@@ -742,6 +746,8 @@ async def status_detalle(
 
     dispositivos_result = await db.execute(select(Dispositivo))
     dispositivos_db = dispositivos_result.scalars().all()
+    for d in dispositivos_db:
+        await db.refresh(d)
     dispositivo_por_codigo: dict[str, Dispositivo] = {
         d.codigo_kiosko: d for d in dispositivos_db
     }

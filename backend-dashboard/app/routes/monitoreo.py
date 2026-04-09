@@ -887,7 +887,7 @@ async def status_detalle(
                     "tiempo_acumulado": tiempo_acumulado,
                     "server_id": runtime_info.get("server_id"),
                     "hora_reinicio": dispositivo.hora_reinicio,
-                    "reinicio_recurrente": dispositivo.reinicio_recurrente if hasattr(dispositivo, 'reinicio_recurrente') else False,
+                    "reinicio_recurrente": getattr(dispositivo, 'reinicio_recurrente', False),
                 }
             )
 

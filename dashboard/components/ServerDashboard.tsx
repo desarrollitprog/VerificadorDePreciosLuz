@@ -499,11 +499,11 @@ export function ServerDashboard() {
                                   {formatLastSeen(d.last_seen)}
                                 </div>
                                 <div className="text-xs mt-1">
-                                  {d.hora_reinicio ? (
+                                  {d.hora_reinicio && d.hora_reinicio.trim() !== '' ? (
                                     <span className="text-blue-600 dark:text-blue-400">
                                       <Clock size={10} className="inline mr-1" />
                                       Reinicio: {d.hora_reinicio}
-                                      {d.reinicio_recurrente && ' (diario)'}
+                                      {d.reinicio_recurrente ? ' (diario)' : ''}
                                     </span>
                                   ) : (
                                     <span className="text-slate-400 dark:text-slate-500">Sin reinicio programado</span>

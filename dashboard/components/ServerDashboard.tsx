@@ -79,15 +79,7 @@ export function ServerDashboard() {
     setError(null);
     try {
       const data = await getServersStatusWithDevices();
-      // Debug: verificar que llega
-      console.log('fetchStatus data:', JSON.stringify(data).substring(0, 500));
       const servidoresData = Array.isArray(data) ? data : [];
-      // Debug devices
-      for (const s of servidoresData) {
-        for (const d of s.dispositivos || []) {
-          console.log('device:', d.device_id, 'hora_reinicio:', d.hora_reinicio);
-        }
-      }
       setServidores(servidoresData);
     } catch {
       setServidores([]);
@@ -515,7 +507,7 @@ export function ServerDashboard() {
                                       {d.reinicio_recurrente ? ' (diario)' : ''}
                                     </span>
                                   ) : (
-                                    <span className="text-amber-500">Sin programación [{d.device_id}]</span>
+                                    <span className="text-slate-400 dark:text-slate-500">Sin reinicio</span>
                                   )}
                                 </div>
                                 <div className="flex items-center gap-2 mt-2">

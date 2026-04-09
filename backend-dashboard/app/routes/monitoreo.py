@@ -844,9 +844,11 @@ async def status_detalle(
                     dispositivo.online = False
 
         dispositivos: list[dict[str, Any]] = []
+        logger.info("LOOP: iterating %s dispositivos for servidor %s", len(dispositivo_por_codigo), s.id)
         for dispositivo in dispositivo_por_codigo.values():
             if dispositivo.servidor_id != s.id:
                 continue
+            logger.info("LOOP: processing device %s, hora_reinicio=%s", dispositivo.codigo_kiosko, getattr(dispositivo, 'hora_reinicio', 'N/A'))
 
             runtime_info = runtime_por_codigo.get(dispositivo.codigo_kiosko, {})
             is_online = bool(dispositivo.online) and online

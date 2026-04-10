@@ -18,8 +18,8 @@ class UpdateWorker(
     override suspend fun doWork(): Result {
         return try {
             val context = applicationContext
-            UpdateChecker.setUpdateMode(UpdateChecker.UpdateMode.AUTO)
-            UpdateChecker.check(context)
+            // Ignora debounce - siempre verifica
+            UpdateChecker.forceCheck(context)
             Result.success()
         } catch (e: Exception) {
             Result.retry()

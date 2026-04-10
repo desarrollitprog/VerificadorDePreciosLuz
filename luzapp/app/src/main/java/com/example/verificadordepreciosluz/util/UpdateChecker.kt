@@ -1,8 +1,10 @@
 package com.example.verificadordepreciosluz.util
 
+import android.app.PendingIntent
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.widget.Toast
@@ -123,10 +125,26 @@ object UpdateChecker {
             val adminComponent = ComponentName(context, MyDeviceAdminReceiver::class.java)
 
             if (dpm.isAdminActive(adminComponent)) {
-                // Device Owner: instalación silenciosa
-                dpm.installUpdatePackage(context.packageName, apkFile.absolutePath)
+                // Device Owner: instalación silenciosa con PackageInstaller
+                val packageInstaller = context.packageManager.packageInstaller
+                val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+                
+                val sessionId = packageInstaller.createSession(params)
+                val session = packageInstaller.openSession(sessionId)
+                
+                apkFile.inputStream().use { input ->
+                    session.openWrite("base.apk", 0, apkFile.length()).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                
+                val pendingIntent = PendingIntent.getBroadcast(
+                    context, 0, Intent(context, MyDeviceAdminReceiver::class.java), PendingIntent.FLAG_IMMUTABLE
+                )
+                session.commit(pendingIntent.intentSender)
+                
                 Handler(Looper.getMainLooper()).post {
-                    Toast.makeText(context, "Actualización instalada", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Actualización programada", Toast.LENGTH_SHORT).show()
                 }
             } else {
                 installNormal(context, apkFile)

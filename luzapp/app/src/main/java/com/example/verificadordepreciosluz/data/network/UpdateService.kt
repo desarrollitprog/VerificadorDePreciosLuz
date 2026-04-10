@@ -69,8 +69,9 @@ object UpdateService {
     }
 
     private fun compareVersions(v1: String, v2: String): Int {
-        val parts1 = v1.split(".").mapNotNull { it.toIntOrNull() }
-        val parts2 = v2.split(".").mapNotNull { it.toIntOrNull() }
+        // Soporta versiones tipo "1.0.0" y fechas "20260410"
+        val parts1 = parseVersionParts(v1)
+        val parts2 = parseVersionParts(v2)
         val maxLen = maxOf(parts1.size, parts2.size)
 
         for (i in 0 until maxLen) {
@@ -79,6 +80,21 @@ object UpdateService {
             if (p1 != p2) return p1 - p2
         }
         return 0
+    }
+    
+    private fun parseVersionParts(version: String): List<Int> {
+        // Si es fecha (8 dígitos), convertir a formato comparable
+        val cleaned = version.replace(".", "")
+        if (cleaned.length == 8 && cleaned.all { it.isDigit() }) {
+            // "20260410" -> [2026, 04, 10]
+            return listOf(
+                cleaned.substring(0, 4).toIntOrNull() ?: 0,
+                cleaned.substring(4, 6).toIntOrNull() ?: 0,
+                cleaned.substring(6, 8).toIntOrNull() ?: 0
+            )
+        }
+        // Versión normal "1.0.0"
+        return version.split(".").mapNotNull { it.toIntOrNull() }
     }
 
     fun getUpdateUrl(updateInfo: UpdateInfo): String {

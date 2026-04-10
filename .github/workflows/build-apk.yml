@@ -47,28 +47,18 @@ jobs:
         run: cp luzapp/app/build/outputs/apk/debug/*.apk luzapp.apk
         shell: bash
 
-      - name: Upload files to repo
+      - name: Commit files to repo
         run: |
-          CONTENT_VERSION=$(base64 -w0 version.json)
-          CONTENT_APK=$(base64 -w0 luzapp.apk)
-          curl -X PUT "https://api.github.com/repos/${{ github.repository }}/contents/version.json" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -d "{\"message\": \"Update version.json\", \"content\": \"$CONTENT_VERSION\", \"branch\": \"main\"}"
-          curl -X PUT "https://api.github.com/repos/${{ github.repository }}/contents/luzapp.apk" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Content-Type: application/octet-stream" \
-            -d "{\"message\": \"Update luzapp.apk\", \"content\": \"$CONTENT_APK\", \"branch\": \"main\"}"
+          git config --local user.email "github-actions@github.com"
+          git config --local user.name "GitHub Actions"
+          git fetch origin || true
+          git add version.json luzapp.apk
+          git commit -m "Update $(date +%Y%m%d)" || echo "No changes to commit"
+          git push origin main --force || (
+            echo "Push rejected, trying pull and retry..."
+            git pull --rebase origin main
+            git push origin main
+          )
         shell: bash
           
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          body: "Actualización automática del $(date +%Y-%m-%d)"
-          files: luzapp.apk
-          tag_name: v1
-          draft: false
-          prerelease: false
-          target_commitish: main
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      

@@ -1,7 +1,1 @@
-{
-  "version": "1.0.0",
-  "min_version": "1.0.0",
-  "download_url": "https://github.com/Tavorl25/VerificadorDePreciosLuz/releases/latest/download/luzapp.apk",
-  "checksum": "placeholder",
-  "changelog": "Configuración inicial"
-}
+{"version": "20260410", "min_version": "1.0.0", "download_url": "https://github.com/Tavorl25/VerificadorDePreciosLuz/releases/latest/download/luzapp.apk", "checksum": "a7bdf2473e33bde6b50e50ac15ee22e6b23e308a79079639841108667c5ee48a", "changelog": "Actualización automática"}

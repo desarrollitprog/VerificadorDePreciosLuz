@@ -35,15 +35,16 @@ class UpdateWorker(
                 .setRequiresBatteryNotLow(true)
                 .build()
             
-            // Calcular tiempo hasta las 7:00 AM (hora Caracas = UTC-4)
+            // Calcular tiempo hasta las 6:00 AM (hora Caracas = UTC-4)
+            // 1 hora después del workflow para evitar conflicto
             val currentTime = Calendar.getInstance()
             val scheduledTime = Calendar.getInstance().apply {
-                set(Calendar.HOUR_OF_DAY, 7)
+                set(Calendar.HOUR_OF_DAY, 6)
                 set(Calendar.MINUTE, 0)
                 set(Calendar.SECOND, 0)
                 set(Calendar.MILLISECOND, 0)
                 
-                // Si ya pasaron las 7 AM, programar para el siguiente día
+                // Si ya pasaron las 6 AM, programar para el siguiente día
                 if (before(currentTime)) {
                     add(Calendar.DAY_OF_MONTH, 1)
                 }

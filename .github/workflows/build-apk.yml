@@ -38,12 +38,12 @@ jobs:
           APK_PATH="luzapp/app/build/outputs/apk/debug"
           APK=$(ls $APK_PATH/*.apk | head -1)
           CHECKSUM=$(sha256sum "$APK" | cut -d' ' -f1)
-          echo "{\"version\": \"$VERSION\", \"min_version\": \"1.0.0\", \"download_url\": \"https://Tavorl25.github.io/VerificadorDePreciosLuz/updates/luzapp.apk\", \"checksum\": \"$CHECKSUM\", \"changelog\": \"Actualización automática\"}" > updates/version.json
+          echo "{\"version\": \"$VERSION\", \"min_version\": \"1.0.0\", \"download_url\": \"https://Tavorl25.github.io/VerificadorDePreciosLuz/luzapp.apk\", \"checksum\": \"$CHECKSUM\", \"changelog\": \"Actualización automática\"}" > version.json
         shell: bash
           
-      - name: Copy APK to updates
+      - name: Copy APK to root
         run: |
-          cp luzapp/app/build/outputs/apk/debug/*.apk updates/luzapp.apk
+          cp luzapp/app/build/outputs/apk/debug/*.apk luzapp.apk
         shell: bash
           
       - name: Commit & Push
@@ -52,5 +52,5 @@ jobs:
           git config --local user.name "GitHub Actions"
           git add updates/
           git commit -m "Daily APK update $(date +%Y-%m-%d)" || echo "No changes to commit"
-          git push
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/Tavorl25/VerificadorDePreciosLuz.git main
         shell: bash

@@ -40,11 +40,25 @@ jobs:
           APK_PATH="luzapp/app/build/outputs/apk/debug"
           APK=$(ls $APK_PATH/*.apk | head -1)
           CHECKSUM=$(sha256sum "$APK" | cut -d' ' -f1)
-          echo "{\"version\": \"$VERSION\", \"min_version\": \"1.0.0\", \"download_url\": \"https://github.com/Tavorl25/VerificadorDePreciosLuz/releases/download/v1/luzapp.apk\", \"checksum\": \"$CHECKSUM\", \"changelog\": \"Actualización automática\"}" > version.json
+          echo "{\"version\": \"$VERSION\", \"min_version\": \"1.0.0\", \"download_url\": \"https://tavorl25.github.io/VerificadorDePreciosLuz/luzapp.apk\", \"checksum\": \"$CHECKSUM\", \"changelog\": \"Actualización automática\"}" > version.json
         shell: bash
           
       - name: Copy APK
         run: cp luzapp/app/build/outputs/apk/debug/*.apk luzapp.apk
+        shell: bash
+
+      - name: Upload files to repo
+        run: |
+          CONTENT_VERSION=$(base64 -w0 version.json)
+          CONTENT_APK=$(base64 -w0 luzapp.apk)
+          curl -X PUT "https://api.github.com/repos/${{ github.repository }}/contents/version.json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"message\": \"Update version.json\", \"content\": \"$CONTENT_VERSION\", \"branch\": \"main\"}"
+          curl -X PUT "https://api.github.com/repos/${{ github.repository }}/contents/luzapp.apk" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/octet-stream" \
+            -d "{\"message\": \"Update luzapp.apk\", \"content\": \"$CONTENT_APK\", \"branch\": \"main\"}"
         shell: bash
           
       - name: Create Release

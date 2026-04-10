@@ -78,6 +78,42 @@ async def ping(device_id: str | None = None):
     return {"status": "Conexion Exitosa"}
 
 
+# Endpoint de debug para recibir logs del BCV desde la app Android
+@app.post("/api/debug-bcv")
+async def debug_bcv(
+    log_message: str = Query(...),
+    device_id: str | None = Query(None),
+    today: str | None = Query(None),
+    cached_date: str | None = Query(None),
+    cached_usd: str | None = Query(None),
+    cached_eur: str | None = Query(None),
+    api_usd: str | None = Query(None),
+    api_eur: str | None = Query(None),
+    cache_actualizado: str | None = Query(None)
+):
+    msg = f"[BCV-DEBUG] {log_message}"
+    if device_id:
+        msg = f"[BCV-DEBUG][{device_id}] {log_message}"
+    
+    if today:
+        msg += f" | today={today}"
+    if cached_date:
+        msg += f" | cachedDate={cached_date}"
+    if cached_usd:
+        msg += f" | cachedUSD={cached_usd}"
+    if cached_eur:
+        msg += f" | cachedEUR={cached_eur}"
+    if api_usd:
+        msg += f" | apiUSD={api_usd}"
+    if api_eur:
+        msg += f" | apiEUR={api_eur}"
+    if cache_actualizado:
+        msg += f" | cacheActualizado={cache_actualizado}"
+    
+    logger.info(msg)
+    return {"status": "logged"}
+
+
 banner_check_task: asyncio.Task | None = None
 notified_banners_start: set[int] = set()
 notified_banners_end: set[int] = set()

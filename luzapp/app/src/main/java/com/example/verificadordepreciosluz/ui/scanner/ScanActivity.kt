@@ -185,6 +185,44 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         startTabletWebSocket()
     }
 
+    // Función para enviar logs de debug al backend
+    private fun sendDebugLog(
+        message: String,
+        today: String? = null,
+        cachedDate: String? = null,
+        cachedUsd: Float? = null,
+        cachedEur: Float? = null,
+        apiUsd: Float? = null,
+        apiEur: Float? = null,
+        cacheActualizado: Boolean? = null
+    ) {
+        val baseUrl = backendBaseUrl ?: return
+        val debugUrl = "$baseUrl/api/debug-bcv"
+        
+        try {
+            val client = OkHttpClient()
+            val params = mutableListOf<String>()
+            params.add("log_message=${message}")
+            params.add("device_id=$deviceId")
+            today?.let { params.add("today=$it") }
+            cachedDate?.let { params.add("cached_date=$it") }
+            cachedUsd?.let { params.add("cached_usd=$it") }
+            cachedEur?.let { params.add("cached_eur=$it") }
+            apiUsd?.let { params.add("api_usd=$it") }
+            apiEur?.let { params.add("api_eur=$it") }
+            cacheActualizado?.let { params.add("cache_actualizado=$it") }
+            
+            val request = Request.Builder()
+                .url("$debugUrl?${params.joinToString("&")}")
+                .post(okhttp3.RequestBody.create(null, ByteArray(0)))
+                .build()
+            
+            client.newCall(request).execute().close()
+        } catch (e: Exception) {
+            Log.w(TAG, "Error enviando debug log: ${e.message}")
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityScanBinding.inflate(layoutInflater)
@@ -705,30 +743,64 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         bannerPollRunnable = null
     }
 
+    // PARTE 3: Limpia el cache si tiene más de 24 horas
+    private fun limpiarCacheObsoleto() {
+        val cachedDateStr = prefsDolar.getString("fecha", null)
+        if (cachedDateStr != null) {
+            try {
+                val tz = java.util.TimeZone.getTimeZone("America/Caracas")
+                val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).apply { timeZone = tz }
+                val cachedDate = dateFormat.parse(cachedDateStr)
+                val ahora = java.util.Date()
+                
+                if (cachedDate != null) {
+                    val diffHoras = (ahora.time - cachedDate.time) / (1000 * 60 * 60)
+                    if (diffHoras > 24) {
+                        prefsDolar.edit().clear().apply()
+                        Log.w(TAG, "BCV: Cache obsoleto limpiado (${diffHoras}h)")
+                        sendDebugLog("Cache obsoleto limpiado (${diffHoras}h)", cachedDate = cachedDateStr)
+                    }
+                }
+            } catch (e: Exception) {
+                prefsDolar.edit().clear().apply()
+                Log.w(TAG, "BCV: Cache corrupto limpiado")
+            }
+        }
+    }
+
     // Obtiene y muestra las cotizaciones BCV (USD y EUR)
     private fun syncDolarBCV() {
         Log.i(TAG, "BCV: syncDolarBCV() llamado")
         
-        val today = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US).format(java.util.Date())
+        // PARTE 3: Limpiar cache obsoleto (más de 24 horas)
+        limpiarCacheObsoleto()
+        
+        // PARTE 1: Usar timezone explícito de Venezuela (America/Caracas)
+        val tz = java.util.TimeZone.getTimeZone("America/Caracas")
+        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).apply { 
+            timeZone = tz 
+        }.format(java.util.Date())
         val cachedDate = prefsDolar.getString("fecha", null)
         val cachedUsd = prefsDolar.getFloat("usd", 0f)
         val cachedEur = prefsDolar.getFloat("eur", 0f)
-        Log.d(TAG, "BCV: today=$today, cachedDate=$cachedDate, cachedUsd=$cachedUsd, cachedEur=$cachedEur")
+        Log.d(TAG, "BCV: today=$today (America/Caracas), cachedDate=$cachedDate, cachedUsd=$cachedUsd, cachedEur=$cachedEur")
 
-        // Si ya tenemos del día de hoy, mostrar cache y salir
+        // PARTE 2: Primero mostrar cache si existe, luego siempre llamar a la API
         if (cachedDate == today && (cachedUsd > 0f || cachedEur > 0f)) {
-            Log.d(TAG, "BCV: mostrando datos cacheados")
+            Log.d(TAG, "BCV: mostrando datos cacheados pero verificando con API...")
             uiHandler.post {
                 mostrarTasaBCV(cachedUsd, cachedEur)
             }
-            return
+            // NO salir aquí, continuar para verificar con API
         }
 
-        Log.d(TAG, "BCV: sin cache o fecha diferente, llamando API...")
+        Log.d(TAG, "BCV: llamando a la API para obtener datos frescos...")
+        sendDebugLog("syncDolarBCV llamado", today = today, cachedDate = cachedDate, cachedUsd = cachedUsd, cachedEur = cachedEur)
         dolarBcJob?.cancel()
         dolarBcJob = scope.launch {
             try {
                 Log.d(TAG, "BCV: ejecutando getCotizaciones()")
+                sendDebugLog("Ejecutando getCotizaciones()", today = today, cachedDate = cachedDate, cachedUsd = cachedUsd, cachedEur = cachedEur)
                 val cotizaciones = dolarRepository.getCotizaciones()
                 Log.d(TAG, "BCV: respuesta cruda: $cotizaciones")
                 
@@ -739,20 +811,44 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 if (usd != null || eur != null) {
                     val usdVal = usd?.promedio ?: 0.0
                     val eurVal = eur?.promedio ?: 0.0
+                    val usdFloat = usdVal.toFloat()
+                    val eurFloat = eurVal.toFloat()
                     
-                    // Guardar fecha y valores
-                    prefsDolar.edit()
-                        .putString("fecha", today)
-                        .putFloat("usd", usdVal.toFloat())
-                        .putFloat("eur", eurVal.toFloat())
-                        .apply()
-
-                    uiHandler.post {
-                        mostrarTasaBCV(usdVal.toFloat(), eurVal.toFloat())
+                    // Comparar con cache - solo actualizar si son diferentes
+                    val cacheIgual = (usdFloat == cachedUsd && eurFloat == cachedEur)
+                    val cacheActualizado: Boolean
+                    
+                    if (cacheIgual) {
+                        Log.d(TAG, "BCV: API devuelve mismos valores que cache, no actualizando")
+                        cacheActualizado = false
+                    } else {
+                        Log.d(TAG, "BCV: Valores diferentes - Actualizando cache y UI")
+                        prefsDolar.edit()
+                            .putString("fecha", today)
+                            .putFloat("usd", usdFloat)
+                            .putFloat("eur", eurFloat)
+                            .apply()
+                        cacheActualizado = true
                     }
-                    Log.d(TAG, "BCV: cotizaciones actualizadas")
+                    
+                    sendDebugLog(
+                        "API responded - comparing with cache",
+                        today = today,
+                        cachedDate = cachedDate,
+                        cachedUsd = cachedUsd,
+                        cachedEur = cachedEur,
+                        apiUsd = usdFloat,
+                        apiEur = eurFloat,
+                        cacheActualizado = cacheActualizado
+                    )
+                    
+                    uiHandler.post {
+                        mostrarTasaBCV(usdFloat, eurFloat)
+                    }
+                    Log.d(TAG, "BCV: cotizaciones mostradas (cache actualizado: $cacheActualizado)")
                 } else {
                     Log.w(TAG, "BCV: API devolvio vacio")
+                    sendDebugLog("API devolvio vacio", today = today, cachedDate = cachedDate, cachedUsd = cachedUsd, cachedEur = cachedEur)
                     uiHandler.post {
                         findViewById<android.widget.TextView>(R.id.cardDolarBc)?.text = "Sin Actualizacion del BCV"
                         findViewById<android.widget.TextView>(R.id.cardDolarBc)?.visibility = View.VISIBLE

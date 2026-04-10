@@ -40,20 +40,27 @@ jobs:
           APK_PATH="luzapp/app/build/outputs/apk/debug"
           APK=$(ls $APK_PATH/*.apk | head -1)
           CHECKSUM=$(sha256sum "$APK" | cut -d' ' -f1)
-          echo "{\"version\": \"$VERSION\", \"min_version\": \"1.0.0\", \"download_url\": \"https://Tavorl25.github.io/VerificadorDePreciosLuz/luzapp.apk\", \"checksum\": \"$CHECKSUM\", \"changelog\": \"Actualización automática\"}" > version.json
+          echo "{\"version\": \"$VERSION\", \"min_version\": \"1.0.0\", \"download_url\": \"https://github.com/Tavorl25/VerificadorDePreciosLuz/releases/latest/download/luzapp.apk\", \"checksum\": \"$CHECKSUM\", \"changelog\": \"Actualización automática\"}" > version.json
         shell: bash
           
-      - name: Copy APK to root
-        run: |
-          cp luzapp/app/build/outputs/apk/debug/*.apk luzapp.apk
+      - name: Copy APK
+        run: cp luzapp/app/build/outputs/apk/debug/*.apk luzapp.apk
         shell: bash
           
-      - name: Commit & Push
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: "Actualización automática del $(date +%Y-%m-%d)"
+          files: luzapp.apk
+          tag_name: v${{ github.run_number }}
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Upload version.json
         run: |
-          git config --local user.email "github-actions@github.com"
-          git config --local user.name "GitHub Actions"
-          git add --force version.json
-          git add --force luzapp.apk
-          git commit -m "Daily APK update $(date +%Y-%m-%d)" || echo "No changes to commit"
-          git push https://${{ secrets.GITHUB_TOKEN }}@github.com/Tavorl25/VerificadorDePreciosLuz.git main
+          curl -s -X PUT https://uploads.github.com/repos/${{ github.repository }}/contents/version.json \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"message": "Update version.json", "content": "'"$(base64 -w0 version.json)"'"}'
         shell: bash

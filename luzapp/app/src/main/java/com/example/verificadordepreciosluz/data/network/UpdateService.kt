@@ -19,7 +19,7 @@ interface UpdateApiService {
 }
 
 object UpdateService {
-    private const val BASE_URL = "https://luzapp.netlify.app"
+    private const val BASE_URL = "https://Tavorl25.github.io/VerificadorDePreciosLuz"
     private const val UPDATE_PATH = "/version.json"
 
     private val client: OkHttpClient by lazy {

@@ -54,8 +54,6 @@
         android:inputType="textUri"
         android:minHeight="48dp"
         android:padding="12dp"
-        android:enabled="false"
-        android:focusable="false"
         app:layout_constraintBottom_toTopOf="@+id/etPuertoServidor"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHorizontal_bias="0.0"

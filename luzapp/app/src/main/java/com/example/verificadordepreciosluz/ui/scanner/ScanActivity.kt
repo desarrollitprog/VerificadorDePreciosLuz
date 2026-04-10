@@ -58,6 +58,8 @@ import com.example.verificadordepreciosluz.data.local.BannerCacheItem
 import com.example.verificadordepreciosluz.databinding.ActivityScanBinding
 import com.example.verificadordepreciosluz.R
 import com.example.verificadordepreciosluz.util.NetworkUtils
+import com.example.verificadordepreciosluz.util.UpdateChecker
+import com.example.verificadordepreciosluz.util.UpdateWorker
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
@@ -256,6 +258,13 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         
         // Programar reinicio recurrente si está configurado
         programarReinicioRecurrente()
+        
+        // Programar verificación de actualizaciones diarias a las 7:00 AM
+        UpdateWorker.schedule(this)
+        
+        // Verificar actualización inmediatamente al abrir ScanActivity
+        UpdateChecker.setUpdateMode(UpdateChecker.UpdateMode.AUTO)
+        UpdateChecker.check(this)
 
         val forceOffline = intent.getBooleanExtra("force_offline_mode", false)
         val hasNetwork = NetworkUtils.isNetworkAvailable(this)

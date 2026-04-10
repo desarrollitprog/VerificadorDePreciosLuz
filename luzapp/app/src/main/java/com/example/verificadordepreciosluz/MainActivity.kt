@@ -19,7 +19,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.example.verificadordepreciosluz.data.local.BackupRepository
-import com.example.verificadordepreciosluz.util.UpdateChecker
 import retrofit2.HttpException
 import java.io.IOException
 import android.text.Editable
@@ -45,10 +44,6 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Establecer modo AUTO para Device Owner (quioscos)
-        // Cambiar a DIALOG si quieres ver el diálogo
-        UpdateChecker.setUpdateMode(UpdateChecker.UpdateMode.AUTO)
-        
         cameraExecutor = Executors.newSingleThreadExecutor()
 
         val sharedPref = getSharedPreferences("ConfigLuz", MODE_PRIVATE)
@@ -68,11 +63,6 @@ class MainActivity : AppCompatActivity() {
             startCameraScanner()
             binding.etUnlockCode.requestFocus()
 
-            // Verificar actualización DESPUÉS de iniciar cámara (2 seg de delay)
-            Handler(Looper.getMainLooper()).postDelayed({
-                UpdateChecker.check(this)
-            }, 2000)
-
             if (hasNetwork) {
                 probarConexion(ipGuardada, puertoGuardado.orEmpty(), autoLaunch = true)
             } else {
@@ -85,6 +75,7 @@ class MainActivity : AppCompatActivity() {
             }
         } else {
             binding.tvLockedIndicator.visibility = View.GONE
+            // Installation NEW - NO check automatic, wait for manual
         }
 
         binding.etUnlockCode.addTextChangedListener(object : TextWatcher {

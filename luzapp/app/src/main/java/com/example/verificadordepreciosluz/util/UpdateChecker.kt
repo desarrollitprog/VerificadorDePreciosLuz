@@ -58,13 +58,13 @@ object UpdateChecker {
         val currentTime = System.currentTimeMillis()
         val lastVersionChecked = prefs.getString(KEY_VERSION_CHECKED, "")
         
-        // Debounce: solo verificar cada 1 hora
-        if (currentTime - lastCheck < DEBOUNCE_MS) {
+        // Debounce: solo verificar cada 1 hora SI ya se verificó antes
+        if (lastCheck > 0 && (currentTime - lastCheck) < DEBOUNCE_MS) {
             Log.d(TAG, "Skipping check, debounce active. Last check: ${currentTime - lastCheck}ms ago")
             return
         }
         
-        // Guardar tiempo para próximo debounce
+        // Guardar tiempo SIEMPRE al verificar
         prefs.edit().putLong(KEY_LAST_CHECK, currentTime).apply()
         
         CoroutineScope(Dispatchers.IO).launch {

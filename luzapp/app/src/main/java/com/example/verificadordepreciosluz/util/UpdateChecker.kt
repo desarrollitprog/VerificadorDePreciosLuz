@@ -50,6 +50,17 @@ object UpdateChecker {
         currentMode = mode
     }
 
+    // Para WorkManager - ignora debounce
+    fun forceCheck(context: Context) {
+        Log.d(TAG, "forceCheck() called - ignoring debounce")
+        currentMode = UpdateMode.AUTO
+        
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putLong(KEY_LAST_CHECK, 0).apply()
+        
+        check(context)
+    }
+
     fun check(context: Context, onUpdateAvailable: ((UpdateInfo) -> Unit)? = null) {
         Log.d(TAG, "check() called, mode: $currentMode")
         

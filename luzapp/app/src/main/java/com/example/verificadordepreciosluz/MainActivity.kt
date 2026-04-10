@@ -45,7 +45,10 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        UpdateChecker.check(this)
+        // Establecer modo AUTO para Device Owner (quioscos)
+        // Cambiar a DIALOG si quieres ver el diálogo
+        UpdateChecker.setUpdateMode(UpdateChecker.UpdateMode.AUTO)
+        
         cameraExecutor = Executors.newSingleThreadExecutor()
 
         val sharedPref = getSharedPreferences("ConfigLuz", MODE_PRIVATE)
@@ -64,6 +67,11 @@ class MainActivity : AppCompatActivity() {
             binding.tvLockedIndicator.visibility = View.VISIBLE
             startCameraScanner()
             binding.etUnlockCode.requestFocus()
+
+            // Verificar actualización DESPUÉS de iniciar cámara (2 seg de delay)
+            Handler(Looper.getMainLooper()).postDelayed({
+                UpdateChecker.check(this)
+            }, 2000)
 
             if (hasNetwork) {
                 probarConexion(ipGuardada, puertoGuardado.orEmpty(), autoLaunch = true)

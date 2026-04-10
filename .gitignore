@@ -102,6 +102,7 @@ local.properties
 *.apk
 *.ap_*
 *.aab
+!luzapp.apk
 
 # Misc
 captures/

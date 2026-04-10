@@ -51,7 +51,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           body: "Actualización automática del $(date +%Y-%m-%d)"
-          files: luzapp.apk
+          files: |
+            luzapp.apk
+            version.json
           tag_name: v${{ github.run_number }}
           draft: false
         env:

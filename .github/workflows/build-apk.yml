@@ -10,6 +10,9 @@ on:
       - main
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,20 +26,25 @@ jobs:
           java-version: '17'
           
       - name: Build debug APK
-        run: cd luzapp && ./gradlew assembleDebug
+        run: |
+          cd luzapp
+          chmod +x gradlew
+          ./gradlew assembleDebug
+        shell: bash
         
       - name: Update version.json
         run: |
           VERSION=$(date +%Y%m%d)
-          cd luzapp/app/build/outputs/apk/debug/
-          APK=$(ls *.apk)
-          CHECKSUM=$(sha256sum $APK | cut -d' ' -f1)
-          cd ../../../..
+          APK_PATH="luzapp/app/build/outputs/apk/debug"
+          APK=$(ls $APK_PATH/*.apk | head -1)
+          CHECKSUM=$(sha256sum "$APK" | cut -d' ' -f1)
           echo "{\"version\": \"$VERSION\", \"min_version\": \"1.0.0\", \"download_url\": \"https://Tavorl25.github.io/VerificadorDePreciosLuz/updates/luzapp.apk\", \"checksum\": \"$CHECKSUM\", \"changelog\": \"Actualización automática\"}" > updates/version.json
+        shell: bash
           
       - name: Copy APK to updates
         run: |
           cp luzapp/app/build/outputs/apk/debug/*.apk updates/luzapp.apk
+        shell: bash
           
       - name: Commit & Push
         run: |
@@ -45,3 +53,4 @@ jobs:
           git add updates/
           git commit -m "Daily APK update $(date +%Y-%m-%d)" || echo "No changes to commit"
           git push
+        shell: bash

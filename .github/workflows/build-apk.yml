@@ -51,12 +51,19 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           body: "Actualización automática del $(date +%Y-%m-%d)"
-          files: |
-            luzapp.apk
-            version.json
-          tag_name: latest
+          files: luzapp.apk
+          tag_name: v1
           draft: false
           prerelease: false
           target_commitish: main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Commit version.json
+        run: |
+          git config --local user.email "github-actions@github.com"
+          git config --local user.name "GitHub Actions"
+          git add version.json
+          git commit -m "Update version $(date +%Y%m%d)" || echo "No change"
+          git push https://${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git main
+        shell: bash

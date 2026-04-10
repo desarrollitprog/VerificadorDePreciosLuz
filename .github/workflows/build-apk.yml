@@ -16,6 +16,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       
@@ -50,7 +52,7 @@ jobs:
         run: |
           git config --local user.email "github-actions@github.com"
           git config --local user.name "GitHub Actions"
-          git add updates/
+          git add version.json luzapp.apk
           git commit -m "Daily APK update $(date +%Y-%m-%d)" || echo "No changes to commit"
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/Tavorl25/VerificadorDePreciosLuz.git main
+          git push https://${{ secrets.GITHUB_TOKEN }}@github.com/Tavorl25/VerificadorDePreciosLuz.git main
         shell: bash

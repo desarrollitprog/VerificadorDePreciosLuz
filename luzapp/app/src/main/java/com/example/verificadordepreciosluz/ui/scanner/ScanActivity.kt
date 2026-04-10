@@ -196,7 +196,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         apiEur: Float? = null,
         cacheActualizado: Boolean? = null
     ) {
-        val baseUrl = backendBaseUrl ?: return
+        val baseUrl = backendBaseUrl?.trimEnd('/') ?: return
         val debugUrl = "$baseUrl/api/debug-bcv"
         
         try {

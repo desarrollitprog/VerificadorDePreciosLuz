@@ -123,7 +123,8 @@ object UpdateChecker {
             val adminComponent = ComponentName(context, MyDeviceAdminReceiver::class.java)
 
             if (dpm.isAdminActive(adminComponent)) {
-                dpm.installUpdatePackage(apkFile.absolutePath)
+                // Device Owner: instalación silenciosa
+                dpm.installUpdatePackage(context.packageName, apkFile.absolutePath)
                 Handler(Looper.getMainLooper()).post {
                     Toast.makeText(context, "Actualización instalada", Toast.LENGTH_SHORT).show()
                 }
@@ -131,6 +132,7 @@ object UpdateChecker {
                 installNormal(context, apkFile)
             }
         } catch (e: Exception) {
+            // Fallback: instalación normal
             installNormal(context, apkFile)
         }
     }

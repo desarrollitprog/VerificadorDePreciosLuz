@@ -40,7 +40,7 @@ jobs:
           APK_PATH="luzapp/app/build/outputs/apk/debug"
           APK=$(ls $APK_PATH/*.apk | head -1)
           CHECKSUM=$(sha256sum "$APK" | cut -d' ' -f1)
-          echo "{\"version\": \"$VERSION\", \"min_version\": \"1.0.0\", \"download_url\": \"https://github.com/Tavorl25/VerificadorDePreciosLuz/releases/latest/download/luzapp.apk\", \"checksum\": \"$CHECKSUM\", \"changelog\": \"Actualización automática\"}" > version.json
+          echo "{\"version\": \"$VERSION\", \"min_version\": \"1.0.0\", \"download_url\": \"https://github.com/Tavorl25/VerificadorDePreciosLuz/releases/download/v1/luzapp.apk\", \"checksum\": \"$CHECKSUM\", \"changelog\": \"Actualización automática\"}" > version.json
         shell: bash
           
       - name: Copy APK
@@ -58,12 +58,3 @@ jobs:
           target_commitish: main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
-      - name: Commit version.json
-        run: |
-          git config --local user.email "github-actions@github.com"
-          git config --local user.name "GitHub Actions"
-          git add version.json
-          git commit -m "Update version $(date +%Y%m%d)" || echo "No change"
-          git push https://${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git main
-        shell: bash

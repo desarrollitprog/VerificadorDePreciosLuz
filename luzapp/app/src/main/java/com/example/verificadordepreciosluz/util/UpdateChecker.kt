@@ -3,12 +3,14 @@ package com.example.verificadordepreciosluz.util
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
+import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.widget.Toast
 import android.os.Handler
 import android.os.Looper
 import com.example.verificadordepreciosluz.data.model.UpdateInfo
 import com.example.verificadordepreciosluz.data.network.UpdateService
+import com.example.verificadordepreciosluz.ui.scanner.MyDeviceAdminReceiver
 import com.example.verificadordepreciosluz.ui.update.UpdateDialog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -118,15 +120,14 @@ object UpdateChecker {
     private fun installSilently(context: Context, apkFile: File) {
         try {
             val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-            val adminComponent = ComponentName(context, com.example.verificadordepreciosluz.MyDeviceAdminReceiver::class.java)
+            val adminComponent = ComponentName(context, MyDeviceAdminReceiver::class.java)
 
             if (dpm.isAdminActive(adminComponent)) {
-                dpm.installUpdate(apkFile.absolutePath)
+                dpm.installUpdatePackage(apkFile.absolutePath)
                 Handler(Looper.getMainLooper()).post {
                     Toast.makeText(context, "Actualización instalada", Toast.LENGTH_SHORT).show()
                 }
             } else {
-                // Si no es Device Owner, hacer instalación normal
                 installNormal(context, apkFile)
             }
         } catch (e: Exception) {

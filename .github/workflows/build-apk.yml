@@ -54,15 +54,9 @@ jobs:
           files: |
             luzapp.apk
             version.json
-          tag_name: v${{ github.run_number }}
+          tag_name: latest
           draft: false
+          prerelease: false
+          target_commitish: main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
-      - name: Upload version.json to repo
-        run: |
-          curl -s -X PUT https://uploads.github.com/repos/${{ github.repository }}/contents/version.json \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -d '{"message": "Update version.json", "content": "'"$(base64 -w0 version.json)"'"}'
-        shell: bash

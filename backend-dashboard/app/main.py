@@ -2,17 +2,21 @@ from fastapi import FastAPI, Request
 from app.routes import publicidad, auth, monitoreo, usuarios, notificaciones, auditoria
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from app.utils.health import get_health_status
 import logging
 import time
 import os
+import uuid
+from app.utils.logger import setup_logging, set_trace_id, set_user_id, StructuredLogger
 
 
-# Asegura que la carpeta static/banners existe
 os.makedirs("static/banners", exist_ok=True)
 
+setup_logging(os.getenv("LOG_LEVEL", "INFO"))
 
 app = FastAPI(title="Dashboard Backend", version="1.0.0")
 logger = logging.getLogger("uvicorn.error")
+request_logger = StructuredLogger("requests")
 
 allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173")
 allowed_origins = [origin.strip() for origin in allowed_origins_env.split(",") if origin.strip()]
@@ -33,18 +37,45 @@ app.add_middleware(
 
 @app.middleware("http")
 async def request_logging_middleware(request: Request, call_next):
+	trace_id = str(uuid.uuid4())
+	set_trace_id(trace_id)
+	
+	auth_header = request.headers.get("Authorization", "")
+	user_id = None
+	if auth_header.startswith("Bearer "):
+		try:
+			from jose import jwt
+			SECRET_KEY = os.getenv("SECRET_KEY", "secret")
+			token = auth_header[7:]
+			payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+			user_id = payload.get("user_id")
+		except Exception:
+			pass
+	
+	if user_id:
+		set_user_id(user_id)
+	
 	start = time.perf_counter()
 	response = await call_next(request)
 	duration_ms = (time.perf_counter() - start) * 1000
-	if request.url.path.startswith("/api"):
-		logger.info(
-			"HTTP %s %s -> %s (%.1fms)",
-			request.method,
-			request.url.path,
-			response.status_code,
-			duration_ms,
-		)
+	
+	request_logger.info(
+		"http_request",
+		method=request.method,
+		path=request.url.path,
+		status_code=response.status_code,
+		duration_ms=round(duration_ms, 2),
+		trace_id=trace_id,
+		user_id=user_id
+	)
 	return response
+
+@app.get("/health")
+async def health_check():
+    health = await get_health_status()
+    status_code = 200 if health["status"] == "healthy" else 503
+    return health, status_code
+
 
 app.include_router(publicidad.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")

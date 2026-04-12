@@ -440,7 +440,7 @@ async def _execute_selective_sync_job(
             if dispositivo_ids and not servidor_ids:
                 dispositivos_mapa = await _get_dispositivos_por_servidor(db, None, dispositivo_ids)
                 servidor_ids_automatico = list(dispositivos_mapa.keys())
-                print(f"[DEBUG] Dispositivo_ids especificados sin servidores. Servers automáticos: {servidor_ids_automatico}")
+                logger.debug(f"Dispositivo_ids sin servidores. Servers automáticos: {servidor_ids_automatico}")
                 online_servers = [s for s in online_servers if s.id in servidor_ids_automatico]
                 servidor_ids_a_buscar = servidor_ids_automatico
             elif servidor_ids:
@@ -450,16 +450,14 @@ async def _execute_selective_sync_job(
             dispositivos_por_servidor = await _get_dispositivos_por_servidor(
                 db, servidor_ids_a_buscar, dispositivo_ids
             )
-            print(f"[DEBUG] servidores_ids: {servidor_ids}, dispositivo_ids: {dispositivo_ids}, online_servers: {[s.id for s in online_servers]}, disp_por_srv: {dispositivos_por_servidor}")
+            logger.debug(f"Sync selectivo: servers={servidor_ids_a_buscar}, dispositivos={len(dispositivo_ids) if dispositivo_ids else 0}")
 
             async def send_selective_sync(ip: str, dispositivo_ids_list: List[str] = None, on_progress: Any = None) -> dict[str, Any]:
                 url = f"http://{ip}:8000/api/fuerza-sync"
                 try:
                     params = {"async_mode": "true"}
                     if dispositivo_ids_list:
-                        print(f"[DEBUG] Enviando dispositivo_ids al servidor {ip}: {dispositivo_ids_list}")
-                        # Enviar como string separado por comas
-                        # IMPORTANTE: El backend-api espera "dispositivo_ids", no "device_ids"
+                        logger.debug(f"Enviando sync a servidor {ip}: {len(dispositivo_ids_list)} dispositivos")
                         params["dispositivo_ids"] = ",".join(dispositivo_ids_list)
                     
                     async with httpx.AsyncClient(timeout=FORCE_SYNC_TIMEOUT_SECONDS) as client:

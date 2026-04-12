@@ -24,7 +24,10 @@ from ..services.replicacion_service import (
     actualizar_estado_a_todas_las_apis,
     actualizar_metadata_a_todas_las_apis,
     sync_a_servidor,
-    actualizar_banner_en_todas_las_apis
+    actualizar_banner_en_todas_las_apis,
+    actualizar_banner_en_asignaciones,
+    obtener_servidores_sin_banner,
+    replicar_banner_completo_a_servidores
 )
 
 
@@ -389,7 +392,8 @@ async def upload_banner(
                 selected_dispositivo_ids = []
         
         if AsignacionTodos and not selected_dispositivo_ids:
-            print(f"Replicando archivo a TODAS las APIs: {file_location}")
+            # Caso 1: Asignar a TODOS los dispositivos
+            print(f"[DEBUG] Upload: Replicando archivo a TODAS las APIs (asignacion_todos=True)")
             replicacion_resultados = await replicar_archivo_a_todas_las_apis(
                 file_path=file_location,
                 IdPublicidadRemoto=nuevo_banner.IdPublicidad,
@@ -403,26 +407,51 @@ async def upload_banner(
                 dispositivo_ids=None,
             )
         elif selected_dispositivo_ids:
-            print(f"Replicando archivo a dispositivos específicos: {selected_dispositivo_ids}")
-            replicacion_resultados = await replicar_archivo_a_todas_las_apis(
-                file_path=file_location,
-                IdPublicidadRemoto=nuevo_banner.IdPublicidad,
-                titulo=Titulo,
-                tipo=Tipo,
-                prioridad=Prioridad,
-                fecha_inicio=FechaInicio,
-                fecha_fin=FechaFin,
-                duracion_seg=DuracionSeg,
-                activo=Activo,
-                dispositivo_ids=selected_dispositivo_ids,
-            )
-        elif selected_servidor_ids or selected_dispositivo_ids:
-            print(f"Replicando archivo a servidores seleccionados: {selected_servidor_ids}")
-            query = select(ServidorSecundario)
-            if selected_servidor_ids:
-                query = query.where(ServidorSecundario.id.in_(selected_servidor_ids))
-            servidores_result = await db.execute(query)
-            servidores = servidores_result.scalars().all()
+            # Caso 2: Asignar a dispositivos específicos - USAR REPLICACIÓN SELECTIVA
+            print(f"[DEBUG] Upload: Dispositivos específicos seleccionados: {selected_dispositivo_ids}")
+            
+            # Obtener servidores únicos de los dispositivos seleccionados
+            disp_query = select(Dispositivo).where(Dispositivo.codigo_kiosko.in_(selected_dispositivo_ids))
+            disp_result = await db.execute(disp_query)
+            dispositivos_encontrados = disp_result.scalars().all()
+            
+            servidor_ids_unicos = list(set([d.servidor_id for d in dispositivos_encontrados]))
+            
+            if servidor_ids_unicos:
+                srv_query = select(ServidorSecundario).where(ServidorSecundario.id.in_(servidor_ids_unicos))
+                srv_result = await db.execute(srv_query)
+                servidores = srv_result.scalars().all()
+                servidores_data = [
+                    {
+                        "id": s.id,
+                        "nombre": s.nombre,
+                        "ip": s.ip,
+                        "api_url": s.api_url or f"http://{s.ip}:8000"
+                    }
+                    for s in servidores
+                ]
+                print(f"[DEBUG] Upload: Replicando SOLO a {len(servidores_data)} servidores con dispositivos asignados: {[s['nombre'] for s in servidores_data]}")
+                replicacion_resultados = await replicar_a_servidores(
+                    file_path=file_location,
+                    servidores=servidores_data,
+                    IdPublicidadRemoto=nuevo_banner.IdPublicidad,
+                    titulo=Titulo,
+                    tipo=Tipo,
+                    prioridad=Prioridad,
+                    fecha_inicio=FechaInicio,
+                    fecha_fin=FechaFin,
+                    duracion_seg=DuracionSeg,
+                    activo=Activo,
+                    dispositivo_ids=selected_dispositivo_ids,
+                )
+            else:
+                print("[DEBUG] Upload: No se encontraron servidores para los dispositivos seleccionados")
+        elif selected_servidor_ids:
+            # Caso 3: Asignar por servidores específicos (sin dispositivo_ids específicos)
+            print(f"[DEBUG] Upload: Servidores específicos seleccionados: {selected_servidor_ids}")
+            srv_query = select(ServidorSecundario).where(ServidorSecundario.id.in_(selected_servidor_ids))
+            srv_result = await db.execute(srv_query)
+            servidores = srv_result.scalars().all()
             servidores_data = [
                 {
                     "id": s.id,
@@ -443,11 +472,11 @@ async def upload_banner(
                 fecha_fin=FechaFin,
                 duracion_seg=DuracionSeg,
                 activo=Activo,
-                dispositivo_ids=selected_dispositivo_ids,
+                dispositivo_ids=None,  # Sin filtro = todos los dispositivos de esos servidores
             )
         else:
-            print("No se replicó a ningún servidor (asignación específica sin servidores seleccionados)")
-        print(f"Replicación finalizada: {replicacion_resultados}")
+            print("[DEBUG] Upload: No se replicó a ningún servidor (asignación específica sin selección)")
+        print(f"[DEBUG] Upload: Replicación finalizada: {replicacion_resultados}")
     except Exception as e:
         print(f"Error en replicación: {str(e)}")
 
@@ -974,6 +1003,7 @@ async def reemplazar_asignaciones_banner(
         await db.commit()
         
         target_dispositivo_ids = None
+        dispositivos = []  # Definir variable para uso posterior en replicación
         
         # Si no es asignacion_todos, crear nuevas asignaciones
         if not asignacion_todos:
@@ -1001,7 +1031,7 @@ async def reemplazar_asignaciones_banner(
                     query = query.where(Dispositivo.codigo_kiosko.in_(parsed_dispositivo_ids))
                 
                 result = await db.execute(query)
-                dispositivos = result.scalars().all()
+                dispositivos = list(result.scalars().all())
                 
                 for disp in dispositivos:
                     nueva_asignacion = PublicidadAsignacion(
@@ -1017,19 +1047,123 @@ async def reemplazar_asignaciones_banner(
                 target_dispositivo_ids = [d.codigo_kiosko for d in dispositivos]
         
         # Actualizar banner en backend-api con los nuevos dispositivo_ids
+        # USAR REPLICACIÓN SELECTIVA: solo enviar a servidores con asignaciones
         if banner.IdPublicidad:
             try:
-                update_result = await actualizar_banner_en_todas_las_apis(
-                    banner_id=banner.IdPublicidad,
-                    titulo=banner.Titulo,
-                    tipo=banner.Tipo,
-                    activo=banner.Activo,
-                    prioridad=banner.Prioridad,
-                    fecha_inicio=banner.FechaInicio.isoformat() if banner.FechaInicio else None,
-                    fecha_fin=banner.FechaFin.isoformat() if banner.FechaFin else None,
-                    duracion_seg=banner.DuracionSeg,
-                    dispositivo_ids=target_dispositivo_ids
-                )
+                if asignacion_todos:
+                    # PARTE 2: Asignar a TODOS - manejar cleanup
+                    # Primero obtener TODOS los servidores
+                    todos_servidores_result = await db.execute(select(ServidorSecundario))
+                    todos_servidores = todos_servidores_result.scalars().all()
+                    todos_servidores_data = [
+                        {
+                            "id": s.id,
+                            "nombre": s.nombre,
+                            "ip": s.ip,
+                            "api_url": s.api_url or f"http://{s.ip}:8000"
+                        }
+                        for s in todos_servidores
+                    ]
+                    
+                    print(f"[DEBUG] PART2-CLEANUP: Verificando servidores que necesitan el banner {banner.IdPublicidad}")
+                    
+                    # Verificar qué servidores NO tienen el banner
+                    servidores_sin_banner = await obtener_servidores_sin_banner(
+                        banner_id=banner.IdPublicidad,
+                        servidores=todos_servidores_data
+                    )
+                    
+                    if servidores_sin_banner:
+                        print(f"[DEBUG] PART2-CLEANUP: {len(servidores_sin_banner)} servidores necesitan el banner")
+                        # Replicar banner completo a servidores que no lo tienen
+                        file_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", banner.Url.lstrip("/")))
+                        banner_data = {
+                            "banner_id": banner.IdPublicidad,
+                            "file_path": file_path,
+                            "titulo": banner.Titulo,
+                            "tipo": banner.Tipo,
+                            "activo": banner.Activo,
+                            "prioridad": banner.Prioridad,
+                            "fecha_inicio": banner.FechaInicio.isoformat() if banner.FechaInicio else None,
+                            "fecha_fin": banner.FechaFin.isoformat() if banner.FechaFin else None,
+                            "duracion_seg": banner.DuracionSeg,
+                            "dispositivo_ids": None  # Asignar a todos
+                        }
+                        replicacion_result = await replicar_banner_completo_a_servidores(
+                            banner_data=banner_data,
+                            servidores=servidores_sin_banner
+                        )
+                        print(f"[DEBUG] PART2-CLEANUP: Replicación completada: {replicacion_result}")
+                    else:
+                        print(f"[DEBUG] PART2-CLEANUP: Todos los servidores ya tienen el banner")
+                    
+                    # Actualizar los servidores que ya tienen el banner
+                    servidores_con_banner = [s for s in todos_servidores_data if s not in servidores_sin_banner]
+                    if servidores_con_banner:
+                        print(f"[DEBUG] PART2-CLEANUP: Actualizando {len(servidores_con_banner)} servidores que ya tienen el banner")
+                        update_result = await actualizar_banner_en_todas_las_apis(
+                            banner_id=banner.IdPublicidad,
+                            titulo=banner.Titulo,
+                            tipo=banner.Tipo,
+                            activo=banner.Activo,
+                            prioridad=banner.Prioridad,
+                            fecha_inicio=banner.FechaInicio.isoformat() if banner.FechaInicio else None,
+                            fecha_fin=banner.FechaFin.isoformat() if banner.FechaFin else None,
+                            duracion_seg=banner.DuracionSeg,
+                            dispositivo_ids=None
+                        )
+                        print(f"[DEBUG] PART2-CLEANUP: Actualización completada: {update_result}")
+                else:
+                    # Si es asignación específica, enviar SOLO a servidores con asignaciones
+                    if target_dispositivo_ids:
+                        # Obtener servidores únicos de los dispositivos asignados
+                        servidor_ids_asignados = list(set([d.servidor_id for d in dispositivos]))
+                        
+                        # Obtener info de esos servidores
+                        servidores_result = await db.execute(
+                            select(ServidorSecundario).where(ServidorSecundario.id.in_(servidor_ids_asignados))
+                        )
+                        servidores_asignados = servidores_result.scalars().all()
+                        
+                        servidores_data = [
+                            {
+                                "id": s.id,
+                                "nombre": s.nombre,
+                                "ip": s.ip,
+                                "api_url": s.api_url or f"http://{s.ip}:8000"
+                            }
+                            for s in servidores_asignados
+                        ]
+                        
+                        print(f"[DEBUG] Replicando SOLO a {len(servidores_data)} servidores con asignaciones: {[s['nombre'] for s in servidores_data]}")
+                        print(f"[DEBUG] Dispositivos asignados: {target_dispositivo_ids}")
+                        update_result = await actualizar_banner_en_asignaciones(
+                            banner_id=banner.IdPublicidad,
+                            servidores=servidores_data,
+                            titulo=banner.Titulo,
+                            tipo=banner.Tipo,
+                            activo=banner.Activo,
+                            prioridad=banner.Prioridad,
+                            fecha_inicio=banner.FechaInicio.isoformat() if banner.FechaInicio else None,
+                            fecha_fin=banner.FechaFin.isoformat() if banner.FechaFin else None,
+                            duracion_seg=banner.DuracionSeg,
+                            dispositivo_ids=target_dispositivo_ids,
+                        )
+                    else:
+                        # No hay dispositivos asignados - enviar a todos con dispositivo_ids vacío para limpiar
+                        print(f"[DEBUG] No hay dispositivos asignados, enviando a todos con cleanup")
+                        update_result = await actualizar_banner_en_todas_las_apis(
+                            banner_id=banner.IdPublicidad,
+                            titulo=banner.Titulo,
+                            tipo=banner.Tipo,
+                            activo=banner.Activo,
+                            prioridad=banner.Prioridad,
+                            fecha_inicio=banner.FechaInicio.isoformat() if banner.FechaInicio else None,
+                            fecha_fin=banner.FechaFin.isoformat() if banner.FechaFin else None,
+                            duracion_seg=banner.DuracionSeg,
+                            dispositivo_ids=[]  # Vacío = limpiar asignaciones
+                        )
+                
                 print(f"[DEBUG] Actualización de banner en backend-api completada: {update_result}")
             except Exception as e:
                 print(f"[ERROR] Error al actualizar banner en backend-api: {str(e)}")

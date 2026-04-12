@@ -16,6 +16,7 @@ router = APIRouter()
 def get_venezuela_now():
     return datetime.now(timezone(timedelta(hours=-4)))
 
+
 def get_venezuela_now_naive():
     return datetime.now(timezone(timedelta(hours=-4))).replace(tzinfo=None)
 
@@ -67,7 +68,6 @@ async def listar_banners(
 ):
     now = get_venezuela_now_naive()
     today_start = datetime.combine(now.date(), datetime.min.time())
-    print(f"[DEBUG] GET /banners - Hora actual Venezuela (now): {now}")
     
     query = select(Publicidad).where(
         Publicidad.activo == True,
@@ -103,6 +103,7 @@ async def listar_banners(
         banners = filtered_banners
     
     return [PublicidadResponse.model_validate(banner.__dict__) for banner in banners]
+
 
 @router.post("/replicar-archivo")
 async def replicar_archivo(
@@ -260,20 +261,22 @@ async def actualizar_banner(
         if fecha_fin:
             banner.fecha_fin = datetime.fromisoformat(fecha_fin)
         
-        if dispositivo_ids is not None:
-            banner.device_ids = dispositivo_ids
+        # Manejar dispositivo_ids:
+        # - Si llega None o "" (string vacío): asignar a todos (limpiar device_ids)
+        # - Si llega un valor: asignar a esos dispositivos
+        if dispositivo_ids is not None and dispositivo_ids.strip() != "":
+            banner.device_ids = dispositivo_ids.strip()
+        else:
+            banner.device_ids = None
         
         await db.commit()
         await db.refresh(banner)
-        
-        print(f"[DEBUG] Banner {banner_id} actualizado. device_ids: {banner.device_ids}")
         
         # Notificar a los dispositivos si el banner está activo y tiene fecha de inicio pasada
         if banner.activo and banner.fecha_inicio:
             now = get_venezuela_now_naive()
             if banner.fecha_inicio <= now:
                 await _notify_banner_iniciado_inmediato(banner, banner.device_ids)
-                print(f"[DEBUG] Notificación de actualización enviada para banner ID={banner.id}")
         
         return {
             "success": True,

@@ -138,9 +138,8 @@ export async function updateBannerAsignations(
   if (servidorIds && servidorIds.length > 0) {
     params.append('servidor_ids', JSON.stringify(servidorIds));
   }
-  if (dispositivoIds && dispositivoIds.length > 0) {
-    params.append('dispositivo_ids', JSON.stringify(dispositivoIds));
-  }
+  // Siempre enviar dispositivo_ids (array vacío si es "todos")
+  params.append('dispositivo_ids', JSON.stringify(dispositivoIds || []));
   const response = await api.put(`/banners/${videoId}/asignaciones?${params.toString()}`);
   return response.data;
 }

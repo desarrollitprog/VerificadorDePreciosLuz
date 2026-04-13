@@ -311,15 +311,7 @@ async def verificar_banner_existe(
         result = await db.execute(stmt)
         banner = result.scalars().first()
     
-    if banner:
-        return {
-            "exists": True, 
-            "banner_id": banner_id,
-            "local_id": banner.id,
-            "titulo": banner.titulo,
-            "tipo": banner.tipo
-        }
-    return {"exists": False, "banner_id": banner_id}
+    return {"exists": banner is not None, "banner_id": banner_id}
 
 
 @router.post("/replicar-archivos")
@@ -405,32 +397,20 @@ async def replicar_archivos_batch(
 @router.delete("/banners/remoto/{id_remoto}")
 async def eliminar_banner_remoto(id_remoto: int, db: AsyncSession = Depends(get_db_publicidad)):
     from ..models.publicidad import Publicidad
-    
-    print(f"[DEBUG] Eliminando banner con IdPublicidadRemoto: {id_remoto}")
-    
     result = await db.execute(select(Publicidad).where(Publicidad.IdPublicidadRemoto == id_remoto))
     banner = result.scalars().first()
-    
     if not banner:
-        print(f"[DEBUG] Banner no encontrado para IdPublicidadRemoto: {id_remoto}")
-        raise HTTPException(status_code=404, detail=f"Banner no encontrado por IdPublicidadRemoto: {id_remoto}")
-    
-    print(f"[DEBUG] Banner encontrado: id={banner.id}, titulo={banner.titulo}, url={banner.url}")
-    
+        raise HTTPException(status_code=404, detail="Banner no encontrado por IdPublicidadRemoto")
+    # Eliminar archivo físico si existe
     if banner.url:
         file_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", banner.url.lstrip("/")))
-        print(f"[DEBUG] Intentando eliminar archivo: {file_path}")
         if os.path.exists(file_path):
             try:
                 os.remove(file_path)
-                print(f"[DEBUG] Archivo eliminado: {file_path}")
-            except Exception as e:
-                print(f"[WARN] Error al eliminar archivo: {e}")
+            except Exception:
                 pass
-    
     await db.delete(banner)
     await db.commit()
-    print(f"[DEBUG] Banner eliminado de BD: id={banner.id}")
     return {"success": True, "message": "Banner eliminado correctamente por IdPublicidadRemoto."}
 
 

@@ -142,14 +142,29 @@ async def Borrado_api(api_url: str, id_remoto: int, timeout: int = 30) -> dict:
     """
     Envía una petición DELETE al backend-api para eliminar un banner remoto por IdPublicidadRemoto.
     Retorna la respuesta del API como dict.
+    Maneja 404 como success (el banner ya no existe).
     """
     url = f"{api_url.rstrip('/')}/banners/remoto/{id_remoto}"
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        response = await client.delete(url)
     try:
-        return response.json()
-    except Exception:
-        return {"success": False, "message": f"Respuesta inválida del API: {response.text}"}
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.delete(url)
+            if response.status_code == 404:
+                log.info("banner_already_deleted", id_remoto=id_remoto, api_url=api_url)
+                return {"success": True, "message": "Banner ya no existe en este servidor"}
+            response.raise_for_status()
+            try:
+                return response.json()
+            except Exception:
+                return {"success": True, "message": f"Respuesta: {response.text}"}
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            log.info("banner_already_deleted", id_remoto=id_remoto, api_url=api_url)
+            return {"success": True, "message": "Banner ya no existe en este servidor"}
+        log.error("borrado_api_error", id_remoto=id_remoto, api_url=api_url, error=str(e))
+        return {"success": False, "error": str(e)}
+    except Exception as e:
+        log.error("borrado_api_error", id_remoto=id_remoto, api_url=api_url, error=str(e))
+        return {"success": False, "error": str(e)}
 
 
 async def actualizar_estado_api(api_url: str, id_remoto: int, activo: bool, timeout: int = 15) -> dict:

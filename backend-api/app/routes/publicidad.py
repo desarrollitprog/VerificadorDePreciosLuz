@@ -291,6 +291,29 @@ async def actualizar_banner(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al actualizar banner: {str(e)}")
 
+
+@router.get("/banners/{banner_id}/exists")
+async def verificar_banner_existe(
+    banner_id: int = Path(..., description="ID del banner a verificar (puede ser ID local o IdPublicidadRemoto)"),
+    db: AsyncSession = Depends(get_db_publicidad)
+):
+    """
+    Verifica si un banner existe en la base de datos.
+    Retorna True si existe, False si no.
+    Busca primero por ID directo, luego por IdPublicidadRemoto.
+    """
+    from ..models.publicidad import Publicidad
+    
+    banner = await db.get(Publicidad, banner_id)
+    
+    if not banner:
+        stmt = select(Publicidad).where(Publicidad.IdPublicidadRemoto == banner_id)
+        result = await db.execute(stmt)
+        banner = result.scalars().first()
+    
+    return {"exists": banner is not None, "banner_id": banner_id}
+
+
 @router.post("/replicar-archivos")
 async def replicar_archivos_batch(
     files: List[UploadFile] = File(...),

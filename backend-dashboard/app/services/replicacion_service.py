@@ -668,13 +668,13 @@ async def actualizar_banner_en_asignaciones(
 async def verificar_banner_existe_en_api(api_url: str, banner_id: int, timeout: int = 15) -> dict:
     """
     Verifica si un banner existe en un backend-api específico.
-    Usa PUT porque es idempotente y retorna 404 si no existe.
+    Usa el endpoint GET /banners/{banner_id}/exists.
     Returns: {"exists": True/False, "status_code": int}
     """
-    check_url = f"{api_url.rstrip('/')}/banners/{banner_id}"
+    check_url = f"{api_url.rstrip('/')}/banners/{banner_id}/exists"
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.put(check_url, data={"titulo": "__check_exists__"})
+            response = await client.get(check_url)
             return {"exists": response.status_code == 200, "status_code": response.status_code}
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
@@ -1142,9 +1142,9 @@ async def actualizar_banner_en_api_con_retry(
 
 async def _verificar_banner_check_internal(api_url: str, banner_id: int, timeout: int) -> httpx.Response:
     """Helper interno para verificación de banner sin retry."""
-    check_url = f"{api_url.rstrip('/')}/banners/{banner_id}"
+    check_url = f"{api_url.rstrip('/')}/banners/{banner_id}/exists"
     async with httpx.AsyncClient(timeout=timeout) as client:
-        return await client.put(check_url, data={"titulo": "__check_exists__"})
+        return await client.get(check_url)
 
 
 async def verificar_banner_existe_en_api_con_retry(api_url: str, banner_id: int, timeout: int = 15) -> dict:

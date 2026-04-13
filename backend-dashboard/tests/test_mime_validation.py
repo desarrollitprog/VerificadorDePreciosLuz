@@ -3,6 +3,9 @@ Pruebas unitarias para Validación MIME en Uploads.
 """
 import sys
 import os
+import io
+
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.utils import FileTypeValidator

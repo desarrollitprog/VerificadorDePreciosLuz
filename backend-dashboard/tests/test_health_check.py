@@ -3,6 +3,9 @@ Pruebas unitarias para Health Check Endpoint (sin dependencias externas).
 """
 import sys
 import os
+import io
+
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 

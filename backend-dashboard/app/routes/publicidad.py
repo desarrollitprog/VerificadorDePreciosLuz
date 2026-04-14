@@ -1085,6 +1085,13 @@ async def reemplazar_asignaciones_banner(
         update_result = None
         if banner.IdPublicidad:
             try:
+                # LOG: Debug asignación
+                log.info("fase6_debug_inicio", 
+                       banner_id=banner.IdPublicidad,
+                       asignacion_todos=asignacion_todos,
+                       target_dispositivo_ids=target_dispositivo_ids,
+                       dispositivos_count=len(dispositivos))
+                
                 # Obtener TODOS los servidores
                 todos_servidores_result = await db.execute(select(ServidorSecundario))
                 todos_servidores = todos_servidores_result.scalars().all()

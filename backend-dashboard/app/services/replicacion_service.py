@@ -1291,6 +1291,9 @@ async def procesar_cambio_asignacion(
     log.info("procesando_cambio_asignacion", banner_id=banner_id, 
             total_srv=len(srv_todos_ids), srv_nuevos=len(srv_nuevos_ids))
     
+    # LOG: Debug - mostrar servidores que tienen el banner
+    log.info("fase6_srv_tienen_ids", banner_id=banner_id, srv_tienen=list(srv_tienen_ids))
+    
     servidores_con_banner = await obtener_servidores_con_banner(
         banner_id=banner_id,
         servidores=servidores_todos,
@@ -1306,6 +1309,12 @@ async def procesar_cambio_asignacion(
     log.info("calculo_diferencias", banner_id=banner_id,
             agregar=len(srv_a_agregar), eliminar=len(srv_a_eliminar), actualizar=len(srv_a_actualizar))
     
+    # LOG: Debug diferencias
+    log.info("fase6_diferencias", banner_id=banner_id,
+            srv_a_agregar=list(srv_a_agregar),
+            srv_a_eliminar=list(srv_a_eliminar),
+            srv_a_actualizar=list(srv_a_actualizar))
+    
     resultados = {
         "banner_id": banner_id,
         "agregar": [],
@@ -1319,13 +1328,16 @@ async def procesar_cambio_asignacion(
     servidores_a_actualizar = [srv for srv in servidores_asignados if srv.get("id") in srv_a_actualizar]
     
     if servidores_a_eliminar:
-        log.info("eliminando_banner_de_servidores", banner_id=banner_id, cantidad=len(servidores_a_eliminar))
+        log.info("eliminando_banner_de_servidores", banner_id=banner_id, cantidad=len(servidores_a_eliminar),
+               servidores_a_eliminar=[s.get("nombre") for s in servidores_a_eliminar])
         limpiezas = await asyncio.gather(
             *[limpiar_banner_de_servidor(srv, banner_id, timeout) for srv in servidores_a_eliminar],
             return_exceptions=False
         )
         for limp in limpiezas:
             resultados["eliminar"].append(limp)
+            log.info("fase6_eliminacion_result", banner_id=banner_id,
+                   servidor=limp.get("servidor_nombre"), success=limp.get("success"))
             if not limp.get("success"):
                 resultados["exito"] = False
     

@@ -12,11 +12,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 class TestLimpiarBannerDeServidor:
     """Pruebas para limpiar_banner_de_servidor()."""
     
-    def test_data_enviado_vacio(self):
-        """Verificar que data contiene dispositivo_ids vacio."""
-        data = {"dispositivo_ids": ""}
-        assert data["dispositivo_ids"] == ""
-        print("✓ test_data_enviado_vacio passed")
+    def test_data_enviado_limpiar_asignaciones(self):
+        """Verificar que data contiene limpiar_asignaciones=True."""
+        data = {"limpiar_asignaciones": True}
+        assert data["limpiar_asignaciones"] is True
+        print("✓ test_data_enviado_limpiar_asignaciones passed")
     
     def test_url_formato(self):
         """Verificar formato de URL."""
@@ -205,7 +205,7 @@ def run_tests():
     
     # Test LimpiarBannerDeServidor
     limpiar_tests = TestLimpiarBannerDeServidor()
-    limpiar_tests.test_data_enviado_vacio()
+    limpiar_tests.test_data_enviado_limpiar_asignaciones()
     limpiar_tests.test_url_formato()
     limpiar_tests.test_estructura_response_exito()
     limpiar_tests.test_estructura_response_error()

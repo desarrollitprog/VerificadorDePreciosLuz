@@ -1171,8 +1171,8 @@ async def limpiar_banner_de_servidor(
     timeout: int = 35
 ) -> dict:
     """
-    Limpia las asignaciones de un banner en un servidor específico.
-    Envía PUT con dispositivo_ids="" para quitar todas las asignaciones.
+    Elimina un banner de un servidor específico.
+    Usa DELETE /banners/remoto/{banner_id} para borrar el banner.
     """
     api_url = servidor.get("api_url")
     if not api_url:
@@ -1189,15 +1189,23 @@ async def limpiar_banner_de_servidor(
             "error": "No se encontró URL del backend-api"
         }
     
-    update_url = f"{api_url.rstrip('/')}/banners/{banner_id}"
-    data = {"dispositivo_ids": ""}
+    delete_url = f"{api_url.rstrip('/')}/banners/remoto/{banner_id}"
     
-    log.info("limpiando_asignacion_banner", banner_id=banner_id, api_url=api_url, servidor=servidor.get("nombre"))
+    log.info("eliminando_banner_de_servidor", banner_id=banner_id, api_url=api_url, servidor=servidor.get("nombre"))
     
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.put(update_url, data=data)
-            log.info("limpieza_response", banner_id=banner_id, api_url=api_url, status_code=response.status_code)
+            response = await client.delete(delete_url)
+            log.info("eliminacion_response", banner_id=banner_id, api_url=api_url, status_code=response.status_code)
+            # 404 = no existía = también es éxito
+            if response.status_code == 200 or response.status_code == 404:
+                return {
+                    "success": True,
+                    "servidor_id": servidor.get("id"),
+                    "servidor_nombre": servidor.get("nombre"),
+                    "api_url": api_url,
+                    "message": "Banner eliminado correctamente"
+                }
             response.raise_for_status()
             return {
                 "success": True,
@@ -1207,7 +1215,7 @@ async def limpiar_banner_de_servidor(
                 "response": response.json()
             }
     except Exception as e:
-        log.error("limpieza_error", banner_id=banner_id, api_url=api_url, error=str(e))
+        log.error("eliminacion_error", banner_id=banner_id, api_url=api_url, error=str(e))
         return {
             "success": False,
             "servidor_id": servidor.get("id"),

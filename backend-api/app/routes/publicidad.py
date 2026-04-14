@@ -262,8 +262,8 @@ async def actualizar_banner(
             banner.fecha_fin = datetime.fromisoformat(fecha_fin)
         
         # Manejar dispositivo_ids:
-        # - Si llega None o "" (string vacío): asignar a todos (limpiar device_ids)
-        # - Si llega un valor: asignar a esos dispositivos
+        # - Si dispositivo_ids tiene valor: asignar a esos dispositivos
+        # - Si dispositivo_ids es None o "": asignar a todos
         if dispositivo_ids is not None and dispositivo_ids.strip() != "":
             banner.device_ids = dispositivo_ids.strip()
         else:

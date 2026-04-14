@@ -643,17 +643,49 @@ async def actualizar_banner_en_asignaciones(
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 response = await client.put(update_url, data=data)
-                log.info("update_assignment_response", banner_id=banner_id, api_url=api_url, servidor_nombre=servidor.get("nombre"), status_code=response.status_code)
-                response.raise_for_status()
+                log.info("update_assignment_response", banner_id=banner_id, api_url=api_url,servidor_nombre=servidor.get("nombre"), status_code=response.status_code)
+                
+                if response.status_code == 404:
+                    log.info("update_assignment_404", banner_id=banner_id, api_url=api_url,servidor_nombre=servidor.get("nombre"), message="Banner no existe, necesita replicar")
+                    resultados.append({
+                        "servidor_id": servidor.get("id"),
+                        "servidor_nombre": servidor.get("nombre"),
+                        "api_url": api_url,
+                        "success": False,
+                        "error": "Banner no existe en servidor, necesita replicar primero",
+                        "needs_replicate": True
+                    })
+                else:
+                    response.raise_for_status()
+                    resultados.append({
+                        "servidor_id": servidor.get("id"),
+                        "servidor_nombre": servidor.get("nombre"),
+                        "api_url": api_url,
+                        "success": True,
+                        "response": response.json()
+                    })
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                log.info("update_assignment_404", banner_id=banner_id, api_url=api_url,servidor_nombre=servidor.get("nombre"), message="Banner no existe, necesita replicar")
                 resultados.append({
                     "servidor_id": servidor.get("id"),
                     "servidor_nombre": servidor.get("nombre"),
                     "api_url": api_url,
-                    "success": True,
-                    "response": response.json()
+                    "success": False,
+                    "error": "Banner no existe en servidor, necesita replicar primero",
+                    "needs_replicate": True
+                })
+            else:
+                log.error("update_assignment_error", banner_id=banner_id, api_url=api_url,servidor_nombre=servidor.get("nombre"), error=str(e))
+                resultados.append({
+                    "servidor_id": servidor.get("id"),
+                    "servidor_nombre": servidor.get("nombre"),
+                    "api_url": api_url,
+                    "success": False,
+                    "error": str(e)
                 })
         except Exception as e:
-            log.error("update_assignment_error", banner_id=banner_id, api_url=api_url, servidor_nombre=servidor.get("nombre"), error=str(e))
+            log.error("update_assignment_error", banner_id=banner_id, api_url=api_url,servidor_nombre=servidor.get("nombre"), error=str(e))
             resultados.append({
                 "servidor_id": servidor.get("id"),
                 "servidor_nombre": servidor.get("nombre"),
@@ -1394,10 +1426,30 @@ async def procesar_cambio_asignacion(
             dispositivo_ids=banner_data.get("dispositivo_ids"),
             timeout=timeout
         )
+        
+        servidores_necesitan_replicar = []
         for act in actualizaciones:
             resultados["actualizar"].append(act)
-            if not act.get("success"):
+            if act.get("needs_replicate"):
+                servidores_necesitan_replicar.append({
+                    "id": act.get("servidor_id"),
+                    "nombre": act.get("servidor_nombre"),
+                    "api_url": act.get("api_url")
+                })
+                log.info("fase6_necesita_replicar", banner_id=banner_id, servidor=act.get("servidor_nombre"))
+            elif not act.get("success"):
                 resultados["exito"] = False
+        
+        if servidores_necesitan_replicar:
+            replicaciones_fallback = await replicar_banner_completo_a_servidores(
+                banner_data=banner_data,
+                servidores=servidores_necesitan_replicar,
+                timeout=timeout
+            )
+            for rep in replicaciones_fallback:
+                resultados["agregar"].append(rep)
+                if not rep.get("success"):
+                    resultados["exito"] = False
     
     log.info("proceso_cambio_asignacion_completo", banner_id=banner_id, exito=resultados["exito"])
     return resultados

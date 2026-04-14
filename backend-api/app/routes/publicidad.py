@@ -260,18 +260,25 @@ async def actualizar_banner(
     Si no encuentra por ID directo, busca por IdPublicidadRemoto.
     """
     from ..models.publicidad import Publicidad
+    import logging
+    logger = logging.getLogger("publicidad")
     
     # Primero buscar por ID directo
+    logger.info(f"[PUT banners] Buscando por ID directo: {banner_id}")
     banner = await db.get(Publicidad, banner_id)
     
     # Si no encuentra, buscar por IdPublicidadRemoto (ID del dashboard)
     if not banner:
+        logger.info(f"[PUT banners] No encontrado por ID {banner_id}, buscando por IdPublicidadRemoto: {banner_id}")
         stmt = select(Publicidad).where(Publicidad.IdPublicidadRemoto == banner_id)
         result = await db.execute(stmt)
         banner = result.scalars().first()
     
     if not banner:
+        logger.info(f"[PUT banners] Banner NO encontrado en DB, retornando 404")
         raise HTTPException(status_code=404, detail=f"Banner no encontrado (ID: {banner_id})")
+    
+    logger.info(f"[PUT banners] Banner encontrado, ID local: {banner.id}, IdRemoto: {banner.IdPublicidadRemoto}")
     
     try:
         # Actualizar campos si se proporcionan
@@ -333,13 +340,22 @@ async def verificar_banner_existe(
     Busca primero por ID directo, luego por IdPublicidadRemoto.
     """
     from ..models.publicidad import Publicidad
+    import logging
+    logger = logging.getLogger("publicidad")
     
+    logger.info(f"[EXISTS] Buscando por ID directo: {banner_id}")
     banner = await db.get(Publicidad, banner_id)
     
     if not banner:
+        logger.info(f"[EXISTS] No encontrado por ID {banner_id}, buscando por IdPublicidadRemoto: {banner_id}")
         stmt = select(Publicidad).where(Publicidad.IdPublicidadRemoto == banner_id)
         result = await db.execute(stmt)
         banner = result.scalars().first()
+    
+    if banner:
+        logger.info(f"[EXISTS] Banner encontrado, ID local: {banner.id}, IdRemoto: {banner.IdPublicidadRemoto}")
+    else:
+        logger.info(f"[EXISTS] Banner NO encontrado")
     
     return {"exists": banner is not None, "banner_id": banner_id}
 

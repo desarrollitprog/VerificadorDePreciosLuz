@@ -156,6 +156,73 @@ Mejorar seguridad, performance, observabilidad y code quality del sistema de ges
 
 ---
 
+## FASE 6: Cambio de Asignación con Cleanup ⏳ EN PROGRESO (Funciones listas)
+
+### Problema identificado
+Cuando se edita una publicidad cambiando la asignación (ej: de "todos" a específico), el sistema no elimina el banner de los servidores que deben perderlo. Esto causa que el banner aparezca en dispositivos incorrectos.
+
+### Descripción del problema
+- **Caso B** ("todos" → específico): Solo envía a nuevos srv, no elimina de antiguos
+- **Caso D** (específico1 → específico2): Solo envía a nuevos srv, no elimina de los quitados
+
+### Casos de asignación
+
+| Caso | Anterior | Nuevo | Problema |
+|------|----------|-------|---------|
+| A | "todos" → "todos" | ✅ Actualiza todos (funciona) |
+| B | "todos" → específico | ❌ No elimina de srv que deben perder |
+| C | específico → "todos" | ⚠️ Funciona pero sin verificación |
+| D | específico1 → específico2 | ❌ No elimina de srv removidos |
+
+### Solución diseño
+
+1. **Verificar asignación ANTERIOR** del banner antes de cambiar
+2. **Consultar servidores** (paralelo) para ver quién tiene el banner actualmente
+3. **Calcular diferencias** usando operaciones de conjuntos
+4. **Ejecutar acciones**:
+   - srv_AGREGAR → POST /replicar-archivo
+   - srv_ELIMINAR → PUT con dispositivo_ids=""
+   - srv_ACTUALIZAR → PUT actualizar datos
+
+### Especificaciones técnicas
+
+| Parámetro | Valor |
+|----------|------|
+| Timeout consultas paralelo | 35 segundos |
+| Manejo de errores | Detener proceso y notificar |
+| Logging | Incluido para debugging |
+
+### Funciones implementadas (PRIORIDAD 1)
+
+| Función | Archivo | Estado |
+|---------|--------|--------|
+| `limpiar_banner_de_servidor()` | replicacion_service.py | ✅ Implementada |
+| `obtener_servidores_con_banner()` | replicacion_service.py | ✅ Implementada |
+| `procesar_cambio_asignacion()` | replicacion_service.py | ✅ Implementada |
+| Modificar endpoint publicidad.py | routes | ⏳ Pendiente |
+| Tests unitarios | tests/ | ⏳ Pendiente |
+
+### Tests a implementar
+
+| Test | Descripción |
+|------|-----------|
+| test_cambio_todos_a_especifico | Verifica agregar + eliminar |
+| test_cambio_especifico_a_todos | Verifica agregar a todos |
+| test_cambio_especifico_a_especifico | Verifica agregar + eliminar |
+| test_error_en_servidor | Verifica que se detenga al fallar uno |
+| test_timeout_paralelo | Verifica timeout de 35s |
+
+### Implementación por prioridad
+
+**_PRIORIDAD 1 (implementar ahora)**: Casos B y D (los más problemáticos)
+** PRIORIDAD 2**: Casos A y C (mejoras adicionales)
+
+---
+
+**Total: 12/14 completados (86%)**
+
+---
+
 ## Orden de Implementación Sugerido
 
 1. ~~✅ FASE 1 (Seguridad) - Completada~~

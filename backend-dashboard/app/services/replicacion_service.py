@@ -799,8 +799,8 @@ async def obtener_servidores_sin_banner(
     timeout: int = 15
 ) -> list:
     """
-    Obtiene la lista de servidores que NO tienen un banner espec├¡fico (PARALELO).
-    Returns: Lista de servidores que necesitan replicaci├│n.
+    Obtiene la lista de servidores que NO tienen un banner específico (PARALELO).
+    Returns: Lista de servidores que necesitan replicación.
     """
     async def _verificar_un_servidor(servidor: dict) -> dict:
         api_url = servidor.get("api_url")
@@ -813,6 +813,7 @@ async def obtener_servidores_sin_banner(
             return {"servidor": servidor, "exists": None}
         
         result = await verificar_banner_existe_en_api(api_url, banner_id, timeout)
+        log.info("debug_sin_banner_check", banner_id=banner_id, api_url=api_url, exists=result.get("exists"))
         return {"servidor": servidor, "exists": result.get("exists", False), "api_url": api_url}
     
     if not servidores:

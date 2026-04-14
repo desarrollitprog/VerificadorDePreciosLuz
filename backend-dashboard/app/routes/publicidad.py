@@ -1121,52 +1121,22 @@ async def reemplazar_asignaciones_banner(
                 }
                 
                 if asignacion_todos:
-                    # CASO A: Asignar a TODOS
-                    # Primero replicar a servidores que NO tienen el banner
-                    log.info("cleanup_start", banner_id=banner.IdPublicidad, total_servidores=len(todos_servidores_data))
+                    # CASO A: Asignar a TODOS - usar procesar_cambio_asignacion
+                    log.info("fase6_caso_a_inicio", banner_id=banner.IdPublicidad, 
+                           srv_total=len(todos_servidores_data))
                     
-                    servidores_sin_banner = await obtener_servidores_sin_banner(
-                        banner_id=banner.IdPublicidad,
-                        servidores=todos_servidores_data
+                    update_result = await procesar_cambio_asignacion(
+                        banner_data=banner_data,
+                        servidores_todos=todos_servidores_data,
+                        servidores_asignados=todos_servidores_data,
+                        timeout=35
                     )
                     
-                    if servidores_sin_banner:
-                        log.info("cleanup_replication_needed", banner_id=banner.IdPublicidad, servidores_necesitan=len(servidores_sin_banner))
-                        replicacion_result = await replicar_banner_completo_a_servidores_con_verificacion(
-                            banner_data=banner_data,
-                            servidores=servidores_sin_banner
-                        )
-                        log.info("cleanup_replication_complete", banner_id=banner.IdPublicidad, replicacion_exito=replicacion_result.get("exito"))
-                    else:
-                        log.info("cleanup_no_replication_needed", banner_id=banner.IdPublicidad)
-                    
-                    # Actualizar servidores que ya tienen el banner (solo metadatos)
-                    log.info("cleanup_updating_existing", banner_id=banner.IdPublicidad, servidores_actualizar=len(todos_servidores_data))
-                    update_result = await actualizar_banner_en_todas_las_apis(
-                        banner_id=banner.IdPublicidad,
-                        titulo=banner.Titulo,
-                        tipo=banner.Tipo,
-                        activo=banner.Activo,
-                        prioridad=banner.Prioridad,
-                        fecha_inicio=banner.FechaInicio.isoformat() if banner.FechaInicio else None,
-                        fecha_fin=banner.FechaFin.isoformat() if banner.FechaFin else None,
-                        duracion_seg=banner.DuracionSeg,
-                        dispositivo_ids=None
-                    )
-                    log.info("cleanup_update_complete", banner_id=banner.IdPublicidad, update_result=update_result)
-                    
-                    # VERIFICACIÓN FINAL
-                    verificacion_final = await verificar_banner_en_servidores(
-                        banner_id=banner.IdPublicidad,
-                        servidores=todos_servidores_data
-                    )
-                    log.info("cleanup_verificacion_final",
-                            banner_id=banner.IdPublicidad,
-                            exito=verificacion_final.get("exito"),
-                            total=verificacion_final.get("total"),
-                            con_banner=verificacion_final.get("total_con_banner"),
-                            sin_banner=verificacion_final.get("total_sin_banner"),
-                            errores=verificacion_final.get("total_errores"))
+                    log.info("fase6_caso_a_resultado", banner_id=banner.IdPublicidad, 
+                           exito=update_result.get("exito"),
+                           agregar=len(update_result.get("agregar", [])),
+                           eliminar=len(update_result.get("eliminar", [])),
+                           actualizar=len(update_result.get("actualizar", [])))
                 else:
                     # CASO B/D: Asignación específica - usar procesar_cambio_asignacion
                     if target_dispositivo_ids:

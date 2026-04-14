@@ -1291,9 +1291,6 @@ async def procesar_cambio_asignacion(
     log.info("procesando_cambio_asignacion", banner_id=banner_id, 
             total_srv=len(srv_todos_ids), srv_nuevos=len(srv_nuevos_ids))
     
-    # LOG: Debug - mostrar servidores que tienen el banner
-    log.info("fase6_srv_tienen_ids", banner_id=banner_id, srv_tienen=list(srv_tienen_ids))
-    
     servidores_con_banner = await obtener_servidores_con_banner(
         banner_id=banner_id,
         servidores=servidores_todos,
@@ -1301,6 +1298,9 @@ async def procesar_cambio_asignacion(
     )
     
     srv_tienen_ids = {srv.get("id") for srv in servidores_con_banner if srv.get("id")}
+    
+    # LOG: Debug - mostrar servidores que tienen el banner (DESPUÉS de definir)
+    log.info("fase6_srv_tienen_ids", banner_id=banner_id, srv_tienen=list(srv_tienen_ids))
     
     srv_a_agregar = srv_nuevos_ids - srv_tienen_ids
     srv_a_eliminar = srv_tienen_ids - srv_nuevos_ids

@@ -158,6 +158,11 @@ async def replicar_archivo(
         from ..models.publicidad import Publicidad
         from sqlalchemy import select
         
+        # Preparar datos primero (necesario para el check)
+        fecha_inicio_dt = datetime.fromisoformat(fecha_inicio) if fecha_inicio else None
+        fecha_fin_dt = datetime.fromisoformat(fecha_fin) if fecha_fin else None
+        tipo_final = tipo or tipo_archivo
+        
         # VERIFICAR si ya existe un banner con el mismo IdPublicidadRemoto
         if IdPublicidadRemoto:
             check_stmt = select(Publicidad).where(Publicidad.IdPublicidadRemoto == IdPublicidadRemoto)
@@ -167,7 +172,7 @@ async def replicar_archivo(
                 # Ya existe - actualizar en lugar de crear nuevo
                 existing_banner.url = url
                 existing_banner.titulo = titulo
-                existing_banner.tipo = tipo or tipo_archivo
+                existing_banner.tipo = tipo_final
                 existing_banner.activo = activo
                 existing_banner.prioridad = prioridad
                 existing_banner.fecha_inicio = fecha_inicio_dt
@@ -184,9 +189,6 @@ async def replicar_archivo(
                     "url": existing_banner.url
                 }
         
-        print(f"[DEBUG] Replicar archivo - FechaInicio recibida: {fecha_inicio}, FechaFin recibida: {fecha_fin}")
-        fecha_inicio_dt = datetime.fromisoformat(fecha_inicio) if fecha_inicio else None
-        fecha_fin_dt = datetime.fromisoformat(fecha_fin) if fecha_fin else None
         print(f"[DEBUG] Replicar archivo - FechaInicio guardada: {fecha_inicio_dt}, FechaFin guardada: {fecha_fin_dt}")
         nuevo_banner = Publicidad(
             titulo=titulo,

@@ -1251,12 +1251,14 @@ async def obtener_servidores_con_banner(
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 response = await client.get(check_url)
+                log.info("debug_exists_check", banner_id=banner_id, api_url=api_url, status_code=response.status_code)
                 return {
                     "servidor": servidor,
                     "tiene_banner": response.status_code == 200,
                     "api_url": api_url
                 }
-        except Exception:
+        except Exception as e:
+            log.info("debug_exists_error", banner_id=banner_id, api_url=api_url, error=str(e))
             return {"servidor": servidor, "tiene_banner": False, "api_url": api_url}
     
     results = await asyncio.gather(*[_verificar(srv) for srv in servidores], return_exceptions=False)

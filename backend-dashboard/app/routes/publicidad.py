@@ -29,7 +29,8 @@ from ..services.replicacion_service import (
     obtener_servidores_sin_banner,
     replicar_banner_completo_a_servidores,
     replicar_banner_completo_a_servidores_con_verificacion,
-    verificar_banner_en_servidores
+    verificar_banner_en_servidores,
+    procesar_cambio_asignacion
 )
 from app.utils.logger import StructuredLogger
 from app.utils import sanitize_html, FileTypeValidator
@@ -1080,26 +1081,41 @@ async def reemplazar_asignaciones_banner(
                 # Guardar dispositivo_ids para replicación
                 target_dispositivo_ids = [d.codigo_kiosko for d in dispositivos]
         
-        # Actualizar banner en backend-api con los nuevos dispositivo_ids
-        # USAR REPLICACIÓN SELECTIVA: solo enviar a servidores con asignaciones
+        # FASE 6: Usar procesar_cambio_asignacion para cleanup
         update_result = None
         if banner.IdPublicidad:
             try:
+                # Obtener TODOS los servidores
+                todos_servidores_result = await db.execute(select(ServidorSecundario))
+                todos_servidores = todos_servidores_result.scalars().all()
+                todos_servidores_data = [
+                    {
+                        "id": s.id,
+                        "nombre": s.nombre,
+                        "ip": s.ip,
+                        "api_url": s.api_url or f"http://{s.ip}:8000"
+                    }
+                    for s in todos_servidores
+                ]
+                
+                # Preparar banner_data para procesar_cambio_asignacion
+                file_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", banner.Url.lstrip("/")))
+                banner_data = {
+                    "banner_id": banner.IdPublicidad,
+                    "file_path": file_path,
+                    "titulo": banner.Titulo,
+                    "tipo": banner.Tipo,
+                    "activo": banner.Activo,
+                    "prioridad": banner.Prioridad,
+                    "fecha_inicio": banner.FechaInicio.isoformat() if banner.FechaInicio else None,
+                    "fecha_fin": banner.FechaFin.isoformat() if banner.FechaFin else None,
+                    "duracion_seg": banner.DuracionSeg,
+                    "dispositivo_ids": target_dispositivo_ids
+                }
+                
                 if asignacion_todos:
-                    # PARTE 2: Asignar a TODOS - manejar cleanup
-                    # Primero obtener TODOS los servidores
-                    todos_servidores_result = await db.execute(select(ServidorSecundario))
-                    todos_servidores = todos_servidores_result.scalars().all()
-                    todos_servidores_data = [
-                        {
-                            "id": s.id,
-                            "nombre": s.nombre,
-                            "ip": s.ip,
-                            "api_url": s.api_url or f"http://{s.ip}:8000"
-                        }
-                        for s in todos_servidores
-                    ]
-                    
+                    # CASO A: Asignar a TODOS
+                    # Primero replicar a servidores que NO tienen el banner
                     log.info("cleanup_start", banner_id=banner.IdPublicidad, total_servidores=len(todos_servidores_data))
                     
                     servidores_sin_banner = await obtener_servidores_sin_banner(
@@ -1109,54 +1125,30 @@ async def reemplazar_asignaciones_banner(
                     
                     if servidores_sin_banner:
                         log.info("cleanup_replication_needed", banner_id=banner.IdPublicidad, servidores_necesitan=len(servidores_sin_banner))
-                        file_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", banner.Url.lstrip("/")))
-                        banner_data = {
-                            "banner_id": banner.IdPublicidad,
-                            "file_path": file_path,
-                            "titulo": banner.Titulo,
-                            "tipo": banner.Tipo,
-                            "activo": banner.Activo,
-                            "prioridad": banner.Prioridad,
-                            "fecha_inicio": banner.FechaInicio.isoformat() if banner.FechaInicio else None,
-                            "fecha_fin": banner.FechaFin.isoformat() if banner.FechaFin else None,
-                            "duracion_seg": banner.DuracionSeg,
-                            "dispositivo_ids": None
-                        }
                         replicacion_result = await replicar_banner_completo_a_servidores_con_verificacion(
                             banner_data=banner_data,
                             servidores=servidores_sin_banner
                         )
                         log.info("cleanup_replication_complete", banner_id=banner.IdPublicidad, replicacion_exito=replicacion_result.get("exito"))
-                        
-                        if replicacion_result.get("verificacion_resultado"):
-                            v = replicacion_result["verificacion_resultado"]
-                            log.info("cleanup_verification_result", 
-                                    banner_id=banner.IdPublicidad,
-                                    verificacion_exito=v.get("exito"),
-                                    con_banner=v.get("total_con_banner"),
-                                    sin_banner=v.get("total_sin_banner"),
-                                    errores=v.get("total_errores"))
                     else:
                         log.info("cleanup_no_replication_needed", banner_id=banner.IdPublicidad)
                     
-                    servidores_con_banner = [s for s in todos_servidores_data if s not in servidores_sin_banner]
-                    if servidores_con_banner:
-                        log.info("cleanup_updating_existing", banner_id=banner.IdPublicidad, servidores_actualizar=len(servidores_con_banner))
-                        update_result = await actualizar_banner_en_todas_las_apis(
-                            banner_id=banner.IdPublicidad,
-                            titulo=banner.Titulo,
-                            tipo=banner.Tipo,
-                            activo=banner.Activo,
-                            prioridad=banner.Prioridad,
-                            fecha_inicio=banner.FechaInicio.isoformat() if banner.FechaInicio else None,
-                            fecha_fin=banner.FechaFin.isoformat() if banner.FechaFin else None,
-                            duracion_seg=banner.DuracionSeg,
-                            dispositivo_ids=None
-                        )
-                        log.info("cleanup_update_complete", banner_id=banner.IdPublicidad, update_result=update_result)
-                    else:
-                        log.info("cleanup_no_update_needed", banner_id=banner.IdPublicidad)
+                    # Actualizar servidores que ya tienen el banner (solo metadatos)
+                    log.info("cleanup_updating_existing", banner_id=banner.IdPublicidad, servidores_actualizar=len(todos_servidores_data))
+                    update_result = await actualizar_banner_en_todas_las_apis(
+                        banner_id=banner.IdPublicidad,
+                        titulo=banner.Titulo,
+                        tipo=banner.Tipo,
+                        activo=banner.Activo,
+                        prioridad=banner.Prioridad,
+                        fecha_inicio=banner.FechaInicio.isoformat() if banner.FechaInicio else None,
+                        fecha_fin=banner.FechaFin.isoformat() if banner.FechaFin else None,
+                        duracion_seg=banner.DuracionSeg,
+                        dispositivo_ids=None
+                    )
+                    log.info("cleanup_update_complete", banner_id=banner.IdPublicidad, update_result=update_result)
                     
+                    # VERIFICACIÓN FINAL
                     verificacion_final = await verificar_banner_en_servidores(
                         banner_id=banner.IdPublicidad,
                         servidores=todos_servidores_data
@@ -1169,18 +1161,14 @@ async def reemplazar_asignaciones_banner(
                             sin_banner=verificacion_final.get("total_sin_banner"),
                             errores=verificacion_final.get("total_errores"))
                 else:
-                    # Si es asignación específica, enviar SOLO a servidores con asignaciones
+                    # CASO B/D: Asignación específica - usar procesar_cambio_asignacion
                     if target_dispositivo_ids:
-                        # Obtener servidores únicos de los dispositivos asignados
                         servidor_ids_asignados = list(set([d.servidor_id for d in dispositivos]))
-                        
-                        # Obtener info de esos servidores
-                        servidores_result = await db.execute(
+                        servidores_asignados_result = await db.execute(
                             select(ServidorSecundario).where(ServidorSecundario.id.in_(servidor_ids_asignados))
                         )
-                        servidores_asignados = servidores_result.scalars().all()
-                        
-                        servidores_data = [
+                        servidores_asignados = servidores_asignados_result.scalars().all()
+                        servidores_asignados_data = [
                             {
                                 "id": s.id,
                                 "nombre": s.nombre,
@@ -1189,37 +1177,28 @@ async def reemplazar_asignaciones_banner(
                             }
                             for s in servidores_asignados
                         ]
-                        
-                        log.info("assignment_replicate_specific", banner_id=banner.IdPublicidad, servidores=[s['nombre'] for s in servidores_data], dispositivo_ids=target_dispositivo_ids)
-                        update_result = await actualizar_banner_en_asignaciones(
-                            banner_id=banner.IdPublicidad,
-                            servidores=servidores_data,
-                            titulo=banner.Titulo,
-                            tipo=banner.Tipo,
-                            activo=banner.Activo,
-                            prioridad=banner.Prioridad,
-                            fecha_inicio=banner.FechaInicio.isoformat() if banner.FechaInicio else None,
-                            fecha_fin=banner.FechaFin.isoformat() if banner.FechaFin else None,
-                            duracion_seg=banner.DuracionSeg,
-                            dispositivo_ids=target_dispositivo_ids,
-                        )
                     else:
-                        log.info("assignment_clear_all", banner_id=banner.IdPublicidad)
-                        update_result = await actualizar_banner_en_todas_las_apis(
-                            banner_id=banner.IdPublicidad,
-                            titulo=banner.Titulo,
-                            tipo=banner.Tipo,
-                            activo=banner.Activo,
-                            prioridad=banner.Prioridad,
-                            fecha_inicio=banner.FechaInicio.isoformat() if banner.FechaInicio else None,
-                            fecha_fin=banner.FechaFin.isoformat() if banner.FechaFin else None,
-                            duracion_seg=banner.DuracionSeg,
-                            dispositivo_ids=[]  # Vacío = limpiar asignaciones
-                        )
+                        servidores_asignados_data = []
+                    
+                    log.info("fase6_procesando_cambio", banner_id=banner.IdPublicidad, 
+                           srv_objetivo=len(servidores_asignados_data),
+                           srv_total=len(todos_servidores_data))
+                    
+                    # USAR LA NUEVA FUNCIÓN FASE 6 para cleanup
+                    update_result = await procesar_cambio_asignacion(
+                        banner_data=banner_data,
+                        servidores_todos=todos_servidores_data,
+                        servidores_asignados=servidores_asignados_data,
+                        timeout=35
+                    )
+                    
+                    log.info("fase6_resultado", banner_id=banner.IdPublicidad, exito=update_result.get("exito"),
+                           agregar=len(update_result.get("agregar", [])),
+                           eliminar=len(update_result.get("eliminar", [])),
+                           actualizar=len(update_result.get("actualizar", [])))
                 
-                log.info("assignment_replication_complete", banner_id=banner.IdPublicidad, update_result=update_result)
             except Exception as e:
-                log.error("assignment_replication_error", banner_id=banner.IdPublicidad, error=str(e))
+                log.error("fase6_error", banner_id=banner.IdPublicidad, error=str(e))
         
         return {"success": True, "message": "Asignaciones actualizadas correctamente."}
     except Exception as e:

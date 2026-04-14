@@ -1251,18 +1251,29 @@ async def obtener_servidores_con_banner(
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 response = await client.get(check_url)
-                log.info("debug_exists_check", banner_id=banner_id, api_url=api_url, status_code=response.status_code)
+                tiene = response.status_code == 200
+                log.info("debug_exists_check", banner_id=banner_id, api_url=api_url, status_code=response.status_code, tiene=tiene)
                 return {
                     "servidor": servidor,
-                    "tiene_banner": response.status_code == 200,
+                    "tiene_banner": tiene,
                     "api_url": api_url
                 }
         except Exception as e:
             log.info("debug_exists_error", banner_id=banner_id, api_url=api_url, error=str(e))
             return {"servidor": servidor, "tiene_banner": False, "api_url": api_url}
     
-    results = await asyncio.gather(*[_verificar(srv) for srv in servidores], return_exceptions=False)
-    return [r for r in results if r.get("tiene_banner")]
+    results = await asyncio.gather(*[_verificar(srv) for srv in servidores], return_exceptions=True)
+    
+    # Debug: mostrar todos los resultados
+    for idx, r in enumerate(results):
+        if isinstance(r, Exception):
+            log.info("debug_result_excepcion", idx=idx, error=str(r))
+        else:
+            log.info("debug_result_item", idx=idx, tiene=r.get("tiene_banner"), result=r)
+    
+    servidores_con = [r for r in results if isinstance(r, dict) and r.get("tiene_banner")]
+    log.info("obtener_servidores_resultado", banner_id=banner_id, total_resultados=len(results), servidores_con_banner=len(servidores_con))
+    return servidores_con
 
 
 async def procesar_cambio_asignacion(

@@ -597,13 +597,17 @@ async def eliminar_banner(
             await db.rollback()
         
         # Intentar borrar remotamente en backend-api usando el IdPublicidad como IdPublicidadRemoto
+        log.info("eliminar_banner_BORRADO_REMOTO_INICIO", banner_id=id, remote_id=banner.IdPublicidad)
         try:
             remote_id = banner.IdPublicidad
             replicacion_resultados = await Borrado_a_todas_las_apis(remote_id)
+            log.info("eliminar_banner_BORRADO_REMOTO_RESULTADOS", banner_id=id, resultados=replicacion_resultados)
             for res in replicacion_resultados:
                 if not res.get("success", False):
+                    log.error("eliminar_banner_BORRADO_REMOTO_ERROR", api_url=res.get("api_url"), error=res.get("error"))
                     raise Exception(f"No se pudo borrar remotamente en {res['api_url']}: {res.get('error', 'Sin mensaje')}")
         except Exception as e:
+            log.error("eliminar_banner_BORRADO_REMOTO_EXCEPTION", banner_id=id, error=str(e))
             raise HTTPException(status_code=500, detail=f"Error al borrar remotamente: {str(e)}")
 
         # Si el borrado remoto fue exitoso o no hay ID remoto, borrar localmente

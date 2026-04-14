@@ -77,6 +77,8 @@ async def replicar_archivo_al_api(
     Retorna la respuesta del API como dict.
     Si dispositivo_ids está presente, solo replica a esos dispositivos.
     """
+    log.info("replicar_archivo_al_api_INICIO", api_url=api_url, file_path=file_path, IdPublicidadRemoto=IdPublicidadRemoto, titulo=titulo)
+    
     if not os.path.isfile(file_path):
         log.error("file_not_found", file_path=file_path)
         raise FileNotFoundError(f"Archivo no encontrado: {file_path}")
@@ -97,18 +99,25 @@ async def replicar_archivo_al_api(
         data = {k: v for k, v in data.items() if v is not None}
 
         upload_url = api_url.rstrip('/') + '/replicar-archivo' if not api_url.rstrip('/').endswith('/replicar-archivo') else api_url
-        log.debug("replicating_file", api_url=api_url, banner_id=IdPublicidadRemoto)
+        log.info("replicar_archivo_al_api_ENVIANDO", upload_url=upload_url, data=data, timeout=timeout)
+        
         try:
             files = {
                 "file": (os.path.basename(file_path), file_handle, "application/octet-stream")
             }
             async with httpx.AsyncClient(timeout=timeout) as client:
                 response = await client.post(upload_url, files=files, data=data)
-            log.debug("replication_response", api_url=api_url, status_code=response.status_code)
+                log.info("replicar_archivo_al_api_RESPUESTA", api_url=api_url, status_code=response.status_code, response_text=response.text[:500] if response.text else "")
+            
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+            log.info("replicar_archivo_al_api_EXITO", api_url=api_url, result=result)
+            return result
+        except httpx.HTTPStatusError as e:
+            log.error("replicar_archivo_al_api_HTTP_ERROR", api_url=api_url, status_code=e.response.status_code, error=str(e), response_text=e.response.text[:500] if e.response.text else "")
+            raise
         except Exception as e:
-            log.error("replication_error", api_url=api_url, error=str(e))
+            log.error("replicar_archivo_al_api_ERROR", api_url=api_url, error=str(e))
             raise
 
 async def replicar_archivos_batch_al_api(api_url: str, file_paths: list, banners: list, timeout: int = 30) -> list:
@@ -206,12 +215,16 @@ def get_api_urls() -> list:
     """
     urls_env = os.getenv("BACKEND_API_URLS", "")
     if urls_env:
-        return [u.strip() for u in urls_env.split(",") if u.strip()]
+        urls = [u.strip() for u in urls_env.split(",") if u.strip()]
+        log.info("get_api_urls_DESDE_ENV", BACKEND_API_URLS=urls_env, urls_encontradas=urls)
+        return urls
     
     legacy_url = os.getenv("BACKEND_API_URL", "")
     if legacy_url:
+        log.info("get_api_urls_LEGACY", BACKEND_API_URL=legacy_url)
         return [legacy_url.strip()]
     
+    log.warning("get_api_urls_VACIO", mensaje="No se encontraron URLs de replicación en variables de entorno")
     return []
 
 
@@ -234,8 +247,10 @@ async def replicar_archivo_a_todas_las_apis(
     Si dispositivo_ids está presente (no None), lo envía al backend-api.
     """
     api_urls = get_api_urls()
+    log.info("replicar_archivo_a_todas_las_apis_INICIO", api_urls_count=len(api_urls), api_urls=api_urls, banner_id=IdPublicidadRemoto)
     resultados = []
     for api_url in api_urls:
+        log.info("replicar_archivo_PROCESANDO", api_url=api_url, banner_id=IdPublicidadRemoto)
         try:
             resp = await replicar_archivo_al_api(
                 api_url=api_url,
@@ -251,9 +266,12 @@ async def replicar_archivo_a_todas_las_apis(
                 timeout=timeout,
                 dispositivo_ids=dispositivo_ids
             )
+            log.info("replicar_archivo_EXITO", api_url=api_url, banner_id=IdPublicidadRemoto, response=resp)
             resultados.append({"api_url": api_url, "success": True, "response": resp})
         except Exception as e:
+            log.error("replicar_archivo_ERROR", api_url=api_url, banner_id=IdPublicidadRemoto, error=str(e))
             resultados.append({"api_url": api_url, "success": False, "error": str(e)})
+    log.info("replicar_archivo_a_todas_las_apis_FIN", api_urls_count=len(api_urls), resultados=resultados)
     return resultados
 
 
@@ -475,6 +493,8 @@ async def replicar_a_servidores(
     Cada servidor debe tener 'ip' o 'api_url'.
     Si dispositivo_ids está presente, filtra por esos dispositivos.
     """
+    log.info("replicar_a_servidores_INICIO", servidores_count=len(servidores), banner_id=IdPublicidadRemoto, servidor_ids=[s.get("id") for s in servidores])
+    
     async def _replicar_a_un_servidor(servidor: dict) -> dict:
         api_url = servidor.get("api_url")
         if not api_url:
@@ -482,10 +502,15 @@ async def replicar_a_servidores(
             if ip:
                 api_url = f"http://{ip}:8000"
         
+        servidor_nombre = servidor.get("nombre", "unknown")
+        servidor_id = servidor.get("id")
+        log.info("replicar_a_servidor_PROCESANDO", servidor_id=servidor_id, servidor_nombre=servidor_nombre, api_url=api_url, banner_id=IdPublicidadRemoto)
+        
         if not api_url:
+            log.warning("replicar_a_servidor_SIN_URL", servidor_id=servidor_id, servidor_nombre=servidor_nombre)
             return {
-                "servidor_id": servidor.get("id"),
-                "servidor_nombre": servidor.get("nombre"),
+                "servidor_id": servidor_id,
+                "servidor_nombre": servidor_nombre,
                 "api_url": None,
                 "success": False,
                 "error": "No se encontró URL del backend-api"
@@ -506,23 +531,26 @@ async def replicar_a_servidores(
                 timeout=timeout,
                 dispositivo_ids=dispositivo_ids,
             )
+            log.info("replicar_a_servidor_EXITO", servidor_id=servidor_id, servidor_nombre=servidor_nombre, api_url=api_url, response=resp)
             return {
-                "servidor_id": servidor.get("id"),
-                "servidor_nombre": servidor.get("nombre"),
+                "servidor_id": servidor_id,
+                "servidor_nombre": servidor_nombre,
                 "api_url": api_url,
                 "success": True,
                 "response": resp
             }
         except Exception as e:
+            log.error("replicar_a_servidor_ERROR", servidor_id=servidor_id, servidor_nombre=servidor_nombre, api_url=api_url, error=str(e))
             return {
-                "servidor_id": servidor.get("id"),
-                "servidor_nombre": servidor.get("nombre"),
+                "servidor_id": servidor_id,
+                "servidor_nombre": servidor_nombre,
                 "api_url": api_url,
                 "success": False,
                 "error": str(e)
             }
     
     if not servidores:
+        log.warning("replicar_a_servidores_SIN_SERVIDORES", banner_id=IdPublicidadRemoto)
         return []
     
     results = await asyncio.gather(

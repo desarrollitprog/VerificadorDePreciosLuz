@@ -1338,17 +1338,28 @@ async def procesar_cambio_asignacion(
     }
     
     servidores_a_agregar = [srv for srv in servidores_asignados if srv.get("id") in srv_a_agregar]
-    servidores_a_eliminar = [srv for srv in servidores_con_banner if srv.get("id") in srv_a_eliminar]
+    # Extraer el servidor anidado de la estructura
+    servidores_a_eliminar = [srv.get("servidor") for srv in servidores_con_banner if srv.get("servidor", {}).get("id") in srv_a_eliminar]
     servidores_a_actualizar = [srv for srv in servidores_asignados if srv.get("id") in srv_a_actualizar]
     
     if servidores_a_eliminar:
         log.info("eliminando_banner_de_servidores", banner_id=banner_id, cantidad=len(servidores_a_eliminar),
-               servidores_a_eliminar=[s.get("nombre") for s in servidores_a_eliminar])
+               servidores_a_eliminar=[s.get("nombre") if isinstance(s, dict) else str(s) for s in servidores_a_eliminar])
         limpiezas = await asyncio.gather(
             *[limpiar_banner_de_servidor(srv, banner_id, timeout) for srv in servidores_a_eliminar],
-            return_exceptions=False
+            return_exceptions=True
         )
         for limp in limpiezas:
+            if isinstance(limp, Exception):
+                log.info("fase6_eliminacion_error", banner_id=banner_id, error=str(limp))
+                resultados["eliminar"].append({"success": False, "error": str(limp)})
+                resultados["exito"] = False
+            else:
+                resultados["eliminar"].append(limp)
+                log.info("fase6_eliminacion_result", banner_id=banner_id,
+                       servidor=limp.get("servidor_nombre"), success=limp.get("success"))
+                if not limp.get("success"):
+                    resultados["exito"] = False
             resultados["eliminar"].append(limp)
             log.info("fase6_eliminacion_result", banner_id=banner_id,
                    servidor=limp.get("servidor_nombre"), success=limp.get("success"))

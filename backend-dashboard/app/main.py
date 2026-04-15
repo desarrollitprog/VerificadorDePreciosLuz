@@ -1,8 +1,10 @@
 from fastapi import FastAPI, Request
+from contextlib import asynccontextmanager
 from app.routes import publicidad, auth, monitoreo, usuarios, notificaciones, auditoria
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from app.utils.health import get_health_status
+from app.scheduler import iniciar_scheduler, detener_scheduler
 import logging
 import time
 import os
@@ -10,11 +12,18 @@ import uuid
 from app.utils.logger import setup_logging, set_trace_id, set_user_id, StructuredLogger
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    iniciar_scheduler()
+    yield
+    detener_scheduler()
+
+
 os.makedirs("static/banners", exist_ok=True)
 
 setup_logging(os.getenv("LOG_LEVEL", "INFO"))
 
-app = FastAPI(title="Dashboard Backend", version="1.0.0")
+app = FastAPI(title="Dashboard Backend", version="1.0.0", lifespan=lifespan)
 logger = logging.getLogger("uvicorn.error")
 request_logger = StructuredLogger("requests")
 

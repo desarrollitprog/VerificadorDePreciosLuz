@@ -71,6 +71,23 @@ async def get_devices_status():
     return status
 
 
+@app.delete("/devices/{device_id}")
+async def unregister_device_endpoint(device_id: str):
+    """
+    Desregistra un dispositivo del servidor secundario.
+    El dashboard lo llama cuando se elimina un dispositivo de la BD.
+    """
+    from app.services.device_registry import unregister_device
+    
+    try:
+        await unregister_device(device_id)
+        logger.info(f"[UNREGISTER] Dispositivo {device_id} desvinculado del servidor")
+        return {"success": True, "message": f"Dispositivo {device_id} desvinculado correctamente"}
+    except Exception as e:
+        logger.error(f"[UNREGISTER] Error desvinculando dispositivo {device_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/ping")
 async def ping(device_id: str | None = None):
     if device_id and device_state_store is not None:

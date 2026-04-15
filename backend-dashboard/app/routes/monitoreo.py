@@ -1166,6 +1166,20 @@ async def eliminar_dispositivo(
     await db.delete(dispositivo)
     await db.commit()
 
+    # Desvincular el dispositivo del servidor secundario
+    if servidor_id:
+        stmt_srv = select(ServidorSecundario).where(ServidorSecundario.id == servidor_id)
+        result_srv = await db.execute(stmt_srv)
+        servidor = result_srv.scalars().first()
+        
+        if servidor:
+            try:
+                async with httpx.AsyncClient(timeout=10) as client:
+                    response = await client.delete(f"http://{servidor.ip}:8000/devices/{device_id}")
+                    logger.info(f"Dispositivo {device_id} desvinculado del servidor {servidor.ip}: {response.status_code}")
+            except Exception as e:
+                logger.warning(f"No se pudo desvincular {device_id} del servidor {servidor.ip}: {e}")
+
     user_id = current_user.get("user_id") if current_user else None
     if user_id is not None:
         try:

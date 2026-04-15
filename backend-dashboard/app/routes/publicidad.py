@@ -1050,11 +1050,15 @@ async def reemplazar_asignaciones_banner(
             parsed_servidor_ids = parse_ids(servidor_ids)
             parsed_dispositivo_ids = parse_ids(dispositivo_ids)
             
-            if not parsed_servidor_ids and not parsed_dispositivo_ids:
-                log.warning("fase7_asignacion_vacia", 
+            # NUEVA REGLA: Para asignación específica (no todos), se REQUIERE seleccionar un servidor
+            # Similar a cuando se sube un archivo - debe seleccionar una sede
+            if not parsed_servidor_ids:
+                log.warning("fase7_validacion_fallida", 
                            banner_id=id,
-                           mensaje="No se recibieron servidores/dispositivos válidos")
-                return {"success": False, "error": "Debe seleccionar al menos un servidor o dispositivo si no asigna a todos."}
+                           parsed_servidor_ids=parsed_servidor_ids,
+                           parsed_dispositivo_ids=parsed_dispositio_ids,
+                           mensaje="Debe seleccionar al menos un servidor para asignación específica")
+                return {"success": False, "error": "Debe seleccionar un servidor para asignación específica. Use 'Todos' si desea asignar a todos los servidores."}
         
         # Eliminar todas las asignaciones existentes
         await db.execute(

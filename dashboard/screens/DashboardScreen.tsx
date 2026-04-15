@@ -1348,7 +1348,9 @@ export const DashboardScreen: React.FC = () => {
                     const data = await getVideos();
                     setVideos(data);
                   } catch (error: any) {
-                    showNotification('Error al actualizar la publicidad', 'error');
+                    // Mostrar mensaje de error específico del backend si está disponible
+                    const errorMessage = error?.response?.data?.error || error?.message || 'Error al actualizar la publicidad';
+                    showNotification(errorMessage, 'error');
                   } finally {
                     setIsSavingEdit(false);
                   }

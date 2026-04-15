@@ -1349,7 +1349,11 @@ export const DashboardScreen: React.FC = () => {
                     setVideos(data);
                   } catch (error: any) {
                     // Mostrar mensaje de error específico del backend si está disponible
-                    const errorMessage = error?.response?.data?.error || error?.message || 'Error al actualizar la publicidad';
+                    // FastAPI devuelve el error en 'detail' o 'error'
+                    const backendError = error?.response?.data?.detail || error?.response?.data?.error;
+                    const errorMessage = backendError || (error.message === 'Request failed with status code 400' 
+                        ? 'Error de validación' 
+                        : 'Error al actualizar la publicidad');
                     showNotification(errorMessage, 'error');
                   } finally {
                     setIsSavingEdit(false);

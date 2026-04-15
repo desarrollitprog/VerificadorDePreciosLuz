@@ -1058,7 +1058,10 @@ async def reemplazar_asignaciones_banner(
                            parsed_servidor_ids=parsed_servidor_ids,
                            parsed_dispositivo_ids=parsed_dispositivo_ids,
                            mensaje="Debe seleccionar al menos un servidor para asignación específica")
-                return {"success": False, "error": "Debe seleccionar un servidor para asignación específica. Use 'Todos' si desea asignar a todos los servidores."}
+                raise HTTPException(
+                    status_code=400, 
+                    detail="Debe seleccionar un servidor para asignación específica. Use 'Todos' si desea asignar a todos los servidores."
+                )
         
         # Eliminar todas las asignaciones existentes
         await db.execute(

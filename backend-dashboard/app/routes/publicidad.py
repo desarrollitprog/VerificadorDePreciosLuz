@@ -91,7 +91,6 @@ class BannerUploadBody(BaseModel):
     Prioridad: int = 0
     FechaInicio: Optional[str] = None
     FechaFin: Optional[str] = None
-    DuracionSeg: Optional[int] = None
     AsignacionTodos: bool = True
     Asignaciones: Optional[List[AsignacionCreate]] = None
 
@@ -210,7 +209,6 @@ async def listar_banners(
                     "Activo": banner.Activo,
                     "FechaInicio": banner.FechaInicio.isoformat() if banner.FechaInicio else None,
                     "FechaFin": banner.FechaFin.isoformat() if banner.FechaFin else None,
-                    "DuracionSeg": banner.DuracionSeg,
                     "UpdatedAt": banner.UpdatedAt.isoformat() if banner.UpdatedAt else None,
                     "size_bytes": size_bytes,
                     "size_human": size_human,
@@ -276,7 +274,6 @@ async def upload_banner(
     Prioridad: int = Form(0),
     FechaInicio: str = Form(None),
     FechaFin: str = Form(None),
-    DuracionSeg: int = Form(None),
     AsignacionTodos: bool = Form(True),
     ServidorIds: str = Form(None),
     DispositivoIds: str = Form(None),
@@ -342,7 +339,6 @@ async def upload_banner(
             Prioridad=Prioridad,
             FechaInicio=FechaInicio_dt,
             FechaFin=FechaFin_dt,
-            DuracionSeg=DuracionSeg,
             asignacion_todos=AsignacionTodos
         )
         db.add(nuevo_banner)
@@ -433,7 +429,6 @@ async def upload_banner(
                 prioridad=Prioridad,
                 fecha_inicio=FechaInicio,
                 fecha_fin=FechaFin,
-                duracion_seg=DuracionSeg,
                 activo=Activo,
                 dispositivo_ids=None,
             )
@@ -456,7 +451,7 @@ async def upload_banner(
                         "id": s.id,
                         "nombre": s.nombre,
                         "ip": s.ip,
-                        "api_url": s.api_url or f"http://{s.ip}:8000"
+                        "api_url": f"http://{s.ip}:8000"
                     }
                     for s in servidores
                 ]
@@ -470,7 +465,6 @@ async def upload_banner(
                     prioridad=Prioridad,
                     fecha_inicio=FechaInicio,
                     fecha_fin=FechaFin,
-                    duracion_seg=DuracionSeg,
                     activo=Activo,
                     dispositivo_ids=selected_dispositivo_ids,
                 )
@@ -486,7 +480,7 @@ async def upload_banner(
                     "id": s.id,
                     "nombre": s.nombre,
                     "ip": s.ip,
-                    "api_url": s.api_url or f"http://{s.ip}:8000"
+                    "api_url": f"http://{s.ip}:8000"
                 }
                 for s in servidores
             ]
@@ -499,7 +493,6 @@ async def upload_banner(
                 prioridad=Prioridad,
                 fecha_inicio=FechaInicio,
                 fecha_fin=FechaFin,
-                duracion_seg=DuracionSeg,
                 activo=Activo,
                 dispositivo_ids=None,  # Sin filtro = todos los dispositivos de esos servidores
             )
@@ -557,7 +550,6 @@ async def upload_banner(
             "Prioridad": nuevo_banner.Prioridad,
             "FechaInicio": str(nuevo_banner.FechaInicio) if nuevo_banner.FechaInicio else None,
             "FechaFin": str(nuevo_banner.FechaFin) if nuevo_banner.FechaFin else None,
-            "DuracionSeg": nuevo_banner.DuracionSeg
         }
     }
 @router.delete("/banners/{id}")
@@ -689,7 +681,6 @@ async def upload_banners_batch(
                 Prioridad=Prioridades[idx],
                 FechaInicio=FechaInicio_dt,
                 FechaFin=FechaFin_dt,
-                DuracionSeg=DuracionesSeg[idx]
             )
             db.add(nuevo_banner)
             await db.commit()
@@ -900,7 +891,7 @@ async def obtener_servidores(
                 "id": srv.id,
                 "nombre": srv.nombre,
                 "ip": srv.ip,
-                "api_url": srv.api_url or f"http://{srv.ip}:8000",
+                "api_url": f"http://{srv.ip}:8000",
                 "online": srv.ultimo_heartbeat is not None,
                 "dispositivos": dispositivos
             })
@@ -1176,7 +1167,7 @@ async def reemplazar_asignaciones_banner(
                         "id": s.id,
                         "nombre": s.nombre,
                         "ip": s.ip,
-                        "api_url": s.api_url or f"http://{s.ip}:8000"
+                        "api_url": f"http://{s.ip}:8000"
                     }
                     for s in todos_servidores
                 ]
@@ -1192,7 +1183,6 @@ async def reemplazar_asignaciones_banner(
                     "prioridad": banner.Prioridad,
                     "fecha_inicio": banner.FechaInicio.isoformat() if banner.FechaInicio else None,
                     "fecha_fin": banner.FechaFin.isoformat() if banner.FechaFin else None,
-                    "duracion_seg": banner.DuracionSeg,
                     "dispositivo_ids": target_dispositivo_ids
                 }
                 
@@ -1226,7 +1216,7 @@ async def reemplazar_asignaciones_banner(
                                 "id": s.id,
                                 "nombre": s.nombre,
                                 "ip": s.ip,
-                                "api_url": s.api_url or f"http://{s.ip}:8000"
+                                "api_url": f"http://{s.ip}:8000"
                             }
                             for s in servidores_asignados
                         ]

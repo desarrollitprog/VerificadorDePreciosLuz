@@ -152,10 +152,11 @@ Mejorar seguridad, performance, observabilidad y code quality del sistema de ges
 | FASE 4 (Code Quality) | 3/3 ✅ | 0/3 |
 | FASE 5 (Infraestructura) | 0/2 | 2/2 |
 | FASE 6 (Cambio Asignación) | 1/1 ✅ | 0/1 |
-| FASE 7 (Fix Asignaciones + Vigencia) | 0/5 | 5/5 |
-| FASE 8 (Background Monitoring Sesiones) | 0/2 | 2/2 |
+| FASE 7 (Fix Asignaciones + Vigencia) | 2/5 | 3/5 |
+| FASE 8 (Background Monitoring Sesiones) | 4/4 ✅ | 0/4 |
+| FASE 9 (Thumbnails Videos) | 0/6 | 6/6 |
 
-**Total: 13/21 completados (62%)**
+**Total: 16/27 completados (59%)**
 
 ---
 
@@ -321,8 +322,8 @@ DASHBOARD                      BACKEND-API                   LUZAPP
 
 | # | Tarea | Estado | Ubicación |
 |---|-------|--------|-----------|
-| 7.1 | Fix caso específico→específico | ⏳ Pendiente | backend-dashboard/publicidad.py |
-| 7.2 | Fix estado "borrador" | ⏳ Pendiente | backend-dashboard/publicidad.py |
+| 7.1 | Fix caso específico→específico | ✅ Completado | backend-dashboard/publicidad.py |
+| 7.2 | Fix estado "borrador" | ✅ Completado | backend-dashboard/publicidad.py |
 | 7.3 | Pre-validation (S1) - validar fechaFin antes de reproducir | ⏳ Pendiente | luzapp/ScanActivity.kt |
 | 7.4 | Cache cleanup (S2) - eliminar banners vencidos | ⏳ Pendiente | luzapp/BannerRepository.kt |
 | 7.5 | WebSocket push (S3) - invalidación inmediata | ⏳ Pendiente | backend-api + luzapp |
@@ -393,8 +394,10 @@ Ejecutar el monitoreo de sesiones automáticamente en **background** cada **3 mi
 
 | # | Tarea | Estado | Ubicación |
 |---|-------|--------|-----------|
-| 8.1 | Extraer lógica de monitoreo | ⏳ Pendiente | app/services/monitoreo_service.py |
-| 8.2 | Agregar scheduler cada 3.5 minutos | ⏳ Pendiente | app/main.py |
+| 8.1 | Agregar APScheduler a requirements.txt | ✅ Completado | requirements.txt |
+| 8.2 | Extraer lógica de monitoreo | ✅ Completado | app/services/monitoreo_service.py |
+| 8.3 | Crear módulo de scheduler | ✅ Completado | app/scheduler.py |
+| 8.4 | Integrar scheduler en main.py | ✅ Completado | app/main.py |
 
 ### Especificaciones técnicas
 
@@ -467,22 +470,26 @@ crontab -e
 
 ---
 
-## Archivos Modificados en FASE 1, FASE 2, FASE 3 y FASE 4
+## Archivos Modificados en FASE 1-8
 
 | Archivo | Cambios |
 |---------|---------|
 | `docker-compose.yml` | ✅ Agregado `dashboard-redis` |
 | `backend-dashboard/app/routes/auth.py` | ✅ Rate limiting y 2FA en Redis |
 | `backend-dashboard/app/utils/__init__.py` | ✅ Sanitización y validación MIME |
-| `backend-dashboard/app/routes/publicidad.py` | ✅ Sanitización, paginación, fix N+1, sin prints |
+| `backend-dashboard/app/routes/publicidad.py` | ✅ Sanitización, paginación, fix N+1, sin prints, FASE 6, FASE 7 (parser, validación), logs estructurados |
 | `backend-dashboard/app/routes/monitoreo.py` | ✅ Logs estructurados (sin prints) |
-| `backend-dashboard/app/main.py` | ✅ Endpoint `/health` |
+| `backend-dashboard/app/main.py` | ✅ Endpoint `/health`, lifespan scheduler |
 | `backend-dashboard/app/utils/health.py` | ✅ Funciones de health check |
 | `backend-dashboard/app/utils/twofa_redis.py` | ✅ Gestión de 2FA en Redis |
 | `backend-dashboard/app/utils/security.py` | ✅ Logging estructurado |
 | `backend-dashboard/app/services/replicacion_service.py` | ✅ Replicación paralela, Cleanup FASE 6, fallback PUT→POST |
-| `backend-dashboard/app/routes/publicidad.py` | ✅ FASE 6 endpoint, uses procesar_cambio_asignacion |
+| `backend-dashboard/app/services/monitoreo_service.py` | ✅ Nuevo - lógica de monitoreo de sesiones |
+| `backend-dashboard/app/scheduler.py` | ✅ Nuevo - scheduler APScheduler |
+| `backend-dashboard/requirements.txt` | ✅ Agregado apscheduler |
 | `backend-api/app/routes/publicidad.py` | ✅ Debug logs para /exists y PUT |
+| `dashboard/services/videoService.ts` | ✅ Fix tipo dispositivoIds (string[]), mapeo thumbnail |
+| `dashboard/components/ServerDeviceSelector.tsx` | ✅ Props actualizadas |
 | `backend-dashboard/tests/test_rate_limiting.py` | ✅ 9 tests |
 | `backend-dashboard/tests/test_sanitization.py` | ✅ 17 tests |
 | `backend-dashboard/tests/test_mime_validation.py` | ✅ 6 tests |
@@ -501,3 +508,102 @@ crontab -e
 |-------|-----------|------|
 | Backups SQL Server | Servidor (manual) | Script + cron |
 | Docker Multi-stage | `backend-dashboard/Dockerfile` | Implementar build分开 |
+
+---
+
+## FASE 9: Thumbnails de Videos
+
+### Problema identificado
+
+Los videos en el dashboard no muestran miniatura (thumbnail) en el preview, lo cual dificulta identificar el contenido visualmente.
+
+### Solución propuesta
+
+Generar thumbnails automáticamente al subir videos usando OpenCV, y mostrarlos en el atributo `poster` del elemento `<video>`.
+
+### Tareas de FASE 9
+
+| # | Tarea | Estado | Ubicación |
+|---|-------|--------|-----------|
+| 9.1 | Agregar campo ThumbnailUrl al modelo | ⏳ Pendiente | app/models/publicidad.py |
+| 9.2 | Agregar campo al schema response | ⏳ Pendiente | app/schemas/publicidad.py |
+| 9.3 | Agregar dependencia opencv | ⏳ Pendiente | requirements.txt |
+| 9.4 | Implementar generación de thumbnail | ⏳ Pendiente | app/routes/publicidad.py |
+| 9.5 | Mapear thumbnail en frontend | ⏳ Pendiente | services/videoService.ts |
+| 9.6 | Usar poster en video player | ⏳ Pendiente | screens/DashboardScreen.tsx |
+
+---
+
+## FASE 10: Limpieza de Columnas No Utilizadas
+
+### Problema identificado
+
+Existen columnas legacy que ya no aportan valor funcional y generan complejidad de mantenimiento:
+- `DuracionSeg` en `Publicidad` (dashboard + api)
+- `api_url` en `servidores_secundarios` (dashboard)
+
+### Solución propuesta
+
+Eliminar el uso en código y luego eliminar físicamente las columnas en base de datos.
+
+### Tareas de FASE 10
+
+| # | Tarea | Estado | Ubicación |
+|---|-------|--------|-----------|
+| 10.1 | Eliminar `api_url` de modelo y uso en backend-dashboard | ✅ Completado | `backend-dashboard/app/models/servidor_secundario.py` + `backend-dashboard/app/routes/publicidad.py` |
+| 10.2 | Eliminar `DuracionSeg` en backend-dashboard (modelo/schemas/rutas/servicios) | ✅ Completado | `backend-dashboard/app/**` |
+| 10.3 | Eliminar `DuracionSeg` en backend-api (modelo/schemas/rutas) | ✅ Completado | `backend-api/app/**` |
+| 10.4 | Ajustar frontend para no depender de `DuracionSeg` | ✅ Completado | `dashboard/services/videoService.ts` |
+| 10.5 | Ejecutar migración SQL para dropear columnas en BD | ⏳ Pendiente | SQL Server |
+
+### Query de migración SQL (pendiente ejecutar)
+
+```sql
+ALTER TABLE Publicidad DROP COLUMN DuracionSeg;
+ALTER TABLE servidores_secundarios DROP COLUMN api_url;
+```
+
+### Especificaciones técnicas
+
+**Dependencia (requirements.txt):**
+```
+opencv-python-headless
+```
+
+**Modelo (app/models/publicidad.py):**
+```python
+ThumbnailUrl = Column("ThumbnailUrl", String(500), nullable=True)
+```
+
+**Generación de thumbnail (app/routes/publicidad.py):**
+```python
+if Tipo == "video":
+    thumbnail_filename = generar_thumbnail(file_location, banners_dir)
+    thumbnail_url = f"/static/banners/{thumbnail_filename}"
+else:
+    thumbnail_url = url  # Para imágenes, usar la misma URL
+
+nuevo_banner = Publicidad(..., ThumbnailUrl=thumbnail_url)
+```
+
+**Frontend (DashboardScreen.tsx):**
+```tsx
+<video 
+  poster={preview.thumbnail || preview.url}
+  src={preview.url}
+  controls
+/>
+```
+
+---
+
+## Estado Actual: Progreso Total
+
+**Total: 16/27 completados (59%)**
+
+- FASE 1-4: ✅ Completas
+- FASE 5: ⏳ Pendiente (2 tareas)
+- FASE 6: ✅ Completada
+- FASE 7: 🔄 Parcial (2/5 completadas - tareas luzapp pendientes)
+- FASE 8: ✅ Completada
+- FASE 9: ⏳ Pendiente

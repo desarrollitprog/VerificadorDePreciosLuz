@@ -67,15 +67,14 @@ async def replicar_archivo_al_api(
     prioridad: int = 0,
     fecha_inicio: str = None,
     fecha_fin: str = None,
-    duracion_seg: int = None,
     activo: bool = True,
     timeout: int = 30,
     dispositivo_ids: list = None,
 ) -> dict:
     """
-    Env├¡a un archivo y metadatos al endpoint de replicaci├│n del backend-api.
+    Envía un archivo y metadatos al endpoint de replicación del backend-api.
     Retorna la respuesta del API como dict.
-    Si dispositivo_ids est├í presente, solo replica a esos dispositivos.
+    Si dispositivo_ids está presente, solo replica a esos dispositivos.
     """
     if not os.path.isfile(file_path):
         log.error("file_not_found", file_path=file_path)
@@ -89,7 +88,6 @@ async def replicar_archivo_al_api(
             "prioridad": prioridad,
             "fecha_inicio": fecha_inicio,
             "fecha_fin": fecha_fin,
-            "duracion_seg": duracion_seg,
             "activo": activo,
         }
         if dispositivo_ids:
@@ -129,7 +127,6 @@ async def replicar_archivos_batch_al_api(api_url: str, file_paths: list, banners
                 prioridad=banner.Prioridad,
                 fecha_inicio=banner.FechaInicio.isoformat() if banner.FechaInicio else None,
                 fecha_fin=banner.FechaFin.isoformat() if banner.FechaFin else None,
-                duracion_seg=banner.DuracionSeg,
                 activo=banner.Activo,
                 timeout=timeout
             )
@@ -218,20 +215,19 @@ def get_api_urls() -> list:
 async def replicar_archivo_a_todas_las_apis(
     file_path: str,
     IdPublicidadRemoto: int = None,
-    titulo: str = None,
+titulo: str = None,
     tipo: str = None,
     prioridad: int = 0,
     fecha_inicio: str = None,
     fecha_fin: str = None,
-    duracion_seg: int = None,
     activo: bool = True,
     timeout: int = 30,
     dispositivo_ids: list = None
 ) -> list:
     """
-    Replica un archivo a todas las APIs de replicaci├│n configuradas.
+    Replica un archivo a todas las APIs de replicación configuradas.
     Retorna una lista de resultados por cada API.
-    Si dispositivo_ids est├í presente (no None), lo env├¡a al backend-api.
+    Si dispositivo_ids está presente (no None), lo envía al backend-api.
     """
     api_urls = get_api_urls()
     resultados = []
@@ -246,7 +242,6 @@ async def replicar_archivo_a_todas_las_apis(
                 prioridad=prioridad,
                 fecha_inicio=fecha_inicio,
                 fecha_fin=fecha_fin,
-                duracion_seg=duracion_seg,
                 activo=activo,
                 timeout=timeout,
                 dispositivo_ids=dispositivo_ids
@@ -332,7 +327,7 @@ async def actualizar_metadata_a_todas_las_apis(
 
 
 async def replicar_archivo_a_api_especifica(
-    api_url: str,
+api_url: str,
     file_path: str,
     IdPublicidadRemoto: int = None,
     titulo: str = None,
@@ -340,12 +335,11 @@ async def replicar_archivo_a_api_especifica(
     prioridad: int = 0,
     fecha_inicio: str = None,
     fecha_fin: str = None,
-    duracion_seg: int = None,
     activo: bool = True,
     timeout: int = 30
 ) -> dict:
     """
-    Replica un archivo a una API espec├¡fica.
+    Replica un archivo a una API específica.
     Retorna la respuesta del API como dict.
     """
     return await replicar_archivo_al_api(
@@ -357,7 +351,6 @@ async def replicar_archivo_a_api_especifica(
         prioridad=prioridad,
         fecha_inicio=fecha_inicio,
         fecha_fin=fecha_fin,
-        duracion_seg=duracion_seg,
         activo=activo,
         timeout=timeout
     )
@@ -367,17 +360,16 @@ async def actualizar_banner_en_api(
     api_url: str,
     banner_id: int,
     titulo: str = None,
-    tipo: str = None,
+tipo: str = None,
     activo: bool = None,
     prioridad: int = None,
     fecha_inicio: str = None,
     fecha_fin: str = None,
-    duracion_seg: int = None,
     dispositivo_ids: list = None,
     timeout: int = 30
 ) -> dict:
     """
-    Actualiza un banner existente en una API espec├¡fica.
+    Actualiza un banner existente en una API específica.
     """
     data = {}
     if titulo is not None:
@@ -392,10 +384,8 @@ async def actualizar_banner_en_api(
         data["fecha_inicio"] = fecha_inicio
     if fecha_fin is not None:
         data["fecha_fin"] = fecha_fin
-    if duracion_seg is not None:
-        data["duracion_seg"] = duracion_seg
     # Siempre enviar dispositivo_ids (None o [] se convierte a "" para limpiar en backend-api)
-    # Si es None o vac├¡o, enviar "" para que el backend-api limpie el campo
+    # Si es None o vacío, enviar "" para que el backend-api limpie el campo
     if dispositivo_ids is not None:
         data["dispositivo_ids"] = ",".join(str(d) for d in dispositivo_ids) if dispositivo_ids else ""
     else:
@@ -420,18 +410,17 @@ async def actualizar_banner_en_api(
 
 async def actualizar_banner_en_todas_las_apis(
     banner_id: int,
-    titulo: str = None,
+titulo: str = None,
     tipo: str = None,
     activo: bool = None,
     prioridad: int = None,
     fecha_inicio: str = None,
     fecha_fin: str = None,
-    duracion_seg: int = None,
     dispositivo_ids: list = None,
     timeout: int = 30
 ) -> list:
     """
-    Actualiza un banner existente en todas las APIs de replicaci├│n.
+    Actualiza un banner existente en todas las APIs de replicación.
     """
     api_urls = get_api_urls()
     resultados = []
@@ -446,7 +435,6 @@ async def actualizar_banner_en_todas_las_apis(
                 prioridad=prioridad,
                 fecha_inicio=fecha_inicio,
                 fecha_fin=fecha_fin,
-                duracion_seg=duracion_seg,
                 dispositivo_ids=dispositivo_ids,
                 timeout=timeout
             )
@@ -465,7 +453,6 @@ async def replicar_a_servidores(
     prioridad: int = 0,
     fecha_inicio: str = None,
     fecha_fin: str = None,
-    duracion_seg: int = None,
     activo: bool = True,
     timeout: int = 30,
     dispositivo_ids: list = None,
@@ -473,7 +460,7 @@ async def replicar_a_servidores(
     """
     Replica un archivo a los servidores seleccionados (PARALELO).
     Cada servidor debe tener 'ip' o 'api_url'.
-    Si dispositivo_ids est├í presente, filtra por esos dispositivos.
+    Si dispositivo_ids está presente, filtra por esos dispositivos.
     """
     async def _replicar_a_un_servidor(servidor: dict) -> dict:
         api_url = servidor.get("api_url")
@@ -501,7 +488,6 @@ async def replicar_a_servidores(
                 prioridad=prioridad,
                 fecha_inicio=fecha_inicio,
                 fecha_fin=fecha_fin,
-                duracion_seg=duracion_seg,
                 activo=activo,
                 timeout=timeout,
                 dispositivo_ids=dispositivo_ids,
@@ -562,12 +548,11 @@ async def actualizar_banner_en_asignaciones(
     banner_id: int,
     servidores: list,
     titulo: str = None,
-    tipo: str = None,
+tipo: str = None,
     activo: bool = None,
     prioridad: int = None,
     fecha_inicio: str = None,
     fecha_fin: str = None,
-    duracion_seg: int = None,
     dispositivo_ids: list = None,
     timeout: int = 30
 ) -> list:
@@ -578,7 +563,7 @@ async def actualizar_banner_en_asignaciones(
         banner_id: ID del banner a actualizar
         servidores: Lista de dicts con 'id', 'nombre', 'api_url' o 'ip' de servidores objetivo
         dispositivo_ids: Lista de dispositivo_ids a asignar (None = todos, [] = ninguno)
-        (otros par├ímetros son metadatos del banner)
+        (otros parámetros son metadatos del banner)
     
     Returns:
         Lista de resultados por servidor
@@ -598,7 +583,7 @@ async def actualizar_banner_en_asignaciones(
                 "servidor_nombre": servidor.get("nombre"),
                 "api_url": None,
                 "success": False,
-                "error": "No se encontr├│ URL del backend-api"
+                "error": "No se encontró URL del backend-api"
             })
             continue
         
@@ -615,8 +600,6 @@ async def actualizar_banner_en_asignaciones(
             data["fecha_inicio"] = fecha_inicio
         if fecha_fin is not None:
             data["fecha_fin"] = fecha_fin
-        if duracion_seg is not None:
-            data["duracion_seg"] = duracion_seg
         
         # Enviar dispositivo_ids:
         # - Si es None: asignar a todos (limpiar filtro)
@@ -880,7 +863,7 @@ async def replicar_banner_completo_a_servidores(
     
     Args:
         banner_data: Dict con 'banner_id', 'file_path', 'titulo', 'tipo', 'activo', 
-                     'prioridad', 'fecha_inicio', 'fecha_fin', 'duracion_seg', 'dispositivo_ids'
+                     'prioridad', 'fecha_inicio', 'fecha_fin', 'dispositivo_ids'
         servidores: Lista de servidores objetivo
     """
     async def _replicar_a_un_servidor(servidor: dict) -> dict:
@@ -919,7 +902,6 @@ async def replicar_banner_completo_a_servidores(
                     "activo": banner_data.get("activo", True),
                     "fecha_inicio": banner_data.get("fecha_inicio"),
                     "fecha_fin": banner_data.get("fecha_fin"),
-                    "duracion_seg": banner_data.get("duracion_seg"),
                 }
                 disp_ids = banner_data.get("dispositivo_ids")
                 if disp_ids is not None:
@@ -979,7 +961,7 @@ async def replicar_banner_completo_a_servidores_con_verificacion(
     
     Args:
         banner_data: Dict con 'banner_id', 'file_path', 'titulo', 'tipo', 'activo', 
-                     'prioridad', 'fecha_inicio', 'fecha_fin', 'duracion_seg', 'dispositivo_ids'
+                     'prioridad', 'fecha_inicio', 'fecha_fin', 'dispositivo_ids'
         servidores: Lista de servidores objetivo
         verificar: Si True, realiza verificaci├│n post-replicaci├│n (default: True)
     
@@ -1077,13 +1059,12 @@ async def replicar_archivo_al_api_con_retry(
     prioridad: int = 0,
     fecha_inicio: str = None,
     fecha_fin: str = None,
-    duracion_seg: int = None,
     activo: bool = True,
     timeout: int = 30,
     dispositivo_ids: list = None,
 ) -> dict:
     """
-    Env├¡a un archivo y metadatos al endpoint de replicaci├│n del backend-api CON RETRY.
+    Envía un archivo y metadatos al endpoint de replicación del backend-api CON RETRY.
     Retorna la respuesta del API como dict.
     """
     if not os.path.isfile(file_path):
@@ -1098,7 +1079,6 @@ async def replicar_archivo_al_api_con_retry(
             "prioridad": prioridad,
             "fecha_inicio": fecha_inicio,
             "fecha_fin": fecha_fin,
-            "duracion_seg": duracion_seg,
             "activo": activo,
         }
         if dispositivo_ids:
@@ -1130,12 +1110,11 @@ async def actualizar_banner_en_api_con_retry(
     prioridad: int = None,
     fecha_inicio: str = None,
     fecha_fin: str = None,
-    duracion_seg: int = None,
     dispositivo_ids: list = None,
     timeout: int = 30
 ) -> dict:
     """
-    Actualiza un banner existente en una API espec├¡fica CON RETRY.
+    Actualiza un banner existente en una API específica CON RETRY.
     """
     data = {}
     if titulo is not None:
@@ -1150,8 +1129,6 @@ async def actualizar_banner_en_api_con_retry(
         data["fecha_inicio"] = fecha_inicio
     if fecha_fin is not None:
         data["fecha_fin"] = fecha_fin
-    if duracion_seg is not None:
-        data["duracion_seg"] = duracion_seg
     if dispositivo_ids is not None:
         data["dispositivo_ids"] = ",".join(str(d) for d in dispositivo_ids) if dispositivo_ids else ""
     else:
@@ -1422,7 +1399,6 @@ async def procesar_cambio_asignacion(
             prioridad=banner_data.get("prioridad"),
             fecha_inicio=banner_data.get("fecha_inicio"),
             fecha_fin=banner_data.get("fecha_fin"),
-            duracion_seg=banner_data.get("duracion_seg"),
             dispositivo_ids=banner_data.get("dispositivo_ids"),
             timeout=timeout
         )

@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class PublicidadBase(BaseModel):
@@ -11,7 +11,6 @@ class PublicidadBase(BaseModel):
     Prioridad: int = 0
     FechaInicio: Optional[datetime] = None
     FechaFin: Optional[datetime] = None
-    DuracionSeg: Optional[int] = Field(default=None, ge=1)
 
 class PublicidadCreate(PublicidadBase):
     pass
@@ -24,7 +23,6 @@ class PublicidadUpdate(BaseModel):
     prioridad: Optional[int] = None
     fecha_inicio: Optional[datetime] = None
     fecha_fin: Optional[datetime] = None
-    duracion_seg: Optional[int] = Field(default=None, ge=1)
 
 
 class PublicidadResponse(PublicidadBase):

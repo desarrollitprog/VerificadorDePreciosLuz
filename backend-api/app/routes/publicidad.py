@@ -115,7 +115,6 @@ async def replicar_archivo(
     prioridad: int = Form(0),
     fecha_inicio: str = Form(None),
     fecha_fin: str = Form(None),
-    duracion_seg: int = Form(None),
     dispositivo_ids: str = Form(None),
     db: AsyncSession = Depends(get_db_publicidad)
 ):
@@ -177,7 +176,6 @@ async def replicar_archivo(
                 existing_banner.prioridad = prioridad
                 existing_banner.fecha_inicio = fecha_inicio_dt
                 existing_banner.fecha_fin = fecha_fin_dt
-                existing_banner.duracion_seg = duracion_seg
                 existing_banner.device_ids = dispositivo_ids
                 await db.commit()
                 await db.refresh(existing_banner)
@@ -198,7 +196,6 @@ async def replicar_archivo(
             prioridad=prioridad,
             fecha_inicio=fecha_inicio_dt,
             fecha_fin=fecha_fin_dt,
-            duracion_seg=duracion_seg,
             device_ids=dispositivo_ids,
             IdPublicidadRemoto=IdPublicidadRemoto
         )
@@ -251,7 +248,6 @@ async def actualizar_banner(
     prioridad: int = Form(None),
     fecha_inicio: str = Form(None),
     fecha_fin: str = Form(None),
-    duracion_seg: int = Form(None),
     dispositivo_ids: str = Form(None),
     db: AsyncSession = Depends(get_db_publicidad)
 ):
@@ -290,8 +286,6 @@ async def actualizar_banner(
             banner.activo = activo
         if prioridad is not None:
             banner.prioridad = prioridad
-        if duracion_seg is not None:
-            banner.duracion_seg = duracion_seg
         
         if fecha_inicio:
             banner.fecha_inicio = datetime.fromisoformat(fecha_inicio)
@@ -368,7 +362,6 @@ async def replicar_archivos_batch(
     Prioridades: List[int] = Form(...),
     FechasInicio: List[str] = Form(...),
     FechasFin: List[str] = Form(...),
-    DuracionesSeg: List[int] = Form(...),
     IdsPublicidadRemoto: List[int] = Form(...),
     db: AsyncSession = Depends(get_db_publicidad)
 ):
@@ -416,7 +409,6 @@ async def replicar_archivos_batch(
                 prioridad=Prioridades[idx],
                 fecha_inicio=fecha_inicio_dt,
                 fecha_fin=fecha_fin_dt,
-                duracion_seg=DuracionesSeg[idx],
                 IdPublicidadRemoto=IdsPublicidadRemoto[idx]
             )
             db.add(nuevo_banner)

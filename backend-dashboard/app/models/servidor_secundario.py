@@ -14,5 +14,4 @@ class ServidorSecundario(Base):
     almacenamiento_total = Column(BigInteger, nullable=False)
     almacenamiento_usado = Column(BigInteger, nullable=False, default=0)
     ultimo_heartbeat = Column(DateTime, nullable=True, default=None)
-    api_url = Column(String(255), nullable=True)
 

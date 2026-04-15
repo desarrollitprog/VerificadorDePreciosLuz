@@ -15,7 +15,7 @@ export interface UploadMediaPayload {
   activo: boolean;
   asignacionTodos?: boolean;
   servidorIds?: number[];
-  dispositivoIds?: number[];
+  dispositivoIds?: string[];
 }
 
 export interface FileMetadata {
@@ -25,7 +25,7 @@ export interface FileMetadata {
   activo: boolean;
   asignacionTodos: boolean;
   servidorIds: number[];
-  dispositivoIds: number[];
+  dispositivoIds: string[];
 }
 
 export interface AsignacionPayload {
@@ -47,7 +47,7 @@ export async function getVideos(): Promise<Video[]> {
         titulo: item.Titulo ?? item.titulo ?? '',
         size: item.size_human ?? item.SizeHuman ?? item.size ?? '',
         date: item.UpdatedAt ?? item.updated_at ?? '',
-        duration: item.DuracionSeg ?? item.duracion_seg ?? '',
+        duration: '',
         status: item.status ?? undefined,
         activo: (item.Activo ?? item.activo) ?? true,
         fechaInicio: item.FechaInicio ?? item.fecha_inicio ?? null,
@@ -89,7 +89,7 @@ export async function getVideosWithDateFilter(
         titulo: item.Titulo ?? item.titulo ?? '',
         size: item.size_human ?? item.SizeHuman ?? item.size ?? '',
         date: item.UpdatedAt ?? item.updated_at ?? '',
-        duration: item.DuracionSeg ?? item.duracion_seg ?? '',
+        duration: '',
         status: item.status ?? undefined,
         activo: (item.Activo ?? item.activo) ?? true,
         fechaInicio: item.FechaInicio ?? item.fecha_inicio ?? null,

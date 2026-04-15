@@ -19,7 +19,6 @@ class Publicidad(Base):
     Prioridad = Column("Prioridad", Integer, nullable=False, default=0)
     FechaInicio = Column("FechaInicio", DateTime, nullable=True)
     FechaFin = Column("FechaFin", DateTime, nullable=True)
-    DuracionSeg = Column("DuracionSeg", Integer, nullable=True)
     UpdatedAt = Column("UpdatedAt", DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
     asignacion_todos = Column("asignacion_todos", Boolean, nullable=False, default=True)
 

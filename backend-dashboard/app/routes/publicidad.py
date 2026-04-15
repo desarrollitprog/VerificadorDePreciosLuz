@@ -192,8 +192,10 @@ async def listar_banners(
             estado = "activo"
             if not banner.Activo:
                 estado = "inactivo"
-            elif not banner.asignacion_todos and len(asignaciones) == 0:
-                estado = "borrador"
+            # ETAPA 3: Fix estado "borrador" - solo mostrar si está inactivo Y no tiene asignaciones específicas
+            # No marcar automáticamente como "borrador" por falta de asignaciones (esto ocurre por error en el flujo)
+            # elif not banner.asignacion_todos and len(asignaciones) == 0:
+            #     estado = "borrador"
             elif banner.FechaFin:
                 now = get_venezuela_now()
                 if banner.FechaFin < now:
@@ -1021,7 +1023,39 @@ async def reemplazar_asignaciones_banner(
     if not banner:
         raise HTTPException(status_code=404, detail="Banner no encontrado.")
     
+    # ETAPA 2: Guardar estado anterior para posible rollback
+    asignacion_todos_anterior = banner.asignacion_todos
+    
     try:
+        # ETAPA 1: Validación de seguridad temprana - verificar que hay servidores/dispositivos válidos
+        # si no es asignacion_todos
+        if not asignacion_todos:
+            def parse_ids(ids_str):
+                """Parsea IDs desde string JSON array, string separado por comas, o entero."""
+                if not ids_str:
+                    return []
+                ids_str = str(ids_str).strip()
+                if not ids_str:
+                    return []
+                try:
+                    parsed = json.loads(ids_str)
+                    if isinstance(parsed, int):
+                        return [str(parsed)]
+                    if isinstance(parsed, list):
+                        return [str(x) for x in parsed]
+                    return []
+                except (json.JSONDecodeError, TypeError):
+                    return [x.strip() for x in ids_str.split(",") if x.strip()]
+            
+            parsed_servidor_ids = parse_ids(servidor_ids)
+            parsed_dispositivo_ids = parse_ids(dispositivo_ids)
+            
+            if not parsed_servidor_ids and not parsed_dispositivo_ids:
+                log.warning("fase7_asignacion_vacia", 
+                           banner_id=id,
+                           mensaje="No se recibieron servidores/dispositivos válidos")
+                return {"success": False, "error": "Debe seleccionar al menos un servidor o dispositivo si no asigna a todos."}
+        
         # Eliminar todas las asignaciones existentes
         await db.execute(
             select(PublicidadAsignacion).where(PublicidadAsignacion.publicidad_id == id)
@@ -1045,17 +1079,39 @@ async def reemplazar_asignaciones_banner(
             parsed_servidor_ids = []
             parsed_dispositivo_ids = []
             
-            if servidor_ids:
+            # ETAPA 1: Parser robusto - acepta JSON array ["1","2"] o string "1,2,3" o entero 1
+            def parse_ids(ids_str):
+                """Parsea IDs desde string JSON array, string separado por comas, o entero."""
+                if not ids_str:
+                    return []
+                ids_str = str(ids_str).strip()
+                if not ids_str:
+                    return []
                 try:
-                    parsed_servidor_ids = json.loads(servidor_ids)
-                except:
-                    parsed_servidor_ids = []
+                    # Intentar como JSON
+                    parsed = json.loads(ids_str)
+                    # Si es un entero solo, envolver en array
+                    if isinstance(parsed, int):
+                        return [str(parsed)]
+                    # Si es un array, convertir todos a string
+                    if isinstance(parsed, list):
+                        return [str(x) for x in parsed]
+                    return []
+                except (json.JSONDecodeError, TypeError):
+                    # Fallback: string separado por comas
+                    return [x.strip() for x in ids_str.split(",") if x.strip()]
             
-            if dispositivo_ids:
-                try:
-                    parsed_dispositivo_ids = json.loads(dispositivo_ids)
-                except:
-                    parsed_dispositivo_ids = []
+            parsed_servidor_ids = parse_ids(servidor_ids)
+            parsed_dispositivo_ids = parse_ids(dispositivo_ids)
+            
+            # ETAPA 1: Validación de seguridad - si no hay servidores/dispositivos válidos
+            # y no es asignacion_todos, mantener las asignaciones anteriores
+            if not parsed_servidor_ids and not parsed_dispositivo_ids:
+                log.warning("fase7_asignacion_vacia", 
+                           banner_id=id,
+                           mensaje="No se recibieron servidores/dispositivos válidos, manteniendo asignaciones anteriores")
+                # Mantener las asignaciones actuales - NO proceder con cambio
+                return {"success": True, "message": "Asignaciones anteriores mantenidas (no se especificaron servidores/dispositivos nuevos)."}
             
             # Obtener dispositivos de los servidores seleccionados
             if parsed_servidor_ids or parsed_dispositivo_ids:
@@ -1173,6 +1229,51 @@ async def reemplazar_asignaciones_banner(
                            agregar=len(update_result.get("agregar", [])),
                            eliminar=len(update_result.get("eliminar", [])),
                            actualizar=len(update_result.get("actualizar", [])))
+                    
+                    # ETAPA 4: Verificar resultado y notificar si hay fallos
+                    if update_result and not update_result.get("exito"):
+                        errores = []
+                        # Revisar errores en agregar
+                        for item in update_result.get("agregar", []):
+                            if not item.get("success"):
+                                errores.append(item)
+                        # Revisar errores en eliminar
+                        for item in update_result.get("eliminar", []):
+                            if not item.get("success"):
+                                errores.append(item)
+                        # Revisar errores en actualizar
+                        for item in update_result.get("actualizar", []):
+                            if not item.get("success"):
+                                errores.append(item)
+                        
+                        if errores:
+                            for error in errores:
+                                srv_nombre = error.get("servidor_nombre", "Desconocido")
+                                srv_id = error.get("servidor_id")
+                                error_msg = error.get("error", error.get("message", "Error desconocido"))
+                                
+                                # Registrar en logs
+                                log.error("fase7_replicacion_fallida",
+                                          banner_id=banner.IdPublicidad,
+                                          banner_titulo=banner.Titulo,
+                                          servidor_nombre=srv_nombre,
+                                          error=error_msg)
+                                
+                                # Crear notificación al dashboard
+                                from app.services.notificacion_service import registrar_accion
+                                await registrar_accion(
+                                    db=db,
+                                    usuario_id=current_user.get("user_id") if current_user else None,
+                                    tipo="ERROR_REPLICACION_ASIGNACION",
+                                    descripcion=f"Error al replicar banner '{banner.Titulo}' en servidor '{srv_nombre}': {error_msg}",
+                                    servidor_id=srv_id,
+                                    dispositivo_id=None
+                                )
+                            await db.commit()
+                            # Revertir el cambio de asignacion_todos si hay errores
+                            banner.asignacion_todos = asignacion_todos_anterior
+                            await db.commit()
+                            return {"success": False, "message": f"Error en replicación. No se aplicaron los cambios. Errores: {len(errores)}"}
                 
             except Exception as e:
                 log.error("fase6_error", banner_id=banner.IdPublicidad, error=str(e))

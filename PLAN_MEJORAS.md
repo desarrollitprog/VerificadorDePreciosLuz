@@ -152,8 +152,10 @@ Mejorar seguridad, performance, observabilidad y code quality del sistema de ges
 | FASE 4 (Code Quality) | 3/3 ✅ | 0/3 |
 | FASE 5 (Infraestructura) | 0/2 | 2/2 |
 | FASE 6 (Cambio Asignación) | 1/1 ✅ | 0/1 |
+| FASE 7 (Fix Asignaciones + Vigencia) | 0/5 | 5/5 |
+| FASE 8 (Background Monitoring Sesiones) | 0/2 | 2/2 |
 
-**Total: 13/14 completados (93%)**
+**Total: 13/21 completados (62%)**
 
 ---
 
@@ -228,7 +230,140 @@ fase6_resultado: banner_id=3561, exito=true, agregar=0, eliminar=2, actualizar=1
 
 ---
 
-**Total: 12/14 completados (86%)**
+## FASE 7: Fix Asignaciones + Control de Vigencia (Banners fechaInicio/fechaFin)
+
+### Problemas identificados
+
+#### 7.1 Bug Caso D (específico → específico)
+Cuando se cambia de un servidor específico a OTRO servidor específico:
+- El banner se elimina de AMBOS servidores
+- Queda marcado como "borrador" en el dashboard
+- **Causa**: Si el frontend no envía `servidor_ids`, la lógica asume "sin asignaciones" y pasa `srv_nuevos_ids = {}` → elimina de todos
+
+#### 7.2 Bug estado "borrador"
+Cuando se cambia asignación específica:
+- Si `asignacion_todos = false` + sin asignaciones → marca "borrador"
+- La lógica NO verifica si la replicación fue exitosa
+- **Causa**: Solo valida `len(asignaciones) == 0`, no valida el resultado de la replicación
+
+#### 7.3 Falta de validación de vigencia en luzapp
+- El sistema NO valida `fechaInicio/fechaFin` antes de reproducir un banner
+- Si el dispositivo no sincroniza después de expirar, **sigue reproduciendo** el banner vencido desde cache local
+- No hay validación "antes de reproducir" en la app
+
+---
+
+### Soluciones propuestas
+
+#### 7.1 Fix Caso D (específico → específico)
+
+| Problema | Solución |
+|----------|----------|
+| No detecta servidores nuevos | Incluir servidores anteriores como fallback si no vienen nuevos |
+| Elimina de todos | Solo eliminar si hay nuevos servidores objetivo |
+| Queda "borrador" | Validar que haya servidores antes de marcar `asignacion_todos=false` |
+
+**Implementación sugerida**:
+- En `publicidad.py:1142` - agregar fallback: si `target_dispositivo_ids` está vacío, mantener asignaciones anteriores
+- Validar que `servidores_asignados_data` no esté vacío antes de ejecutar `procesar_cambio_asignacion`
+
+#### 7.2 Fix estado "borrador"
+
+| Problema | Solución |
+|----------|----------|
+| `asignacion_todos=false` + sin asignaciones → "borrador" | Mantener estado anterior si falla la replicación |
+| No detecta errores de replicación | Verificar resultado de `procesar_cambio_asignacion` antes de confirmar cambio |
+
+**Implementación sugerida**:
+- En `publicidad.py:1037` - no marcar `asignacion_todos=false` si no hay servidores objetivo
+- Verificar `update_result.get("exito")` antes de finalizar el cambio
+
+#### 7.3 Control de Vigencia (3 capas de protección)
+
+| # | Solución | Ubicación | Descripción |
+|---|---------|-----------|------------|
+| S1 | Pre-validation | luzapp | Validar `fechaFinMs` antes de reproducir (safety net) |
+| S2 | Cache cleanup | luzapp | Eliminar banners vencidos al sincronizar |
+| S3 | WebSocket push | backend-api | Invalidación inmediata cuando admin cambia |
+
+**Flujo propuesto**:
+
+```
+DASHBOARD                      BACKEND-API                   LUZAPP
+──────────────────────────────────────────────────────────────────
+1. Admin crea banner
+   fecha_inicio: 14/04/2026 08:00
+   fecha_fin:    14/04/2026 18:00
+   ─────────────────────────────────────────────────────────────▶
+2. POST /replicar-archivo
+   Guarda en tabla publicidad
+   (fecha_inicio, fecha_fin)
+   ─────────────────────────────────────────────────────────────
+3. GET /banners?device_id=xxx
+   Backend filtra por fecha:
+   WHERE fecha_fin >= ahora
+   Retorna lista vigente
+   ◀───────────────────────────────────────────────────────────
+4. luzapp descarga + guarda en cache
+   BannerCacheItem:
+   - id, url, localPath
+   - fechaFinMs: 1742055600000  ← NUEVO: guardar fechaFin
+```
+
+**Por qué NO implementar loop de report back**:
+- Backend ya conoce `fecha_fin` de la base de datos
+- Evita race conditions (admin cambia → dispositivo reporta inactivo → admin no puede reactivarlo)
+- Las 3 soluciones son independientes y no requieren report back
+
+---
+
+### Tareas de FASE 7
+
+| # | Tarea | Estado | Ubicación |
+|---|-------|--------|-----------|
+| 7.1 | Fix caso específico→específico | ⏳ Pendiente | backend-dashboard/publicidad.py |
+| 7.2 | Fix estado "borrador" | ⏳ Pendiente | backend-dashboard/publicidad.py |
+| 7.3 | Pre-validation (S1) - validar fechaFin antes de reproducir | ⏳ Pendiente | luzapp/ScanActivity.kt |
+| 7.4 | Cache cleanup (S2) - eliminar banners vencidos | ⏳ Pendiente | luzapp/BannerRepository.kt |
+| 7.5 | WebSocket push (S3) - invalidación inmediata | ⏳ Pendiente | backend-api + luzapp |
+
+---
+
+### Especificaciones técnicas para S1 (Pre-validation luzapp)
+
+```kotlin
+// En playStandbyItem() antes de reproducir:
+if (item.fechaFinMs != null && now > item.fechaFinMs) {
+    Log.w(TAG, "Banner vencido, skipping: ${item.id}")
+    nextStandbyItem()  // Skip banner vencido
+    return
+}
+```
+
+### Especificaciones técnicas para S2 (Cache cleanup luzapp)
+
+```kotlin
+// En BannerRepository - al sincronizar:
+fun cleanupExpiredBanners() {
+    val now = System.currentTimeMillis()
+    items.removeAll { 
+        it.fechaFinMs != null && now > it.fechaFinMs 
+    }
+    saveMetadata()
+}
+```
+
+### Especificaciones técnicas para S3 (WebSocket push)
+
+```python
+# backend-api - cuando admin cambia banner:
+# Mensaje: { "type": "BANNER_EXPIRED", "banner_id": 123 }
+# luzapp lo elimina del cache
+```
+
+---
+
+**Total: 13/19 completados (68%)** - FASE 7 suma 5 tareas adicionales
 
 ---
 
@@ -239,6 +374,68 @@ fase6_resultado: banner_id=3561, exito=true, agregar=0, eliminar=2, actualizar=1
 3. ~~✅ FASE 3 (Performance) - Completada~~
 4. ~~✅ FASE 4 (Code Quality) - Completada~~
 5. ⏳ FASE 5 (Infra) - Backups y CI/CD
+
+---
+
+## FASE 8: Background Monitoring de Sesiones de Dispositivos
+
+### Problema identificado
+
+El monitoreo de sesiones de dispositivos **solo se ejecuta cuando alguien accede al dashboard**. Esto causa que:
+- Si nadie entra al dashboard por un tiempo, los cronómetros de tiempo de actividad no se actualizan
+- Los dispositivos pueden desconectarse y conectarse sin que el sistema lo detecte si no hay actividad en el dashboard
+
+### Solución propuesta
+
+Ejecutar el monitoreo de sesiones automáticamente en **background** cada **3 minutos 30 segundos** (3.5 minutos).
+
+### Tareas de FASE 8
+
+| # | Tarea | Estado | Ubicación |
+|---|-------|--------|-----------|
+| 8.1 | Extraer lógica de monitoreo | ⏳ Pendiente | app/services/monitoreo_service.py |
+| 8.2 | Agregar scheduler cada 3.5 minutos | ⏳ Pendiente | app/main.py |
+
+### Especificaciones técnicas
+
+**Nuevo servicio: app/services/monitoreo_service.py**
+
+```python
+async def actualizar_sesiones_dispositivos():
+    """
+    Función que se ejecuta cada 3.5 minutos.
+    Consulta /devices/status de cada servidor secundario
+    y actualiza sesiones en BD (DispositivoSesion).
+    """
+    # 1. Obtener todos los servidores secundarios online
+    # 2. Para cada servidor: _obtener_dispositivos_de_servidor(ip)
+    # 3. Actualizar DispositivoSesion (inicio/fin/duracion)
+    # 4. Tolerancia a errores: si un servidor no responde, continuar
+```
+
+**Scheduler en app/main.py:**
+
+```python
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+scheduler = AsyncIOScheduler()
+scheduler.add_job(
+    actualizar_sesiones_dispositivos,
+    'interval',
+    minutes=3.5,  # 3 minutos 30 segundos
+    id='monitoreo_sesiones'
+)
+scheduler.start()
+```
+
+### Consideraciones
+
+| Aspecto | Detalle |
+|---------|---------|
+| **Frecuencia** | 3.5 minutos (evita choque con desconexión de 8 min para servidores y 3 min para dispositivos) |
+| **Tolerancia a errores** | Si un servidor no responde, continuar con los demás |
+| **Logging** | Registrar inicio y fin de cada ejecución |
+| **Sesiones** | Se registrarán igual que ahora: inicio/fin/duración (sin notificaciones) |
 
 ---
 

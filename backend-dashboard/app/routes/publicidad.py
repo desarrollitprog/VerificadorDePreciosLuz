@@ -1115,14 +1115,27 @@ async def reemplazar_asignaciones_banner(
             
             # Obtener dispositivos de los servidores seleccionados
             if parsed_servidor_ids or parsed_dispositivo_ids:
+                # Convertir IDs a enteros para la consulta
+                try:
+                    parsed_servidor_ids_int = [int(x) for x in parsed_servidor_ids]
+                except (ValueError, TypeError):
+                    parsed_servidor_ids_int = []
+                
                 query = select(Dispositivo)
-                if parsed_servidor_ids:
-                    query = query.where(Dispositivo.servidor_id.in_(parsed_servidor_ids))
+                if parsed_servidor_ids_int:
+                    query = query.where(Dispositivo.servidor_id.in_(parsed_servidor_ids_int))
                 if parsed_dispositivo_ids:
                     query = query.where(Dispositivo.codigo_kiosko.in_(parsed_dispositivo_ids))
                 
                 result = await db.execute(query)
                 dispositivos = list(result.scalars().all())
+                
+                log.info("fase7_debug_dispositivos", 
+                        banner_id=id,
+                        parsed_servidor_ids=parsed_servidor_ids,
+                        parsed_servidor_ids_int=parsed_servidor_ids_int,
+                        dispositivos_encontrados=len(dispositivos),
+                        dispositivos_ids=[d.codigo_kiosko for d in dispositivos])
                 
                 for disp in dispositivos:
                     nueva_asignacion = PublicidadAsignacion(

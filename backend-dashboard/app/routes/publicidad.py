@@ -1299,6 +1299,8 @@ async def reemplazar_asignaciones_banner(
                 log.error("fase6_error", banner_id=banner.IdPublicidad, error=str(e))
         
         return {"success": True, "message": "Asignaciones actualizadas correctamente."}
+    except HTTPException:
+        raise
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"Error al actualizar asignaciones: {str(e)}")

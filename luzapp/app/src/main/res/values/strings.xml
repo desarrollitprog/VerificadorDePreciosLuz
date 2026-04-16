@@ -31,4 +31,7 @@
     <string name="total_ref">PRECIO</string>
     <string name="iva_incluido">IVA INCLUIDO (SI APLICA)</string>
     <string name="oferta">¡OFERTA!</string>
+    <string name="sin_actualizacion_bcv">Sin Actualizacion del BCV</string>
+    <string name="precio_bs_formato">Bs %1$s</string>
+    <string name="fuera_de_servicio">Fuera de Servicio</string>
 </resources>

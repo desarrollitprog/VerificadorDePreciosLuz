@@ -555,7 +555,7 @@ Eliminar el uso en código y luego eliminar físicamente las columnas en base de
 | 10.2 | Eliminar `DuracionSeg` en backend-dashboard (modelo/schemas/rutas/servicios) | ✅ Completado | `backend-dashboard/app/**` |
 | 10.3 | Eliminar `DuracionSeg` en backend-api (modelo/schemas/rutas) | ✅ Completado | `backend-api/app/**` |
 | 10.4 | Ajustar frontend para no depender de `DuracionSeg` | ✅ Completado | `dashboard/services/videoService.ts` |
-| 10.5 | Ejecutar migración SQL para dropear columnas en BD | ⏳ Pendiente | SQL Server |
+| 10.5 | Ejecutar migración SQL para dropear columnas en BD | ✅ Completado | SQL Server |
 
 ### Query de migración SQL (pendiente ejecutar)
 
@@ -600,7 +600,7 @@ nuevo_banner = Publicidad(..., ThumbnailUrl=thumbnail_url)
 
 ## Estado Actual: Progreso Total
 
-**Total: 24/28 completados (86%)**
+**Total: 25/28 completados (89%)**
 
 - FASE 1-4: ✅ Completas
 - FASE 5: ⏳ Pendiente (2 tareas manual en servidor)
@@ -609,3 +609,5 @@ nuevo_banner = Publicidad(..., ThumbnailUrl=thumbnail_url)
 - FASE 8: ✅ Completada
 - FASE 9: ✅ Completada
 - FASE 10: ✅ Completada
+- FASE 9: ⏳ Pendiente (thumbnails videos)
+- FASE 10: 🔄 Parcial (80% - 4/5, migración BD pendiente)

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy import func
+import cv2
 from ..models import Publicidad, PublicidadAsignacion, ServidorSecundario, Dispositivo
 from ..schemas import PublicidadResponse, PublicidadCreate
 from ..database import get_db_usuarios
@@ -55,6 +56,41 @@ def _format_size_human(size_bytes: int) -> str:
     if unit_index == 0:
         return f"{int(value)} {units[unit_index]}"
     return f"{value:.1f} {units[unit_index]}"
+
+
+def generar_thumbnail(video_path: str, output_dir: str) -> Optional[str]:
+    """
+    Genera un thumbnail (frame inicial) de un video usando OpenCV.
+    Retorna la URL relativa del thumbnail o None si falla.
+    """
+    try:
+        video = cv2.VideoCapture(video_path)
+        if not video.isOpened():
+            log.warning("thumbnail_generation_failed", reason="cannot_open_video", path=video_path)
+            return None
+        
+        success, frame = video.read()
+        video.release()
+        
+        if not success:
+            log.warning("thumbnail_generation_failed", reason="cannot_read_frame", path=video_path)
+            return None
+        
+        thumbnail_filename = f"thumb_{uuid.uuid4().hex[:8]}.jpg"
+        thumbnail_path = os.path.join(output_dir, thumbnail_filename)
+        
+        success = cv2.imwrite(thumbnail_path, frame)
+        if not success:
+            log.warning("thumbnail_generation_failed", reason="cannot_write_thumbnail", path=video_path)
+            return None
+        
+        thumbnail_url = f"/static/banners/{thumbnail_filename}"
+        log.info("thumbnail_generated", video_path=video_path, thumbnail=thumbnail_url)
+        return thumbnail_url
+    
+    except Exception as e:
+        log.warning("thumbnail_generation_error", error=str(e), path=video_path)
+        return None
 
 
 def _resolve_banner_size(url: str | None) -> tuple[int, str]:
@@ -324,6 +360,12 @@ async def upload_banner(
 
     # Guardar metadatos en la base de datos
     url = f"/static/banners/{filename}"
+    thumbnail_url = None
+    
+    # Generar thumbnail si es video
+    if Tipo == "video":
+        thumbnail_url = generar_thumbnail(file_location, banners_dir)
+    
     try:
         FechaInicio_dt = datetime.fromisoformat(FechaInicio) if FechaInicio else None
         FechaFin_dt = datetime.fromisoformat(FechaFin) if FechaFin else None
@@ -335,6 +377,7 @@ async def upload_banner(
             Titulo=titulo_sanitized,
             Tipo=Tipo,
             Url=url,
+            ThumbnailUrl=thumbnail_url,
             Activo=Activo,
             Prioridad=Prioridad,
             FechaInicio=FechaInicio_dt,
@@ -668,6 +711,11 @@ async def upload_banners_batch(
                 continue
             
             url = f"/static/banners/{filename}"
+            thumbnail_url = None
+            
+            if Tipo == "video":
+                thumbnail_url = generar_thumbnail(file_location, banners_dir)
+            
             FechaInicio_dt = datetime.fromisoformat(FechasInicio[idx]) if FechasInicio[idx] else None
             FechaFin_dt = datetime.fromisoformat(FechasFin[idx]) if FechasFin[idx] else None
             if FechaInicio_dt and FechaFin_dt and FechaInicio_dt > FechaFin_dt:
@@ -677,6 +725,7 @@ async def upload_banners_batch(
                 Titulo=titulo_sanitized,
                 Tipo=Tipo,
                 Url=url,
+                ThumbnailUrl=thumbnail_url,
                 Activo=Activos[idx],
                 Prioridad=Prioridades[idx],
                 FechaInicio=FechaInicio_dt,

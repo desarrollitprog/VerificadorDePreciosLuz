@@ -7,6 +7,7 @@ class PublicidadBase(BaseModel):
     Titulo: Optional[str] = None
     Tipo: Literal["image", "video"] = "image"
     Url: str
+    ThumbnailUrl: Optional[str] = None
     Activo: bool = True
     Prioridad: int = 0
     FechaInicio: Optional[datetime] = None

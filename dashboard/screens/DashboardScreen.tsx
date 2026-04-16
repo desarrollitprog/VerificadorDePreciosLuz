@@ -1409,6 +1409,7 @@ export const DashboardScreen: React.FC = () => {
               <video 
                 ref={videoRef}
                 src={preview.url} 
+                poster={preview.thumbnail || preview.url}
                 controls 
                 autoPlay 
                 preload="none"

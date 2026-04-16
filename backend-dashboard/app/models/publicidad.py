@@ -15,6 +15,7 @@ class Publicidad(Base):
     Titulo = Column("Titulo", String(200), nullable=True)
     Tipo = Column("Tipo", String(10), nullable=False, default="image")
     Url = Column("Url", String(500), nullable=False)
+    ThumbnailUrl = Column("ThumbnailUrl", String(500), nullable=True)
     Activo = Column("Activo", Boolean, nullable=False, default=True)
     Prioridad = Column("Prioridad", Integer, nullable=False, default=0)
     FechaInicio = Column("FechaInicio", DateTime, nullable=True)

@@ -154,7 +154,8 @@ Mejorar seguridad, performance, observabilidad y code quality del sistema de ges
 | FASE 6 (Cambio Asignación) | 1/1 ✅ | 0/1 |
 | FASE 7 (Fix Asignaciones + Vigencia) | 2/5 | 3/5 |
 | FASE 8 (Background Monitoring Sesiones) | 4/4 ✅ | 0/4 |
-| FASE 9 (Thumbnails Videos) | 0/6 | 6/6 |
+| FASE 9 (Thumbnails Videos) | 6/6 ✅ | 0/6 |
+| FASE 10 (Limpieza Columnas) | 4/5 | 1/5 |
 
 **Total: 16/27 completados (59%)**
 
@@ -511,13 +512,13 @@ crontab -e
 
 ---
 
-## FASE 9: Thumbnails de Videos
+## FASE 9: Thumbnails de Videos ✅ COMPLETADA
 
 ### Problema identificado
 
 Los videos en el dashboard no muestran miniatura (thumbnail) en el preview, lo cual dificulta identificar el contenido visualmente.
 
-### Solución propuesta
+### Solución implementada
 
 Generar thumbnails automáticamente al subir videos usando OpenCV, y mostrarlos en el atributo `poster` del elemento `<video>`.
 
@@ -525,12 +526,12 @@ Generar thumbnails automáticamente al subir videos usando OpenCV, y mostrarlos 
 
 | # | Tarea | Estado | Ubicación |
 |---|-------|--------|-----------|
-| 9.1 | Agregar campo ThumbnailUrl al modelo | ⏳ Pendiente | app/models/publicidad.py |
-| 9.2 | Agregar campo al schema response | ⏳ Pendiente | app/schemas/publicidad.py |
-| 9.3 | Agregar dependencia opencv | ⏳ Pendiente | requirements.txt |
-| 9.4 | Implementar generación de thumbnail | ⏳ Pendiente | app/routes/publicidad.py |
-| 9.5 | Mapear thumbnail en frontend | ⏳ Pendiente | services/videoService.ts |
-| 9.6 | Usar poster en video player | ⏳ Pendiente | screens/DashboardScreen.tsx |
+| 9.1 | Agregar campo ThumbnailUrl al modelo | ✅ Completado | app/models/publicidad.py |
+| 9.2 | Agregar campo al schema response | ✅ Completado | app/schemas/publicidad.py |
+| 9.3 | Agregar dependencia opencv | ✅ Completado | requirements.txt |
+| 9.4 | Implementar generación de thumbnail | ✅ Completado | app/routes/publicidad.py |
+| 9.5 | Mapear thumbnail en frontend | ✅ Completado | services/videoService.ts |
+| 9.6 | Usar poster en video player | ✅ Completado | screens/DashboardScreen.tsx |
 
 ---
 
@@ -599,11 +600,12 @@ nuevo_banner = Publicidad(..., ThumbnailUrl=thumbnail_url)
 
 ## Estado Actual: Progreso Total
 
-**Total: 16/27 completados (59%)**
+**Total: 19/28 completados (68%)**
 
 - FASE 1-4: ✅ Completas
-- FASE 5: ⏳ Pendiente (2 tareas)
+- FASE 5: ⏳ Pendiente (2 tareas manual en servidor)
 - FASE 6: ✅ Completada
-- FASE 7: 🔄 Parcial (2/5 completadas - tareas luzapp pendientes)
+- FASE 7: 🔄 Parcial (40% - 2/5, tareas luzapp pendientes)
 - FASE 8: ✅ Completada
-- FASE 9: ⏳ Pendiente
+- FASE 9: ⏳ Pendiente (thumbnails videos)
+- FASE 10: 🔄 Parcial (80% - 4/5, migración BD pendiente)

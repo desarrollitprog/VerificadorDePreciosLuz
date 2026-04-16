@@ -15,7 +15,7 @@ export interface UploadMediaPayload {
   activo: boolean;
   asignacionTodos?: boolean;
   servidorIds?: number[];
-  dispositivoIds?: number[];
+  dispositivoIds?: string[];
 }
 
 export interface FileMetadata {
@@ -25,7 +25,7 @@ export interface FileMetadata {
   activo: boolean;
   asignacionTodos: boolean;
   servidorIds: number[];
-  dispositivoIds: number[];
+  dispositivoIds: string[];
 }
 
 export interface AsignacionPayload {
@@ -42,12 +42,12 @@ export async function getVideos(): Promise<Video[]> {
         id: String(item.IdPublicidad ?? item.id ?? ''),
         filename: (item.Url ?? item.url ?? '').split('/').pop() || '',
         url: item.Url ?? item.url ?? '',
-        thumbnail: (item.Tipo ?? item.tipo) === 'image' ? (item.Url ?? item.url ?? '') : '',
+        thumbnail: (item.Tipo ?? item.tipo) === 'image' ? (item.Url ?? item.url ?? '') : (item.ThumbnailUrl ?? item.thumbnailUrl ?? ''),
         tipo: item.Tipo ?? item.tipo ?? '',
         titulo: item.Titulo ?? item.titulo ?? '',
         size: item.size_human ?? item.SizeHuman ?? item.size ?? '',
         date: item.UpdatedAt ?? item.updated_at ?? '',
-        duration: item.DuracionSeg ?? item.duracion_seg ?? '',
+        duration: '',
         status: item.status ?? undefined,
         activo: (item.Activo ?? item.activo) ?? true,
         fechaInicio: item.FechaInicio ?? item.fecha_inicio ?? null,
@@ -84,12 +84,12 @@ export async function getVideosWithDateFilter(
         id: String(item.IdPublicidad ?? item.id ?? ''),
         filename: (item.Url ?? item.url ?? '').split('/').pop() || '',
         url: item.Url ?? item.url ?? '',
-        thumbnail: (item.Tipo ?? item.tipo) === 'image' ? (item.Url ?? item.url ?? '') : '',
+        thumbnail: (item.Tipo ?? item.tipo) === 'image' ? (item.Url ?? item.url ?? '') : (item.ThumbnailUrl ?? item.thumbnailUrl ?? ''),
         tipo: item.Tipo ?? item.tipo ?? '',
         titulo: item.Titulo ?? item.titulo ?? '',
         size: item.size_human ?? item.SizeHuman ?? item.size ?? '',
         date: item.UpdatedAt ?? item.updated_at ?? '',
-        duration: item.DuracionSeg ?? item.duracion_seg ?? '',
+        duration: '',
         status: item.status ?? undefined,
         activo: (item.Activo ?? item.activo) ?? true,
         fechaInicio: item.FechaInicio ?? item.fecha_inicio ?? null,
@@ -138,9 +138,8 @@ export async function updateBannerAsignations(
   if (servidorIds && servidorIds.length > 0) {
     params.append('servidor_ids', JSON.stringify(servidorIds));
   }
-  if (dispositivoIds && dispositivoIds.length > 0) {
-    params.append('dispositivo_ids', JSON.stringify(dispositivoIds));
-  }
+  // Siempre enviar dispositivo_ids (array vacío si es "todos")
+  params.append('dispositivo_ids', JSON.stringify(dispositivoIds || []));
   const response = await api.put(`/banners/${videoId}/asignaciones?${params.toString()}`);
   return response.data;
 }

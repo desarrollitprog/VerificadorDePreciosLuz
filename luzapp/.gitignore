@@ -13,3 +13,7 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# APK files
+*.apk
+/app/build/outputs/apk/

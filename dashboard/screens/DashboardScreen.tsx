@@ -695,12 +695,7 @@ export const DashboardScreen: React.FC = () => {
                   {video.tipo === 'image' ? (
                     <img src={video.thumbnail} alt={video.titulo || video.filename} className="w-full h-full object-cover" />
                   ) : (
-                    <div className="flex items-center justify-center w-full h-full">
-                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <rect width="24" height="24" rx="6" fill="#1c2936" />
-                        <polygon points="9,7 17,12 9,17" fill="#fff" />
-                      </svg>
-                    </div>
+                    <img src={video.thumbnail || video.url} alt={video.titulo || video.filename} className="w-full h-full object-cover" />
                   )}
                   <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors"></div>
                   {video.duration && video.tipo === 'video' && (
@@ -1348,7 +1343,13 @@ export const DashboardScreen: React.FC = () => {
                     const data = await getVideos();
                     setVideos(data);
                   } catch (error: any) {
-                    showNotification('Error al actualizar la publicidad', 'error');
+                    // Mostrar mensaje de error específico del backend si está disponible
+                    // FastAPI devuelve el error en 'detail' o 'error'
+                    const backendError = error?.response?.data?.detail || error?.response?.data?.error;
+                    const errorMessage = backendError || (error.message === 'Request failed with status code 400' 
+                        ? 'Error de validación' 
+                        : 'Error al actualizar la publicidad');
+                    showNotification(errorMessage, 'error');
                   } finally {
                     setIsSavingEdit(false);
                   }
@@ -1403,6 +1404,7 @@ export const DashboardScreen: React.FC = () => {
               <video 
                 ref={videoRef}
                 src={preview.url} 
+                poster={preview.thumbnail || preview.url}
                 controls 
                 autoPlay 
                 preload="none"

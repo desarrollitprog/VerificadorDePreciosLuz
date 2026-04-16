@@ -21,6 +21,20 @@ services:
       timeout: 5s
       retries: 5
 
+  dashboard-redis:
+    image: redis:7-alpine
+    container_name: dashboard-redis
+    ports:
+      - "6380:6379"
+    restart: always
+    volumes:
+      - dashboard_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
   dashboard-backend:
     build:
       context: ./backend-dashboard
@@ -28,6 +42,8 @@ services:
     container_name: dashboard-backend
     env_file:
       - ./backend-dashboard/.env.dashboard
+    environment:
+      - REDIS_URL=redis://dashboard-redis:6379
     ports:
       - "8001:8000"
     restart: always
@@ -36,6 +52,8 @@ services:
     depends_on:
       sqlserver:
         condition: service_healthy
+      dashboard-redis:
+        condition: service_started
 
   dashboard-frontend:
     build:
@@ -52,6 +70,7 @@ services:
 
 volumes:
   mssql_data:
+  dashboard_redis_data:
 
 networks:
   default:

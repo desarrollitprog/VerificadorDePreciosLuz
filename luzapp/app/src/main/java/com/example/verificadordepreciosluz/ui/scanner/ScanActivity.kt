@@ -2,8 +2,6 @@
 
 package com.example.verificadordepreciosluz.ui.scanner
 
-import com.example.verificadordepreciosluz.ui.scanner.ReinicioReceiver
-
 import android.Manifest
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
@@ -84,6 +82,7 @@ import com.example.verificadordepreciosluz.data.repository.DolarRepository
 import java.io.File
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 
@@ -109,7 +108,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private var lastPlaybackReportKey: String? = null
     private var lastPlaybackReportAt = 0L
     private val retryCountMap = mutableMapOf<String, Int>()
-    private val MAX_RETRY_BEFORE_REPORT = 3
+    private val maxRetryBeforeReport = 3
     private var lastMockSubmitAt = 0L
     private var pendingMockText: String? = null
     private var mockIdleRunnable: Runnable? = null
@@ -119,10 +118,10 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private var connectivityManager: ConnectivityManager? = null
     private var offlineBackup: BackupResponse? = null
     private var backupReadyNotified = false
-    private val backupMaxAgeMs = (12 * 60 * 60 * 1000L).toLong()
+    private val backupMaxAgeMs = (12 * 60 * 60 * 1000L)
     private var cameraProvider: ProcessCameraProvider? = null
-    private val bannerMaxAgeMs = (12 * 60 * 60 * 1000L).toLong()
-    private val bannerPollIntervalMs = (25 * 60 * 1000L).toLong()
+    private val bannerMaxAgeMs = (12 * 60 * 60 * 1000L)
+    private val bannerPollIntervalMs = (25 * 60 * 1000L)
     private val bannerPollHandler = Handler(Looper.getMainLooper())
     private var bannerPollRunnable: Runnable? = null
     private var backendBaseUrl: String? = null
@@ -131,7 +130,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private var standbyIndex = 0
     private var standbyActive = false
     private var standbyTimerRunnable: Runnable? = null
-    private val KIOSK_EXIT_CODE = "ADMIN-CODE-125"
+    private val kioskExitCode = "ADMIN-CODE-125"
     private var isKioskMode = false
     private var isDownloading = false  // Para bloquear salida durante descarga
     private var dolarBcJob: Job? = null
@@ -216,7 +215,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             
             val request = Request.Builder()
                 .url("$debugUrl?${params.joinToString("&")}")
-                .post(okhttp3.RequestBody.create(null, ByteArray(0)))
+                .post(ByteArray(0).toRequestBody(null))
                 .build()
             
             client.newCall(request).execute().close()
@@ -233,12 +232,12 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (isDownloading) {
-                    Toast.makeText(this@ScanActivity, "Descarga en progreso, espera...", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@ScanActivity, R.string.error_downloading, Toast.LENGTH_SHORT).show()
                     binding.etMockCode.requestFocus()
                     return
                 }
                 if (!backupReady) {
-                    Toast.makeText(this@ScanActivity, "Respaldo no está listo. Espera la sincronización", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@ScanActivity, R.string.error_backup_not_ready, Toast.LENGTH_SHORT).show()
                     binding.etMockCode.requestFocus()
                     return
                 }
@@ -253,8 +252,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         tone = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80)
 
         // Inicializar Device Policy Manager para modo kiosco
-        dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-        adminComponent = ComponentName(this, com.example.verificadordepreciosluz.ui.scanner.MyDeviceAdminReceiver::class.java)
+        dpm = getSystemService(DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        adminComponent = ComponentName(this, MyDeviceAdminReceiver::class.java)
         
         // Programar reinicio recurrente si está configurado
         programarReinicioRecurrente()
@@ -379,11 +378,11 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 val text = editable?.toString()?.trim().orEmpty()
                 
                 // Verificar si es el código de salida del modo kiosco
-                if (isKioskMode && text == KIOSK_EXIT_CODE) {
+                if (isKioskMode && text == kioskExitCode) {
                     Log.i(TAG, ">>> Código de salida detectado en TextWatcher! Desactivando modo kiosco...")
                     disableKioskMode()
                     isKioskMode = false
-                    Toast.makeText(this@ScanActivity, "Modo kiosco desactivado", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@ScanActivity, R.string.msg_kiosk_disabled, Toast.LENGTH_SHORT).show()
                     editable?.clear()
                     binding.etMockCode.requestFocus()
                     return
@@ -519,13 +518,13 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
     private fun maybeProcessCode(code: String) {
         // Verificar si es el código de salida del modo kiosco
-        Log.d(TAG, "maybeProcessCode: code='$code', isKioskMode=$isKioskMode, KIOSK_EXIT_CODE='$KIOSK_EXIT_CODE', equals=${code == KIOSK_EXIT_CODE}")
+        Log.d(TAG, "maybeProcessCode: code='$code', isKioskMode=$isKioskMode, kioskExitCode='$kioskExitCode', equals=${code == kioskExitCode}")
         
-        if (isKioskMode && code == KIOSK_EXIT_CODE) {
+        if (isKioskMode && code == kioskExitCode) {
             Log.i(TAG, ">>> Código de salida detectado! Desactivando modo kiosco...")
             disableKioskMode()
             isKioskMode = false
-            Toast.makeText(this, "Modo kiosco desactivado", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.msg_kiosk_disabled, Toast.LENGTH_SHORT).show()
             // Limpiar el campo y no procesar más
             binding.etMockCode.text?.clear()
             return
@@ -534,7 +533,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         val clean = sanitizeCode(code)
         if (clean == null) {
             // Código no válido (longitud incorrecta)
-            Toast.makeText(this, "Código no válido. Use serial del producto.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.error_invalid_code, Toast.LENGTH_SHORT).show()
             binding.etMockCode.requestFocus()
             return
         }
@@ -542,7 +541,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         // Debounce: evita spam si el mismo código se mantiene en cámara.
         val now = android.os.SystemClock.elapsedRealtime()
         if (now < pauseUntil) return
-        val cooldown = 1500L // 1.5s permite re-escaneos razonables
+        val cooldown = 1500L // 1.5 s permite re-escaneos razonables
         if (requestInFlight) return
         if (clean == lastCode && (now - lastScanAt) < cooldown) return
         lastCode = clean
@@ -703,7 +702,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private fun deleteBannerFile(bannerId: Int, url: String) {
         try {
             val ext = url.substringAfterLast('.', "")
-            val safeExt = if (ext.isBlank()) "bin" else ext
+            val safeExt = ext.ifBlank { "bin" }
             val fileName = "banner_$bannerId.$safeExt"
             val bannersDir = File(filesDir, "banners")
             val file = File(bannersDir, fileName)
@@ -752,13 +751,13 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         bannerPollRunnable = null
     }
 
-    // PARTE 3: Limpia el cache si tiene más de 24 horas
+    // PARTE 3: Limpia el caché si tiene más de 24 horas
     private fun limpiarCacheObsoleto() {
         val cachedDateStr = prefsDolar.getString("fecha", null)
         if (cachedDateStr != null) {
             try {
                 val tz = java.util.TimeZone.getTimeZone("America/Caracas")
-                val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).apply { timeZone = tz }
+                val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = tz }
                 val cachedDate = dateFormat.parse(cachedDateStr)
                 val ahora = java.util.Date()
                 
@@ -770,7 +769,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                         sendDebugLog("Cache obsoleto limpiado (${diffHoras}h)", cachedDate = cachedDateStr)
                     }
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 prefsDolar.edit().clear().apply()
                 Log.w(TAG, "BCV: Cache corrupto limpiado")
             }
@@ -781,12 +780,12 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private fun syncDolarBCV() {
         Log.i(TAG, "BCV: syncDolarBCV() llamado")
         
-        // PARTE 3: Limpiar cache obsoleto (más de 24 horas)
+        // PARTE 3: Limpiar caché obsoleto (más de 24 horas)
         limpiarCacheObsoleto()
         
         // PARTE 1: Usar timezone explícito de Venezuela (America/Caracas)
         val tz = java.util.TimeZone.getTimeZone("America/Caracas")
-        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).apply { 
+        val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { 
             timeZone = tz 
         }.format(java.util.Date())
         val cachedDate = prefsDolar.getString("fecha", null)
@@ -794,13 +793,13 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         val cachedEur = prefsDolar.getFloat("eur", 0f)
         Log.d(TAG, "BCV: today=$today (America/Caracas), cachedDate=$cachedDate, cachedUsd=$cachedUsd, cachedEur=$cachedEur")
 
-        // PARTE 2: Primero mostrar cache si existe, luego siempre llamar a la API
+        // PARTE 2: Primero mostrar caché si existe, luego siempre llamar a la API
         if (cachedDate == today && (cachedUsd > 0f || cachedEur > 0f)) {
             Log.d(TAG, "BCV: mostrando datos cacheados pero verificando con API...")
             uiHandler.post {
                 mostrarTasaBCV(cachedUsd, cachedEur)
             }
-            // NO salir aquí, continuar para verificar con API
+            // No salir aquí, continuar para verificar con API
         }
 
         Log.d(TAG, "BCV: llamando a la API para obtener datos frescos...")
@@ -859,14 +858,14 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                     Log.w(TAG, "BCV: API devolvio vacio")
                     sendDebugLog("API devolvio vacio", today = today, cachedDate = cachedDate, cachedUsd = cachedUsd, cachedEur = cachedEur)
                     uiHandler.post {
-                        findViewById<android.widget.TextView>(R.id.cardDolarBc)?.text = "Sin Actualizacion del BCV"
+                        findViewById<android.widget.TextView>(R.id.cardDolarBc)?.text = getString(R.string.sin_actualizacion_bcv)
                         findViewById<android.widget.TextView>(R.id.cardDolarBc)?.visibility = View.VISIBLE
                     }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "BCV: Error fetching BCV rate", e)
                 uiHandler.post {
-                    findViewById<android.widget.TextView>(R.id.cardDolarBc)?.text = "Sin Actualizacion del BCV"
+                    findViewById<android.widget.TextView>(R.id.cardDolarBc)?.text = getString(R.string.sin_actualizacion_bcv)
                     findViewById<android.widget.TextView>(R.id.cardDolarBc)?.visibility = View.VISIBLE
                 }
             }
@@ -874,7 +873,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     }
 
     private fun mostrarTasaBCV(usd: Float, eur: Float) {
-        val symbols = DecimalFormatSymbols(Locale("es", "VE")).apply {
+        val symbols = DecimalFormatSymbols(Locale.Builder().setLanguage("es").setRegion("VE").build()).apply {
             groupingSeparator = '.'
             decimalSeparator = ','
         }
@@ -938,7 +937,18 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         standbyIndex = 0
         standbyActive = true
         binding.standbyOverlay.visibility = View.VISIBLE
+        
+        resetVideoView()
         playStandbyItem()
+    }
+
+    private fun resetVideoView() {
+        try {
+            binding.standbyVideo.stopPlayback()
+        } catch (e: Exception) {
+            Log.w(TAG, "Error en stopPlayback: ${e.message}")
+        }
+        binding.standbyVideo.setVideoURI(null)
     }
 
     // Reproduce un item del carrusel (imagen o video)
@@ -947,15 +957,15 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         // Proteger el índice
         if (standbyIndex >= standbyItems.size) standbyIndex = 0
         val item = standbyItems[standbyIndex]
-        val fileExists = java.io.File(item.localPath).exists()
+        val fileExists = File(item.localPath).exists()
         if (!fileExists) {
             // Contador de reintentos para evitar spam de notificaciones
             val currentRetry = retryCountMap.getOrDefault(item.localPath, 0)
             val newRetry = currentRetry + 1
             retryCountMap[item.localPath] = newRetry
             
-            if (newRetry >= MAX_RETRY_BEFORE_REPORT) {
-                // Solo reportar si falló MAX_RETRY_BEFORE_REPORT veces consecutivas
+            if (newRetry >= maxRetryBeforeReport) {
+                // Solo reportar si falló maxRetryBeforeReport veces consecutivas
                 Log.w(TAG, "Standby: archivo no existe tras $newRetry intentos, eliminando de la lista: ${item.localPath}")
                 reportPlaybackFailure(
                     localPath = item.localPath,
@@ -963,7 +973,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 )
                 retryCountMap.remove(item.localPath)
             } else {
-                Log.w(TAG, "Standby: archivo no existe (intento $newRetry/$MAX_RETRY_BEFORE_REPORT), reintentando: ${item.localPath}")
+                Log.w(TAG, "Standby: archivo no existe (intento $newRetry/$maxRetryBeforeReport), reintentando: ${item.localPath}")
             }
             
             if (standbyItems.isNotEmpty()) {
@@ -981,7 +991,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         
         // Si el archivo existe, resetear el contador de reintentos
         retryCountMap.remove(item.localPath)
-        Log.i(TAG, "Standby: item idx=$standbyIndex tipo=${item.tipo} path=${item.localPath} exists=$fileExists")
+        Log.i(TAG, "Standby: item idx=$standbyIndex tipo=${item.tipo} path=${item.localPath} exists=true")
         standbySlideRunnable?.let { uiHandler.removeCallbacks(it) }
         binding.standbyImage.visibility = View.GONE
         binding.standbyVideo.visibility = View.GONE
@@ -992,7 +1002,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         
         if (item.tipo == "video") {
             binding.standbyVideo.visibility = View.VISIBLE
+            
             binding.standbyVideo.setOnCompletionListener {
+                resetVideoView()
                 nextStandbyItem()
             }
             binding.standbyVideo.setOnPreparedListener { mp ->
@@ -1001,20 +1013,20 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             binding.standbyVideo.setOnErrorListener { _, what, extra ->
                 Log.w(TAG, "Standby: error video what=$what extra=$extra para ${item.localPath}")
                 
-                // Contador de reintentos para errores de video
+                resetVideoView()
+                
                 val currentRetry = retryCountMap.getOrDefault(item.localPath, 0)
                 val newRetry = currentRetry + 1
                 retryCountMap[item.localPath] = newRetry
                 
-                // Solo reportar si falló MAX_RETRY_BEFORE_REPORT veces consecutivas
-                if (newRetry >= MAX_RETRY_BEFORE_REPORT) {
+                if (newRetry >= maxRetryBeforeReport) {
                     reportPlaybackFailure(
                         localPath = item.localPath,
                         reason = "VideoView error what=$what extra=$extra tras $newRetry intentos"
                     )
                     retryCountMap.remove(item.localPath)
                 } else {
-                    Log.w(TAG, "Standby: error video (intento $newRetry/$MAX_RETRY_BEFORE_REPORT), reintentando...")
+                    Log.w(TAG, "Standby: error video (intento $newRetry/$maxRetryBeforeReport), reintentando...")
                 }
                 
                 if (standbyItems.size == 1) {
@@ -1027,19 +1039,33 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                         stopStandbyCarousel()
                     } else {
                         if (standbyIndex >= standbyItems.size) standbyIndex = 0
-                        playStandbyItem()
+                        uiHandler.postDelayed({
+                            playStandbyItem()
+                        }, 150)
                     }
                 }
                 true
             }
-            val videoFile = java.io.File(item.localPath)
+            
+            val videoFile = File(item.localPath)
             val videoUri = android.net.Uri.fromFile(videoFile)
-            binding.standbyVideo.setVideoURI(videoUri)
-            binding.standbyVideo.start()
+            
+            resetVideoView()
+            uiHandler.postDelayed({
+                binding.standbyVideo.setVideoURI(videoUri)
+                binding.standbyVideo.start()
+            }, 100)
         } else {
             binding.standbyImage.visibility = View.VISIBLE
             val reqWidth = if (binding.standbyImage.width > 0) binding.standbyImage.width else resources.displayMetrics.widthPixels
             val reqHeight = if (binding.standbyImage.height > 0) binding.standbyImage.height else resources.displayMetrics.heightPixels
+            
+            val imageFile = java.io.File(item.localPath)
+            if (!imageFile.exists()) {
+                Log.w(TAG, "Standby: el archivo de imagen desapareció justo antes de decodificar: ${item.localPath}")
+                nextStandbyItem()
+                return
+            }
             val bitmap = decodeSampledBitmap(item.localPath, reqWidth, reqHeight)
             if (bitmap == null) {
                 Log.w(TAG, "Standby: bitmap nulo para ${item.localPath}")
@@ -1088,7 +1114,6 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
             val decodeOptions = BitmapFactory.Options().apply {
                 inPreferredConfig = Bitmap.Config.RGB_565
-                inDither = true
                 inScaled = false
                 inSampleSize = calculateInSampleSize(bounds.outWidth, bounds.outHeight, reqWidth, reqHeight)
             }
@@ -1105,8 +1130,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private fun calculateInSampleSize(srcWidth: Int, srcHeight: Int, reqWidth: Int, reqHeight: Int): Int {
         var inSampleSize = 1
         if (srcHeight > reqHeight || srcWidth > reqWidth) {
-            var halfHeight = srcHeight / 2
-            var halfWidth = srcWidth / 2
+            val halfHeight = srcHeight / 2
+            val halfWidth = srcWidth / 2
             while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
                 inSampleSize *= 2
             }
@@ -1114,7 +1139,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         return inSampleSize.coerceAtLeast(1)
     }
 
-    // 2.1) Re-sincronizar respaldo local cuando vuelve la conexión
+    // 2.1 Re-sincronizar respaldo local cuando vuelve la conexión
     private fun resyncBackupIfOnline(service: ApiService) {
         scope.launch {
             try {
@@ -1167,7 +1192,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         if (ready && !backupReadyNotified) {
             backupReadyNotified = true
             uiHandler.post {
-                Toast.makeText(this, "Respaldo listo. Puedes salir", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, R.string.msg_backup_ready, Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -1179,7 +1204,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         return System.currentTimeMillis() - updatedAtMillis > backupMaxAgeMs
     }
 
-    // 2.2) Actualizar texto de última sincronización del backup
+    // 2.2 Actualizar texto de última sincronización del backup
     private fun updateOfflineTimestamp(backup: BackupResponse?) {
         val updatedAt = backup?.updatedAt
         val formatted = formatIsoToReadable(updatedAt) ?: "-"
@@ -1191,7 +1216,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         }
     }
 
-    // 2.4) Validar antigüedad del respaldo local (máx 12h)
+    // 2.4 Validar antigüedad del respaldo local (máx. 12 h)
     private fun isBackupStale(backup: BackupResponse?): Boolean {
         val updatedAtMillis = BackupUtils.parseIsoToMillis(backup?.updatedAt) ?: return true
         return System.currentTimeMillis() - updatedAtMillis > backupMaxAgeMs
@@ -1241,26 +1266,26 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 uiHandler.post {
                     feedbackSuccess()
                     showResult(producto)
-                    // Pausa el escáner 3s tras un éxito para evitar lecturas inmediatas repetidas
+                    // Pausa el escáner 3 s tras un éxito para evitar lecturas inmediatas repetidas
                     pauseUntil = android.os.SystemClock.elapsedRealtime() + 4000
                 }
             } catch (e: Exception) {
                 var setOffline = false
                 val (key, msg) = when (e) {
                     is HttpException -> when (e.code()) {
-                        404 -> "404" to "Producto no encontrado"
-                        in 500..599 -> "5xx" to "Error del servidor (${e.code()})"
-                        else -> "4xx" to "Error HTTP (${e.code()})"
+                        404 -> "404" to getString(R.string.error_product_not_found)
+                        in 500..599 -> "5xx" to getString(R.string.error_server, e.code())
+                        else -> "4xx" to getString(R.string.error_http, e.code())
                     }
                     is SocketTimeoutException -> {
                         setOffline = true
-                        "timeout" to "Tiempo de Conexion agotado"
+                        "timeout" to getString(R.string.error_timeout)
                     }
                     is IOException -> {
                         setOffline = true
-                        "network" to "Fallo de red o conexión"
+                        "network" to getString(R.string.error_network)
                     }
-                    else -> "unknown" to "Error inesperado"
+                    else -> "unknown" to getString(R.string.error_unexpected)
                 }
                 if (setOffline && !offlineMode) {
                     setOfflineMode(true)
@@ -1301,7 +1326,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 val producto = indexRepo.lookupProductoOffline(code)
                     ?: BackupRepository(this@ScanActivity).lookupProductoOffline(code)
                 if (producto == null) {
-                    uiHandler.post { showThrottledError("offline_not_found", "Producto no encontrado") }
+                    uiHandler.post { showThrottledError("offline_not_found", getString(R.string.error_product_not_found)) }
                     return@launch
                 }
                 uiHandler.post {
@@ -1327,13 +1352,13 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         val defaultPort = getString(R.string.default_port)
 
         if (sanitized.isNullOrBlank() || !NetworkUtils.validateHost(sanitized)) {
-            goToConfig("Configura IP/puerto primero")
+            goToConfig(getString(R.string.error_config_required))
             return false
         }
 
         val portToUse = port ?: defaultPort
         if (!NetworkUtils.validatePort(portToUse)) {
-            goToConfig("Puerto inválido. Regresando a configuración")
+            goToConfig(getString(R.string.error_invalid_port))
             return false
         }
 
@@ -1382,9 +1407,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                     if (backup != null) {
                         if (isBackupStale(backup)) {
                             uiHandler.post {
-                                showThrottledError("offline_stale", "Respaldo vencido (24h). Conéctate al servidor")
+                                showThrottledError("offline_stale", getString(R.string.error_backup_stale))
                             }
-                            goToConfig("Respaldo vencido. Regresando a configuración")
+                            goToConfig(getString(R.string.error_backup_stale))
                             return@launch
                         }
                         offlineBackup = backup
@@ -1395,7 +1420,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                         offlineRetry = true
                         continue
                     }
-                    goToConfig(reason ?: "Conexión perdida. Regresando a configuración")
+                    goToConfig(reason ?: getString(R.string.error_connection_lost))
                     return@launch
                 }
                 if (offlineMode || offlineRetry) {
@@ -1419,15 +1444,15 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 return true to null
             } catch (e: HttpException) {
                 lastReason = if (e.code() in 400..499) {
-                    "Ping falló (${e.code()}). Revisa la configuración"
+                    getString(R.string.error_ping_failed, e.code())
                 } else {
-                    "Servidor responde con error (${e.code()})"
+                    getString(R.string.error_server, e.code())
                 }
                 if (e.code() in 400..499) break
             } catch (_: SocketTimeoutException) {
-                lastReason = "Tiempo de Conexion agotado"
+                lastReason = getString(R.string.error_timeout)
             } catch (_: IOException) {
-                lastReason = "Ping sin conexión"
+                lastReason = getString(R.string.error_ping_no_connection)
             }
         }
         return false to lastReason
@@ -1466,7 +1491,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
         // Mostrar precio en Bs con separador de miles y decimales
         val precioBs = producto.pvpBaseOferta ?: producto.pvpBase ?: 0.0
-        val symbols = DecimalFormatSymbols(Locale("es", "VE")).apply {
+        val symbols = DecimalFormatSymbols(Locale.Builder().setLanguage("es").setRegion("VE").build()).apply {
             groupingSeparator = '.'
             decimalSeparator = ','
         }
@@ -1502,29 +1527,29 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             binding.tvPrecioOferta.text = String.format(Locale.US, "$%.2f", producto.pvpOferta)
             // Mostrar precio en bolívares en la oferta
             val precioBs = producto.pvpBaseOferta ?: producto.pvpBase ?: 0.0
-            val symbols = DecimalFormatSymbols(Locale("es", "VE")).apply {
+            val symbols = DecimalFormatSymbols(Locale.Builder().setLanguage("es").setRegion("VE").build()).apply {
                 groupingSeparator = '.'
                 decimalSeparator = ','
             }
             val formatter = DecimalFormat("#,##0.##", symbols)
             val precioBsFormateado = formatter.format(precioBs)
-            binding.tvPrecioBsOferta.text = "Bs $precioBsFormateado"
+            binding.tvPrecioBsOferta.text = getString(R.string.precio_bs_formato, precioBsFormateado)
             
             // Reducir tamaño si el texto supera 25 caracteres (usando tamaños del XML)
-            val tamanoNombreOferta = resources.getDimension(R.dimen.text_size_nombre_oferta) / resources.displayMetrics.scaledDensity
+            val tamanoNombreOferta = resources.getDimension(R.dimen.text_size_nombre_oferta) / resources.displayMetrics.density
             val tamanoNombreReducido = tamanoNombreOferta * 0.8f
             if (producto.nombre.length > 25) {
                 binding.tvNombreOferta.textSize = tamanoNombreReducido
             }
             
-            val tamanoPrecioOferta = resources.getDimension(R.dimen.text_size_precio_oferta) / resources.displayMetrics.scaledDensity
+            val tamanoPrecioOferta = resources.getDimension(R.dimen.text_size_precio_oferta) / resources.displayMetrics.density
             val tamanoPrecioOfertaReducido = tamanoPrecioOferta * 0.8f
             val precioOfertaText = String.format(Locale.US, "$%.2f", producto.pvpOferta)
             if (precioOfertaText.length > 25) {
                 binding.tvPrecioOferta.textSize = tamanoPrecioOfertaReducido
             }
             
-            val tamanoPrecioBsOferta = resources.getDimension(R.dimen.text_size_precio_bs_oferta) / resources.displayMetrics.scaledDensity
+            val tamanoPrecioBsOferta = resources.getDimension(R.dimen.text_size_precio_bs_oferta) / resources.displayMetrics.density
             val tamanoPrecioBsOfertaReducido = tamanoPrecioBsOferta * 0.8f
             val precioBsOfertaText = "Bs $precioBsFormateado"
             if (precioBsOfertaText.length > 25) {
@@ -1682,7 +1707,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                     isKioskMode = true
                     Log.i(TAG, "Modo kiosco activado en onResume (delayed)")
                 }
-            }, 500) // 500ms de delay
+            }, 500) // 500 ms de delay
         }
         
         resumeCameraIfAvailable()  // Solo reiniciar cámara si está disponible
@@ -1708,19 +1733,6 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         runOnUiThread {
             findViewById<android.widget.FrameLayout>(R.id.progressContainer).visibility = View.GONE
         }
-    }
-
-    // Método para manejar mensajes de WebSocket
-    private fun handleWebSocketMessage(message: String) {
-        // Ejemplo de parseo simple, ajustar según formato real
-        if (message == "WIPE_AND_RESYNC") {
-            val apiService = api ?: return
-            val baseUrl = backendBaseUrl ?: return
-            scope.launch {
-                ejecutarPurgaTotal(this@ScanActivity, apiService, baseUrl, deviceId)
-            }
-        }
-        // ...otros comandos...
     }
 
     private fun startTabletWebSocket() {
@@ -1785,181 +1797,216 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                         } catch (e: Exception) {
                             Log.e(TAG, "[WebSocket] Error enviando confirmación", e)
                         }
-                        if (command == "WIPE_AND_RESYNC") {
-                            Log.i(TAG, "[WebSocket] Comando WIPE_AND_RESYNC recibido. Pausando carrusel antes de purga...")
-                            
-                            // 1. PAUSAR el carrusel INMEDIATAMENTE antes de borrar archivos
-                            uiHandler.post {
-                                stopStandbyCarousel()
-                                binding.standbyOverlay.visibility = View.GONE
-                                Log.d(TAG, "[WebSocket] Carrusel detenido y overlay ocultado")
-                            }
-                            
-                            scope.launch {
-                                val apiService = api
-                                if (apiService == null) {
-                                    sendSyncConfirmation(webSocket, command, "FAILED", "ApiService no inicializado")
-                                    return@launch
-                                }
+                        when (command) {
+                            "WIPE_AND_RESYNC" -> {
+                                Log.i(
+                                    TAG,
+                                    "[WebSocket] Comando WIPE_AND_RESYNC recibido. Pausando carrusel antes de purga..."
+                                )
 
-                                // 2. Ejecutar purga SIN callback de inicio de carrusel
-                                val purgeResult = ejecutarPurgaTotal(this@ScanActivity, apiService, baseUrl, deviceId) {
-                                    // Callback vacío - controlamos el inicio manualmente
-                                }
-
-                                // 3. Solo iniciar carrusel DESPUÉS de que la purga termine exitosamente
+                                // 1. PAUSAR el carrusel INMEDIATAMENTE antes de borrar archivos
                                 uiHandler.post {
-                                    if (purgeResult.success) {
-                                        Log.i(TAG, "[WebSocket] Purga exitosa, iniciando carrusel...")
-                                        startStandbyCarousel()
-                                    } else {
-                                        Log.w(TAG, "[WebSocket] Purga fallida, no se inicia carrusel")
-                                        sendSyncConfirmation(webSocket, command, "FAILED", purgeResult.reason ?: "Purga fallida")
-                                    }
+                                    stopStandbyCarousel()
+                                    binding.standbyOverlay.visibility = View.GONE
+                                    Log.d(TAG, "[WebSocket] Carrusel detenido y overlay ocultado")
                                 }
 
-                                if (purgeResult.success) {
-                                    sendSyncConfirmation(webSocket, command, "SUCCESS")
-                                } else {
-                                    sendSyncConfirmation(webSocket, command, "FAILED", purgeResult.reason ?: "Purga fallida")
-                                }
-                            }
-                        } else if (command == "BANNER_INICIADO") {
-                            val bannerId = message.optInt("banner_id", 0)
-                            val titulo = message.optString("titulo", "")
-                            Log.i(TAG, "[WebSocket] BANNER_INICIADO recibido: id=$bannerId, titulo=$titulo")
-                            
-                            // Recargar banners inmediatamente cuando un banner comienza
-                            uiHandler.post {
-                                syncBannersOnStart()
-                                Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_INICIADO")
-                                // Confirmar al backend que el banner fue recibido
-                                sendSyncConfirmation(webSocket, command, "SUCCESS")
-                            }
-                        } else if (command == "BANNER_FINALIZADO") {
-                            val bannerId = message.optInt("banner_id", 0)
-                            val titulo = message.optString("titulo", "")
-                            val bannerUrl = message.optString("url", "")
-                            Log.i(TAG, "[WebSocket] BANNER_FINALIZADO recibido: id=$bannerId, titulo=$titulo")
-                            
-                            // Eliminar archivo local del banner que terminó
-                            if (bannerId > 0 && bannerUrl.isNotEmpty()) {
-                                deleteBannerFile(bannerId, bannerUrl)
-                            }
-                            
-                            // Recargar banners inmediatamente cuando un banner termina
-                            uiHandler.post {
-                                syncBannersOnStart()
-                                Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_FINALIZADO")
-                                // Confirmar al backend que el banner fue recibido
-                                sendSyncConfirmation(webSocket, command, "SUCCESS")
-                            }
-                        } else if (command == "REINICIAR") {
-                            Log.i(TAG, "[WebSocket] ==== REINICIAR COMMAND RECEIVED ====")
-                            val scheduledAt = message.optString("scheduled_at", "")
-                            val targetHour = message.optString("hour", "") // formato "06:35"
-                            val isRecurring = message.optBoolean("recurring", false)
-                            Log.i(TAG, "[WebSocket] hour=$targetHour, scheduled_at=$scheduledAt, recurring=$isRecurring")
-                            
-                            try {
-                                val pkgName = applicationContext.packageName
-                                Log.i(TAG, "[WebSocket] Verificando si es Device Owner: $pkgName")
-                                
-                                // Guardar configuración recurrente si aplica
-                                if (dpm.isDeviceOwnerApp(pkgName)) {
-                                    val prefs = getSharedPreferences("reinicio_config", Context.MODE_PRIVATE)
-                                    
-                                    if (isRecurring && targetHour.isNotEmpty()) {
-                                        Log.i(TAG, "[WebSocket] Guardando configuración de reinicio recurrente")
-                                        prefs.edit()
-                                            .putString("hora_reinicio", targetHour)
-                                            .putBoolean("recurrente", true)
-                                            .apply()
-                                        Log.i(TAG, "[WebSocket] Configuración guardada: hora=$targetHour, recurrente=true")
-                                    } else if (!isRecurring) {
-                                        prefs.edit()
-                                            .putBoolean("recurrente", false)
-                                            .apply()
+                                scope.launch {
+                                    val apiService = api
+                                    if (apiService == null) {
+                                        sendSyncConfirmation(webSocket, command, "FAILED", "ApiService no inicializado")
+                                        return@launch
+                                    }
+
+                                    // 2. Ejecutar purga SIN callback de inicio de carrusel
+                                    val purgeResult = ejecutarPurgaTotal(this@ScanActivity, apiService, baseUrl, deviceId) {
+                                        // Callback vacío - controlamos el inicio manualmente
+                                    }
+
+                                    // 3. Solo iniciar carrusel DESPUÉS de que la purga termine exitosamente
+                                    uiHandler.post {
+                                        if (purgeResult.success) {
+                                            Log.i(TAG, "[WebSocket] Purga exitosa, iniciando carrusel...")
+                                            startStandbyCarousel()
+                                        } else {
+                                            Log.w(TAG, "[WebSocket] Purga fallida, no se inicia carrusel")
+                                            sendSyncConfirmation(
+                                                webSocket,
+                                                command,
+                                                "FAILED",
+                                                purgeResult.reason ?: "Purga fallida"
+                                            )
+                                        }
+                                    }
+
+                                    if (purgeResult.success) {
+                                        sendSyncConfirmation(webSocket, command, "SUCCESS")
+                                    } else {
+                                        sendSyncConfirmation(
+                                            webSocket,
+                                            command,
+                                            "FAILED",
+                                            purgeResult.reason ?: "Purga fallida"
+                                        )
                                     }
                                 }
-                                
-                                // Si hay hour, calcular delay en timezone del dispositivo
-                                if (targetHour.isNotEmpty()) {
-                                    val delay = calcularProximaReinicio(targetHour)
-                                    
-                                    if (delay > 0) {
-                                        Log.i(TAG, "[WebSocket] Programando reinicio para dentro de ${delay/1000/60} minutos")
+                            }
+                            "BANNER_INICIADO" -> {
+                                val bannerId = message.optInt("banner_id", 0)
+                                val titulo = message.optString("titulo", "")
+                                Log.i(TAG, "[WebSocket] BANNER_INICIADO recibido: id=$bannerId, titulo=$titulo")
+
+                                // Recargar banners inmediatamente cuando un banner comienza
+                                uiHandler.post {
+                                    syncBannersOnStart()
+                                    Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_INICIADO")
+                                    // Confirmar al backend que el banner fue recibido
+                                    sendSyncConfirmation(webSocket, command, "SUCCESS")
+                                }
+                            }
+                            "BANNER_FINALIZADO" -> {
+                                val bannerId = message.optInt("banner_id", 0)
+                                val titulo = message.optString("titulo", "")
+                                val bannerUrl = message.optString("url", "")
+                                Log.i(TAG, "[WebSocket] BANNER_FINALIZADO recibido: id=$bannerId, titulo=$titulo")
+
+                                // Eliminar archivo local del banner que terminó
+                                if (bannerId > 0 && bannerUrl.isNotEmpty()) {
+                                    deleteBannerFile(bannerId, bannerUrl)
+                                }
+
+                                // Recargar banners inmediatamente cuando un banner termina
+                                uiHandler.post {
+                                    syncBannersOnStart()
+                                    Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_FINALIZADO")
+                                    // Confirmar al backend que el banner fue recibido
+                                    sendSyncConfirmation(webSocket, command, "SUCCESS")
+                                }
+                            }
+                            "REINICIAR" -> {
+                                Log.i(TAG, "[WebSocket] ==== REINICIAR COMMAND RECEIVED ====")
+                                val scheduledAt = message.optString("scheduled_at", "")
+                                val targetHour = message.optString("hour", "") // formato "06:35"
+                                val isRecurring = message.optBoolean("recurring", false)
+                                Log.i(
+                                    TAG,
+                                    "[WebSocket] hour=$targetHour, scheduled_at=$scheduledAt, recurring=$isRecurring"
+                                )
+
+                                try {
+                                    val pkgName = applicationContext.packageName
+                                    Log.i(TAG, "[WebSocket] Verificando si es Device Owner: $pkgName")
+
+                                    // Guardar configuración recurrente si aplica
+                                    if (dpm.isDeviceOwnerApp(pkgName)) {
+                                        val prefs = getSharedPreferences("reinicio_config", MODE_PRIVATE)
+
+                                        if (isRecurring && targetHour.isNotEmpty()) {
+                                            Log.i(TAG, "[WebSocket] Guardando configuración de reinicio recurrente")
+                                            prefs.edit()
+                                                .putString("hora_reinicio", targetHour)
+                                                .putBoolean("recurrente", true)
+                                                .apply()
+                                            Log.i(
+                                                TAG,
+                                                "[WebSocket] Configuración guardada: hora=$targetHour, recurrente=true"
+                                            )
+                                        } else if (!isRecurring) {
+                                            prefs.edit()
+                                                .putBoolean("recurrente", false)
+                                                .apply()
+                                        }
+                                    }
+
+                                    // Sí hay hour, calcular delay en timezone del dispositivo
+                                    if (targetHour.isNotEmpty()) {
+                                        val delay = calcularProximaReinicio(targetHour)
+
+                                        if (delay > 0) {
+                                            Log.i(
+                                                TAG,
+                                                "[WebSocket] Programando reinicio para dentro de ${delay / 1000 / 60} minutos"
+                                            )
+                                            sendSyncConfirmation(webSocket, command, "RECEIVED")
+                                            uiHandler.postDelayed({
+                                                ejecutarReinicio(dpm, adminComponent, webSocket, command)
+                                            }, delay)
+                                            return
+                                        } else {
+                                            Log.i(
+                                                TAG,
+                                                "[WebSocket] La hora programada ya pasó hoy, ejecutando inmediatamente"
+                                            )
+                                        }
+                                    } else if (scheduledAt.isNotEmpty()) {
+                                        // Legacy: usar scheduled_at para backward compatibility
+                                        try {
+                                            val normalizedAt =
+                                                scheduledAt.replace("+00:00", "+0000").replace("+00", "+0000")
+                                            val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.US)
+                                            val targetTime = isoFormat.parse(normalizedAt)
+
+                                            if (targetTime != null) {
+                                                val now = System.currentTimeMillis()
+                                                val delayLegacy = targetTime.time - now
+
+                                                if (delayLegacy > 0) {
+                                                    Log.i(
+                                                        TAG,
+                                                        "[WebSocket] Programando reinicio legacy para dentro de ${delayLegacy / 1000 / 60} minutos"
+                                                    )
+                                                    sendSyncConfirmation(webSocket, command, "RECEIVED")
+                                                    uiHandler.postDelayed({
+                                                        ejecutarReinicio(dpm, adminComponent, webSocket, command)
+                                                    }, delayLegacy)
+                                                    return
+                                                }
+                                            }
+                                        } catch (e: Exception) {
+                                            Log.e(TAG, "[WebSocket] Error parseando scheduled_at: ${e.message}")
+                                        }
+                                    }
+
+                                    // Reinicio inmediato o sin hour
+                                    if (dpm.isDeviceOwnerApp(pkgName)) {
+                                        Log.i(TAG, "[WebSocket] ES Device Owner - ejecutando reinicio automático")
                                         sendSyncConfirmation(webSocket, command, "RECEIVED")
+                                        Log.i(TAG, "[WebSocket] Confirmación RECEIVED enviada, ejecutando reinicio...")
                                         uiHandler.postDelayed({
                                             ejecutarReinicio(dpm, adminComponent, webSocket, command)
-                                        }, delay)
-                                        return
+                                        }, 2000)
                                     } else {
-                                        Log.i(TAG, "[WebSocket] La hora programada ya pasó hoy, ejecutando inmediatamente")
-                                    }
-                                } else if (scheduledAt.isNotEmpty()) {
-                                    // Legacy: usar scheduled_at para backward compatibility
-                                    try {
-                                        val normalizedAt = scheduledAt.replace("+00:00", "+0000").replace("+00", "+0000")
-                                        val isoFormat = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.US)
-                                        val targetTime = isoFormat.parse(normalizedAt)
-                                        
-                                        if (targetTime != null) {
-                                            val now = System.currentTimeMillis()
-                                            val delayLegacy = targetTime.time - now
-                                            
-                                            if (delayLegacy > 0) {
-                                                Log.i(TAG, "[WebSocket] Programando reinicio legacy para dentro de ${delayLegacy/1000/60} minutos")
-                                                sendSyncConfirmation(webSocket, command, "RECEIVED")
-                                                uiHandler.postDelayed({
-                                                    ejecutarReinicio(dpm, adminComponent, webSocket, command)
-                                                }, delayLegacy)
-                                                return
+                                        // No es Device Owner: mostrar diálogo
+                                        Log.i(TAG, "[WebSocket] NO es Device Owner - mostrando diálogo...")
+                                        sendSyncConfirmation(webSocket, command, "RECEIVED")
+                                        runOnUiThread {
+                                            try {
+                                                Log.i(TAG, "[WebSocket] Intentando mostrar diálogo...")
+                                                val alertDialog = android.app.AlertDialog.Builder(this@ScanActivity)
+                                                    .setTitle("Reinicio solicitado")
+                                                    .setMessage("El servidor ha solicitado el reinicio del dispositivo.\n\nPor favor, mantén presionado el botón de Encendido para reiniciar.")
+                                                    .setPositiveButton("Aceptar") { _, _ ->
+                                                        Log.i(TAG, "[WebSocket] Usuario presionó Aceptar")
+                                                        sendSyncConfirmation(webSocket, command, "COMPLETED")
+                                                    }
+                                                    .setCancelable(false)
+                                                    .create()
+                                                alertDialog.show()
+                                                Log.i(TAG, "[WebSocket] Diálogo mostrado correctamente")
+                                            } catch (e: Exception) {
+                                                Log.e(TAG, "[WebSocket] Error al mostrar diálogo: ${e.message}")
+                                                sendSyncConfirmation(webSocket, command, "FAILED", "Error: ${e.message}")
                                             }
                                         }
-                                    } catch (e: Exception) {
-                                        Log.e(TAG, "[WebSocket] Error parseando scheduled_at: ${e.message}")
                                     }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "[WebSocket] Error preparando reinicio: ${e.message}")
+                                    sendSyncConfirmation(webSocket, command, "FAILED", "Error: ${e.message}")
                                 }
-                                
-                                // Reinicio inmediato o sin hour
-                                if (dpm.isDeviceOwnerApp(pkgName)) {
-                                    Log.i(TAG, "[WebSocket] ES Device Owner - ejecutando reinicio automático")
-                                    sendSyncConfirmation(webSocket, command, "RECEIVED")
-                                    Log.i(TAG, "[WebSocket] Confirmación RECEIVED enviada, ejecutando reinicio...")
-                                    uiHandler.postDelayed({
-                                        ejecutarReinicio(dpm, adminComponent, webSocket, command)
-                                    }, 2000)
-                                } else {
-                                    // No es Device Owner: mostrar diálogo
-                                    Log.i(TAG, "[WebSocket] NO es Device Owner - mostrando diálogo...")
-                                    sendSyncConfirmation(webSocket, command, "RECEIVED")
-                                    runOnUiThread {
-                                        try {
-                                            Log.i(TAG, "[WebSocket] Intentando mostrar diálogo...")
-                                            val alertDialog = android.app.AlertDialog.Builder(this@ScanActivity)
-                                                .setTitle("Reinicio solicitado")
-                                                .setMessage("El servidor ha solicitado el reinicio del dispositivo.\n\nPor favor, mantén presionado el botón de Encendido para reiniciar.")
-                                                .setPositiveButton("Aceptar") { _, _ ->
-                                                    Log.i(TAG, "[WebSocket] Usuario presionó Aceptar")
-                                                    sendSyncConfirmation(webSocket, command, "COMPLETED")
-                                                }
-                                                .setCancelable(false)
-                                                .create()
-                                            alertDialog.show()
-                                            Log.i(TAG, "[WebSocket] Diálogo mostrado correctamente")
-                                        } catch (e: Exception) {
-                                            Log.e(TAG, "[WebSocket] Error al mostrar diálogo: ${e.message}")
-                                            sendSyncConfirmation(webSocket, command, "FAILED", "Error: ${e.message}")
-                                        }
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                Log.e(TAG, "[WebSocket] Error preparando reinicio: ${e.message}")
-                                sendSyncConfirmation(webSocket, command, "FAILED", "Error: ${e.message}")
                             }
-                        } else {
-                            Log.i(TAG, "[WebSocket] Comando recibido no reconocido: $command")
+                            else -> {
+                                Log.i(TAG, "[WebSocket] Comando recibido no reconocido: $command")
+                            }
                         }
                     } catch (e: Exception) {
                         Log.e(TAG, "[WebSocket] Error procesando mensaje WebSocket (texto)", e)
@@ -1994,99 +2041,124 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                         } catch (e: Exception) {
                             Log.e(TAG, "[WebSocket] Error enviando confirmación (binario)", e)
                         }
-                        if (command == "WIPE_AND_RESYNC") {
-                            Log.i(TAG, "[WebSocket] Comando WIPE_AND_RESYNC recibido (binario). Ejecutando purga total...")
-                            scope.launch {
-                                val apiService = api
-                                if (apiService == null) {
-                                    sendSyncConfirmation(webSocket, command, "FAILED", "ApiService no inicializado")
-                                    return@launch
-                                }
+                        when (command) {
+                            "WIPE_AND_RESYNC" -> {
+                                Log.i(
+                                    TAG,
+                                    "[WebSocket] Comando WIPE_AND_RESYNC recibido (binario). Ejecutando purga total..."
+                                )
+                                scope.launch {
+                                    val apiService = api
+                                    if (apiService == null) {
+                                        sendSyncConfirmation(webSocket, command, "FAILED", "ApiService no inicializado")
+                                        return@launch
+                                    }
 
-                                val purgeResult = ejecutarPurgaTotal(this@ScanActivity, apiService, baseUrl, deviceId) {
-                                    uiHandler.post {
-                                        stopStandbyCarousel()
-                                        startStandbyCarousel()
+                                    val purgeResult = ejecutarPurgaTotal(this@ScanActivity, apiService, baseUrl, deviceId) {
+                                        uiHandler.post {
+                                            stopStandbyCarousel()
+                                            startStandbyCarousel()
+                                        }
+                                    }
+
+                                    if (purgeResult.success) {
+                                        sendSyncConfirmation(webSocket, command, "SUCCESS")
+                                    } else {
+                                        sendSyncConfirmation(
+                                            webSocket,
+                                            command,
+                                            "FAILED",
+                                            purgeResult.reason ?: "Purga fallida"
+                                        )
                                     }
                                 }
+                            }
+                            "BANNER_INICIADO" -> {
+                                val bannerId = message.optInt("banner_id", 0)
+                                val titulo = message.optString("titulo", "")
+                                Log.i(TAG, "[WebSocket] BANNER_INICIADO recibido (binario): id=$bannerId, titulo=$titulo")
 
-                                if (purgeResult.success) {
+                                uiHandler.post {
+                                    syncBannersOnStart()
+                                    Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_INICIADO (binario)")
+                                    // Confirmar al backend que el banner fue recibido
                                     sendSyncConfirmation(webSocket, command, "SUCCESS")
-                                } else {
-                                    sendSyncConfirmation(webSocket, command, "FAILED", purgeResult.reason ?: "Purga fallida")
                                 }
                             }
-                        } else if (command == "BANNER_INICIADO") {
-                            val bannerId = message.optInt("banner_id", 0)
-                            val titulo = message.optString("titulo", "")
-                            Log.i(TAG, "[WebSocket] BANNER_INICIADO recibido (binario): id=$bannerId, titulo=$titulo")
-                            
-                            uiHandler.post {
-                                syncBannersOnStart()
-                                Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_INICIADO (binario)")
-                                // Confirmar al backend que el banner fue recibido
-                                sendSyncConfirmation(webSocket, command, "SUCCESS")
+                            "BANNER_FINALIZADO" -> {
+                                val bannerId = message.optInt("banner_id", 0)
+                                val titulo = message.optString("titulo", "")
+                                val bannerUrl = message.optString("url", "")
+                                Log.i(TAG, "[WebSocket] BANNER_FINALIZADO recibido (binario): id=$bannerId, titulo=$titulo")
+
+                                // Eliminar archivo local del banner que terminó
+                                if (bannerId > 0 && bannerUrl.isNotEmpty()) {
+                                    deleteBannerFile(bannerId, bannerUrl)
+                                }
+
+                                uiHandler.post {
+                                    syncBannersOnStart()
+                                    Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_FINALIZADO (binario)")
+                                    // Confirmar al backend que el banner fue recibido
+                                    sendSyncConfirmation(webSocket, command, "SUCCESS")
+                                }
                             }
-                        } else if (command == "BANNER_FINALIZADO") {
-                            val bannerId = message.optInt("banner_id", 0)
-                            val titulo = message.optString("titulo", "")
-                            val bannerUrl = message.optString("url", "")
-                            Log.i(TAG, "[WebSocket] BANNER_FINALIZADO recibido (binario): id=$bannerId, titulo=$titulo")
-                            
-                            // Eliminar archivo local del banner que terminó
-                            if (bannerId > 0 && bannerUrl.isNotEmpty()) {
-                                deleteBannerFile(bannerId, bannerUrl)
-                            }
-                            
-                            uiHandler.post {
-                                syncBannersOnStart()
-                                Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_FINALIZADO (binario)")
-                                // Confirmar al backend que el banner fue recibido
-                                sendSyncConfirmation(webSocket, command, "SUCCESS")
-                            }
-                        } else if (command == "REINICIAR") {
-                            Log.i(TAG, "[WebSocket] Comando REINICIAR recibido (binario). Ejecutando reinicio del dispositivo...")
-                            try {
-                                val pkgName = applicationContext.packageName
-                                if (dpm.isDeviceOwnerApp(pkgName)) {
-                                    Log.i(TAG, "[WebSocket] ES Device Owner (binario) - ejecutando reinicio")
-                                    sendSyncConfirmation(webSocket, command, "RECEIVED")
-                                    Log.i(TAG, "[WebSocket] Confirmación RECEIVED enviada (binario), ejecutando reinicio...")
-                                    uiHandler.postDelayed({
-                                        try {
-                                            dpm.reboot(adminComponent)
-                                        } catch (e: Exception) {
-                                            Log.e(TAG, "[WebSocket] Error al ejecutar reinicio (binario): ${e.message}")
-                                            sendSyncConfirmation(webSocket, command, "FAILED", "Error al reiniciar: ${e.message}")
-                                        }
-                                    }, 2000)
-                                } else {
-                                    Log.i(TAG, "[WebSocket] NO es Device Owner (binario) - mostrando diálogo...")
-                                    sendSyncConfirmation(webSocket, command, "RECEIVED")
-                                    runOnUiThread {
-                                        try {
-                                            val alertDialog = android.app.AlertDialog.Builder(this@ScanActivity)
-                                                .setTitle("Reinicio solicitado")
-                                                .setMessage("El servidor ha solicitado el reinicio del dispositivo.\n\nPor favor, mantén presionado el botón de Encendido para reiniciar.")
-                                                .setPositiveButton("Aceptar") { _, _ ->
-                                                    Log.i(TAG, "[WebSocket] Usuario presionó Aceptar (binario)")
-                                                    sendSyncConfirmation(webSocket, command, "COMPLETED")
-                                                }
-                                                .setCancelable(false)
-                                                .create()
-                                            alertDialog.show()
-                                        } catch (e: Exception) {
-                                            Log.e(TAG, "[WebSocket] Error al mostrar diálogo (binario): ${e.message}")
-                                            sendSyncConfirmation(webSocket, command, "FAILED", "Error: ${e.message}")
+                            "REINICIAR" -> {
+                                Log.i(
+                                    TAG,
+                                    "[WebSocket] Comando REINICIAR recibido (binario). Ejecutando reinicio del dispositivo..."
+                                )
+                                try {
+                                    val pkgName = applicationContext.packageName
+                                    if (dpm.isDeviceOwnerApp(pkgName)) {
+                                        Log.i(TAG, "[WebSocket] ES Device Owner (binario) - ejecutando reinicio")
+                                        sendSyncConfirmation(webSocket, command, "RECEIVED")
+                                        Log.i(
+                                            TAG,
+                                            "[WebSocket] Confirmación RECEIVED enviada (binario), ejecutando reinicio..."
+                                        )
+                                        uiHandler.postDelayed({
+                                            try {
+                                                dpm.reboot(adminComponent)
+                                            } catch (e: Exception) {
+                                                Log.e(TAG, "[WebSocket] Error al ejecutar reinicio (binario): ${e.message}")
+                                                sendSyncConfirmation(
+                                                    webSocket,
+                                                    command,
+                                                    "FAILED",
+                                                    "Error al reiniciar: ${e.message}"
+                                                )
+                                            }
+                                        }, 2000)
+                                    } else {
+                                        Log.i(TAG, "[WebSocket] NO es Device Owner (binario) - mostrando diálogo...")
+                                        sendSyncConfirmation(webSocket, command, "RECEIVED")
+                                        runOnUiThread {
+                                            try {
+                                                val alertDialog = android.app.AlertDialog.Builder(this@ScanActivity)
+                                                    .setTitle("Reinicio solicitado")
+                                                    .setMessage("El servidor ha solicitado el reinicio del dispositivo.\n\nPor favor, mantén presionado el botón de Encendido para reiniciar.")
+                                                    .setPositiveButton("Aceptar") { _, _ ->
+                                                        Log.i(TAG, "[WebSocket] Usuario presionó Aceptar (binario)")
+                                                        sendSyncConfirmation(webSocket, command, "COMPLETED")
+                                                    }
+                                                    .setCancelable(false)
+                                                    .create()
+                                                alertDialog.show()
+                                            } catch (e: Exception) {
+                                                Log.e(TAG, "[WebSocket] Error al mostrar diálogo (binario): ${e.message}")
+                                                sendSyncConfirmation(webSocket, command, "FAILED", "Error: ${e.message}")
+                                            }
                                         }
                                     }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "[WebSocket] Error preparando reinicio (binario): ${e.message}")
+                                    sendSyncConfirmation(webSocket, command, "FAILED", "Error: ${e.message}")
                                 }
-                            } catch (e: Exception) {
-                                Log.e(TAG, "[WebSocket] Error preparando reinicio (binario): ${e.message}")
-                                sendSyncConfirmation(webSocket, command, "FAILED", "Error: ${e.message}")
                             }
-                        } else {
-                            Log.i(TAG, "[WebSocket] Comando recibido no reconocido (binario): $command")
+                            else -> {
+                                Log.i(TAG, "[WebSocket] Comando recibido no reconocido (binario): $command")
+                            }
                         }
                     } catch (e: Exception) {
                         Log.e(TAG, "[WebSocket] Error procesando mensaje WebSocket (binario)", e)
@@ -2180,7 +2252,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             playingMsg.put("device_id", deviceId)
             
             val content = org.json.JSONObject()
-            content.put("titulo", item.titulo ?: java.io.File(item.localPath).name)
+            content.put("titulo", item.titulo ?: File(item.localPath).name)
             content.put("url", item.remoteUrl)
             content.put("tipo", item.tipo)
             item.duracionSeg?.let { content.put("duracion", it) }
@@ -2206,7 +2278,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private fun showOutOfService() {
         runOnUiThread {
             binding.resultOverlay.visibility = View.VISIBLE
-            binding.tvNombre.text = "Fuera de Servicio"
+            binding.tvNombre.text = getString(R.string.fuera_de_servicio)
             binding.tvPrecioActual.text = ""
             binding.tvPrecioDolar.text = ""
             binding.tvIva.text = ""
@@ -2297,7 +2369,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
     private fun programarReinicioRecurrente() {
         try {
-            val prefs = getSharedPreferences("reinicio_config", Context.MODE_PRIVATE)
+            val prefs = getSharedPreferences("reinicio_config", MODE_PRIVATE)
             val horaReinicio = prefs.getString("hora_reinicio", null)
             val esRecurrente = prefs.getBoolean("recurrente", false)
             
@@ -2325,7 +2397,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 calendar.add(java.util.Calendar.DAY_OF_YEAR, 1)
             }
             
-            val alarmManager = getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager
+            val alarmManager = getSystemService(ALARM_SERVICE) as? android.app.AlarmManager
             if (alarmManager == null) {
                 Log.e(TAG, "[Reinicio] AlarmManager no disponible")
                 return
@@ -2348,20 +2420,12 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             
             // Usar setExactAndAllowWhileIdle para Android 6+
             try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    alarmManager.setExactAndAllowWhileIdle(
-                        android.app.AlarmManager.RTC_WAKEUP,
-                        calendar.timeInMillis,
-                        pendingIntent
-                    )
-                } else {
-                    alarmManager.setExactAndAllowWhileIdle(
-                        android.app.AlarmManager.RTC_WAKEUP,
-                        calendar.timeInMillis,
-                        pendingIntent
-                    )
-                }
-            } catch (e: SecurityException) {
+                alarmManager.setExactAndAllowWhileIdle(
+                    android.app.AlarmManager.RTC_WAKEUP,
+                    calendar.timeInMillis,
+                    pendingIntent
+                )
+            } catch (_: SecurityException) {
                 Log.w(TAG, "[Reinicio] SecurityException: usando set() como fallback")
                 alarmManager.set(
                     android.app.AlarmManager.RTC_WAKEUP,

@@ -63,7 +63,7 @@ jobs:
         run: |
           git config --local user.email "github-actions@github.com"
           git config --local user.name "GitHub Actions"
-          git add .version_number version.json luzapp.apk
+          git add -f .version_number version.json luzapp.apk
           git commit -m "build: APK v${{ steps.version.outputs.build_number }} - $(date +%Y-%m-%d)" || echo "No changes to commit"
           git push origin main || (
             echo "Push rejected, trying pull and retry..."

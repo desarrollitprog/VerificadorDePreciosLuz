@@ -17,6 +17,3 @@ local.properties
 # APK files
 *.apk
 /app/build/outputs/apk/
-
-# Version tracking
-.version_number

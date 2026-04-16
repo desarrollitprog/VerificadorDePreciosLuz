@@ -98,9 +98,8 @@ local.properties
 *.jks
 *.keystore
 
-# APKs and AABs
-*.apk
-*.ap_*
+# APKs and AABs (except luzapp.apk for releases)
+*.ap_
 *.aab
 !luzapp.apk
 .version_number

@@ -33,19 +33,24 @@ jobs:
       - name: Create version.json
         run: |
           VERSION=$(date +%Y%m%d)
+          DATE=$(date +%Y-%m-%d)
           APK_PATH="luzapp/app/build/outputs/apk/debug"
           APK=$(ls $APK_PATH/*.apk | head -1)
           CHECKSUM=$(sha256sum "$APK" | cut -d' ' -f1)
-          FILENAME=$(basename "$APK")
-          echo "{\"version\": \"$VERSION\", \"min_version\": \"1.0.0\", \"download_url\": \"https://github.com/TavorL25/VerificadorDePreciosLuz/releases/latest/download/$FILENAME\", \"checksum\": \"$CHECKSUM\", \"changelog\": \"Actualización automática del $(date +%Y-%m-%d)\"}" > version.json
+          # Renombrar a luzapp.apk para el release
+          cp "$APK" luzapp.apk
+          echo "{\"version\": \"$VERSION\", \"min_version\": \"1.0.0\", \"download_url\": \"https://github.com/TavorL25/VerificadorDePreciosLuz/releases/download/daily/luzapp.apk\", \"checksum\": \"$CHECKSUM\", \"changelog\": \"Actualización automática del $DATE\"}" > version.json
         shell: bash
           
       - name: Upload APK to Release
         uses: softprops/action-gh-release@v1
         with:
-          files: luzapp/app/build/outputs/apk/debug/*.apk
+          files: luzapp.apk
           generate_release_notes: true
-          tag_name: daily-${{ github.run_id }}
+          tag_name: daily
+          name: "Daily Build"
+          draft: false
+          prerelease: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           

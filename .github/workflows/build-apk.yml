@@ -10,9 +10,6 @@ on:
       - main
   workflow_dispatch:
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -32,33 +29,31 @@ jobs:
           cd luzapp
           chmod +x gradlew
           ./gradlew assembleDebug
-        shell: bash
-        
-      - name: Update version.json
+          
+      - name: Create version.json
         run: |
           VERSION=$(date +%Y%m%d)
           APK_PATH="luzapp/app/build/outputs/apk/debug"
           APK=$(ls $APK_PATH/*.apk | head -1)
           CHECKSUM=$(sha256sum "$APK" | cut -d' ' -f1)
-          echo "{\"version\": \"$VERSION\", \"min_version\": \"1.0.0\", \"download_url\": \"https://tavorl25.github.io/VerificadorDePreciosLuz/luzapp.apk\", \"checksum\": \"$CHECKSUM\", \"changelog\": \"Actualización automática\"}" > version.json
+          FILENAME=$(basename "$APK")
+          echo "{\"version\": \"$VERSION\", \"min_version\": \"1.0.0\", \"download_url\": \"https://github.com/TavorL25/VerificadorDePreciosLuz/releases/latest/download/$FILENAME\", \"checksum\": \"$CHECKSUM\", \"changelog\": \"Actualización automática del $(date +%Y-%m-%d)\"}" > version.json
         shell: bash
           
-      - name: Copy APK
-        run: cp luzapp/app/build/outputs/apk/debug/*.apk luzapp.apk
-        shell: bash
-
-      - name: Commit files to repo
+      - name: Upload APK to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: luzapp/app/build/outputs/apk/debug/*.apk
+          generate_release_notes: true
+          tag_name: daily-${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Commit version.json (sin APK)
         run: |
           git config --local user.email "github-actions@github.com"
           git config --local user.name "GitHub Actions"
-          git fetch origin || true
-          git add version.json luzapp.apk
-          git commit -m "Update $(date +%Y%m%d)" || echo "No changes to commit"
-          git push origin main --force || (
-            echo "Push rejected, trying pull and retry..."
-            git pull --rebase origin main
-            git push origin main
-          )
+          git add version.json
+          git commit -m "Update version.json $(date +%Y%m%d)" || echo "No changes to commit"
+          git push origin main || echo "Push skipped - no changes"
         shell: bash
-          
-      

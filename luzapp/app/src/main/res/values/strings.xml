@@ -34,4 +34,23 @@
     <string name="sin_actualizacion_bcv">Sin Actualizacion del BCV</string>
     <string name="precio_bs_formato">Bs %1$s</string>
     <string name="fuera_de_servicio">Fuera de Servicio</string>
+    <string name="msg_no_banners">No hay banners disponibles</string>
+    <string name="error_downloading">Error descargando datos</string>
+    <string name="error_backup_not_ready">Backup no disponible</string>
+    <string name="msg_kiosk_disabled">Modo kiosco deshabilitado</string>
+    <string name="error_product_not_found">Producto no encontrado</string>
+    <string name="error_server">Error del servidor (%1$d)</string>
+    <string name="error_http">Error HTTP (%1$d)</string>
+    <string name="error_ping_no_connection">Sin conexión al servidor</string>
+    <string name="error_ping_failed">Error del servidor (%1$d)</string>
+    <string name="error_timeout">Tiempo de espera agotado</string>
+    <string name="error_backup_stale">Backup desactualizado</string>
+    <string name="error_connection_lost">Conexión perdida</string>
+    <string name="error_invalid_port">Puerto inválido</string>
+    <string name="error_config_required">Configuración requerida</string>
+    <string name="error_unexpected">Error inesperado</string>
+    <string name="error_network">Error de red</string>
+    <string name="msg_backup_ready">Backup listo</string>
+    <string name="error_invalid_code">Código inválido</string>
+
 </resources>

@@ -67,7 +67,7 @@ class BannerRepository(
         val absoluteUrl = if (item.url.startsWith("http")) item.url else baseUrl.trimEnd('/') + "/" + item.url.trimStart('/')
         val safeUrl = absoluteUrl.replace(" ", "%20")
         val ext = absoluteUrl.substringAfterLast('.', "")
-        val safeExt = if (ext.isBlank()) "bin" else ext
+        val safeExt = ext.ifBlank { "bin" }
         val fileName = "banner_${item.id}.$safeExt"
         val dir = File(context.filesDir, DIR_BANNERS)
         if (!dir.exists()) dir.mkdirs()

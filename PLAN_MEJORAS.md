@@ -155,7 +155,7 @@ Mejorar seguridad, performance, observabilidad y code quality del sistema de ges
 | FASE 7 (Fix Asignaciones + Vigencia) | 2/5 | 3/5 |
 | FASE 8 (Background Monitoring Sesiones) | 4/4 ✅ | 0/4 |
 | FASE 9 (Thumbnails Videos) | 6/6 ✅ | 0/6 |
-| FASE 10 (Limpieza Columnas) | 4/5 | 1/5 |
+| FASE 10 (Limpieza Columnas) | 5/5 ✅ | 0/5 |
 
 **Total: 16/27 completados (59%)**
 
@@ -600,12 +600,12 @@ nuevo_banner = Publicidad(..., ThumbnailUrl=thumbnail_url)
 
 ## Estado Actual: Progreso Total
 
-**Total: 19/28 completados (68%)**
+**Total: 24/28 completados (86%)**
 
 - FASE 1-4: ✅ Completas
 - FASE 5: ⏳ Pendiente (2 tareas manual en servidor)
 - FASE 6: ✅ Completada
 - FASE 7: 🔄 Parcial (40% - 2/5, tareas luzapp pendientes)
 - FASE 8: ✅ Completada
-- FASE 9: ⏳ Pendiente (thumbnails videos)
-- FASE 10: 🔄 Parcial (80% - 4/5, migración BD pendiente)
+- FASE 9: ✅ Completada
+- FASE 10: ✅ Completada

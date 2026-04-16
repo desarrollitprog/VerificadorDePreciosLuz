@@ -233,12 +233,12 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (isDownloading) {
-                    Toast.makeText(this@ScanActivity, "Descarga en progreso, espera...", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@ScanActivity, R.string.error_downloading, Toast.LENGTH_SHORT).show()
                     binding.etMockCode.requestFocus()
                     return
                 }
                 if (!backupReady) {
-                    Toast.makeText(this@ScanActivity, "Respaldo no está listo. Espera la sincronización", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@ScanActivity, R.string.error_backup_not_ready, Toast.LENGTH_SHORT).show()
                     binding.etMockCode.requestFocus()
                     return
                 }
@@ -383,7 +383,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                     Log.i(TAG, ">>> Código de salida detectado en TextWatcher! Desactivando modo kiosco...")
                     disableKioskMode()
                     isKioskMode = false
-                    Toast.makeText(this@ScanActivity, "Modo kiosco desactivado", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@ScanActivity, R.string.msg_kiosk_disabled, Toast.LENGTH_SHORT).show()
                     editable?.clear()
                     binding.etMockCode.requestFocus()
                     return
@@ -525,7 +525,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             Log.i(TAG, ">>> Código de salida detectado! Desactivando modo kiosco...")
             disableKioskMode()
             isKioskMode = false
-            Toast.makeText(this, "Modo kiosco desactivado", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.msg_kiosk_disabled, Toast.LENGTH_SHORT).show()
             // Limpiar el campo y no procesar más
             binding.etMockCode.text?.clear()
             return
@@ -534,7 +534,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         val clean = sanitizeCode(code)
         if (clean == null) {
             // Código no válido (longitud incorrecta)
-            Toast.makeText(this, "Código no válido. Use serial del producto.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.error_invalid_code, Toast.LENGTH_SHORT).show()
             binding.etMockCode.requestFocus()
             return
         }
@@ -699,28 +699,6 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         }
     }
 
-    // Elimina el archivo local de un banner específico
-    private fun deleteBannerFile(bannerId: Int, url: String) {
-        try {
-            val ext = url.substringAfterLast('.', "")
-            val safeExt = if (ext.isBlank()) "bin" else ext
-            val fileName = "banner_$bannerId.$safeExt"
-            val bannersDir = File(filesDir, "banners")
-            val file = File(bannersDir, fileName)
-            if (file.exists()) {
-                if (file.delete()) {
-                    Log.i(TAG, "[BannerCleanup] Archivo eliminado: $fileName")
-                } else {
-                    Log.w(TAG, "[BannerCleanup] No se pudo eliminar: $fileName")
-                }
-            } else {
-                Log.d(TAG, "[BannerCleanup] Archivo no existe: $fileName")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "[BannerCleanup] Error al eliminar archivo del banner $bannerId", e)
-        }
-    }
-
     // Inicia polling de banners cada 25 minutos
     private fun startBannerPolling() {
         val runnable = object : Runnable {
@@ -859,14 +837,14 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                     Log.w(TAG, "BCV: API devolvio vacio")
                     sendDebugLog("API devolvio vacio", today = today, cachedDate = cachedDate, cachedUsd = cachedUsd, cachedEur = cachedEur)
                     uiHandler.post {
-                        findViewById<android.widget.TextView>(R.id.cardDolarBc)?.text = "Sin Actualizacion del BCV"
+                        findViewById<android.widget.TextView>(R.id.cardDolarBc)?.text = getString(R.string.msg_no_bcv_update)
                         findViewById<android.widget.TextView>(R.id.cardDolarBc)?.visibility = View.VISIBLE
                     }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "BCV: Error fetching BCV rate", e)
                 uiHandler.post {
-                    findViewById<android.widget.TextView>(R.id.cardDolarBc)?.text = "Sin Actualizacion del BCV"
+                    findViewById<android.widget.TextView>(R.id.cardDolarBc)?.text = getString(R.string.msg_no_bcv_update)
                     findViewById<android.widget.TextView>(R.id.cardDolarBc)?.visibility = View.VISIBLE
                 }
             }
@@ -1033,6 +1011,11 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 true
             }
             val videoFile = java.io.File(item.localPath)
+            if (!videoFile.exists()) {
+                Log.w(TAG, "Standby: el archivo de video desapareció justo antes de reproducir: ${item.localPath}")
+                nextStandbyItem()
+                return
+            }
             val videoUri = android.net.Uri.fromFile(videoFile)
             binding.standbyVideo.setVideoURI(videoUri)
             binding.standbyVideo.start()
@@ -1040,6 +1023,13 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             binding.standbyImage.visibility = View.VISIBLE
             val reqWidth = if (binding.standbyImage.width > 0) binding.standbyImage.width else resources.displayMetrics.widthPixels
             val reqHeight = if (binding.standbyImage.height > 0) binding.standbyImage.height else resources.displayMetrics.heightPixels
+            
+            val imageFile = java.io.File(item.localPath)
+            if (!imageFile.exists()) {
+                Log.w(TAG, "Standby: el archivo de imagen desapareció justo antes de decodificar: ${item.localPath}")
+                nextStandbyItem()
+                return
+            }
             val bitmap = decodeSampledBitmap(item.localPath, reqWidth, reqHeight)
             if (bitmap == null) {
                 Log.w(TAG, "Standby: bitmap nulo para ${item.localPath}")
@@ -1167,7 +1157,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         if (ready && !backupReadyNotified) {
             backupReadyNotified = true
             uiHandler.post {
-                Toast.makeText(this, "Respaldo listo. Puedes salir", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, R.string.msg_backup_ready, Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -1248,19 +1238,19 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 var setOffline = false
                 val (key, msg) = when (e) {
                     is HttpException -> when (e.code()) {
-                        404 -> "404" to "Producto no encontrado"
-                        in 500..599 -> "5xx" to "Error del servidor (${e.code()})"
-                        else -> "4xx" to "Error HTTP (${e.code()})"
+                        404 -> "404" to getString(R.string.error_product_not_found)
+                        in 500..599 -> "5xx" to getString(R.string.error_server, e.code())
+                        else -> "4xx" to getString(R.string.error_http, e.code())
                     }
                     is SocketTimeoutException -> {
                         setOffline = true
-                        "timeout" to "Tiempo de Conexion agotado"
+                        "timeout" to getString(R.string.error_timeout)
                     }
                     is IOException -> {
                         setOffline = true
-                        "network" to "Fallo de red o conexión"
+                        "network" to getString(R.string.error_network)
                     }
-                    else -> "unknown" to "Error inesperado"
+                    else -> "unknown" to getString(R.string.error_unexpected)
                 }
                 if (setOffline && !offlineMode) {
                     setOfflineMode(true)
@@ -1301,7 +1291,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 val producto = indexRepo.lookupProductoOffline(code)
                     ?: BackupRepository(this@ScanActivity).lookupProductoOffline(code)
                 if (producto == null) {
-                    uiHandler.post { showThrottledError("offline_not_found", "Producto no encontrado") }
+                    uiHandler.post { showThrottledError("offline_not_found", getString(R.string.error_product_not_found)) }
                     return@launch
                 }
                 uiHandler.post {
@@ -1327,13 +1317,13 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         val defaultPort = getString(R.string.default_port)
 
         if (sanitized.isNullOrBlank() || !NetworkUtils.validateHost(sanitized)) {
-            goToConfig("Configura IP/puerto primero")
+            goToConfig(getString(R.string.error_config_required))
             return false
         }
 
         val portToUse = port ?: defaultPort
         if (!NetworkUtils.validatePort(portToUse)) {
-            goToConfig("Puerto inválido. Regresando a configuración")
+            goToConfig(getString(R.string.error_invalid_port))
             return false
         }
 
@@ -1382,9 +1372,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                     if (backup != null) {
                         if (isBackupStale(backup)) {
                             uiHandler.post {
-                                showThrottledError("offline_stale", "Respaldo vencido (24h). Conéctate al servidor")
+                                showThrottledError("offline_stale", getString(R.string.error_backup_stale))
                             }
-                            goToConfig("Respaldo vencido. Regresando a configuración")
+                            goToConfig(getString(R.string.error_backup_stale))
                             return@launch
                         }
                         offlineBackup = backup
@@ -1395,7 +1385,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                         offlineRetry = true
                         continue
                     }
-                    goToConfig(reason ?: "Conexión perdida. Regresando a configuración")
+                    goToConfig(reason ?: getString(R.string.error_connection_lost))
                     return@launch
                 }
                 if (offlineMode || offlineRetry) {
@@ -1419,15 +1409,15 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 return true to null
             } catch (e: HttpException) {
                 lastReason = if (e.code() in 400..499) {
-                    "Ping falló (${e.code()}). Revisa la configuración"
+                    getString(R.string.error_ping_failed, e.code())
                 } else {
-                    "Servidor responde con error (${e.code()})"
+                    getString(R.string.error_server, e.code())
                 }
                 if (e.code() in 400..499) break
             } catch (_: SocketTimeoutException) {
-                lastReason = "Tiempo de Conexion agotado"
+                lastReason = getString(R.string.error_timeout)
             } catch (_: IOException) {
-                lastReason = "Ping sin conexión"
+                lastReason = getString(R.string.error_ping_no_connection)
             }
         }
         return false to lastReason
@@ -1717,10 +1707,12 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             val apiService = api ?: return
             val baseUrl = backendBaseUrl ?: return
             scope.launch {
-                ejecutarPurgaTotal(this@ScanActivity, apiService, baseUrl, deviceId)
+                uiHandler.post { stopStandbyCarousel() }
+                ejecutarPurgaTotal(this@ScanActivity, apiService, baseUrl, deviceId) {
+                    uiHandler.post { startStandbyCarousel() }
+                }
             }
         }
-        // ...otros comandos...
     }
 
     private fun startTabletWebSocket() {
@@ -1842,16 +1834,11 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                             val bannerUrl = message.optString("url", "")
                             Log.i(TAG, "[WebSocket] BANNER_FINALIZADO recibido: id=$bannerId, titulo=$titulo")
                             
-                            // Eliminar archivo local del banner que terminó
-                            if (bannerId > 0 && bannerUrl.isNotEmpty()) {
-                                deleteBannerFile(bannerId, bannerUrl)
-                            }
-                            
-                            // Recargar banners inmediatamente cuando un banner termina
+                            // Recargar banners inmediatamente para actualizar la lista vigente
                             uiHandler.post {
                                 syncBannersOnStart()
                                 Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_FINALIZADO")
-                                // Confirmar al backend que el banner fue recibido
+                                // Confirmar al backend que el comando fue procesado
                                 sendSyncConfirmation(webSocket, command, "SUCCESS")
                             }
                         } else if (command == "REINICIAR") {
@@ -1938,9 +1925,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                         try {
                                             Log.i(TAG, "[WebSocket] Intentando mostrar diálogo...")
                                             val alertDialog = android.app.AlertDialog.Builder(this@ScanActivity)
-                                                .setTitle("Reinicio solicitado")
-                                                .setMessage("El servidor ha solicitado el reinicio del dispositivo.\n\nPor favor, mantén presionado el botón de Encendido para reiniciar.")
-                                                .setPositiveButton("Aceptar") { _, _ ->
+                                                .setTitle(R.string.title_reboot_requested)
+                                                .setMessage(R.string.msg_reboot_manual)
+                                                .setPositiveButton(android.R.string.ok) { _, _ ->
                                                     Log.i(TAG, "[WebSocket] Usuario presionó Aceptar")
                                                     sendSyncConfirmation(webSocket, command, "COMPLETED")
                                                 }
@@ -1995,7 +1982,13 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                             Log.e(TAG, "[WebSocket] Error enviando confirmación (binario)", e)
                         }
                         if (command == "WIPE_AND_RESYNC") {
-                            Log.i(TAG, "[WebSocket] Comando WIPE_AND_RESYNC recibido (binario). Ejecutando purga total...")
+                            Log.i(TAG, "[WebSocket] Comando WIPE_AND_RESYNC recibido (binario). Deteniendo carrusel y ejecutando purga total...")
+                            
+                            // Detener carrusel ANTES de la purga para evitar errores de archivo no encontrado
+                            uiHandler.post {
+                                stopStandbyCarousel()
+                            }
+
                             scope.launch {
                                 val apiService = api
                                 if (apiService == null) {
@@ -2005,7 +1998,6 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
                                 val purgeResult = ejecutarPurgaTotal(this@ScanActivity, apiService, baseUrl, deviceId) {
                                     uiHandler.post {
-                                        stopStandbyCarousel()
                                         startStandbyCarousel()
                                     }
                                 }
@@ -2033,15 +2025,10 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                             val bannerUrl = message.optString("url", "")
                             Log.i(TAG, "[WebSocket] BANNER_FINALIZADO recibido (binario): id=$bannerId, titulo=$titulo")
                             
-                            // Eliminar archivo local del banner que terminó
-                            if (bannerId > 0 && bannerUrl.isNotEmpty()) {
-                                deleteBannerFile(bannerId, bannerUrl)
-                            }
-                            
                             uiHandler.post {
                                 syncBannersOnStart()
                                 Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_FINALIZADO (binario)")
-                                // Confirmar al backend que el banner fue recibido
+                                // Confirmar al backend que el comando fue procesado
                                 sendSyncConfirmation(webSocket, command, "SUCCESS")
                             }
                         } else if (command == "REINICIAR") {
@@ -2066,9 +2053,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                     runOnUiThread {
                                         try {
                                             val alertDialog = android.app.AlertDialog.Builder(this@ScanActivity)
-                                                .setTitle("Reinicio solicitado")
-                                                .setMessage("El servidor ha solicitado el reinicio del dispositivo.\n\nPor favor, mantén presionado el botón de Encendido para reiniciar.")
-                                                .setPositiveButton("Aceptar") { _, _ ->
+                                                .setTitle(R.string.title_reboot_requested)
+                                                .setMessage(R.string.msg_reboot_manual)
+                                                .setPositiveButton(android.R.string.ok) { _, _ ->
                                                     Log.i(TAG, "[WebSocket] Usuario presionó Aceptar (binario)")
                                                     sendSyncConfirmation(webSocket, command, "COMPLETED")
                                                 }
@@ -2206,7 +2193,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private fun showOutOfService() {
         runOnUiThread {
             binding.resultOverlay.visibility = View.VISIBLE
-            binding.tvNombre.text = "Fuera de Servicio"
+            binding.tvNombre.text = getString(R.string.msg_out_of_service)
             binding.tvPrecioActual.text = ""
             binding.tvPrecioDolar.text = ""
             binding.tvIva.text = ""

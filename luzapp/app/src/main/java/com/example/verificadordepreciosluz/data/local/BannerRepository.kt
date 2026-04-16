@@ -48,6 +48,7 @@ class BannerRepository(
             val items = remote.mapNotNull { downloadBanner(it) }
             if (items.isEmpty()) {
                 Log.w(TAG, "No se pudo descargar ningún banner, se conserva el cache actual")
+                context.getString(com.example.verificadordepreciosluz.R.string.msg_no_banners).let { Log.w(TAG, it) }
                 return@runCatching loadCache()
             }
             val meta = BannerCacheMeta(

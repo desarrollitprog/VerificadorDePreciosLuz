@@ -187,7 +187,7 @@ async def replicar_archivo(
                     "url": existing_banner.url
                 }
         
-        print(f"[DEBUG] Replicar archivo - FechaInicio guardada: {fecha_inicio_dt}, FechaFin guardada: {fecha_fin_dt}")
+print(f"[DEBUG] Replicar archivo - FechaInicio guardada: {fecha_inicio_dt}, FechaFin guardada: {fecha_fin_dt}")
         nuevo_banner = Publicidad(
             titulo=titulo,
             tipo=tipo or tipo_archivo,

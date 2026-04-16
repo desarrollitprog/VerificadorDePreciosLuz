@@ -242,6 +242,7 @@ async def listar_banners(
                     "Titulo": banner.Titulo,
                     "Tipo": banner.Tipo,
                     "Url": banner.Url,
+                    "ThumbnailUrl": banner.ThumbnailUrl,
                     "Activo": banner.Activo,
                     "FechaInicio": banner.FechaInicio.isoformat() if banner.FechaInicio else None,
                     "FechaFin": banner.FechaFin.isoformat() if banner.FechaFin else None,

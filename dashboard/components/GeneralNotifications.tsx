@@ -91,14 +91,25 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = ({ onNa
       normalized
         .filter((n) => {
           const tipo = String(n.tipo || '').toUpperCase();
-          return tipo === 'SYNC_FAILED' || tipo === 'PLAYBACK_FAILED';
+          return tipo === 'SYNC_FAILED' || tipo === 'PLAYBACK_FAILED' || tipo === 'PUBLICIDAD_VENCIDA';
         })
         .filter((n) => !shownErrorNotificationIdsRef.current.has(n.id))
         .forEach((n) => {
           shownErrorNotificationIdsRef.current.add(n.id);
           const tipo = String(n.tipo || '').toUpperCase();
-          const prefix = tipo === 'PLAYBACK_FAILED' ? 'Error de reproducción' : 'Fallo de sincronización';
-          showNotification(`${prefix}: ${n.descripcion}`, 'error', 7000);
+          let prefix = '';
+          let tipo_notif = 'warning';
+          if (tipo === 'PLAYBACK_FAILED') {
+            prefix = 'Error de reproducción';
+            tipo_notif = 'error';
+          } else if (tipo === 'PUBLICIDAD_VENCIDA') {
+            prefix = 'Publicidad vencida';
+            tipo_notif = 'warning';
+          } else {
+            prefix = 'Fallo de sincronización';
+            tipo_notif = 'error';
+          }
+          showNotification(`${prefix}: ${n.descripcion}`, tipo_notif, 7000);
         });
 
       if (markAsRead && (res.unread_count || 0) > 0) {

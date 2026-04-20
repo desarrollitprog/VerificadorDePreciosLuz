@@ -39,3 +39,26 @@ async def registrar_accion(
     await db.commit()
     await db.refresh(notificacion)
     return notificacion
+
+
+async def crear_notificacion_sistema(
+    db: AsyncSession,
+    tipo: str,
+    descripcion: str,
+    dispositivo_id: str = None,
+    servidor_id: int = None,
+) -> Notificacion:
+    """
+    Crea una notificación del sistema (sin usuario, ej. por vencimiento automático).
+    """
+    notificacion = Notificacion(
+        usuario_id=None,  # Notificación del sistema
+        tipo=tipo,
+        descripcion=descripcion,
+        dispositivo_id=dispositivo_id,
+        servidor_id=servidor_id,
+    )
+    db.add(notificacion)
+    await db.commit()
+    await db.refresh(notificacion)
+    return notificacion

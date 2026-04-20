@@ -102,7 +102,22 @@ async def listar_banners(
                     filtered_banners.append(banner)
         banners = filtered_banners
     
-    return [PublicidadResponse.model_validate(banner.__dict__) for banner in banners]
+    # Convertir banners a response incluyendo fecha_inicio_ms y fecha_fin_ms
+    response_list = []
+    for banner in banners:
+        banner_dict = banner.__dict__.copy()
+        # Calcular fecha_inicio_ms si existe fecha_inicio
+        if banner.fecha_inicio:
+            banner_dict['fecha_inicio_ms'] = int(banner.fecha_inicio.timestamp() * 1000)
+        else:
+            banner_dict['fecha_inicio_ms'] = None
+        # Calcular fecha_fin_ms si existe fecha_fin
+        if banner.fecha_fin:
+            banner_dict['fecha_fin_ms'] = int(banner.fecha_fin.timestamp() * 1000)
+        else:
+            banner_dict['fecha_fin_ms'] = None
+        response_list.append(PublicidadResponse.model_validate(banner_dict))
+    return response_list
 
 
 @router.post("/replicar-archivo")

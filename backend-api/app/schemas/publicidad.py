@@ -30,6 +30,8 @@ class PublicidadUpdate(BaseModel):
 class PublicidadResponse(PublicidadBase):
     id: int
     updated_at: Optional[datetime] = None
+    fecha_inicio_ms: Optional[int] = None
+    fecha_fin_ms: Optional[int] = None
 
     class Config:
         from_attributes = True

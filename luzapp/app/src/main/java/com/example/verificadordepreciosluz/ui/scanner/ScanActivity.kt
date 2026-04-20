@@ -957,6 +957,35 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         // Proteger el índice
         if (standbyIndex >= standbyItems.size) standbyIndex = 0
         val item = standbyItems[standbyIndex]
+        
+        // FASE 7.3: Validar vigencia - skip banners no vigentes
+        val now = System.currentTimeMillis()
+        
+        // Validar fecha_inicio (no reproducir antes de tiempo)
+        if (item.fechaInicioMs != null && now < item.fechaInicioMs) {
+            Log.d(TAG, "Standby: banner ${item.id} aún no inicia (fechaInicioMs=${item.fechaInicioMs}), skipping...")
+            standbyIndex++
+            if (standbyIndex >= standbyItems.size) standbyIndex = 0
+            playStandbyItem()
+            return
+        }
+        
+        // Validar fecha_fin (skip si ya vencido)
+        if (item.fechaFinMs != null && now > item.fechaFinMs) {
+            Log.w(TAG, "Standby: banner ${item.id} vencido (fechaFinMs=${item.fechaFinMs}), eliminando...")
+            val file = File(item.localPath)
+            if (file.exists()) file.delete()
+            standbyItems.removeAt(standbyIndex)
+            if (standbyItems.isEmpty()) {
+                Log.i(TAG, "Standby: todos los banners han vencido. Deteniendo carrusel.")
+                stopStandbyCarousel()
+                return
+            }
+            if (standbyIndex >= standbyItems.size) standbyIndex = 0
+            playStandbyItem()
+            return
+        }
+        
         val fileExists = File(item.localPath).exists()
         if (!fileExists) {
             // Contador de reintentos para evitar spam de notificaciones

@@ -598,7 +598,7 @@ nuevo_banner = Publicidad(..., ThumbnailUrl=thumbnail_url)
 
 ---
 
-## Estado Actual: Progreso Total
+## Estado Actual: Progreso Total (FASES ORIGINALES)
 
 **Total: 25/28 completados (89%)**
 
@@ -609,5 +609,93 @@ nuevo_banner = Publicidad(..., ThumbnailUrl=thumbnail_url)
 - FASE 8: ✅ Completada
 - FASE 9: ✅ Completada
 - FASE 10: ✅ Completada
-- FASE 9: ⏳ Pendiente (thumbnails videos)
-- FASE 10: 🔄 Parcial (80% - 4/5, migración BD pendiente)
+
+---
+
+## FASE 11: Refactorización y Estabilidad (Backend)
+
+*Prioridad: Crítica | Objetivo: Eliminar deuda técnica y mejorar mantenibilidad.*
+
+### 11.1 Refactorización de `monitoreo.py` ⏳ PENDIENTE
+- **Descripción**: Dividir `monitoreo.py` en módulos independientes:
+  - `servers.py` - Gestión de servidores secundarios
+  - `devices.py` - Gestión de dispositivos
+  - `sync.py` - Lógica de sincronización
+- **Impacto**: Estructura modular y mantenible
+- **Complejidad**: Media
+
+### 11.2 Implementación de `sync_service.py` ⏳ PENDIENTE
+- **Descripción**: Mover lógica de negocio de rutas a servicios
+- **Impacto**: Permite pruebas unitarias y desacopla la API
+- **Complejidad**: Media
+
+### 11.3 Manejador Global de Excepciones ⏳ PENDIENTE
+- **Descripción**: Reemplazar `try-except: pass` por respuestas estandarizadas
+- **Impacto**: Frontend recibe errores claros
+- **Complejidad**: Baja
+
+---
+
+## FASE 12: Infraestructura de Navegación y Estado (Frontend)
+
+*Prioridad: Alta | Objetivo: Crear una base sólida para la expansión de la UI.*
+
+### 12.1 Integración de `react-router-dom` ⏳ PENDIENTE
+- **Descripción**: Migrar estado `currentScreen` a rutas reales
+- **Impacto**: Navegación fluida y enlaces directos
+- **Complejidad**: Media
+- **Dependencias**: react-router-dom
+
+### 12.2 Implementación de `Zustand` ⏳ PENDIENTE
+- **Descripción**: Centralizar estado de sesión y configuraciones
+- **Impacto**: Elimina prop-drilling y optimiza flujo de datos
+- **Complejidad**: Media
+- **Dependencias**: zustand
+
+---
+
+## FASE 13: Experiencia de Usuario y Funcionalidades (UX/UI)
+
+*Prioridad: Media | Objetivo: Profesionalizar la interacción con el usuario.*
+
+### 13.1 Sistema de Feedback (Toasts y Modales) ⏳ PENDIENTE
+- **Descripción**: Implementar avisos descriptivos y confirmaciones
+- **Impacto**: Reduce errores accidentales del usuario
+- **Complejidad**: Baja
+
+### 13.2 Vista de Auditoría Detallada ⏳ PENDIENTE
+- **Descripción**: Crear pantalla de logs con filtros avanzados
+- **Impacto**: Aprovecha robustez del backend (FASE 11)
+- **Complejidad**: Media
+
+### 13.3 Visualización de Datos (`Recharts`) ⏳ PENDIENTE
+- **Descripción**: Implementar gráficas de almacenamiento y uptime
+- **Impacto**: Transforma datos crudos en información visual
+- **Complejidad**: Media
+- **Dependencias**: recharts
+
+---
+
+## FASE 14: Pulido Visual y Estética (Polishing)
+
+*Prioridad: Baja | Objetivo: Lograr un acabado de producto final.*
+
+### 14.1 Sistemas de Carga (Skeleton Screens) ⏳ PENDIENTE
+- **Descripción**: Añadir estados de carga visuales
+- **Impacto**: Mejora la percepción de velocidad
+- **Complejidad**: Baja
+
+### 14.2 Selector de Tema (Dark/Light Mode) ⏳ PENDIENTE
+- **Descripción**: Implementar persistencia con `localStorage`
+- **Impacto**: Mejora el confort visual del operador
+- **Complejidad**: Baja
+
+---
+
+## Resumen de Progreso Total (Todas las Fases)
+
+| Grupo | Fases | Completado | Pendiente |
+|-------|-------|------------|-----------|
+| Originales | 1-10 | 25/28 (89%) | 5/28 |
+| Nuevas | 11-14 | 0/11 (0%) | 11/11 |
+| **TOTAL** | **1-14** | **25/39 (64%)** | **14/39**

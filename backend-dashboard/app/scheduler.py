@@ -14,7 +14,7 @@ _scheduler: AsyncIOScheduler | None = None
 def iniciar_scheduler() -> AsyncIOScheduler:
     """
     Inicializa y devuelve el scheduler.
-    Agrega el job de monitoreo de sesiones cada 3.5 minutos.
+    Agrega jobs de monitoreo cada 3.5 minutos.
     """
     global _scheduler
     if _scheduler is not None:
@@ -22,14 +22,25 @@ def iniciar_scheduler() -> AsyncIOScheduler:
         return _scheduler
 
     from app.services.monitoreo_service import actualizar_sesiones_dispositivos
+    from app.services.publicidad_service import expirar_banners_vencidos
 
     _scheduler = AsyncIOScheduler()
 
+    # Job 1: Monitoreo de sesiones de dispositivos
     _scheduler.add_job(
         actualizar_sesiones_dispositivos,
         'interval',
         minutes=3.5,
         id='monitoreo_sesiones',
+        replace_existing=True
+    )
+
+    # Job 2: Expirar banners vencidos (cada 3.5 minutos)
+    _scheduler.add_job(
+        expirar_banners_vencidos,
+        'interval',
+        minutes=3.5,
+        id='expirar_banners',
         replace_existing=True
     )
 

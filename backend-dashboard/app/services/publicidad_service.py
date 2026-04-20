@@ -3,7 +3,7 @@ Servicio de gestión de publicidad.
 Ejecutado periódicamente para expirar banners vencidos.
 """
 import httpx
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from app.database import AsyncSessionLocalUsuarios
 from app.models.publicidad import Publicidad
@@ -12,6 +12,15 @@ from app.utils.logger import StructuredLogger
 from app.services.notificacion_service import crear_notificacion_sistema
 
 log = StructuredLogger("publicidad_service")
+
+
+def get_venezuela_now():
+    tz = timezone(timedelta(hours=-4))
+    return datetime.now(tz).replace(tzinfo=None)
+
+
+# Margen solo para logs, no para expiración real (60s después de fecha_fin)
+MARGEN_EXPIRACION_SEGUNDOS = 0
 
 
 async def notificar_banner_expirado(banner_id: int, titulo: str) -> None:
@@ -53,7 +62,7 @@ async def expirar_banners_vencidos():
     
     try:
         async with AsyncSessionLocalUsuarios() as db:
-            now = datetime.now()
+            now = get_venezuela_now()
             
             # Buscar banners activos cuya fecha_fin ya pasó
             stmt = (
@@ -66,7 +75,9 @@ async def expirar_banners_vencidos():
             
             vencidos_banners = []
             for banner in banners:
-                if banner.FechaFin and banner.FechaFin < now:
+                # Solo marcar vencido cuando YA PASÓ fecha_fin + margen
+                fecha_vencimiento = banner.FechaFin + timedelta(seconds=MARGEN_EXPIRACION_SEGUNDOS) if banner.FechaFin else None
+                if banner.FechaFin and fecha_vencimiento and fecha_vencimiento < now:
                     # Actualizar activo a False
                     banner.Activo = False
                     titulo = banner.Titulo or f"Banner #{banner.IdPublicidad}"

@@ -683,8 +683,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         }
     }
 
-    // Sincroniza banners en segundo plano - fuer descarga inmediata cuando se recibe BANNER_INICIADO
-    private fun syncBannersOnStart() {
+    // Sincroniza banners en segundo plano - fuerza descarga inmediata cuando se recibe BANNER_INICIADO
+    private fun syncBannersOnStart(newBannerId: Int? = null) {
         val service = api ?: return
         val baseUrl = backendBaseUrl ?: return
         scope.launch {
@@ -692,6 +692,38 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 val repo = BannerRepository(this@ScanActivity, service, baseUrl)
                 // Forzar descarga inmediata (maxAgeMs = 0) cuando se recibe BANNER_INICIADO
                 repo.refreshIfStale(0L, deviceId)
+                
+                // Esperar 500ms para que termine la descarga antes de priorizar
+                delay(500L)
+                
+                // Recargar el cache local y priorizar el nuevo banner
+                uiHandler.post {
+                    // Recargar lista desde cache
+                    val cache = repo.loadCache()
+                    if (cache != null && cache.items.isNotEmpty()) {
+                        standbyItems = cache.items.toMutableList()
+                        
+                        // Si hay un nuevo banner, moverlo al inicio del carrusel
+                        if (newBannerId != null) {
+                            Log.i(TAG, "[WebSocket] Priorizando banner $newBannerId para reproducción inmediata")
+                            // Buscar el banner en standbyItems y moverlo al inicio
+                            val index = standbyItems.indexOfFirst { it.id == newBannerId }
+                            if (index > 0) {
+                                val item = standbyItems.removeAt(index)
+                                standbyItems.add(0, item)
+                                standbyIndex = 0
+                                // Forzar reproducción inmediata
+                                playStandbyItem()
+                                Log.i(TAG, "[WebSocket] Banner $newBannerId movido al índice 0 para reproducción")
+                            } else if (index == 0) {
+                                // Ya está al inicio, forzar reproducción
+                                standbyIndex = 0
+                                playStandbyItem()
+                                Log.i(TAG, "[WebSocket] Banner $newBannerId ya en índice 0, reproduciendo")
+                            }
+                        }
+                    }
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Error al sincronizar banners", e)
             }
@@ -1885,9 +1917,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                 val titulo = message.optString("titulo", "")
                                 Log.i(TAG, "[WebSocket] BANNER_INICIADO recibido: id=$bannerId, titulo=$titulo")
 
-                                // Recargar banners inmediatamente cuando un banner comienza
+                                // Recargar banners inmediatamente y priorizar el nuevo banner
+                                syncBannersOnStart(bannerId)
                                 uiHandler.post {
-                                    syncBannersOnStart()
                                     Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_INICIADO")
                                     // Confirmar al backend que el banner fue recibido
                                     sendSyncConfirmation(webSocket, command, "SUCCESS")
@@ -2107,8 +2139,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                 val titulo = message.optString("titulo", "")
                                 Log.i(TAG, "[WebSocket] BANNER_INICIADO recibido (binario): id=$bannerId, titulo=$titulo")
 
+                                // Recargar banners inmediatamente y priorizar el nuevo banner
+                                syncBannersOnStart(bannerId)
                                 uiHandler.post {
-                                    syncBannersOnStart()
                                     Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_INICIADO (binario)")
                                     // Confirmar al backend que el banner fue recibido
                                     sendSyncConfirmation(webSocket, command, "SUCCESS")

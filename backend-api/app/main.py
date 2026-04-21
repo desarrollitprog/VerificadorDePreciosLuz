@@ -18,6 +18,11 @@ from pydantic import BaseModel
 from . import database, models, schemas
 from .routes import consultas, publicidad
 from .services import DeviceCommandBus, DeviceStateStore
+from .services.scheduler_notifications import (
+    save_pending_notification,
+    get_pending_notification,
+    remove_pending_notification,
+)
 from .database import get_db_publicidad
 from .models.publicidad import Publicidad
 
@@ -134,6 +139,7 @@ async def debug_bcv(
 banner_check_task: asyncio.Task | None = None
 notified_banners_start: set[int] = set()
 notified_banners_end: set[int] = set()
+scheduler_notifications: Any = None
 
 BANNER_CHECK_INTERVAL = 20 * 60  # 20 minutos en segundos
 
@@ -234,6 +240,79 @@ async def _send_banner_notification(banner: Publicidad, target_device_ids: List[
         await tablet_ws_manager.broadcast(banner_info)
 
 
+async def _send_to_device_robust(device_id: str, banner_info: dict) -> bool:
+    sent_via = None
+    
+    if device_command_bus is not None:
+        try:
+            await device_command_bus.publish_command(
+                device_id=device_id,
+                command=banner_info.get("command", ""),
+                payload=banner_info,
+            )
+            sent_via = "Redis"
+            logger.info(f"[BANNER_ROBUST] Enviado {banner_info.get('command')} via Redis a {device_id}")
+        except Exception as e:
+            logger.warning(f"[BANNER_ROBUST] Redis falló para {device_id}: {e}")
+    
+    ws = tablet_ws_manager.device_map.get(device_id)
+    if ws:
+        try:
+            await ws.send_json(banner_info)
+            sent_via = "WS"
+            logger.info(f"[BANNER_ROBUST] Enviado {banner_info.get('command')} via WS a {device_id}")
+        except Exception as e:
+            logger.warning(f"[BANNER_ROBUST] WS falló para {device_id}: {e}")
+    
+    if sent_via:
+        return True
+    
+    try:
+        from app.services.device_state import DeviceStateStore
+        key = f"device:pending:banner:{device_id}"
+        import json
+        await device_state_store.redis.set(key, json.dumps(banner_info), ex=300)
+        logger.info(f"[BANNER_ROBUST] Guardado en cola Redis para {device_id}")
+    except Exception as e:
+        logger.warning(f"[BANNER_ROBUST] Cola Redis falló para {device_id}: {e}")
+    
+    return sent_via is not None
+
+
+async def send_banner_notification_robust(banner: Publicidad, target_device_ids: List[str] | None, command: str):
+    banner_info = {
+        "command": command,
+        "banner_id": banner.id,
+        "titulo": banner.titulo,
+        "url": banner.url,
+        "tipo": banner.tipo,
+        "fecha_inicio": banner.fecha_inicio.isoformat() if banner.fecha_inicio else None,
+        "fecha_fin": banner.fecha_fin.isoformat() if banner.fecha_fin else None,
+    }
+    
+    if target_device_ids:
+        for device_id in target_device_ids:
+            await _send_to_device_robust(device_id, banner_info)
+    else:
+        if device_state_store is not None:
+            try:
+                status_map = await device_state_store.get_all_status()
+                online_devices = [d for d, info in status_map.items() if info.get("online")]
+            except Exception as e:
+                logger.warning(f"[BANNER_ROBUST] Error obteniendo estado de Redis: {e}")
+                online_devices = []
+        else:
+            online_devices = []
+        
+        if not online_devices:
+            online_devices = [d for d, _ in tablet_ws_manager.get_connected_targets() if d]
+        
+        logger.info(f"[BANNER_ROBUST] {command} para banner {banner.id}: {len(online_devices)} dispositivos")
+        
+        for device_id in online_devices:
+            await _send_to_device_robust(device_id, banner_info)
+
+
 async def schedule_banner_notification(
     banner_id: int,
     device_ids: str | None,
@@ -246,9 +325,7 @@ async def schedule_banner_notification(
     """Programa notificaciones exactas para inicio y fin de banner."""
     now = get_venezuela_now()
     
-    # Programar notificación de inicio
     if fecha_inicio:
-        # Convertir fecha_inicio a aware si es naive
         if fecha_inicio.tzinfo is None:
             fecha_inicio_aware = fecha_inicio.replace(tzinfo=timezone(timedelta(hours=-4)))
         else:
@@ -257,13 +334,26 @@ async def schedule_banner_notification(
         delay_inicio = (fecha_inicio_aware - now).total_seconds()
         if delay_inicio > 0:
             logger.info(f"Programando notificación de inicio para banner {banner_id} en {delay_inicio} segundos")
+            
+            await save_pending_notification(
+                banner_id=banner_id,
+                device_ids=device_ids,
+                titulo=titulo,
+                url=url,
+                tipo=tipo,
+                fecha_inicio=fecha_inicio,
+                fecha_fin=fecha_fin,
+                command="BANNER_INICIADO",
+                scheduled_at=fecha_inicio_aware,
+            )
+            
             await asyncio.sleep(delay_inicio)
             
-            # Verificar si ya fue notificado (evitar duplicados)
             if banner_id in notified_banners_start:
                 logger.info(f"Banner {banner_id} ya notificado de inicio, saltando")
+                await remove_pending_notification(banner_id, "BANNER_INICIADO")
             else:
-                # Obtener el banner actualizado de la BD para verificar si aún está activo
+                pending = await get_pending_notification(banner_id, "BANNER_INICIADO")
                 async for db in get_db_publicidad():
                     result = await db.execute(select(Publicidad).where(Publicidad.id == banner_id))
                     banner = result.scalars().first()
@@ -271,12 +361,12 @@ async def schedule_banner_notification(
                         target_device_ids = None
                         if banner.device_ids:
                             target_device_ids = [d.strip() for d in banner.device_ids.split(",") if d.strip()]
-                        await _send_banner_notification(banner, target_device_ids, "BANNER_INICIADO")
+                        await send_banner_notification_robust(banner, target_device_ids, "BANNER_INICIADO")
                         notified_banners_start.add(banner_id)
                         logger.info(f"Notificación de inicio enviada para banner {banner_id}")
+                    await remove_pending_notification(banner_id, "BANNER_INICIADO")
                     break
     
-    # Programar notificación de fin
     if fecha_fin:
         if fecha_fin.tzinfo is None:
             fecha_fin_aware = fecha_fin.replace(tzinfo=timezone(timedelta(hours=-4)))
@@ -286,12 +376,26 @@ async def schedule_banner_notification(
         delay_fin = (fecha_fin_aware - now).total_seconds()
         if delay_fin > 0:
             logger.info(f"Programando notificación de fin para banner {banner_id} en {delay_fin} segundos")
+            
+            await save_pending_notification(
+                banner_id=banner_id,
+                device_ids=device_ids,
+                titulo=titulo,
+                url=url,
+                tipo=tipo,
+                fecha_inicio=fecha_inicio,
+                fecha_fin=fecha_fin,
+                command="BANNER_FINALIZADO",
+                scheduled_at=fecha_fin_aware,
+            )
+            
             await asyncio.sleep(delay_fin)
             
-            # Verificar si ya fue notificado (evitar duplicados)
             if banner_id in notified_banners_end:
                 logger.info(f"Banner {banner_id} ya notificado de fin, saltando")
+                await remove_pending_notification(banner_id, "BANNER_FINALIZADO")
             else:
+                await get_pending_notification(banner_id, "BANNER_FINALIZADO")
                 async for db in get_db_publicidad():
                     result = await db.execute(select(Publicidad).where(Publicidad.id == banner_id))
                     banner = result.scalars().first()
@@ -299,9 +403,10 @@ async def schedule_banner_notification(
                         target_device_ids = None
                         if banner.device_ids:
                             target_device_ids = [d.strip() for d in banner.device_ids.split(",") if d.strip()]
-                        await _send_banner_notification(banner, target_device_ids, "BANNER_FINALIZADO")
+                        await send_banner_notification_robust(banner, target_device_ids, "BANNER_FINALIZADO")
                         notified_banners_end.add(banner_id)
                         logger.info(f"Notificación de fin enviada para banner {banner_id}")
+                    await remove_pending_notification(banner_id, "BANNER_FINALIZADO")
                     break
 
 
@@ -343,6 +448,14 @@ async def start_device_monitor():
 
     banner_check_task = asyncio.create_task(_check_banners_starting())
     logger.info("Banner check task iniciada")
+
+    try:
+        from app.services.scheduler_notifications import SchedulerNotifications, scheduler_notifications as sn
+        global scheduler_notifications
+        scheduler_notifications = await SchedulerNotifications.create(ttl_seconds=7200)
+        logger.info("SchedulerNotifications inicializado con Redis (TTL=2h)")
+    except Exception as e:
+        logger.warning(f"SchedulerNotifications no disponible: {e}")
 
 
 @app.on_event("shutdown")

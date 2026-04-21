@@ -121,7 +121,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private val backupMaxAgeMs = (12 * 60 * 60 * 1000L)
     private var cameraProvider: ProcessCameraProvider? = null
     private val bannerMaxAgeMs = (12 * 60 * 60 * 1000L)
-    private val bannerPollIntervalMs = (25 * 60 * 1000L)
+    private val bannerPollIntervalMs = (60 * 1000L)  // 60 segundos - suficiente para detectar programaciones
     private val bannerPollHandler = Handler(Looper.getMainLooper())
     private var bannerPollRunnable: Runnable? = null
     private var backendBaseUrl: String? = null
@@ -753,6 +753,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     }
 
     // Inicia polling de banners cada 25 minutos
+    private var lastBannerCheckMs: Long = 0L
+    
     private fun startBannerPolling() {
         val runnable = object : Runnable {
             override fun run() {
@@ -764,6 +766,21 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                         try {
                             val repo = BannerRepository(this@ScanActivity, service, baseUrl)
                             repo.refreshIfStale(bannerMaxAgeMs, deviceId)
+                            
+                            // Verificar si hay un banner que debe iniciar ahora (fallback cuando WebSocket no está conectado)
+                            val now = System.currentTimeMillis()
+                            if (lastBannerCheckMs > 0) {
+                                val cache = repo.loadCache()
+                                cache?.items?.forEach { bannerItem ->
+                                    // Si el banner tiene fecha_inicio y debe iniciar entre el último check y ahora
+                                    if (bannerItem.fechaInicioMs != null && bannerItem.fechaInicioMs > lastBannerCheckMs && bannerItem.fechaInicioMs <= now) {
+                                        Log.i(TAG, "[Polling] Banner ${bannerItem.id} debe iniciar ahora, priorizando...")
+                                        // Forzar recarga y priorización
+                                        syncBannersOnStart(bannerItem.id)
+                                    }
+                                }
+                            }
+                            lastBannerCheckMs = now
                             Log.d(TAG, "Banner polling: refresh completed")
                         } catch (e: Exception) {
                             Log.e(TAG, "Banner polling: error", e)

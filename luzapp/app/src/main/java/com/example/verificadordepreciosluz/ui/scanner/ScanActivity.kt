@@ -128,6 +128,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private val standbyIdleMs = 20_000L
     private var standbyItems: MutableList<BannerCacheItem> = mutableListOf()
     private var standbyIndex = 0
+    private var forcePlayNow = false
     private var standbyActive = false
     private var standbyTimerRunnable: Runnable? = null
     private val kioskExitCode = "ADMIN-CODE-125"
@@ -706,6 +707,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                         // Si hay un nuevo banner, moverlo al inicio del carrusel
                         if (newBannerId != null) {
                             Log.i(TAG, "[WebSocket] Priorizando banner $newBannerId para reproducción inmediata")
+                            // Asegurar que el overlay esté visible
+                            binding.standbyOverlay.visibility = View.VISIBLE
+                            standbyActive = true
                             // Buscar el banner en standbyItems y moverlo al inicio
                             val index = standbyItems.indexOfFirst { it.id == newBannerId }
                             if (index > 0) {
@@ -754,6 +758,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
     // Inicia polling de banners cada 25 minutos
     private var lastBannerCheckMs: Long = 0L
+    private val notifiedBannersStart = mutableSetOf<Int>()
+    private val notifiedBannersEnd = mutableSetOf<Int>()
     
     private fun startBannerPolling() {
         val runnable = object : Runnable {
@@ -773,10 +779,15 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                 val cache = repo.loadCache()
                                 cache?.items?.forEach { bannerItem ->
                                     // Si el banner tiene fecha_inicio y debe iniciar entre el último check y ahora
+                                    // Y NO fue ya notificado por WebSocket
                                     if (bannerItem.fechaInicioMs != null && bannerItem.fechaInicioMs > lastBannerCheckMs && bannerItem.fechaInicioMs <= now) {
-                                        Log.i(TAG, "[Polling] Banner ${bannerItem.id} debe iniciar ahora, priorizando...")
-                                        // Forzar recarga y priorización
-                                        syncBannersOnStart(bannerItem.id)
+                                        if (!notifiedBannersStart.contains(bannerItem.id)) {
+                                            Log.i(TAG, "[Polling] Banner ${bannerItem.id} debe iniciar ahora, priorizando...")
+                                            notifiedBannersStart.add(bannerItem.id)
+                                            syncBannersOnStart(bannerItem.id)
+                                        } else {
+                                            Log.d(TAG, "[Polling] Banner ${bannerItem.id} ya notificado por WebSocket, saltando")
+                                        }
                                     }
                                 }
                             }
@@ -1011,11 +1022,15 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         val now = System.currentTimeMillis()
         
         // Validar fecha_inicio (no reproducir antes de tiempo)
-        if (item.fechaInicioMs != null && now < item.fechaInicioMs) {
-            Log.d(TAG, "Standby: banner ${item.id} aún no inicia (fechaInicioMs=${item.fechaInicioMs}), skipping...")
-            standbyIndex++
-            if (standbyIndex >= standbyItems.size) standbyIndex = 0
-            playStandbyItem()
+        // SOLO para polling. Cuando llega por WebSocket (BANNER_INICIADO), se reproduce inmediatamente
+        if (item.fechaInicioMs != null && now < item.fechaInicioMs && !forcePlayNow) {
+            Log.d(TAG, "Standby: banner ${item.id} aún no inicia (now=$now, fechaInicioMs=${item.fechaInicioMs}), esperando...")
+            uiHandler.postDelayed({
+                Log.d(TAG, "Standby: retry ejecutándose, standbyActive=$standbyActive")
+                if (standbyActive && standbyItems.isNotEmpty()) {
+                    playStandbyItem()
+                }
+            }, 5000)
             return
         }
         
@@ -1162,6 +1177,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private fun nextStandbyItem() {
         if (!standbyActive || standbyItems.isEmpty()) return
         standbyIndex = (standbyIndex + 1) % standbyItems.size
+        forcePlayNow = false
         playStandbyItem()
     }
 
@@ -1934,6 +1950,12 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                 val titulo = message.optString("titulo", "")
                                 Log.i(TAG, "[WebSocket] BANNER_INICIADO recibido: id=$bannerId, titulo=$titulo")
 
+                                // Marcar como notificado para evitar duplicados con polling
+                                notifiedBannersStart.add(bannerId)
+
+                                // Forzar reproducción inmediata (ignorar validación de fecha_inicio)
+                                forcePlayNow = true
+
                                 // Recargar banners inmediatamente y priorizar el nuevo banner
                                 syncBannersOnStart(bannerId)
                                 uiHandler.post {
@@ -1947,6 +1969,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                 val titulo = message.optString("titulo", "")
                                 val bannerUrl = message.optString("url", "")
                                 Log.i(TAG, "[WebSocket] BANNER_FINALIZADO recibido: id=$bannerId, titulo=$titulo")
+
+                                // Marcar como notificado para evitar duplicados con polling
+                                notifiedBannersEnd.add(bannerId)
 
                                 // Eliminar archivo local del banner que terminó
                                 if (bannerId > 0 && bannerUrl.isNotEmpty()) {
@@ -2156,6 +2181,12 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                 val titulo = message.optString("titulo", "")
                                 Log.i(TAG, "[WebSocket] BANNER_INICIADO recibido (binario): id=$bannerId, titulo=$titulo")
 
+                                // Marcar como notificado para evitar duplicados con polling
+                                notifiedBannersStart.add(bannerId)
+
+                                // Forzar reproducción inmediata (ignorar validación de fecha_inicio)
+                                forcePlayNow = true
+
                                 // Recargar banners inmediatamente y priorizar el nuevo banner
                                 syncBannersOnStart(bannerId)
                                 uiHandler.post {
@@ -2170,6 +2201,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                 val bannerUrl = message.optString("url", "")
                                 Log.i(TAG, "[WebSocket] BANNER_FINALIZADO recibido (binario): id=$bannerId, titulo=$titulo")
 
+                                // Marcar como notificado para evitar duplicados con polling
+                                notifiedBannersEnd.add(bannerId)
+
                                 // Eliminar archivo local del banner que terminó
                                 if (bannerId > 0 && bannerUrl.isNotEmpty()) {
                                     deleteBannerFile(bannerId, bannerUrl)
@@ -2178,7 +2212,6 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                 uiHandler.post {
                                     syncBannersOnStart()
                                     Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_FINALIZADO (binario)")
-                                    // Confirmar al backend que el banner fue recibido
                                     sendSyncConfirmation(webSocket, command, "SUCCESS")
                                 }
                             }

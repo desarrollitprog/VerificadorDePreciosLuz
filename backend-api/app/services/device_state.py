@@ -145,3 +145,19 @@ class DeviceStateStore:
         except Exception as e:
             logger.error(f"[Redis] get_playing_content({device_id}) falló: {e}")
             return None
+
+    async def remove_device(self, device_id: str) -> None:
+        """Elimina completamente un dispositivo de Redis (state, playing, y del set devices:all)."""
+        async def _do_remove():
+            keys_to_delete = [
+                f"device:state:{device_id}",
+                f"device:playing:{device_id}",
+            ]
+            for key in keys_to_delete:
+                await self.redis.delete(key)
+            await self.redis.srem("devices:all", device_id)
+
+        try:
+            await self._retry_operation(_do_remove, operation_name=f"remove_device({device_id})")
+        except Exception as e:
+            logger.error(f"[Redis] remove_device({device_id}) falló definitivamente: {e}")

@@ -86,6 +86,8 @@ async def unregister_device_endpoint(device_id: str):
     
     try:
         await unregister_device(device_id)
+        if device_state_store is not None:
+            await device_state_store.remove_device(device_id)
         logger.info(f"[UNREGISTER] Dispositivo {device_id} desvinculado del servidor")
         return {"success": True, "message": f"Dispositivo {device_id} desvinculado correctamente"}
     except Exception as e:

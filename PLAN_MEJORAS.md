@@ -692,10 +692,112 @@ nuevo_banner = Publicidad(..., ThumbnailUrl=thumbnail_url)
 
 ---
 
+## FASE 15: Comunicación MQTT (FUTURO - BAJA PRIORIDAD)
+
+### Objetivo
+Implementar MQTT como vía adicional de comunicación para comandos cuando WebSocket no está disponible.
+
+### Problema Actual
+- Comandos que no llegan cuando el dispositivo se reconecta
+- Cola Redis que no es consumida
+- Multi-worker con limitaciones de memoria
+
+### Arquitectura Propuesta
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│ backend-api ──▶ Redis pub/sub ──▶ MQTT ──▶ dispositivo    │
+│                      │                    │              │
+│                      │              ┌────┘              │
+│                      ▼            ▼                   │
+│                 Cola Redis (fallback)  ← También usa  │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### Componentes
+
+| # | Componente | Cambio | Complejidad |
+|---|----------|-------|-----------|
+| 1 | **Docker**: Agregar MQTT broker | Baja |
+| 2 | **Backend**: Cliente MQTT | Media |
+| 3 | **Backend**: Integrar en envío | Media |
+| 4 | **luzapp**: Cliente MQTT | Alta |
+
+### Paso 1: MQTT Broker (Docker)
+
+```yaml
+# docker-compose.yml
+mqtt:
+    image: eclipse-mosquitto:2
+    ports:
+        - "1883:1883"
+```
+
+### Paso 2: Cliente MQTT (Python)
+
+```python
+# backend-api/app/services/mqtt_client.py
+import paho.mqtt.client as mqtt
+
+class MqttClient:
+    def __init__(self):
+        self.client = mqtt.Client()
+    
+    def publish(self, topic, payload):
+        self.client.publish(topic, json.dumps(payload))
+```
+
+### Paso 3: Integración Backend
+
+```python
+# Fallback strategy:
+# 1. Redis pub/sub
+# 2. WebSocket  
+# 3. MQTT
+# 4. Cola Redis
+```
+
+### Paso 4: Cliente MQTT (luzapp)
+
+```kotlin
+// dependencies
+implementation('org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5')
+
+// Connect en ScanActivity
+mqttClient.connect("tcp://server:1883")
+```
+
+### Alternativa: Opción D (Más Simple)
+
+Si MQTT es muy complejo, implementar solo consulta de cola al reconectar:
+
+```
+luzapp: WebSocket connect → GET /api/comandos/pendientes → procesar
+```
+
+### Comparación
+
+| Aspecto | MQTT | Opción D |
+|--------|------|---------|
+| Complejidad | Alta | Baja |
+| Infra extra | MQTT broker | Ninguna |
+| Tiempo | 5-7 horas | 2-3 horas |
+| Efectividad | Alta | Media |
+| Prioridad | Baja | Media |
+
+**Nota**: La Opción D (cola + consulta) se propone como alternativa más simple que resuelve ~80% del problema con 30% del esfuerzo.
+
+---
+
+*Prioridad: BAJA | Objetivo: Comunicación robusta cuando WebSocket no está disponible.*
+
+---
+
 ## Resumen de Progreso Total (Todas las Fases)
 
 | Grupo | Fases | Completado | Pendiente |
 |-------|-------|------------|-----------|
 | Originales | 1-10 | 25/28 (89%) | 5/28 |
 | Nuevas | 11-14 | 0/11 (0%) | 11/11 |
-| **TOTAL** | **1-14** | **25/39 (64%)** | **14/39**
+| Nueva | 15 | 0/1 (0%) | 1/1 |
+| **TOTAL** | **1-15** | **25/40 (63%)** | **15/40**

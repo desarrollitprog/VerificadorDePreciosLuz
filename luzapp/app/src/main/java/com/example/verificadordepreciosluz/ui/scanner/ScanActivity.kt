@@ -129,6 +129,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private var standbyItems: MutableList<BannerCacheItem> = mutableListOf()
     private var standbyIndex = 0
     private var forcePlayNow = false
+    private var forcePlayNowTimer: Runnable? = null
+    private val forcePlayNowTimeoutMs = 60000L // 60 segundos
     private var standbyActive = false
     private var standbyTimerRunnable: Runnable? = null
     private val kioskExitCode = "ADMIN-CODE-125"
@@ -1013,13 +1015,19 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
     // Reproduce un item del carrusel (imagen o video)
     private fun playStandbyItem() {
-        if (!standbyActive || standbyItems.isEmpty()) return
+        Log.d(TAG, "playStandbyItem: INICIO standbyActive=$standbyActive itemsSize=${standbyItems.size}")
+        if (!standbyActive || standbyItems.isEmpty()) {
+            Log.w(TAG, "playStandbyItem: SALIENDO - standbyActive=$standbyActive o items vacio")
+            return
+        }
         // Proteger el índice
         if (standbyIndex >= standbyItems.size) standbyIndex = 0
         val item = standbyItems[standbyIndex]
+        Log.d(TAG, "playStandbyItem: item=${item.id} tipo=${item.tipo} fechaInicioMs=${item.fechaInicioMs} localPath=${item.localPath}")
         
         // FASE 7.3: Validar vigencia - skip banners no vigentes
         val now = System.currentTimeMillis()
+        Log.d(TAG, "playStandbyItem: validando fecha_inicio forcePlayNow=$forcePlayNow now=$now")
         
         // Validar fecha_inicio (no reproducir antes de tiempo)
         // SOLO para polling. Cuando llega por WebSocket (BANNER_INICIADO), se reproduce inmediatamente
@@ -1033,7 +1041,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             }, 5000)
             return
         }
-        
+
         // Validar fecha_fin (skip si ya vencido)
         if (item.fechaFinMs != null && now > item.fechaFinMs) {
             Log.w(TAG, "Standby: banner ${item.id} vencido (fechaFinMs=${item.fechaFinMs}), eliminando...")
@@ -1051,6 +1059,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         }
         
         val fileExists = File(item.localPath).exists()
+        Log.d(TAG, "playStandbyItem: archivo existe=$fileExists path=${item.localPath}")
         if (!fileExists) {
             // Contador de reintentos para evitar spam de notificaciones
             val currentRetry = retryCountMap.getOrDefault(item.localPath, 0)
@@ -1177,7 +1186,6 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private fun nextStandbyItem() {
         if (!standbyActive || standbyItems.isEmpty()) return
         standbyIndex = (standbyIndex + 1) % standbyItems.size
-        forcePlayNow = false
         playStandbyItem()
     }
 
@@ -1953,6 +1961,13 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                 // Marcar como notificado para evitar duplicados con polling
                                 notifiedBannersStart.add(bannerId)
 
+                                //Cancelar timer anterior si existe
+                                forcePlayNowTimer?.let { uiHandler.removeCallbacks(it) }
+
+                                //Programar Expiracion
+                                forcePlayNowTimer = Runnable {forcePlayNow = false}
+                                uiHandler.postDelayed(forcePlayNowTimer!!, forcePlayNowTimeoutMs)
+
                                 // Forzar reproducción inmediata (ignorar validación de fecha_inicio)
                                 forcePlayNow = true
 
@@ -2183,6 +2198,13 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
                                 // Marcar como notificado para evitar duplicados con polling
                                 notifiedBannersStart.add(bannerId)
+
+                                //Cancelar timer anterior si existe
+                                forcePlayNowTimer?.let {uiHandler.removeCallbacks(it)}
+
+                                //Programar expiracion
+                                forcePlayNowTimer = Runnable {forcePlayNow = false}
+                                uiHandler.postDelayed(forcePlayNowTimer!!, forcePlayNowTimeoutMs)
 
                                 // Forzar reproducción inmediata (ignorar validación de fecha_inicio)
                                 forcePlayNow = true

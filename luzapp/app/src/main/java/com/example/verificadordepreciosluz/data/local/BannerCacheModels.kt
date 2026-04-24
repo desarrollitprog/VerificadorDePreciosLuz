@@ -8,6 +8,8 @@ data class BannerCacheItem(
     val localPath: String,
     val duracionSeg: Int?,
     val prioridad: Int?,
+    val fechaInicioMs: Long? = null,
+    val fechaFinMs: Long? = null
 )
 
 data class BannerCacheMeta(

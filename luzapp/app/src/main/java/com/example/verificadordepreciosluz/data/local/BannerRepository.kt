@@ -136,6 +136,8 @@ class BannerRepository(
             localPath = outFile.absolutePath,
             duracionSeg = item.duracionSeg,
             prioridad = item.prioridad,
+            fechaInicioMs = item.fechaInicioMs,
+            fechaFinMs = item.fechaFinMs
         )
     }
 

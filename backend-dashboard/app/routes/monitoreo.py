@@ -1176,7 +1176,10 @@ async def eliminar_dispositivo(
             try:
                 async with httpx.AsyncClient(timeout=10) as client:
                     response = await client.delete(f"http://{servidor.ip}:8000/devices/{device_id}")
-                    logger.info(f"Dispositivo {device_id} desvinculado del servidor {servidor.ip}: {response.status_code}")
+                    if response.status_code == 200:
+                        logger.info(f"Dispositivo {device_id} desvinculado del servidor {servidor.ip}: {response.status_code}")
+                    else:
+                        logger.warning(f"Dispositivo {device_id} no se pudo desvincular del servidor {servidor.ip}: {response.status_code}")
             except Exception as e:
                 logger.warning(f"No se pudo desvincular {device_id} del servidor {servidor.ip}: {e}")
 

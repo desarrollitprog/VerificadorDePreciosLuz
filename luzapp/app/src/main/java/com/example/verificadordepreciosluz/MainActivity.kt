@@ -3,6 +3,7 @@ package com.example.verificadordepreciosluz
 import android.os.Bundle
 import android.content.Intent
 import android.view.View
+import android.view.KeyEvent
 import android.widget.Toast
 import android.provider.Settings
 import android.os.Handler
@@ -23,45 +24,122 @@ import retrofit2.HttpException
 import java.io.IOException
 import android.text.Editable
 import android.text.TextWatcher
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.Preview
-import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.core.content.ContextCompat
-import com.google.mlkit.vision.barcode.BarcodeScanning
-import com.google.mlkit.vision.common.InputImage
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
-    private lateinit var cameraExecutor: ExecutorService
     private var isUnlocked = false
     private val UNLOCK_CODE = "ADMIN-CODE-125"
+    private var scannerBuffer = StringBuilder()
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // Interceptar teclas del escáner HID cuando el config está bloqueado
+        if (!isUnlocked && event.action == KeyEvent.ACTION_DOWN) {
+            val keyCode = event.keyCode
+            val unicodeChar = event.unicodeChar
+            
+            Log.d("MainActivity", "dispatchKeyEvent: keyCode=$keyCode, unicodeChar=$unicodeChar")
+            
+            // Ignorar teclas de control (flechas, tab, etc.)
+            if (keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_DPAD_CENTER) {
+                // Enter del escáner - procesar el buffer acumulado
+                val scannedText = scannerBuffer.toString()
+                Log.d("MainActivity", "dispatchKeyEvent: ENTER detectado, buffer='$scannedText'")
+                if (scannedText.isNotEmpty()) {
+                    runOnUiThread {
+                        binding.etUnlockCode.setText(scannedText)
+                        Log.d("MainActivity", "dispatchKeyEvent: Texto enviado a etUnlockCode='$scannedText'")
+                    }
+                }
+                scannerBuffer.clear()
+                return true // Consumir el Enter para que no active el botón
+            } else if (unicodeChar != 0) {
+                // Carácter imprimible del escáner
+                val char = unicodeChar.toChar()
+                scannerBuffer.append(char)
+                Log.d("MainActivity", "dispatchKeyEvent: Carácter agregado='$char', buffer actual='${scannerBuffer}'")
+                return true // Consumir para que no escriba en otros campos
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.d("MainActivity", "onCreate: Iniciando MainActivity")
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        cameraExecutor = Executors.newSingleThreadExecutor()
-
         val sharedPref = getSharedPreferences("ConfigLuz", MODE_PRIVATE)
         val ipGuardada = sharedPref.getString("ip_servidor", "")
-        binding.etIpServidor.setText(ipGuardada)
         val puertoGuardado = sharedPref.getString("puerto_servidor", getString(com.example.verificadordepreciosluz.R.string.default_port))
+        Log.d("MainActivity", "onCreate: ipGuardada='$ipGuardada', puertoGuardado='$puertoGuardado'")
+        
+        binding.etIpServidor.setText(ipGuardada)
         binding.etPuertoServidor.setText(puertoGuardado)
 
         val hasNetwork = NetworkUtils.isNetworkAvailable(this)
+        Log.d("MainActivity", "onCreate: hasNetwork=$hasNetwork, ipGuardada.isNullOrBlank=${ipGuardada.isNullOrBlank()}")
+
+        // TextWatcher para el campo de desbloqueo
+        binding.etUnlockCode.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {
+                Log.d("MainActivity", "etUnlockCode.beforeTextChanged: s='$s'")
+            }
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                Log.d("MainActivity", "etUnlockCode.onTextChanged: s='$s'")
+            }
+            override fun afterTextChanged(editable: Editable?) {
+                val code = editable?.toString()?.trim() ?: ""
+                Log.d("MainActivity", "etUnlockCode.afterTextChanged: code='$code', UNLOCK_CODE='$UNLOCK_CODE', coincidencia=${code == UNLOCK_CODE}")
+                if (code == UNLOCK_CODE) {
+                    Log.d("MainActivity", "etUnlockCode.afterTextChanged: ¡Código correcto! Desbloqueando")
+                    unlockConfig()
+                    binding.etUnlockCode.text?.clear()
+                }
+            }
+        })
+
+        // TextWatcher TEMPORAL para debug
+        binding.etIpServidor.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {
+                Log.d("MainActivity", "etIpServidor.beforeTextChanged: s='$s'")
+            }
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                Log.d("MainActivity", "etIpServidor.onTextChanged: s='$s'")
+            }
+            override fun afterTextChanged(editable: Editable?) {
+                val text = editable?.toString() ?: ""
+                Log.d("MainActivity", "etIpServidor.afterTextChanged: text='$text'")
+            }
+        })
+
+        // Verificar foco
+        binding.etUnlockCode.setOnFocusChangeListener { _, hasFocus ->
+            Log.d("MainActivity", "etUnlockCode focus changed: hasFocus=$hasFocus")
+        }
+        binding.etIpServidor.setOnFocusChangeListener { _, hasFocus ->
+            Log.d("MainActivity", "etIpServidor focus changed: hasFocus=$hasFocus")
+        }
 
         if (!ipGuardada.isNullOrBlank()) {
+            Log.d("MainActivity", "onCreate: IP guardada encontrada, bloqueando inputs")
             binding.etIpServidor.isEnabled = false
             binding.etIpServidor.isFocusable = false
             binding.etPuertoServidor.isEnabled = false
             binding.etPuertoServidor.isFocusable = false
             binding.tvLockedIndicator.visibility = View.VISIBLE
-            startCameraScanner()
+            
+            // CRÍTICO: Asegurar que el escáner HID escriba en etUnlockCode
+            binding.etUnlockCode.isEnabled = true
+            binding.etUnlockCode.isFocusable = true
+            binding.etUnlockCode.isFocusableInTouchMode = true
             binding.etUnlockCode.requestFocus()
+            Log.d("MainActivity", "onCreate: Forzando foco en etUnlockCode, tiene foco=${binding.etUnlockCode.hasFocus()}")
+            
+            // Verificar de inmediato dónde está el foco
+            Handler(Looper.getMainLooper()).postDelayed({
+                Log.d("MainActivity", "onCreate: Verificación foco - etUnlockCode=${binding.etUnlockCode.hasFocus()}, etIpServidor=${binding.etIpServidor.hasFocus()}")
+            }, 500)
 
             if (hasNetwork) {
                 probarConexion(ipGuardada, puertoGuardado.orEmpty(), autoLaunch = true)
@@ -74,23 +152,11 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         } else {
+            Log.d("MainActivity", "onCreate: No hay IP guardada, mostrando configuración manual")
             binding.tvLockedIndicator.visibility = View.GONE
-            // Installation NEW - NO check automatic, wait for manual
         }
 
-        binding.etUnlockCode.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(editable: Editable?) {
-                val code = editable?.toString()?.trim() ?: ""
-                if (code == UNLOCK_CODE) {
-                    unlockConfig()
-                    binding.etUnlockCode.text?.clear()
-                }
-            }
-        })
-
-        // Solo verificar backup si NO hay IP guardada (si la hay, ya se manejó arriba)
+        // Solo verificar backup si NO hay IP guardada
         if (ipGuardada.isNullOrBlank() && !hasNetwork) {
             val backup = BackupRepository(this@MainActivity).loadBackup()
             if (backup != null) {
@@ -135,9 +201,14 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        
+        // Evitar que el botón se active con Enter del escáner HID
+        binding.btnValidar.isFocusable = false
+        binding.btnValidar.isFocusableInTouchMode = false
     }
 
     private fun unlockConfig() {
+        Log.d("MainActivity", "unlockConfig: Iniciando desbloqueo")
         isUnlocked = true
         binding.etIpServidor.isEnabled = true
         binding.etIpServidor.isFocusable = true
@@ -147,60 +218,13 @@ class MainActivity : AppCompatActivity() {
         binding.etPuertoServidor.isFocusableInTouchMode = true
         binding.tvLockedIndicator.visibility = View.GONE
         binding.etIpServidor.requestFocus()
+        Log.d("MainActivity", "unlockConfig: Configuración desbloqueada")
         Toast.makeText(this, "Configuración desbloqueada", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun startCameraScanner() {
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
-        cameraProviderFuture.addListener({
-            val cameraProvider = cameraProviderFuture.get()
-            val preview = Preview.Builder().build().also {
-                it.setSurfaceProvider(binding.previewViewLogin.surfaceProvider)
-            }
-            val imageAnalyzer = ImageAnalysis.Builder()
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .build()
-                .also {
-                    it.setAnalyzer(cameraExecutor) { imageProxy ->
-                        processImage(imageProxy)
-                    }
-                }
-            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-            try {
-                cameraProvider.unbindAll()
-                cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalyzer)
-            } catch (e: Exception) {
-                Log.e("MainActivity", "Camera binding failed", e)
-            }
-        }, ContextCompat.getMainExecutor(this))
-    }
-
-    @androidx.camera.core.ExperimentalGetImage
-    private fun processImage(imageProxy: androidx.camera.core.ImageProxy) {
-        val mediaImage = imageProxy.image
-        if (mediaImage != null) {
-            val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-            val scanner = BarcodeScanning.getClient()
-            scanner.process(image)
-                .addOnSuccessListener { barcodes ->
-                    for (barcode in barcodes) {
-                        barcode.rawValue?.let { code ->
-                            runOnUiThread {
-                                binding.etUnlockCode.setText(code)
-                            }
-                        }
-                    }
-                }
-                .addOnCompleteListener {
-                    imageProxy.close()
-                }
-        } else {
-            imageProxy.close()
-        }
     }
 
     private fun probarConexion(ip: String, puerto: String, autoLaunch: Boolean, retryCount: Int = 0) {
         val base = NetworkUtils.buildBaseUrl(ip, puerto, getString(com.example.verificadordepreciosluz.R.string.default_port))
+        Log.d("MainActivity", "probarConexion: Iniciando con ip='$ip', puerto='$puerto', autoLaunch=$autoLaunch, retryCount=$retryCount")
         val api = ApiClient.create(base, BuildConfig.DEBUG)
         val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
         val maxRetries = 5
@@ -211,32 +235,32 @@ class MainActivity : AppCompatActivity() {
                     binding.btnValidar.isEnabled = false
                     binding.progressBar.visibility = View.VISIBLE
                 }
+                Log.d("MainActivity", "probarConexion: Enviando ping a $base")
                 val result = api.ping(deviceId)
+                Log.d("MainActivity", "probarConexion: Ping exitoso")
                 withContext(Dispatchers.Main) {
                     if (!autoLaunch) {
-                        Toast.makeText(
-                            this@MainActivity,
-                            "Resultado de ping: ${result.status}",
-                            Toast.LENGTH_LONG
-                        ).show()
+                        Toast.makeText(this@MainActivity, "Resultado de ping: ${result.status}", Toast.LENGTH_LONG).show()
                     }
                     startActivity(Intent(this@MainActivity, com.example.verificadordepreciosluz.ui.scanner.ScanActivity::class.java))
                     finish()
                 }
             } catch (e: Exception) {
+                Log.e("MainActivity", "probarConexion: Error en intento $retryCount", e)
                 withContext(Dispatchers.Main) {
                     if (autoLaunch && retryCount < maxRetries) {
                         val delay = (retryCount + 1) * 2000L
-                        Log.d("MainActivity", "Intento ${retryCount + 1}/$maxRetries falló. Reintentando en ${delay}ms...")
+                        Log.d("MainActivity", "probarConexion: Reintentando en ${delay}ms...")
                         Handler(Looper.getMainLooper()).postDelayed({
                             probarConexion(ip, puerto, autoLaunch, retryCount + 1)
                         }, delay)
                     } else {
                         val message = when (e) {
                             is HttpException -> "Error HTTP (${e.code()}) al conectar"
-                            is IOException -> "Tiempo de Conexion agotado"
+                            is IOException -> "Tiempo de Conexión agotado"
                             else -> "No se pudo conectar al servidor"
                         }
+                        Log.d("MainActivity", "probarConexion: Resultado final: $message")
                         if (!autoLaunch) {
                             Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
                         } else {
@@ -282,9 +306,4 @@ class MainActivity : AppCompatActivity() {
         val sanitizedHost: String? = null,
         val portToUse: String? = null
     )
-
-    override fun onDestroy() {
-        super.onDestroy()
-        cameraExecutor.shutdown()
-    }
 }

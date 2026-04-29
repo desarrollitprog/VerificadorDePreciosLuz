@@ -8,16 +8,7 @@
     android:background="@color/fondo_logo"
     tools:context=".MainActivity">
 
-    <!-- Cámara oculta para escanear código de salida -->
-    <androidx.camera.view.PreviewView
-        android:id="@+id/previewViewLogin"
-        android:layout_width="1dp"
-        android:layout_height="1dp"
-        android:visibility="invisible"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
-
-    <!-- Campo oculto para procesar códigos escaneados -->
+    <!-- Campo para procesar códigos del escáner HID (oculto pero funcional) -->
     <EditText
         android:id="@+id/etUnlockCode"
         android:layout_width="1dp"

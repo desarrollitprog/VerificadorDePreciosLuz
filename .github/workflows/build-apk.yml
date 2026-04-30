@@ -41,7 +41,7 @@ jobs:
           APK=$(ls $APK_PATH/*.apk | head -1)
           CHECKSUM=$(sha256sum "$APK" | cut -d' ' -f1)
           echo "{\"version\": \"$VERSION\", \"min_version\": \"1.0.0\", \"download_url\": \"https://tavorl25.github.io/VerificadorDePreciosLuz/luzapp.apk\", \"checksum\": \"$CHECKSUM\", \"changelog\": \"Actualización automática\"}" > version.json
-          shell: bash
+        shell: bash
           
       - name: Copy APK
         run: cp luzapp/app/build/outputs/apk/debug/*.apk luzapp.apk

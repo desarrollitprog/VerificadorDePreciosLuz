@@ -25,11 +25,14 @@ import java.io.IOException
 import android.text.Editable
 import android.text.TextWatcher
 
+
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var isUnlocked = false
     private val UNLOCK_CODE = "ADMIN-CODE-125"
     private var scannerBuffer = StringBuilder()
+    private val handler = Handler(Looper.getMainLooper())
+    private var bufferTimeoutRunnable: Runnable? = null
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         // Interceptar teclas del escáner HID cuando el config está bloqueado
@@ -45,19 +48,36 @@ class MainActivity : AppCompatActivity() {
                 val scannedText = scannerBuffer.toString()
                 Log.d("MainActivity", "dispatchKeyEvent: ENTER detectado, buffer='$scannedText'")
                 if (scannedText.isNotEmpty()) {
-                    runOnUiThread {
-                        binding.etUnlockCode.setText(scannedText)
-                        Log.d("MainActivity", "dispatchKeyEvent: Texto enviado a etUnlockCode='$scannedText'")
-                    }
+                    binding.etUnlockCode.setText(scannedText)
+                    Log.d("MainActivity", "dispatchKeyEvent: Texto enviado a etUnlockCode='$scannedText'")
                 }
                 scannerBuffer.clear()
                 return true // Consumir el Enter para que no active el botón
             } else if (unicodeChar != 0) {
-                // Carácter imprimible del escáner
                 val char = unicodeChar.toChar()
                 scannerBuffer.append(char)
-                Log.d("MainActivity", "dispatchKeyEvent: Carácter agregado='$char', buffer actual='${scannerBuffer}'")
-                return true // Consumir para que no escriba en otros campos
+                val bufferText = scannerBuffer.toString()
+                Log.d("MainActivity", "Carácter agregado: '$char', buffer: '$bufferText', length=${bufferText.length}")
+
+                // PROCESAR AUTOMÁTICAMENTE cuando alcance longitud válida
+                if (bufferText.length == 8 || bufferText.length == 12 || bufferText.length == 13) {
+                    Log.d("MainActivity", "Longitud válida alcanzada: ${bufferText.length}, procesando...")
+                    binding.etUnlockCode.setText(bufferText)
+                    scannerBuffer.clear()
+                    return true
+                }
+
+                // Timeout de 2 segundos para limpiar buffer incompleto
+                bufferTimeoutRunnable?.let {handler.removeCallbacks(it) }
+                bufferTimeoutRunnable = Runnable {
+                    if (scannerBuffer.isNotEmpty()) {
+                        Log.w("MainActivity", "Timeout: limpiando buffer incompleto: '${scannerBuffer}'")
+                        scannerBuffer.clear()
+                    }
+                }
+                handler.postDelayed(bufferTimeoutRunnable!!, 2000L)
+
+                return true
             }
         }
         return super.dispatchKeyEvent(event)
@@ -127,6 +147,8 @@ class MainActivity : AppCompatActivity() {
             binding.etIpServidor.isFocusable = false
             binding.etPuertoServidor.isEnabled = false
             binding.etPuertoServidor.isFocusable = false
+            binding.btnValidar.isFocusable = false
+            binding.btnValidar.isFocusableInTouchMode = false
             binding.tvLockedIndicator.visibility = View.VISIBLE
             
             // CRÍTICO: Asegurar que el escáner HID escriba en etUnlockCode
@@ -154,6 +176,8 @@ class MainActivity : AppCompatActivity() {
         } else {
             Log.d("MainActivity", "onCreate: No hay IP guardada, mostrando configuración manual")
             binding.tvLockedIndicator.visibility = View.GONE
+            binding.btnValidar.isFocusable = true
+            binding.btnValidar.isFocusableInTouchMode = true
         }
 
         // Solo verificar backup si NO hay IP guardada
@@ -202,9 +226,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
         
-        // Evitar que el botón se active con Enter del escáner HID
-        binding.btnValidar.isFocusable = false
-        binding.btnValidar.isFocusableInTouchMode = false
     }
 
     private fun unlockConfig() {
@@ -216,6 +237,8 @@ class MainActivity : AppCompatActivity() {
         binding.etPuertoServidor.isEnabled = true
         binding.etPuertoServidor.isFocusable = true
         binding.etPuertoServidor.isFocusableInTouchMode = true
+        binding.btnValidar.isFocusable = true
+        binding.btnValidar.isFocusableInTouchMode = true
         binding.tvLockedIndicator.visibility = View.GONE
         binding.etIpServidor.requestFocus()
         Log.d("MainActivity", "unlockConfig: Configuración desbloqueada")
@@ -251,9 +274,8 @@ class MainActivity : AppCompatActivity() {
                     if (autoLaunch && retryCount < maxRetries) {
                         val delay = (retryCount + 1) * 2000L
                         Log.d("MainActivity", "probarConexion: Reintentando en ${delay}ms...")
-                        Handler(Looper.getMainLooper()).postDelayed({
-                            probarConexion(ip, puerto, autoLaunch, retryCount + 1)
-                        }, delay)
+                        kotlinx.coroutines.delay(delay)
+                        probarConexion(ip, puerto, autoLaunch, retryCount + 1)
                     } else {
                         val message = when (e) {
                             is HttpException -> "Error HTTP (${e.code()}) al conectar"

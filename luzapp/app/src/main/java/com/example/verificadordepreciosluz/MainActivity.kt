@@ -29,21 +29,22 @@ import android.text.TextWatcher
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var isUnlocked = false
+    private var isLocked = false
     private val UNLOCK_CODE = "ADMIN-CODE-125"
     private var scannerBuffer = StringBuilder()
     private val handler = Handler(Looper.getMainLooper())
     private var bufferTimeoutRunnable: Runnable? = null
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        // Interceptar teclas del escáner HID cuando el config está bloqueado
-        if (!isUnlocked && event.action == KeyEvent.ACTION_DOWN) {
+        // Interceptar teclas del escáner HID solo en modo bloqueado
+        if (isLocked && !isUnlocked && event.action == KeyEvent.ACTION_DOWN) {
             val keyCode = event.keyCode
             val unicodeChar = event.unicodeChar
             
             Log.d("MainActivity", "dispatchKeyEvent: keyCode=$keyCode, unicodeChar=$unicodeChar")
             
             // Ignorar teclas de control (flechas, tab, etc.)
-            if (keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_DPAD_CENTER) {
+            if (keyCode == KeyEvent.KEYCODE_ENTER) {
                 // Enter del escáner - procesar el buffer acumulado
                 val scannedText = scannerBuffer.toString()
                 Log.d("MainActivity", "dispatchKeyEvent: ENTER detectado, buffer='$scannedText'")
@@ -53,6 +54,9 @@ class MainActivity : AppCompatActivity() {
                 }
                 scannerBuffer.clear()
                 return true // Consumir el Enter para que no active el botón
+            } else if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER) {
+                // No consumir DPAD_CENTER - permitir que llegue al botón
+                return super.dispatchKeyEvent(event)
             } else if (unicodeChar != 0) {
                 val char = unicodeChar.toChar()
                 scannerBuffer.append(char)
@@ -142,6 +146,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (!ipGuardada.isNullOrBlank()) {
+            isLocked = true
             Log.d("MainActivity", "onCreate: IP guardada encontrada, bloqueando inputs")
             binding.etIpServidor.isEnabled = false
             binding.etIpServidor.isFocusable = false

@@ -36,12 +36,12 @@ jobs:
         
       - name: Update version.json
         run: |
-          VERSION=$(date +%Y%m%d)
+          VERSION=$(grep -oP 'versionName\s*=\s*"\K[^"]+' luzapp/app/build.gradle.kts || echo "1.0.0")
           APK_PATH="luzapp/app/build/outputs/apk/debug"
           APK=$(ls $APK_PATH/*.apk | head -1)
           CHECKSUM=$(sha256sum "$APK" | cut -d' ' -f1)
           echo "{\"version\": \"$VERSION\", \"min_version\": \"1.0.0\", \"download_url\": \"https://tavorl25.github.io/VerificadorDePreciosLuz/luzapp.apk\", \"checksum\": \"$CHECKSUM\", \"changelog\": \"Actualización automática\"}" > version.json
-        shell: bash
+          shell: bash
           
       - name: Copy APK
         run: cp luzapp/app/build/outputs/apk/debug/*.apk luzapp.apk

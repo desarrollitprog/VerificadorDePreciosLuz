@@ -1817,16 +1817,19 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     }
 
     private fun toggleMockPanel() {
-        val isHidden = binding.mockPanel.alpha == 0f
-        if (isHidden) {
-            binding.mockPanel.alpha = 1f
-            binding.etMockCode.alpha = 1f
+        // En lugar de cambiar alpha del panel, cambiamos visibilidad del rectángulo ocultador
+        val isRectanguloVisible = binding.rectanguloOcultador.visibility == View.VISIBLE
+        
+        if (isRectanguloVisible) {
+            // Mostrar toggle: ocultar rectángulo
+            binding.rectanguloOcultador.visibility = View.GONE
             binding.etMockCode.requestFocus()
+            Log.d(TAG, "Toggle: Mostrando panel (rectángulo oculto)")
         } else {
-            binding.mockPanel.alpha = 0f
-            binding.etMockCode.alpha = 0f
-            // Mantener view visible para que siga existiendo; foco opcional si se usa lector
+            // Ocultar toggle: mostrar rectángulo
+            binding.rectanguloOcultador.visibility = View.VISIBLE
             binding.etMockCode.requestFocus()
+            Log.d(TAG, "Toggle: Ocultando panel (rectángulo visible)")
         }
     }
 

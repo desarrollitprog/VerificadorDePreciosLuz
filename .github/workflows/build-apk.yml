@@ -1,0 +1,62 @@
+name: Build APK Daily
+
+on:
+  schedule:
+    - cron: '0 9 * * *'  # Daily at 9 AM UTC = 5 AM Caracas
+  push:
+    paths:
+      - 'luzapp/**'
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          
+      - name: Build debug APK
+        run: |
+          cd luzapp
+          chmod +x gradlew
+          ./gradlew assembleDebug
+        shell: bash
+        
+      - name: Update version.json
+        run: |
+          VERSION=$(grep -oP 'versionName\s*=\s*"\K[^"]+' luzapp/app/build.gradle.kts || echo "1.0.0")
+          APK_PATH="luzapp/app/build/outputs/apk/debug"
+          APK=$(ls $APK_PATH/*.apk | head -1)
+          CHECKSUM=$(sha256sum "$APK" | cut -d' ' -f1)
+          echo "{\"version\": \"$VERSION\", \"min_version\": \"1.0.0\", \"download_url\": \"https://tavorl25.github.io/VerificadorDePreciosLuz/luzapp.apk\", \"checksum\": \"$CHECKSUM\", \"changelog\": \"Actualización automática\"}" > version.json
+        shell: bash
+          
+      - name: Copy APK
+        run: cp luzapp/app/build/outputs/apk/debug/*.apk luzapp.apk
+        shell: bash
+
+      - name: Commit files to repo
+        run: |
+          git config --local user.email "github-actions@github.com"
+          git config --local user.name "GitHub Actions"
+          git fetch origin || true
+          git add version.json luzapp.apk
+          git commit -m "Update $(date +%Y%m%d)" || echo "No changes to commit"
+          git push origin main --force || (
+            echo "Push rejected, trying pull and retry..."
+            git pull --rebase origin main
+            git push origin main
+          )
+        shell: bash

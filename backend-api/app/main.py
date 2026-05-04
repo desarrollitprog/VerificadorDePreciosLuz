@@ -18,6 +18,11 @@ from pydantic import BaseModel
 from . import database, models, schemas
 from .routes import consultas, publicidad
 from .services import DeviceCommandBus, DeviceStateStore
+from .services.scheduler_notifications import (
+    save_pending_notification,
+    get_pending_notification,
+    remove_pending_notification,
+)
 from .database import get_db_publicidad
 from .models.publicidad import Publicidad
 
@@ -71,6 +76,25 @@ async def get_devices_status():
     return status
 
 
+@app.delete("/devices/{device_id}")
+async def unregister_device_endpoint(device_id: str):
+    """
+    Desregistra un dispositivo del servidor secundario.
+    El dashboard lo llama cuando se elimina un dispositivo de la BD.
+    """
+    from app.services.device_registry import unregister_device
+    
+    try:
+        await unregister_device(device_id)
+        if device_state_store is not None:
+            await device_state_store.remove_device(device_id)
+        logger.info(f"[UNREGISTER] Dispositivo {device_id} desvinculado del servidor")
+        return {"success": True, "message": f"Dispositivo {device_id} desvinculado correctamente"}
+    except Exception as e:
+        logger.error(f"[UNREGISTER] Error desvinculando dispositivo {device_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/ping")
 async def ping(device_id: str | None = None):
     if device_id and device_state_store is not None:
@@ -78,9 +102,46 @@ async def ping(device_id: str | None = None):
     return {"status": "Conexion Exitosa"}
 
 
+# Endpoint de debug para recibir logs del BCV desde la app Android
+@app.post("/api/debug-bcv")
+async def debug_bcv(
+    log_message: str = Query(...),
+    device_id: str | None = Query(None),
+    today: str | None = Query(None),
+    cached_date: str | None = Query(None),
+    cached_usd: str | None = Query(None),
+    cached_eur: str | None = Query(None),
+    api_usd: str | None = Query(None),
+    api_eur: str | None = Query(None),
+    cache_actualizado: str | None = Query(None)
+):
+    msg = f"[BCV-DEBUG] {log_message}"
+    if device_id:
+        msg = f"[BCV-DEBUG][{device_id}] {log_message}"
+    
+    if today:
+        msg += f" | today={today}"
+    if cached_date:
+        msg += f" | cachedDate={cached_date}"
+    if cached_usd:
+        msg += f" | cachedUSD={cached_usd}"
+    if cached_eur:
+        msg += f" | cachedEUR={cached_eur}"
+    if api_usd:
+        msg += f" | apiUSD={api_usd}"
+    if api_eur:
+        msg += f" | apiEUR={api_eur}"
+    if cache_actualizado:
+        msg += f" | cacheActualizado={cache_actualizado}"
+    
+    logger.info(msg)
+    return {"status": "logged"}
+
+
 banner_check_task: asyncio.Task | None = None
 notified_banners_start: set[int] = set()
 notified_banners_end: set[int] = set()
+scheduler_notifications: Any = None
 
 BANNER_CHECK_INTERVAL = 20 * 60  # 20 minutos en segundos
 
@@ -181,6 +242,79 @@ async def _send_banner_notification(banner: Publicidad, target_device_ids: List[
         await tablet_ws_manager.broadcast(banner_info)
 
 
+async def _send_to_device_robust(device_id: str, banner_info: dict) -> bool:
+    sent_via = None
+    
+    if device_command_bus is not None:
+        try:
+            await device_command_bus.publish_command(
+                device_id=device_id,
+                command=banner_info.get("command", ""),
+                payload=banner_info,
+            )
+            sent_via = "Redis"
+            logger.info(f"[BANNER_ROBUST] Enviado {banner_info.get('command')} via Redis a {device_id}")
+        except Exception as e:
+            logger.warning(f"[BANNER_ROBUST] Redis falló para {device_id}: {e}")
+    
+    ws = tablet_ws_manager.device_map.get(device_id)
+    if ws:
+        try:
+            await ws.send_json(banner_info)
+            sent_via = "WS"
+            logger.info(f"[BANNER_ROBUST] Enviado {banner_info.get('command')} via WS a {device_id}")
+        except Exception as e:
+            logger.warning(f"[BANNER_ROBUST] WS falló para {device_id}: {e}")
+    
+    if sent_via:
+        return True
+    
+    try:
+        from app.services.device_state import DeviceStateStore
+        key = f"device:pending:banner:{device_id}"
+        import json
+        await device_state_store.redis.set(key, json.dumps(banner_info), ex=300)
+        logger.info(f"[BANNER_ROBUST] Guardado en cola Redis para {device_id}")
+    except Exception as e:
+        logger.warning(f"[BANNER_ROBUST] Cola Redis falló para {device_id}: {e}")
+    
+    return sent_via is not None
+
+
+async def send_banner_notification_robust(banner: Publicidad, target_device_ids: List[str] | None, command: str):
+    banner_info = {
+        "command": command,
+        "banner_id": banner.id,
+        "titulo": banner.titulo,
+        "url": banner.url,
+        "tipo": banner.tipo,
+        "fecha_inicio": banner.fecha_inicio.isoformat() if banner.fecha_inicio else None,
+        "fecha_fin": banner.fecha_fin.isoformat() if banner.fecha_fin else None,
+    }
+    
+    if target_device_ids:
+        for device_id in target_device_ids:
+            await _send_to_device_robust(device_id, banner_info)
+    else:
+        if device_state_store is not None:
+            try:
+                status_map = await device_state_store.get_all_status()
+                online_devices = [d for d, info in status_map.items() if info.get("online")]
+            except Exception as e:
+                logger.warning(f"[BANNER_ROBUST] Error obteniendo estado de Redis: {e}")
+                online_devices = []
+        else:
+            online_devices = []
+        
+        if not online_devices:
+            online_devices = [d for d, _ in tablet_ws_manager.get_connected_targets() if d]
+        
+        logger.info(f"[BANNER_ROBUST] {command} para banner {banner.id}: {len(online_devices)} dispositivos")
+        
+        for device_id in online_devices:
+            await _send_to_device_robust(device_id, banner_info)
+
+
 async def schedule_banner_notification(
     banner_id: int,
     device_ids: str | None,
@@ -193,9 +327,7 @@ async def schedule_banner_notification(
     """Programa notificaciones exactas para inicio y fin de banner."""
     now = get_venezuela_now()
     
-    # Programar notificación de inicio
     if fecha_inicio:
-        # Convertir fecha_inicio a aware si es naive
         if fecha_inicio.tzinfo is None:
             fecha_inicio_aware = fecha_inicio.replace(tzinfo=timezone(timedelta(hours=-4)))
         else:
@@ -204,13 +336,26 @@ async def schedule_banner_notification(
         delay_inicio = (fecha_inicio_aware - now).total_seconds()
         if delay_inicio > 0:
             logger.info(f"Programando notificación de inicio para banner {banner_id} en {delay_inicio} segundos")
+            
+            await save_pending_notification(
+                banner_id=banner_id,
+                device_ids=device_ids,
+                titulo=titulo,
+                url=url,
+                tipo=tipo,
+                fecha_inicio=fecha_inicio,
+                fecha_fin=fecha_fin,
+                command="BANNER_INICIADO",
+                scheduled_at=fecha_inicio_aware,
+            )
+            
             await asyncio.sleep(delay_inicio)
             
-            # Verificar si ya fue notificado (evitar duplicados)
             if banner_id in notified_banners_start:
                 logger.info(f"Banner {banner_id} ya notificado de inicio, saltando")
+                await remove_pending_notification(banner_id, "BANNER_INICIADO")
             else:
-                # Obtener el banner actualizado de la BD para verificar si aún está activo
+                pending = await get_pending_notification(banner_id, "BANNER_INICIADO")
                 async for db in get_db_publicidad():
                     result = await db.execute(select(Publicidad).where(Publicidad.id == banner_id))
                     banner = result.scalars().first()
@@ -218,12 +363,12 @@ async def schedule_banner_notification(
                         target_device_ids = None
                         if banner.device_ids:
                             target_device_ids = [d.strip() for d in banner.device_ids.split(",") if d.strip()]
-                        await _send_banner_notification(banner, target_device_ids, "BANNER_INICIADO")
+                        await send_banner_notification_robust(banner, target_device_ids, "BANNER_INICIADO")
                         notified_banners_start.add(banner_id)
                         logger.info(f"Notificación de inicio enviada para banner {banner_id}")
+                    await remove_pending_notification(banner_id, "BANNER_INICIADO")
                     break
     
-    # Programar notificación de fin
     if fecha_fin:
         if fecha_fin.tzinfo is None:
             fecha_fin_aware = fecha_fin.replace(tzinfo=timezone(timedelta(hours=-4)))
@@ -233,12 +378,26 @@ async def schedule_banner_notification(
         delay_fin = (fecha_fin_aware - now).total_seconds()
         if delay_fin > 0:
             logger.info(f"Programando notificación de fin para banner {banner_id} en {delay_fin} segundos")
+            
+            await save_pending_notification(
+                banner_id=banner_id,
+                device_ids=device_ids,
+                titulo=titulo,
+                url=url,
+                tipo=tipo,
+                fecha_inicio=fecha_inicio,
+                fecha_fin=fecha_fin,
+                command="BANNER_FINALIZADO",
+                scheduled_at=fecha_fin_aware,
+            )
+            
             await asyncio.sleep(delay_fin)
             
-            # Verificar si ya fue notificado (evitar duplicados)
             if banner_id in notified_banners_end:
                 logger.info(f"Banner {banner_id} ya notificado de fin, saltando")
+                await remove_pending_notification(banner_id, "BANNER_FINALIZADO")
             else:
+                await get_pending_notification(banner_id, "BANNER_FINALIZADO")
                 async for db in get_db_publicidad():
                     result = await db.execute(select(Publicidad).where(Publicidad.id == banner_id))
                     banner = result.scalars().first()
@@ -246,9 +405,10 @@ async def schedule_banner_notification(
                         target_device_ids = None
                         if banner.device_ids:
                             target_device_ids = [d.strip() for d in banner.device_ids.split(",") if d.strip()]
-                        await _send_banner_notification(banner, target_device_ids, "BANNER_FINALIZADO")
+                        await send_banner_notification_robust(banner, target_device_ids, "BANNER_FINALIZADO")
                         notified_banners_end.add(banner_id)
                         logger.info(f"Notificación de fin enviada para banner {banner_id}")
+                    await remove_pending_notification(banner_id, "BANNER_FINALIZADO")
                     break
 
 
@@ -290,6 +450,14 @@ async def start_device_monitor():
 
     banner_check_task = asyncio.create_task(_check_banners_starting())
     logger.info("Banner check task iniciada")
+
+    try:
+        from app.services.scheduler_notifications import SchedulerNotifications, scheduler_notifications as sn
+        global scheduler_notifications
+        scheduler_notifications = await SchedulerNotifications.create(ttl_seconds=7200)
+        logger.info("SchedulerNotifications inicializado con Redis (TTL=2h)")
+    except Exception as e:
+        logger.warning(f"SchedulerNotifications no disponible: {e}")
 
 
 @app.on_event("shutdown")
@@ -1004,6 +1172,9 @@ async def fuerza_sync(
 
 class ComandoBody(BaseModel):
     comando: str
+    hour: str | None = None  # formato "06:35" - el dispositivo calcula la próxima occurrence
+    scheduled_at: str | None = None  # formato ISO 8601 (legacy, para backward compatibility)
+    recurring: bool = False
 
 
 COMMAND_TIMEOUT = 60  # segundos para esperar confirmación de reinicio
@@ -1028,15 +1199,27 @@ async def enviar_comando_a_dispositivo(
     if comando not in ("REINICIAR",):
         raise HTTPException(status_code=400, detail=f"Comando no soportado: {comando}")
     
-    # Publicar comando en Redis (via pub/sub) - similar a sincronización
-    # Los workers con el WebSocket del dispositivo conectado lo recibirán y enviarán
-    logger.info(f"[COMMAND] Publicando comando '{comando}' para dispositivo {device_id}")
+    # Preparar payload para comandos programados
+    # El dispositivo calcula la próxima occurrence en su timezone local
+    is_recurring = body.recurring
+    
+    # Preparar payload para el dispositivo
+    command_payload = {}
+    if body.hour:
+        # Nuevo formato: enviar solo hour y recurring
+        command_payload["hour"] = body.hour
+        command_payload["recurring"] = is_recurring
+        logger.info(f"[COMMAND] Payload con hour: {body.hour}, recurring: {is_recurring}")
+    elif body.scheduled_at:
+        # Legacy: scheduled_at para backward compatibility
+        command_payload["scheduled_at"] = body.scheduled_at
+        command_payload["recurring"] = is_recurring
+        logger.info(f"[COMMAND] Payload legacy con scheduled_at: {body.scheduled_at}")
+    
+    logger.info(f"[COMMAND] Payload del comando: {command_payload}")
     
     # Preparar waiters para confirmación
     ack_key = f"command:{device_id}:{comando}"
-    waiter = asyncio.Event()
-    command_ack_waiters[ack_key] = waiter
-    command_ack_payloads.pop(ack_key, None)
     
     # Validar que Redis esté disponible
     if device_command_bus is None:
@@ -1074,7 +1257,7 @@ async def enviar_comando_a_dispositivo(
         await device_command_bus.publish_command(
             device_id=device_id,
             command=comando,
-            payload={},
+            payload=command_payload,
         )
         
         # Esperar confirmación via polling a Redis
@@ -1656,7 +1839,12 @@ async def _on_bus_command(device_id: str, command: str, payload: dict):
     if command == "WIPE_AND_RESYNC":
         await tablet_ws_manager.send_to_device(device_id, {"command": "WIPE_AND_RESYNC"})
     elif command == "REINICIAR":
-        await tablet_ws_manager.send_to_device(device_id, {"command": "REINICIAR"})
+        message = {"command": "REINICIAR"}
+        if payload:
+            message.update(payload)
+        await tablet_ws_manager.send_to_device(device_id, message)
+    elif command in ("BANNER_INICIADO", "BANNER_FINALIZADO"):
+        await tablet_ws_manager.send_to_device(device_id, payload)
 
 
 async def _on_bus_confirmation(device_id: str, command: str, status: str, reason: str):

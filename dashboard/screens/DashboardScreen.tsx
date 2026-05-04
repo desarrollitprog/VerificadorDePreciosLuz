@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNotification } from '../components/useNotification';
-import { Search, UploadCloud, MoreVertical, Eye, Trash, Film, Plus, Server, Smartphone, ChevronDown, ChevronRight } from 'lucide-react';
+import { Search, UploadCloud, MoreVertical, Eye, Trash, Film, Plus, Server, Smartphone, ChevronDown, ChevronRight, Clock } from 'lucide-react';
 import { getVideos, uploadMedia, deleteVideo, sincronizarServidores, updateBannerMetadata, updateBannerAsignations, FileMetadata } from '../services/videoService';
 import { Video, Servidor } from '../types';
 import { ServerDeviceSelector } from '../components/ServerDeviceSelector';
@@ -695,12 +695,7 @@ export const DashboardScreen: React.FC = () => {
                   {video.tipo === 'image' ? (
                     <img src={video.thumbnail} alt={video.titulo || video.filename} className="w-full h-full object-cover" />
                   ) : (
-                    <div className="flex items-center justify-center w-full h-full">
-                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <rect width="24" height="24" rx="6" fill="#1c2936" />
-                        <polygon points="9,7 17,12 9,17" fill="#fff" />
-                      </svg>
-                    </div>
+                    <img src={video.thumbnail || video.url} alt={video.titulo || video.filename} className="w-full h-full object-cover" />
                   )}
                   <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors"></div>
                   {video.duration && video.tipo === 'video' && (
@@ -748,10 +743,30 @@ export const DashboardScreen: React.FC = () => {
                     </button>
                   </div>
                   {/* Badges de asignación */}
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
                     <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold border ${video.estado === 'activo' ? 'bg-green-500/10 text-green-500 border-green-500/20' : video.estado === 'inactivo' ? 'bg-slate-500/10 text-slate-500 border-slate-500/20' : video.estado === 'vencido' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-amber-500/10 text-amber-500 border-amber-500/20'}`}>
                       {(video.estado || 'activo').toUpperCase()}
                     </span>
+                    {/* Badge de programado */}
+                    {(video.fechaInicio || video.fechaFin) && (
+                      <span className="relative group/badges">
+                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold bg-purple-500/10 text-purple-500 border border-purple-500/20">
+                          <Clock size={10} />
+                          PROGRAMADO
+                        </span>
+                        {/* Tooltip con fechas */}
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 dark:bg-slate-800 text-white text-xs rounded-lg shadow-xl opacity-0 invisible group-hover/badges:opacity-100 group-hover/badges:visible transition-all duration-200 z-50 whitespace-nowrap">
+                          <div className="font-semibold mb-1">Programación</div>
+                          {video.fechaInicio && (
+                            <div className="text-slate-300">Inicio: <span className="text-white">{video.fechaInicio}</span></div>
+                          )}
+                          {video.fechaFin && (
+                            <div className="text-slate-300">Fin: <span className="text-white">{video.fechaFin}</span></div>
+                          )}
+                          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900 dark:border-t-slate-800"></div>
+                        </div>
+                      </span>
+                    )}
                     {video.asignacion_todos ? (
                       <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
                         <Server size={10} />
@@ -1348,7 +1363,13 @@ export const DashboardScreen: React.FC = () => {
                     const data = await getVideos();
                     setVideos(data);
                   } catch (error: any) {
-                    showNotification('Error al actualizar la publicidad', 'error');
+                    // Mostrar mensaje de error específico del backend si está disponible
+                    // FastAPI devuelve el error en 'detail' o 'error'
+                    const backendError = error?.response?.data?.detail || error?.response?.data?.error;
+                    const errorMessage = backendError || (error.message === 'Request failed with status code 400' 
+                        ? 'Error de validación' 
+                        : 'Error al actualizar la publicidad');
+                    showNotification(errorMessage, 'error');
                   } finally {
                     setIsSavingEdit(false);
                   }
@@ -1403,6 +1424,7 @@ export const DashboardScreen: React.FC = () => {
               <video 
                 ref={videoRef}
                 src={preview.url} 
+                poster={preview.thumbnail || preview.url}
                 controls 
                 autoPlay 
                 preload="none"

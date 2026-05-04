@@ -440,7 +440,7 @@ async def _execute_selective_sync_job(
             if dispositivo_ids and not servidor_ids:
                 dispositivos_mapa = await _get_dispositivos_por_servidor(db, None, dispositivo_ids)
                 servidor_ids_automatico = list(dispositivos_mapa.keys())
-                print(f"[DEBUG] Dispositivo_ids especificados sin servidores. Servers automáticos: {servidor_ids_automatico}")
+                logger.debug(f"Dispositivo_ids sin servidores. Servers automáticos: {servidor_ids_automatico}")
                 online_servers = [s for s in online_servers if s.id in servidor_ids_automatico]
                 servidor_ids_a_buscar = servidor_ids_automatico
             elif servidor_ids:
@@ -450,16 +450,14 @@ async def _execute_selective_sync_job(
             dispositivos_por_servidor = await _get_dispositivos_por_servidor(
                 db, servidor_ids_a_buscar, dispositivo_ids
             )
-            print(f"[DEBUG] servidores_ids: {servidor_ids}, dispositivo_ids: {dispositivo_ids}, online_servers: {[s.id for s in online_servers]}, disp_por_srv: {dispositivos_por_servidor}")
+            logger.debug(f"Sync selectivo: servers={servidor_ids_a_buscar}, dispositivos={len(dispositivo_ids) if dispositivo_ids else 0}")
 
             async def send_selective_sync(ip: str, dispositivo_ids_list: List[str] = None, on_progress: Any = None) -> dict[str, Any]:
                 url = f"http://{ip}:8000/api/fuerza-sync"
                 try:
                     params = {"async_mode": "true"}
                     if dispositivo_ids_list:
-                        print(f"[DEBUG] Enviando dispositivo_ids al servidor {ip}: {dispositivo_ids_list}")
-                        # Enviar como string separado por comas
-                        # IMPORTANTE: El backend-api espera "dispositivo_ids", no "device_ids"
+                        logger.debug(f"Enviando sync a servidor {ip}: {len(dispositivo_ids_list)} dispositivos")
                         params["dispositivo_ids"] = ",".join(dispositivo_ids_list)
                     
                     async with httpx.AsyncClient(timeout=FORCE_SYNC_TIMEOUT_SECONDS) as client:
@@ -732,7 +730,6 @@ async def status_detalle(
     """
     Devuelve servidores + dispositivos conectados (consultando /devices/status por IP).
     """
-    logger.info("status-detalle: solicitud recibida")
     now = _utcnow()
     umbral = now - timedelta(minutes=HEARTBEAT_OFFLINE_MINUTES)
 
@@ -741,7 +738,7 @@ async def status_detalle(
     servidores = result.scalars().all()
 
     dispositivos_result = await db.execute(select(Dispositivo))
-    dispositivos_db = dispositivos_result.scalars().all()
+    dispositivos_db = list(dispositivos_result.scalars().all())
     dispositivo_por_codigo: dict[str, Dispositivo] = {
         d.codigo_kiosko: d for d in dispositivos_db
     }
@@ -886,6 +883,8 @@ async def status_detalle(
                     "ultima_duracion": ultima_duracion,
                     "tiempo_acumulado": tiempo_acumulado,
                     "server_id": runtime_info.get("server_id"),
+                    "hora_reinicio": getattr(dispositivo, 'hora_reinicio', None),
+                    "reinicio_recurrente": getattr(dispositivo, 'reinicio_recurrente', False),
                 }
             )
 
@@ -1167,6 +1166,23 @@ async def eliminar_dispositivo(
     await db.delete(dispositivo)
     await db.commit()
 
+    # Desvincular el dispositivo del servidor secundario
+    if servidor_id:
+        stmt_srv = select(ServidorSecundario).where(ServidorSecundario.id == servidor_id)
+        result_srv = await db.execute(stmt_srv)
+        servidor = result_srv.scalars().first()
+        
+        if servidor:
+            try:
+                async with httpx.AsyncClient(timeout=10) as client:
+                    response = await client.delete(f"http://{servidor.ip}:8000/devices/{device_id}")
+                    if response.status_code == 200:
+                        logger.info(f"Dispositivo {device_id} desvinculado del servidor {servidor.ip}: {response.status_code}")
+                    else:
+                        logger.warning(f"Dispositivo {device_id} no se pudo desvincular del servidor {servidor.ip}: {response.status_code}")
+            except Exception as e:
+                logger.warning(f"No se pudo desvincular {device_id} del servidor {servidor.ip}: {e}")
+
     user_id = current_user.get("user_id") if current_user else None
     if user_id is not None:
         try:
@@ -1378,3 +1394,126 @@ async def reiniciar_dispositivo(
     except Exception as e:
         logger.error(f"Error al reiniciar dispositivo {device_id}: %s", e)
         raise HTTPException(status_code=500, detail=f"Error al comunicarse con el servidor: {str(e)}")
+
+
+class ProgramarReinicioBody(BaseModel):
+    device_ids: list[str] = []  # vacío = todos los dispositivos
+    hour: str  # formato "06:35"
+    recurring: bool = True
+
+
+@router.post("/dispositivos/programar-reinicio")
+async def programar_reinicio_masivo(
+    body: ProgramarReinicioBody,
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_cliente),
+):
+    """
+    Programa reinicio masivo para uno o todos los dispositivos.
+    
+    Lógica:
+    - Si device_ids vacío: obtener todos los dispositivos de BD
+    - Calcular scheduled_at basado en hour + fecha actual/mañana
+    - Si recurring=True: configurar para ejecutarse diariamente
+    """
+    from datetime import datetime, timedelta, timezone
+    
+    # 1. Obtener lista de dispositivos
+    # Si device_ids tiene elementos específicos, usarlos; si está vacía, obtener todos de BD
+    dispositivos_ids = body.device_ids if body.device_ids and len(body.device_ids) > 0 else []
+    
+    if not dispositivos_ids:
+        # Obtener todos los dispositivos de la base de datos
+        stmt = select(Dispositivo.codigo_kiosko)
+        result = await db.execute(stmt)
+        dispositivos_ids = [row[0] for row in result.fetchall()]
+    
+    if not dispositivos_ids:
+        raise HTTPException(status_code=400, detail="No hay dispositivos disponibles")
+    
+    logger.info(f"[PROGRAMAR_REINICIO] Programando para {len(dispositivos_ids)} dispositivos, hour={body.hour}, recurring={body.recurring}")
+    
+    # Validar formato de hora
+    hour_parts = body.hour.split(':')
+    if len(hour_parts) != 2:
+        raise HTTPException(status_code=400, detail="Formato de hora inválido. Use HH:MM")
+    
+    # 3. Enviar comando a cada dispositivo (el dispositivo calcular la próxima occurrence)
+    resultados = {
+        "total": len(dispositivos_ids),
+        "enviados": 0,
+        "fallidos": 0,
+        "details": []
+    }
+    
+    for device_id in dispositivos_ids:
+        try:
+            # Buscar servidor del dispositivo
+            stmt_disp = select(Dispositivo).where(Dispositivo.codigo_kiosko == device_id)
+            result_disp = await db.execute(stmt_disp)
+            dispositivo = result_disp.scalars().first()
+            
+            logger.info(f"[PROGRAMAR_REINICIO] Procesando {device_id}, hora_reinicio_actual={dispositivo.hora_reinicio if dispositivo else 'None'}")
+            
+            if not dispositivo or not dispositivo.servidor_id:
+                resultados["fallidos"] += 1
+                resultados["details"].append({"device_id": device_id, "status": "error", "message": "Dispositivo sin servidor"})
+                continue
+            
+            stmt_srv = select(ServidorSecundario).where(ServidorSecundario.id == dispositivo.servidor_id)
+            result_srv = await db.execute(stmt_srv)
+            servidor = result_srv.scalars().first()
+            
+            if not servidor:
+                resultados["fallidos"] += 1
+                resultados["details"].append({"device_id": device_id, "status": "error", "message": "Servidor no encontrado"})
+                continue
+            
+            servidor_ip = servidor.ip
+            
+            # Llamar al backend-api del servidor
+            api_url = f"http://{servidor_ip}:8000/api/comandos/{device_id}"
+            
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.post(
+                    api_url,
+                    json={
+                        "comando": "REINICIAR",
+                        "hour": body.hour,
+                        "recurring": body.recurring
+                    }
+                )
+                
+                if response.status_code == 200:
+                    resultados["enviados"] += 1
+                    resultados["details"].append({"device_id": device_id, "status": "enviado", "hour": body.hour, "recurring": body.recurring})
+                    
+                    # Guardar hora de reinicio en la BD
+                    dispositivo.hora_reinicio = body.hour
+                    dispositivo.reinicio_recurrente = body.recurring
+                    await db.flush()
+                    await db.refresh(dispositivo)
+                    await db.commit()
+                    
+                    logger.info(f"[PROGRAMAR_REINICIO] Guardado en BD: {device_id} hora={body.hour} recurrente={body.recurring}")
+                else:
+                    resultados["fallidos"] += 1
+                    resultados["details"].append({"device_id": device_id, "status": "error", "message": f"HTTP {response.status_code}"})
+                    
+        except Exception as e:
+            logger.error(f"[PROGRAMAR_REINICIO] Error con {device_id}: {e}")
+            resultados["fallidos"] += 1
+            resultados["details"].append({"device_id": device_id, "status": "error", "message": str(e)})
+    
+    # 4. Registrar en auditoría
+    user_id = current_user.get("user_id") if current_user else None
+    actor_name = current_user.get("nombre_usuario") or current_user.get("usuario") or "Sistema"
+    
+    await registrar_accion(
+        db,
+        user_id,
+        "PROGRAMAR_REINICIO_MASIVO",
+        f"Reinicio programado por {actor_name}: {len(dispositivos_ids)} dispositivos, hour={body.hour}, recurring={body.recurring}",
+    )
+    
+    return resultados

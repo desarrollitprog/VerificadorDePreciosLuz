@@ -4,7 +4,6 @@ import android.content.Context
 import android.util.Log
 import com.example.verificadordepreciosluz.data.network.ApiService
 import com.example.verificadordepreciosluz.data.network.ProductoResponse
-import com.example.verificadordepreciosluz.util.SyncPrefs
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.io.File
@@ -67,18 +66,13 @@ class BackupRepository(
             "ofertas_detalles", "impuestos_producto", "tasas_impuesto", "barras_asociadas"
         )
         val limit = 1000
-        var maxFechaModifica: String? = null
         for (section in sections) {
             var totalItems = 0
             var offset = 0
-            do {
-                try {
-                    val updatedSince = if (section == "precios") SyncPrefs.getFechaModifica(context) else null
-                    val page = if (section == "precios") {
-                        service.getBackupSection(section, offset, limit, updatedSince)
-                    } else {
-                        service.getBackupSection(section, offset, limit, null)
-                    }
+                do {
+                    try {
+                        // Siempre descargar backup completo (sin filtro updatedSince)
+                        val page = service.getBackupSection(section, offset, limit, null)
                     if (updatedAt == null) updatedAt = page.updatedAt
                     when (section) {
                         "productos" -> {
@@ -107,12 +101,6 @@ class BackupRepository(
                                         preciosMap[key] = item
                                     }
                                 }
-                                // Actualizar maxFechaModifica
-                                if (!item.fechaModifica.isNullOrBlank()) {
-                                    if (maxFechaModifica == null || item.fechaModifica > maxFechaModifica) {
-                                        maxFechaModifica = item.fechaModifica
-                                    }
-                                }
                             }
                             totalItems += page.precios.size
                         }
@@ -134,11 +122,6 @@ class BackupRepository(
                     throw e
                 }
             } while (true)
-        }
-        // Guardar el máximo FechaModifica de precios si se descargó la sección
-        if (maxFechaModifica != null) {
-            SyncPrefs.saveFechaModifica(context, maxFechaModifica)
-            Log.i("BackupRepository", "[downloadPagedBackup] Guardada maxFechaModifica precios: $maxFechaModifica")
         }
         return BackupResponse(
             updatedAt = updatedAt,

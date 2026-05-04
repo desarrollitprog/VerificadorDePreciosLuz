@@ -1,7 +1,10 @@
 import os
+import logging
 from passlib.context import CryptContext
 from jose import jwt
 from datetime import datetime, timedelta
+
+logger = logging.getLogger("security")
 
 # Hash de contraseñas
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -55,5 +58,5 @@ def verificar_token_jwt(token: str, audience: str = "dashboard"):
         )
         return payload
     except Exception as e:
-        print(f"Token error: {e}")
+        logger.debug("token_verification_failed", error=str(e))
         return None

@@ -11,6 +11,8 @@ export interface DeviceStatus {
   ultima_duracion?: number | null;
   tiempo_acumulado?: number | null;
   server_id?: string | null;
+  hora_reinicio?: string | null;
+  reinicio_recurrente?: boolean;
 }
 
 export interface ServerStatus {
@@ -125,6 +127,8 @@ export async function getServersStatusWithDevices(): Promise<ServerStatusDetail[
           ultima_duracion: d.ultima_duracion ?? null,
           tiempo_acumulado: d.tiempo_acumulado ?? null,
           server_id: d.server_id ?? null,
+          hora_reinicio: d.hora_reinicio ?? null,
+          reinicio_recurrente: d.reinicio_recurrente ?? false,
         }))
       : [],
   }));
@@ -204,4 +208,27 @@ export async function deleteDevice(deviceId: string): Promise<{ success: boolean
 export async function deleteServer(serverId: string): Promise<{ success: boolean; message: string }> {
   const response = await api.delete(`/servidores/${encodeURIComponent(serverId)}`);
   return response.data as { success: boolean; message: string };
+}
+
+export interface ScheduleRestartParams {
+  device_ids: string[];  // vacío = todos
+  hour: string;          // formato "06:35"
+  recurring: boolean;
+}
+
+export interface ScheduleRestartResult {
+  total: number;
+  enviados: number;
+  fallidos: number;
+  details: Array<{
+    device_id: string;
+    status: string;
+    scheduled_at?: string;
+    message?: string;
+  }>;
+}
+
+export async function scheduleRestart(params: ScheduleRestartParams): Promise<ScheduleRestartResult> {
+  const response = await api.post('/dispositivos/programar-reinicio', params);
+  return response.data as ScheduleRestartResult;
 }

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy import func
+import cv2
 from ..models import Publicidad, PublicidadAsignacion, ServidorSecundario, Dispositivo
 from ..schemas import PublicidadResponse, PublicidadCreate
 from ..database import get_db_usuarios
@@ -24,11 +25,19 @@ from ..services.replicacion_service import (
     actualizar_estado_a_todas_las_apis,
     actualizar_metadata_a_todas_las_apis,
     sync_a_servidor,
-    actualizar_banner_en_todas_las_apis
+    actualizar_banner_en_todas_las_apis,
+    actualizar_banner_en_asignaciones,
+    obtener_servidores_sin_banner,
+    replicar_banner_completo_a_servidores,
+    replicar_banner_completo_a_servidores_con_verificacion,
+    verificar_banner_en_servidores,
+    procesar_cambio_asignacion
 )
-
+from app.utils.logger import StructuredLogger
+from app.utils import sanitize_html, FileTypeValidator
 
 router = APIRouter()
+log = StructuredLogger("publicidad")
 
 
 def get_venezuela_now():
@@ -47,6 +56,41 @@ def _format_size_human(size_bytes: int) -> str:
     if unit_index == 0:
         return f"{int(value)} {units[unit_index]}"
     return f"{value:.1f} {units[unit_index]}"
+
+
+def generar_thumbnail(video_path: str, output_dir: str) -> Optional[str]:
+    """
+    Genera un thumbnail (frame inicial) de un video usando OpenCV.
+    Retorna la URL relativa del thumbnail o None si falla.
+    """
+    try:
+        video = cv2.VideoCapture(video_path)
+        if not video.isOpened():
+            log.warning("thumbnail_generation_failed", reason="cannot_open_video", path=video_path)
+            return None
+        
+        success, frame = video.read()
+        video.release()
+        
+        if not success:
+            log.warning("thumbnail_generation_failed", reason="cannot_read_frame", path=video_path)
+            return None
+        
+        thumbnail_filename = f"thumb_{uuid.uuid4().hex[:8]}.jpg"
+        thumbnail_path = os.path.join(output_dir, thumbnail_filename)
+        
+        success = cv2.imwrite(thumbnail_path, frame)
+        if not success:
+            log.warning("thumbnail_generation_failed", reason="cannot_write_thumbnail", path=video_path)
+            return None
+        
+        thumbnail_url = f"/static/banners/{thumbnail_filename}"
+        log.info("thumbnail_generated", video_path=video_path, thumbnail=thumbnail_url)
+        return thumbnail_url
+    
+    except Exception as e:
+        log.warning("thumbnail_generation_error", error=str(e), path=video_path)
+        return None
 
 
 def _resolve_banner_size(url: str | None) -> tuple[int, str]:
@@ -83,7 +127,6 @@ class BannerUploadBody(BaseModel):
     Prioridad: int = 0
     FechaInicio: Optional[str] = None
     FechaFin: Optional[str] = None
-    DuracionSeg: Optional[int] = None
     AsignacionTodos: bool = True
     Asignaciones: Optional[List[AsignacionCreate]] = None
 
@@ -95,10 +138,29 @@ async def listar_banners(
     fecha_desde: str | None = None,
     fecha_hasta: str | None = None,
     incluir_todos: bool = False,
+    limit: int = Query(50, ge=1, le=200, description="Número máximo de banners a retornar"),
+    offset: int = Query(0, ge=0, description="Offset para paginación"),
 ):
     try:
         total_dispositivos_result = await db.execute(select(func.count(Dispositivo.id)))
         total_dispositivos = total_dispositivos_result.scalar() or 0
+        
+        count_query = select(func.count(Publicidad.IdPublicidad))
+        if fecha_desde:
+            try:
+                desde_date = datetime.fromisoformat(fecha_desde.replace('Z', '+00:00'))
+                count_query = count_query.where(Publicidad.FechaInicio >= desde_date)
+            except ValueError:
+                pass
+        if fecha_hasta:
+            try:
+                hasta_date = datetime.fromisoformat(fecha_hasta.replace('Z', '+00:00'))
+                count_query = count_query.where(Publicidad.FechaInicio <= hasta_date)
+            except ValueError:
+                pass
+        
+        total_count_result = await db.execute(count_query)
+        total_count = total_count_result.scalar() or 0
         
         query = select(Publicidad).options(
             selectinload(Publicidad.asignaciones).selectinload(PublicidadAsignacion.servidor)
@@ -124,8 +186,24 @@ async def listar_banners(
         
         query = query.order_by(Publicidad.IdPublicidad.desc())
         
+        query = query.offset(offset).limit(limit)
+        
         result = await db.execute(query)
         banners = result.scalars().all()
+        
+        all_dispositivo_ids = set()
+        for banner in banners:
+            if not banner.asignacion_todos:
+                for asig in banner.asignaciones:
+                    if asig.dispositivo_id:
+                        all_dispositivo_ids.add(asig.dispositivo_id)
+        
+        dispositivos_mapa = {}
+        if all_dispositivo_ids:
+            stmt_disp = select(Dispositivo).where(Dispositivo.codigo_kiosko.in_(list(all_dispositivo_ids)))
+            result_disp = await db.execute(stmt_disp)
+            for disp in result_disp.scalars().all():
+                dispositivos_mapa[disp.codigo_kiosko] = disp.nombre_amigable
         
         banners_payload = []
         
@@ -136,14 +214,6 @@ async def listar_banners(
             if banner.asignacion_todos:
                 dispositivos_count = total_dispositivos
             else:
-                dispositivo_ids = [asig.dispositivo_id for asig in banner.asignaciones]
-                dispositivos_mapa = {}
-                if dispositivo_ids:
-                    stmt_disp = select(Dispositivo).where(Dispositivo.codigo_kiosko.in_(dispositivo_ids))
-                    result_disp = await db.execute(stmt_disp)
-                    for disp in result_disp.scalars().all():
-                        dispositivos_mapa[disp.codigo_kiosko] = disp.nombre_amigable
-                
                 for asig in banner.asignaciones:
                     asignaciones.append({
                         "servidor_id": asig.servidor_id,
@@ -157,14 +227,12 @@ async def listar_banners(
             estado = "activo"
             if not banner.Activo:
                 estado = "inactivo"
-            elif not banner.asignacion_todos and len(asignaciones) == 0:
-                estado = "borrador"
+            # ETAPA 3: Fix estado "borrador" - solo mostrar si está inactivo Y no tiene asignaciones específicas
+            # No marcar automáticamente como "borrador" por falta de asignaciones (esto ocurre por error en el flujo)
+            # elif not banner.asignacion_todos and len(asignaciones) == 0:
+            #     estado = "borrador"
             elif banner.FechaFin:
                 now = get_venezuela_now()
-                print(f"[DEBUG] Banner ID={banner.IdPublicidad}, Titulo={banner.Titulo}")
-                print(f"[DEBUG]   FechaFin en BD: {banner.FechaFin}")
-                print(f"[DEBUG]   Hora actual Venezuela (now): {now}")
-                print(f"[DEBUG]   Comparacion: {banner.FechaFin} < {now} = {banner.FechaFin < now}")
                 if banner.FechaFin < now:
                     estado = "vencido"
             
@@ -174,10 +242,10 @@ async def listar_banners(
                     "Titulo": banner.Titulo,
                     "Tipo": banner.Tipo,
                     "Url": banner.Url,
+                    "ThumbnailUrl": banner.ThumbnailUrl,
                     "Activo": banner.Activo,
                     "FechaInicio": banner.FechaInicio.isoformat() if banner.FechaInicio else None,
                     "FechaFin": banner.FechaFin.isoformat() if banner.FechaFin else None,
-                    "DuracionSeg": banner.DuracionSeg,
                     "UpdatedAt": banner.UpdatedAt.isoformat() if banner.UpdatedAt else None,
                     "size_bytes": size_bytes,
                     "size_human": size_human,
@@ -191,6 +259,12 @@ async def listar_banners(
             "success": True,
             "message": "Banners obtenidos correctamente.",
             "banners": banners_payload,
+            "pagination": {
+                "total": total_count,
+                "limit": limit,
+                "offset": offset,
+                "has_more": offset + len(banners_payload) < total_count,
+            }
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener banners: {str(e)}")
@@ -237,7 +311,6 @@ async def upload_banner(
     Prioridad: int = Form(0),
     FechaInicio: str = Form(None),
     FechaFin: str = Form(None),
-    DuracionSeg: int = Form(None),
     AsignacionTodos: bool = Form(True),
     ServidorIds: str = Form(None),
     DispositivoIds: str = Form(None),
@@ -277,34 +350,45 @@ async def upload_banner(
     try:
         with open(file_location, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-        print(f"Se ha guardado correctamente en la ruta: {file_location}")
+        
+        is_valid, mime_type = FileTypeValidator.validate_file(file_location, allowed_images + allowed_videos)
+        if not is_valid:
+            os.remove(file_location)
+            detail = f"Archivo no es una imagen o video válido. Tipo detectado: {mime_type}" if mime_type else "Archivo no es una imagen o video válido."
+            raise HTTPException(status_code=400, detail=detail)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al guardar el archivo: {str(e)}")
 
     # Guardar metadatos en la base de datos
     url = f"/static/banners/{filename}"
+    thumbnail_url = None
+    
+    # Generar thumbnail si es video
+    if Tipo == "video":
+        thumbnail_url = generar_thumbnail(file_location, banners_dir)
+    
     try:
-        print(f"[DEBUG] Recibido - FechaInicio: {FechaInicio}, FechaFin: {FechaFin}")
         FechaInicio_dt = datetime.fromisoformat(FechaInicio) if FechaInicio else None
         FechaFin_dt = datetime.fromisoformat(FechaFin) if FechaFin else None
-        print(f"[DEBUG] Parsed - FechaInicio_dt: {FechaInicio_dt}, FechaFin_dt: {FechaFin_dt}")
         if FechaInicio_dt and FechaFin_dt and FechaInicio_dt > FechaFin_dt:
             raise HTTPException(status_code=400, detail="Rango inválido: FechaInicio no puede ser mayor que FechaFin.")
+        
+        titulo_sanitized = sanitize_html(Titulo)
         nuevo_banner = Publicidad(
-            Titulo=Titulo,
+            Titulo=titulo_sanitized,
             Tipo=Tipo,
             Url=url,
+            ThumbnailUrl=thumbnail_url,
             Activo=Activo,
             Prioridad=Prioridad,
             FechaInicio=FechaInicio_dt,
             FechaFin=FechaFin_dt,
-            DuracionSeg=DuracionSeg,
             asignacion_todos=AsignacionTodos
         )
         db.add(nuevo_banner)
         await db.commit()
         await db.refresh(nuevo_banner)
-        print(f"Se ha guardado correctamente en la base de datos: Id={nuevo_banner.IdPublicidad}, Titulo={nuevo_banner.Titulo}, Url={nuevo_banner.Url}")
+        log.info("banner_created", banner_id=nuevo_banner.IdPublicidad, titulo=nuevo_banner.Titulo)
 
         # Procesar servidores y dispositivos seleccionados
         import json
@@ -324,27 +408,18 @@ async def upload_banner(
                 selected_dispositivo_ids = []
 
         # Guardar asignaciones en la tabla publicidad_asignacion
-        # Guardar cuando: (NO es "todos" Y hay servidores/dispositivos) O (es "todos" pero hay dispositivos específicos seleccionados)
-        print(f"[DEBUG] AsignacionTodos={AsignacionTodos}, selected_servidor_ids={selected_servidor_ids}, selected_dispositivo_ids={selected_dispositivo_ids}")
         guardar_asignaciones = (not AsignacionTodos and (selected_servidor_ids or selected_dispositivo_ids)) or (AsignacionTodos and selected_dispositivo_ids)
         if guardar_asignaciones:
-            print(f"Guardando asignaciones para publicidad {nuevo_banner.IdPublicidad}: servidores={selected_servidor_ids}, dispositivos={selected_dispositivo_ids}")
-            
-            # Obtener dispositivos de los servidores seleccionados (usando codigo_kiosko para strings)
             try:
                 dispositivos_query = select(Dispositivo)
                 if selected_servidor_ids:
                     dispositivos_query = dispositivos_query.where(Dispositivo.servidor_id.in_(selected_servidor_ids))
                 if selected_dispositivo_ids:
-                    # Los selected_dispositivo_ids son strings (codigo_kiosko), no ids enteros
                     dispositivos_query = dispositivos_query.where(Dispositivo.codigo_kiosko.in_(selected_dispositivo_ids))
                 
-                print(f"[DEBUG] SQL Query: {dispositivos_query}")
                 dispositivos_result = await db.execute(dispositivos_query)
                 dispositivos = dispositivos_result.scalars().all()
-                print(f"[DEBUG] Dispositivos encontrados: {len(dispositivos)}")
                 
-                # Crear registros de asignación - guardar codigo_kiosko como dispositivo_id (string)
                 for disp in dispositivos:
                     asignacion = PublicidadAsignacion(
                         publicidad_id=nuevo_banner.IdPublicidad,
@@ -354,9 +429,9 @@ async def upload_banner(
                     db.add(asignacion)
                 
                 await db.commit()
-                print(f"Asignaciones guardadas: {len(dispositivos)} registros")
+                log.info("asignaciones_guardadas", banner_id=nuevo_banner.IdPublicidad, cantidad=len(dispositivos))
             except Exception as e:
-                print(f"[ERROR] Error guardando asignaciones: {str(e)}")
+                log.error("error_asignaciones", banner_id=nuevo_banner.IdPublicidad, error=str(e))
                 await db.rollback()
                 raise
     except HTTPException:
@@ -389,7 +464,7 @@ async def upload_banner(
                 selected_dispositivo_ids = []
         
         if AsignacionTodos and not selected_dispositivo_ids:
-            print(f"Replicando archivo a TODAS las APIs: {file_location}")
+            log.info("upload_replicate_all", banner_id=nuevo_banner.IdPublicidad)
             replicacion_resultados = await replicar_archivo_a_todas_las_apis(
                 file_path=file_location,
                 IdPublicidadRemoto=nuevo_banner.IdPublicidad,
@@ -398,37 +473,58 @@ async def upload_banner(
                 prioridad=Prioridad,
                 fecha_inicio=FechaInicio,
                 fecha_fin=FechaFin,
-                duracion_seg=DuracionSeg,
                 activo=Activo,
                 dispositivo_ids=None,
             )
         elif selected_dispositivo_ids:
-            print(f"Replicando archivo a dispositivos específicos: {selected_dispositivo_ids}")
-            replicacion_resultados = await replicar_archivo_a_todas_las_apis(
-                file_path=file_location,
-                IdPublicidadRemoto=nuevo_banner.IdPublicidad,
-                titulo=Titulo,
-                tipo=Tipo,
-                prioridad=Prioridad,
-                fecha_inicio=FechaInicio,
-                fecha_fin=FechaFin,
-                duracion_seg=DuracionSeg,
-                activo=Activo,
-                dispositivo_ids=selected_dispositivo_ids,
-            )
-        elif selected_servidor_ids or selected_dispositivo_ids:
-            print(f"Replicando archivo a servidores seleccionados: {selected_servidor_ids}")
-            query = select(ServidorSecundario)
-            if selected_servidor_ids:
-                query = query.where(ServidorSecundario.id.in_(selected_servidor_ids))
-            servidores_result = await db.execute(query)
-            servidores = servidores_result.scalars().all()
+            log.info("upload_replicate_specific_devices", banner_id=nuevo_banner.IdPublicidad, dispositivo_ids=selected_dispositivo_ids)
+            
+            # Obtener servidores únicos de los dispositivos seleccionados
+            disp_query = select(Dispositivo).where(Dispositivo.codigo_kiosko.in_(selected_dispositivo_ids))
+            disp_result = await db.execute(disp_query)
+            dispositivos_encontrados = disp_result.scalars().all()
+            
+            servidor_ids_unicos = list(set([d.servidor_id for d in dispositivos_encontrados]))
+            
+            if servidor_ids_unicos:
+                srv_query = select(ServidorSecundario).where(ServidorSecundario.id.in_(servidor_ids_unicos))
+                srv_result = await db.execute(srv_query)
+                servidores = srv_result.scalars().all()
+                servidores_data = [
+                    {
+                        "id": s.id,
+                        "nombre": s.nombre,
+                        "ip": s.ip,
+                        "api_url": f"http://{s.ip}:8000"
+                    }
+                    for s in servidores
+                ]
+                log.info("upload_replicate_to_servers", banner_id=nuevo_banner.IdPublicidad, servidores=[s['nombre'] for s in servidores_data])
+                replicacion_resultados = await replicar_a_servidores(
+                    file_path=file_location,
+                    servidores=servidores_data,
+                    IdPublicidadRemoto=nuevo_banner.IdPublicidad,
+                    titulo=Titulo,
+                    tipo=Tipo,
+                    prioridad=Prioridad,
+                    fecha_inicio=FechaInicio,
+                    fecha_fin=FechaFin,
+                    activo=Activo,
+                    dispositivo_ids=selected_dispositivo_ids,
+                )
+            else:
+                log.warning("upload_no_servers_found", banner_id=nuevo_banner.IdPublicidad)
+        elif selected_servidor_ids:
+            log.info("upload_replicate_specific_servers", banner_id=nuevo_banner.IdPublicidad, servidor_ids=selected_servidor_ids)
+            srv_query = select(ServidorSecundario).where(ServidorSecundario.id.in_(selected_servidor_ids))
+            srv_result = await db.execute(srv_query)
+            servidores = srv_result.scalars().all()
             servidores_data = [
                 {
                     "id": s.id,
                     "nombre": s.nombre,
                     "ip": s.ip,
-                    "api_url": s.api_url or f"http://{s.ip}:8000"
+                    "api_url": f"http://{s.ip}:8000"
                 }
                 for s in servidores
             ]
@@ -441,15 +537,14 @@ async def upload_banner(
                 prioridad=Prioridad,
                 fecha_inicio=FechaInicio,
                 fecha_fin=FechaFin,
-                duracion_seg=DuracionSeg,
                 activo=Activo,
-                dispositivo_ids=selected_dispositivo_ids,
+                dispositivo_ids=None,  # Sin filtro = todos los dispositivos de esos servidores
             )
         else:
-            print("No se replicó a ningún servidor (asignación específica sin servidores seleccionados)")
-        print(f"Replicación finalizada: {replicacion_resultados}")
+            log.warning("upload_no_replication", banner_id=nuevo_banner.IdPublicidad)
+        log.info("upload_replication_complete", banner_id=nuevo_banner.IdPublicidad, resultados=replicacion_resultados)
     except Exception as e:
-        print(f"Error en replicación: {str(e)}")
+        log.error("upload_replication_error", banner_id=nuevo_banner.IdPublicidad if 'nuevo_banner' in dir() else None, error=str(e))
 
     user_id = current_user.get("user_id")
     if user_id is not None:
@@ -499,7 +594,6 @@ async def upload_banner(
             "Prioridad": nuevo_banner.Prioridad,
             "FechaInicio": str(nuevo_banner.FechaInicio) if nuevo_banner.FechaInicio else None,
             "FechaFin": str(nuevo_banner.FechaFin) if nuevo_banner.FechaFin else None,
-            "DuracionSeg": nuevo_banner.DuracionSeg
         }
     }
 @router.delete("/banners/{id}")
@@ -538,7 +632,7 @@ async def eliminar_banner(
             await db.execute(delete(PublicidadAsignacion).where(PublicidadAsignacion.publicidad_id == id))
             await db.commit()
         except Exception as e:
-            print(f"[DEBUG] Error eliminando asignaciones: {e}")
+            log.error("error_eliminar_asignaciones", banner_id=id, error=str(e))
             await db.rollback()
         
         # Intentar borrar remotamente en backend-api usando el IdPublicidad como IdPublicidadRemoto
@@ -610,20 +704,33 @@ async def upload_banners_batch(
         try:
             with open(file_location, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
+            
+            is_valid, mime_type = FileTypeValidator.validate_file(file_location, allowed_images + allowed_videos)
+            if not is_valid:
+                os.remove(file_location)
+                errores.append({"filename": file.filename, "error": f"Archivo no es una imagen o video válido. Tipo detectado: {mime_type}"})
+                continue
+            
             url = f"/static/banners/{filename}"
+            thumbnail_url = None
+            
+            if Tipo == "video":
+                thumbnail_url = generar_thumbnail(file_location, banners_dir)
+            
             FechaInicio_dt = datetime.fromisoformat(FechasInicio[idx]) if FechasInicio[idx] else None
             FechaFin_dt = datetime.fromisoformat(FechasFin[idx]) if FechasFin[idx] else None
             if FechaInicio_dt and FechaFin_dt and FechaInicio_dt > FechaFin_dt:
                 raise Exception("Rango inválido: FechaInicio no puede ser mayor que FechaFin.")
+            titulo_sanitized = sanitize_html(Titulos[idx])
             nuevo_banner = Publicidad(
-                Titulo=Titulos[idx],
+                Titulo=titulo_sanitized,
                 Tipo=Tipo,
                 Url=url,
+                ThumbnailUrl=thumbnail_url,
                 Activo=Activos[idx],
                 Prioridad=Prioridades[idx],
                 FechaInicio=FechaInicio_dt,
                 FechaFin=FechaFin_dt,
-                DuracionSeg=DuracionesSeg[idx]
             )
             db.add(nuevo_banner)
             await db.commit()
@@ -746,7 +853,7 @@ async def actualizar_banner_metadata(
     banner.FechaInicio = fecha_inicio
     banner.FechaFin = fecha_fin
     if body.titulo is not None:
-        banner.Titulo = body.titulo
+        banner.Titulo = sanitize_html(body.titulo)
 
     await db.commit()
     await db.refresh(banner)
@@ -834,7 +941,7 @@ async def obtener_servidores(
                 "id": srv.id,
                 "nombre": srv.nombre,
                 "ip": srv.ip,
-                "api_url": srv.api_url or f"http://{srv.ip}:8000",
+                "api_url": f"http://{srv.ip}:8000",
                 "online": srv.ultimo_heartbeat is not None,
                 "dispositivos": dispositivos
             })
@@ -957,7 +1064,46 @@ async def reemplazar_asignaciones_banner(
     if not banner:
         raise HTTPException(status_code=404, detail="Banner no encontrado.")
     
+    # ETAPA 2: Guardar estado anterior para posible rollback
+    asignacion_todos_anterior = banner.asignacion_todos
+    
     try:
+        # ETAPA 1: Validación de seguridad temprana - verificar que hay servidores/dispositivos válidos
+        # si no es asignacion_todos
+        if not asignacion_todos:
+            def parse_ids(ids_str):
+                """Parsea IDs desde string JSON array, string separado por comas, o entero."""
+                if not ids_str:
+                    return []
+                ids_str = str(ids_str).strip()
+                if not ids_str:
+                    return []
+                try:
+                    parsed = json.loads(ids_str)
+                    if isinstance(parsed, int):
+                        return [str(parsed)]
+                    if isinstance(parsed, list):
+                        return [str(x) for x in parsed]
+                    return []
+                except (json.JSONDecodeError, TypeError):
+                    return [x.strip() for x in ids_str.split(",") if x.strip()]
+            
+            parsed_servidor_ids = parse_ids(servidor_ids)
+            parsed_dispositivo_ids = parse_ids(dispositivo_ids)
+            
+# NUEVA REGLA: Para asignación específica (no todos), se REQUIERE seleccionar un servidor
+            # Similar a cuando se sube un archivo - debe seleccionar una sede
+            if not parsed_servidor_ids:
+                log.warning("fase7_validacion_fallida", 
+                           banner_id=id,
+                           parsed_servidor_ids=parsed_servidor_ids,
+                           parsed_dispositivo_ids=parsed_dispositivo_ids,
+                           mensaje="Debe seleccionar al menos un servidor para asignación específica")
+                raise HTTPException(
+                    status_code=400, 
+                    detail="Debe seleccionar un servidor para asignación específica. Use 'Todos' si desea asignar a todos los servidores."
+                )
+        
         # Eliminar todas las asignaciones existentes
         await db.execute(
             select(PublicidadAsignacion).where(PublicidadAsignacion.publicidad_id == id)
@@ -974,34 +1120,70 @@ async def reemplazar_asignaciones_banner(
         await db.commit()
         
         target_dispositivo_ids = None
+        dispositivos = []  # Definir variable para uso posterior en replicación
         
         # Si no es asignacion_todos, crear nuevas asignaciones
         if not asignacion_todos:
             parsed_servidor_ids = []
             parsed_dispositivo_ids = []
             
-            if servidor_ids:
+            # ETAPA 1: Parser robusto - acepta JSON array ["1","2"] o string "1,2,3" o entero 1
+            def parse_ids(ids_str):
+                """Parsea IDs desde string JSON array, string separado por comas, o entero."""
+                if not ids_str:
+                    return []
+                ids_str = str(ids_str).strip()
+                if not ids_str:
+                    return []
                 try:
-                    parsed_servidor_ids = json.loads(servidor_ids)
-                except:
-                    parsed_servidor_ids = []
+                    # Intentar como JSON
+                    parsed = json.loads(ids_str)
+                    # Si es un entero solo, envolver en array
+                    if isinstance(parsed, int):
+                        return [str(parsed)]
+                    # Si es un array, convertir todos a string
+                    if isinstance(parsed, list):
+                        return [str(x) for x in parsed]
+                    return []
+                except (json.JSONDecodeError, TypeError):
+                    # Fallback: string separado por comas
+                    return [x.strip() for x in ids_str.split(",") if x.strip()]
             
-            if dispositivo_ids:
-                try:
-                    parsed_dispositivo_ids = json.loads(dispositivo_ids)
-                except:
-                    parsed_dispositivo_ids = []
+            parsed_servidor_ids = parse_ids(servidor_ids)
+            parsed_dispositivo_ids = parse_ids(dispositivo_ids)
+            
+            # ETAPA 1: Validación de seguridad - si no hay servidores/dispositivos válidos
+            # y no es asignacion_todos, mantener las asignaciones anteriores
+            if not parsed_servidor_ids and not parsed_dispositivo_ids:
+                log.warning("fase7_asignacion_vacia", 
+                           banner_id=id,
+                           mensaje="No se recibieron servidores/dispositivos válidos, manteniendo asignaciones anteriores")
+                # Mantener las asignaciones actuales - NO proceder con cambio
+                return {"success": True, "message": "Asignaciones anteriores mantenidas (no se especificaron servidores/dispositivos nuevos)."}
             
             # Obtener dispositivos de los servidores seleccionados
             if parsed_servidor_ids or parsed_dispositivo_ids:
+                # Convertir IDs a enteros para la consulta
+                try:
+                    parsed_servidor_ids_int = [int(x) for x in parsed_servidor_ids]
+                except (ValueError, TypeError):
+                    parsed_servidor_ids_int = []
+                
                 query = select(Dispositivo)
-                if parsed_servidor_ids:
-                    query = query.where(Dispositivo.servidor_id.in_(parsed_servidor_ids))
+                if parsed_servidor_ids_int:
+                    query = query.where(Dispositivo.servidor_id.in_(parsed_servidor_ids_int))
                 if parsed_dispositivo_ids:
                     query = query.where(Dispositivo.codigo_kiosko.in_(parsed_dispositivo_ids))
                 
                 result = await db.execute(query)
-                dispositivos = result.scalars().all()
+                dispositivos = list(result.scalars().all())
+                
+                log.info("fase7_debug_dispositivos", 
+                        banner_id=id,
+                        parsed_servidor_ids=parsed_servidor_ids,
+                        parsed_servidor_ids_int=parsed_servidor_ids_int,
+                        dispositivos_encontrados=len(dispositivos),
+                        dispositivos_ids=[d.codigo_kiosko for d in dispositivos])
                 
                 for disp in dispositivos:
                     nueva_asignacion = PublicidadAsignacion(
@@ -1016,25 +1198,149 @@ async def reemplazar_asignaciones_banner(
                 # Guardar dispositivo_ids para replicación
                 target_dispositivo_ids = [d.codigo_kiosko for d in dispositivos]
         
-        # Actualizar banner en backend-api con los nuevos dispositivo_ids
+        # FASE 6: Usar procesar_cambio_asignacion para cleanup
+        update_result = None
         if banner.IdPublicidad:
             try:
-                update_result = await actualizar_banner_en_todas_las_apis(
-                    banner_id=banner.IdPublicidad,
-                    titulo=banner.Titulo,
-                    tipo=banner.Tipo,
-                    activo=banner.Activo,
-                    prioridad=banner.Prioridad,
-                    fecha_inicio=banner.FechaInicio.isoformat() if banner.FechaInicio else None,
-                    fecha_fin=banner.FechaFin.isoformat() if banner.FechaFin else None,
-                    duracion_seg=banner.DuracionSeg,
-                    dispositivo_ids=target_dispositivo_ids
-                )
-                print(f"[DEBUG] Actualización de banner en backend-api completada: {update_result}")
+                # LOG: Debug asignación
+                log.info("fase6_debug_inicio", 
+                       banner_id=banner.IdPublicidad,
+                       asignacion_todos=asignacion_todos,
+                       target_dispositivo_ids=target_dispositivo_ids,
+                       dispositivos_count=len(dispositivos))
+                
+                # Obtener TODOS los servidores
+                todos_servidores_result = await db.execute(select(ServidorSecundario))
+                todos_servidores = todos_servidores_result.scalars().all()
+                todos_servidores_data = [
+                    {
+                        "id": s.id,
+                        "nombre": s.nombre,
+                        "ip": s.ip,
+                        "api_url": f"http://{s.ip}:8000"
+                    }
+                    for s in todos_servidores
+                ]
+                
+                # Preparar banner_data para procesar_cambio_asignacion
+                file_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", banner.Url.lstrip("/")))
+                banner_data = {
+                    "banner_id": banner.IdPublicidad,
+                    "file_path": file_path,
+                    "titulo": banner.Titulo,
+                    "tipo": banner.Tipo,
+                    "activo": banner.Activo,
+                    "prioridad": banner.Prioridad,
+                    "fecha_inicio": banner.FechaInicio.isoformat() if banner.FechaInicio else None,
+                    "fecha_fin": banner.FechaFin.isoformat() if banner.FechaFin else None,
+                    "dispositivo_ids": target_dispositivo_ids
+                }
+                
+                if asignacion_todos:
+                    # CASO A: Asignar a TODOS - usar procesar_cambio_asignacion
+                    log.info("fase6_caso_a_inicio", banner_id=banner.IdPublicidad, 
+                           srv_total=len(todos_servidores_data))
+                    
+                    update_result = await procesar_cambio_asignacion(
+                        banner_data=banner_data,
+                        servidores_todos=todos_servidores_data,
+                        servidores_asignados=todos_servidores_data,
+                        timeout=35
+                    )
+                    
+                    log.info("fase6_caso_a_resultado", banner_id=banner.IdPublicidad, 
+                           exito=update_result.get("exito"),
+                           agregar=len(update_result.get("agregar", [])),
+                           eliminar=len(update_result.get("eliminar", [])),
+                           actualizar=len(update_result.get("actualizar", [])))
+                else:
+                    # CASO B/D: Asignación específica - usar procesar_cambio_asignacion
+                    if target_dispositivo_ids:
+                        servidor_ids_asignados = list(set([d.servidor_id for d in dispositivos]))
+                        servidores_asignados_result = await db.execute(
+                            select(ServidorSecundario).where(ServidorSecundario.id.in_(servidor_ids_asignados))
+                        )
+                        servidores_asignados = servidores_asignados_result.scalars().all()
+                        servidores_asignados_data = [
+                            {
+                                "id": s.id,
+                                "nombre": s.nombre,
+                                "ip": s.ip,
+                                "api_url": f"http://{s.ip}:8000"
+                            }
+                            for s in servidores_asignados
+                        ]
+                    else:
+                        servidores_asignados_data = []
+                    
+                    log.info("fase6_procesando_cambio", banner_id=banner.IdPublicidad, 
+                           srv_objetivo=len(servidores_asignados_data),
+                           srv_total=len(todos_servidores_data))
+                    
+                    # USAR LA NUEVA FUNCIÓN FASE 6 para cleanup
+                    update_result = await procesar_cambio_asignacion(
+                        banner_data=banner_data,
+                        servidores_todos=todos_servidores_data,
+                        servidores_asignados=servidores_asignados_data,
+                        timeout=35
+                    )
+                    
+                    log.info("fase6_resultado", banner_id=banner.IdPublicidad, exito=update_result.get("exito"),
+                           agregar=len(update_result.get("agregar", [])),
+                           eliminar=len(update_result.get("eliminar", [])),
+                           actualizar=len(update_result.get("actualizar", [])))
+                    
+                    # ETAPA 4: Verificar resultado y notificar si hay fallos
+                    if update_result and not update_result.get("exito"):
+                        errores = []
+                        # Revisar errores en agregar
+                        for item in update_result.get("agregar", []):
+                            if not item.get("success"):
+                                errores.append(item)
+                        # Revisar errores en eliminar
+                        for item in update_result.get("eliminar", []):
+                            if not item.get("success"):
+                                errores.append(item)
+                        # Revisar errores en actualizar
+                        for item in update_result.get("actualizar", []):
+                            if not item.get("success"):
+                                errores.append(item)
+                        
+                        if errores:
+                            for error in errores:
+                                srv_nombre = error.get("servidor_nombre", "Desconocido")
+                                srv_id = error.get("servidor_id")
+                                error_msg = error.get("error", error.get("message", "Error desconocido"))
+                                
+                                # Registrar en logs
+                                log.error("fase7_replicacion_fallida",
+                                          banner_id=banner.IdPublicidad,
+                                          banner_titulo=banner.Titulo,
+                                          servidor_nombre=srv_nombre,
+                                          error=error_msg)
+                                
+                                # Crear notificación al dashboard
+                                from app.services.notificacion_service import registrar_accion
+                                await registrar_accion(
+                                    db=db,
+                                    usuario_id=current_user.get("user_id") if current_user else None,
+                                    tipo="ERROR_REPLICACION_ASIGNACION",
+                                    descripcion=f"Error al replicar banner '{banner.Titulo}' en servidor '{srv_nombre}': {error_msg}",
+                                    servidor_id=srv_id,
+                                    dispositivo_id=None
+                                )
+                            await db.commit()
+                            # Revertir el cambio de asignacion_todos si hay errores
+                            banner.asignacion_todos = asignacion_todos_anterior
+                            await db.commit()
+                            return {"success": False, "message": f"Error en replicación. No se aplicaron los cambios. Errores: {len(errores)}"}
+                
             except Exception as e:
-                print(f"[ERROR] Error al actualizar banner en backend-api: {str(e)}")
+                log.error("fase6_error", banner_id=banner.IdPublicidad, error=str(e))
         
         return {"success": True, "message": "Asignaciones actualizadas correctamente."}
+    except HTTPException:
+        raise
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"Error al actualizar asignaciones: {str(e)}")

@@ -49,14 +49,14 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <!-- Panel de prueba (emulador): oculto por defecto; togglear tocando el título -->
+    <!-- Panel de prueba (emulador): SIEMPRE VISIBLE para el sistema (alpha=1f) -->
     <LinearLayout
         android:id="@+id/mockPanel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:layout_marginEnd="16dp"
-        android:alpha="0"
+        android:alpha="1.0"
         android:background="#00FFFFFF"
         android:orientation="vertical"
         android:padding="8dp"
@@ -68,7 +68,7 @@
             android:id="@+id/etMockCode"
             android:layout_width="200dp"
             android:layout_height="wrap_content"
-            android:alpha="0"
+            android:alpha="1.0"
             android:autofillHints=""
             android:focusable="true"
             android:focusableInTouchMode="true"
@@ -90,6 +90,17 @@
             android:paddingHorizontal="16dp"
             android:text="@string/btn_mock_scan" />
     </LinearLayout>
+
+    <!-- Rectángulo blanco para ocultar el toggle visualmente -->
+    <View
+        android:id="@+id/rectanguloOcultador"
+        android:layout_width="300dp"
+        android:layout_height="120dp"
+        android:background="#F7EFEA"
+        android:visibility="visible"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:visibility="gone" />
 
     <ImageView
         android:id="@+id/ivLogoLuz"

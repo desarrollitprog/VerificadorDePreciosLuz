@@ -16,6 +16,7 @@ router = APIRouter()
 def get_venezuela_now():
     return datetime.now(timezone(timedelta(hours=-4)))
 
+
 def get_venezuela_now_naive():
     return datetime.now(timezone(timedelta(hours=-4))).replace(tzinfo=None)
 
@@ -67,7 +68,6 @@ async def listar_banners(
 ):
     now = get_venezuela_now_naive()
     today_start = datetime.combine(now.date(), datetime.min.time())
-    print(f"[DEBUG] GET /banners - Hora actual Venezuela (now): {now}")
     
     query = select(Publicidad).where(
         Publicidad.activo == True,
@@ -102,7 +102,23 @@ async def listar_banners(
                     filtered_banners.append(banner)
         banners = filtered_banners
     
-    return [PublicidadResponse.model_validate(banner.__dict__) for banner in banners]
+    # Convertir banners a response incluyendo fecha_inicio_ms y fecha_fin_ms
+    response_list = []
+    for banner in banners:
+        banner_dict = banner.__dict__.copy()
+        # Calcular fecha_inicio_ms si existe fecha_inicio
+        if banner.fecha_inicio:
+            banner_dict['fecha_inicio_ms'] = int(banner.fecha_inicio.timestamp() * 1000)
+        else:
+            banner_dict['fecha_inicio_ms'] = None
+        # Calcular fecha_fin_ms si existe fecha_fin
+        if banner.fecha_fin:
+            banner_dict['fecha_fin_ms'] = int(banner.fecha_fin.timestamp() * 1000)
+        else:
+            banner_dict['fecha_fin_ms'] = None
+        response_list.append(PublicidadResponse.model_validate(banner_dict))
+    return response_list
+
 
 @router.post("/replicar-archivo")
 async def replicar_archivo(
@@ -114,7 +130,6 @@ async def replicar_archivo(
     prioridad: int = Form(0),
     fecha_inicio: str = Form(None),
     fecha_fin: str = Form(None),
-    duracion_seg: int = Form(None),
     dispositivo_ids: str = Form(None),
     db: AsyncSession = Depends(get_db_publicidad)
 ):
@@ -155,19 +170,42 @@ async def replicar_archivo(
     url = f"/static/banners/{filename}"
     try:
         from ..models.publicidad import Publicidad
-        print(f"[DEBUG] Replicar archivo - FechaInicio recibida: {fecha_inicio}, FechaFin recibida: {fecha_fin}")
+        from sqlalchemy import select
+        
         fecha_inicio_dt = datetime.fromisoformat(fecha_inicio) if fecha_inicio else None
         fecha_fin_dt = datetime.fromisoformat(fecha_fin) if fecha_fin else None
-        print(f"[DEBUG] Replicar archivo - FechaInicio guardada: {fecha_inicio_dt}, FechaFin guardada: {fecha_fin_dt}")
+        tipo_final = tipo or tipo_archivo
+        
+        if IdPublicidadRemoto:
+            check_stmt = select(Publicidad).where(Publicidad.IdPublicidadRemoto == IdPublicidadRemoto)
+            check_result = await db.execute(check_stmt)
+            existing_banner = check_result.scalars().first()
+            if existing_banner:
+                existing_banner.url = url
+                existing_banner.titulo = titulo
+                existing_banner.tipo = tipo_final
+                existing_banner.activo = activo
+                existing_banner.prioridad = prioridad
+                existing_banner.fecha_inicio = fecha_inicio_dt
+                existing_banner.fecha_fin = fecha_fin_dt
+                existing_banner.device_ids = dispositivo_ids
+                await db.commit()
+                await db.refresh(existing_banner)
+                return {
+                    "success": True,
+                    "message": "Banner actualizado correctamente",
+                    "id": existing_banner.id,
+                    "url": existing_banner.url
+                }
+        
         nuevo_banner = Publicidad(
             titulo=titulo,
-            tipo=tipo or tipo_archivo,
+            tipo=tipo_final,
             url=url,
             activo=activo,
             prioridad=prioridad,
             fecha_inicio=fecha_inicio_dt,
             fecha_fin=fecha_fin_dt,
-            duracion_seg=duracion_seg,
             device_ids=dispositivo_ids,
             IdPublicidadRemoto=IdPublicidadRemoto
         )
@@ -220,7 +258,6 @@ async def actualizar_banner(
     prioridad: int = Form(None),
     fecha_inicio: str = Form(None),
     fecha_fin: str = Form(None),
-    duracion_seg: int = Form(None),
     dispositivo_ids: str = Form(None),
     db: AsyncSession = Depends(get_db_publicidad)
 ):
@@ -229,18 +266,25 @@ async def actualizar_banner(
     Si no encuentra por ID directo, busca por IdPublicidadRemoto.
     """
     from ..models.publicidad import Publicidad
+    import logging
+    logger = logging.getLogger("publicidad")
     
     # Primero buscar por ID directo
+    logger.info(f"[PUT banners] Buscando por ID directo: {banner_id}")
     banner = await db.get(Publicidad, banner_id)
     
     # Si no encuentra, buscar por IdPublicidadRemoto (ID del dashboard)
     if not banner:
+        logger.info(f"[PUT banners] No encontrado por ID {banner_id}, buscando por IdPublicidadRemoto: {banner_id}")
         stmt = select(Publicidad).where(Publicidad.IdPublicidadRemoto == banner_id)
         result = await db.execute(stmt)
         banner = result.scalars().first()
     
     if not banner:
+        logger.info(f"[PUT banners] Banner NO encontrado en DB, retornando 404")
         raise HTTPException(status_code=404, detail=f"Banner no encontrado (ID: {banner_id})")
+    
+    logger.info(f"[PUT banners] Banner encontrado, ID local: {banner.id}, IdRemoto: {banner.IdPublicidadRemoto}")
     
     try:
         # Actualizar campos si se proporcionan
@@ -252,28 +296,28 @@ async def actualizar_banner(
             banner.activo = activo
         if prioridad is not None:
             banner.prioridad = prioridad
-        if duracion_seg is not None:
-            banner.duracion_seg = duracion_seg
         
         if fecha_inicio:
             banner.fecha_inicio = datetime.fromisoformat(fecha_inicio)
         if fecha_fin:
             banner.fecha_fin = datetime.fromisoformat(fecha_fin)
         
-        if dispositivo_ids is not None:
-            banner.device_ids = dispositivo_ids
+        # Manejar dispositivo_ids:
+        # - Si dispositivo_ids tiene valor: asignar a esos dispositivos
+        # - Si dispositivo_ids es None o "": asignar a todos
+        if dispositivo_ids is not None and dispositivo_ids.strip() != "":
+            banner.device_ids = dispositivo_ids.strip()
+        else:
+            banner.device_ids = None
         
         await db.commit()
         await db.refresh(banner)
-        
-        print(f"[DEBUG] Banner {banner_id} actualizado. device_ids: {banner.device_ids}")
         
         # Notificar a los dispositivos si el banner está activo y tiene fecha de inicio pasada
         if banner.activo and banner.fecha_inicio:
             now = get_venezuela_now_naive()
             if banner.fecha_inicio <= now:
                 await _notify_banner_iniciado_inmediato(banner, banner.device_ids)
-                print(f"[DEBUG] Notificación de actualización enviada para banner ID={banner.id}")
         
         return {
             "success": True,
@@ -288,6 +332,38 @@ async def actualizar_banner(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al actualizar banner: {str(e)}")
 
+
+@router.get("/banners/{banner_id}/exists")
+async def verificar_banner_existe(
+    banner_id: int = Path(..., description="ID del banner a verificar (puede ser ID local o IdPublicidadRemoto)"),
+    db: AsyncSession = Depends(get_db_publicidad)
+):
+    """
+    Verifica si un banner existe en la base de datos.
+    Retorna True si existe, False si no.
+    Busca primero por ID directo, luego por IdPublicidadRemoto.
+    """
+    from ..models.publicidad import Publicidad
+    import logging
+    logger = logging.getLogger("publicidad")
+    
+    logger.info(f"[EXISTS] Buscando por ID directo: {banner_id}")
+    banner = await db.get(Publicidad, banner_id)
+    
+    if not banner:
+        logger.info(f"[EXISTS] No encontrado por ID {banner_id}, buscando por IdPublicidadRemoto: {banner_id}")
+        stmt = select(Publicidad).where(Publicidad.IdPublicidadRemoto == banner_id)
+        result = await db.execute(stmt)
+        banner = result.scalars().first()
+    
+    if banner:
+        logger.info(f"[EXISTS] Banner encontrado, ID local: {banner.id}, IdRemoto: {banner.IdPublicidadRemoto}")
+    else:
+        logger.info(f"[EXISTS] Banner NO encontrado")
+    
+    return {"exists": banner is not None, "banner_id": banner_id}
+
+
 @router.post("/replicar-archivos")
 async def replicar_archivos_batch(
     files: List[UploadFile] = File(...),
@@ -296,7 +372,6 @@ async def replicar_archivos_batch(
     Prioridades: List[int] = Form(...),
     FechasInicio: List[str] = Form(...),
     FechasFin: List[str] = Form(...),
-    DuracionesSeg: List[int] = Form(...),
     IdsPublicidadRemoto: List[int] = Form(...),
     db: AsyncSession = Depends(get_db_publicidad)
 ):
@@ -344,7 +419,6 @@ async def replicar_archivos_batch(
                 prioridad=Prioridades[idx],
                 fecha_inicio=fecha_inicio_dt,
                 fecha_fin=fecha_fin_dt,
-                duracion_seg=DuracionesSeg[idx],
                 IdPublicidadRemoto=IdsPublicidadRemoto[idx]
             )
             db.add(nuevo_banner)

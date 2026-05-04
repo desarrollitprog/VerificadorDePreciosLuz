@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
     <application
         android:name=".App"
@@ -36,6 +39,18 @@
             <action android:name="android.intent.action.BOOT_COMPLETED" />
         </intent-filter>
     </receiver>
+    <receiver android:name="com.example.verificadordepreciosluz.ui.scanner.ReinicioReceiver" android:enabled="true" android:exported="false">
+        <intent-filter>
+            <action android:name="com.example.verificadordepreciosluz.REINICIO" />
+        </intent-filter>
+    </receiver>
+    
+    <!-- Servicio en primer plano solo para TV/FireTV -->
+    <service
+        android:name=".KioskService"
+        android:enabled="true"
+        android:exported="false"
+        android:foregroundServiceType="dataSync" />
     <receiver
         android:name="com.example.verificadordepreciosluz.ui.scanner.MyDeviceAdminReceiver"
         android:permission="android.permission.BIND_DEVICE_ADMIN"

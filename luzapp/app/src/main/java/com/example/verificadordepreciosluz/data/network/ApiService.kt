@@ -41,7 +41,9 @@ data class BannerResponse(
     val url: String,
     @SerializedName("duracion_seg") val duracionSeg: Int?,
     val prioridad: Int?,
-    @SerializedName("updated_at") val updatedAt: String?
+    @SerializedName("updated_at") val updatedAt: String?,
+    @SerializedName("fecha_inicio_ms") val fechaInicioMs: Long?,
+    @SerializedName("fecha_fin_ms") val fechaFinMs: Long?
 )
 
 data class PlaybackStatusRequest(

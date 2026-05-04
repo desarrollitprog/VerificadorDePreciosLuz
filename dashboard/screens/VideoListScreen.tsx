@@ -117,9 +117,13 @@ export const VideoListScreen: React.FC = () => {
     setError(null);
     try {
       await deleteVideo(videoId);
-      setVideos((prev) => prev.filter((v) => v.id !== videoId));
     } catch {
       setError('Error Borrando Videos');
+    } finally {
+      try {
+        const data = await getVideos();
+        setVideos(Array.isArray(data) ? data : []);
+      } catch {}
     }
   };
 

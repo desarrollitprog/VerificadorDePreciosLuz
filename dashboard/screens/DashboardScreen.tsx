@@ -363,13 +363,16 @@ export const DashboardScreen: React.FC = () => {
     setConfirmDelete({ open: false, videoId: null, titulo: '' });
     try {
       await deleteVideo(confirmDelete.videoId);
-      setVideos(videos.filter(v => v.id !== confirmDelete.videoId));
       showNotification('Archivo borrado correctamente', 'success');
     } catch (err: any) {
       setError('Error deleting video');
       showNotification('Error al borrar archivo', 'error');
     } finally {
       setDeletingVideoId(null);
+      try {
+        const data = await getVideos();
+        setVideos(data);
+      } catch {}
     }
   };
 

@@ -60,7 +60,7 @@ class MainActivity : AppCompatActivity() {
                 Log.d("MainActivity", "Carácter agregado: '$char', buffer: '$bufferText', length=${bufferText.length}")
 
                 // PROCESAR AUTOMÁTICAMENTE cuando alcance longitud válida
-                if (bufferText.length == 8 || bufferText.length == 12 || bufferText.length == 13) {
+                if (bufferText.length == 14) {
                     Log.d("MainActivity", "Longitud válida alcanzada: ${bufferText.length}, procesando...")
                     binding.etUnlockCode.setText(bufferText)
                     scannerBuffer.clear()
@@ -175,9 +175,11 @@ class MainActivity : AppCompatActivity() {
             }
         } else {
             Log.d("MainActivity", "onCreate: No hay IP guardada, mostrando configuración manual")
+            isUnlocked = true
             binding.tvLockedIndicator.visibility = View.GONE
             binding.btnValidar.isFocusable = true
             binding.btnValidar.isFocusableInTouchMode = true
+            binding.etIpServidor.requestFocus()
         }
 
         // Solo verificar backup si NO hay IP guardada

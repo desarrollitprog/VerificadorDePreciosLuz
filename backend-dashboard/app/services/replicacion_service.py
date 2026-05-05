@@ -137,16 +137,19 @@ async def replicar_archivos_batch_al_api(api_url: str, file_paths: list, banners
 
 async def Borrado_api(api_url: str, id_remoto: int, timeout: int = 30) -> dict:
     """
-    Env├¡a una petici├│n DELETE al backend-api para eliminar un banner remoto por IdPublicidadRemoto.
-    Retorna la respuesta del API como dict.
+    Envia peticion DELETE al backend-api para eliminar banner remoto por IdPublicidadRemoto.
+    404 = banner no existe en ese servidor = exito (idempotente).
     """
     url = f"{api_url.rstrip('/')}/banners/remoto/{id_remoto}"
     async with httpx.AsyncClient(timeout=timeout) as client:
         response = await client.delete(url)
-    try:
-        return response.json()
-    except Exception:
-        return {"success": False, "message": f"Respuesta inv├ílida del API: {response.text}"}
+    if response.status_code in (200, 404):
+        try:
+            return response.json()
+        except Exception:
+            return {"success": True, "message": "Eliminado"}
+    response.raise_for_status()
+    return response.json()
 
 
 async def actualizar_estado_api(api_url: str, id_remoto: int, activo: bool, timeout: int = 15) -> dict:

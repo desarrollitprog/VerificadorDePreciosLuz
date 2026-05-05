@@ -325,10 +325,10 @@ async def upload_banner(
     allowed_videos = ["mp4", "webm", "mkv", "avi", "mov"]
     if ext in allowed_images:
         Tipo = "image"
-        max_size = 20 * 1024 * 1024  # 20 MB
+        max_size = 500 * 1024 * 1024  # 20 MB
     elif ext in allowed_videos:
         Tipo = "video"
-        max_size = 20 * 1024 * 1024  # 20 MB
+        max_size = 500 * 1024 * 1024  # 20 MB
     else:
         raise HTTPException(status_code=400, detail=f"Tipo de archivo no permitido: .{ext}")
 

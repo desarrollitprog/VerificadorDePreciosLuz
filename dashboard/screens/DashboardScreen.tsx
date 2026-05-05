@@ -225,7 +225,7 @@ export const DashboardScreen: React.FC = () => {
       setUploadStatuses([]);
     if (!event.target.files?.length) return;
     const files = Array.from(event.target.files);
-    const maxSize = 20 * 1024 * 1024;
+    const maxSize = 500 * 1024 * 1024;
     const validFiles: File[] = [];
     const metadatas: FileMetadata[] = [];
     let rejected = 0;
@@ -247,8 +247,8 @@ export const DashboardScreen: React.FC = () => {
       });
     });
     if (rejected > 0) {
-      setError(`Se rechazaron ${rejected} archivos por tamaño (max 20MB).`);
-      showNotification(`Se rechazaron ${rejected} archivos por tamaño (max 20MB)`, 'warning');
+      setError(`Se rechazaron ${rejected} archivos por tamaño (max 500MB).`);
+      showNotification(`Se rechazaron ${rejected} archivos por tamaño (max 500MB)`, 'warning');
     }
     if (validFiles.length === 0) return;
     setSelectedFiles(validFiles);

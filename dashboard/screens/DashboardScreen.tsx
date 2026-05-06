@@ -892,7 +892,7 @@ export const DashboardScreen: React.FC = () => {
 
       {isUploadModalOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 px-4 pt-20">
-          <div className="w-full max-w-2xl bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl p-5">
+          <div className="w-full max-w-6xl bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl p-5">
             <div className="flex items-start justify-between mb-4">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white">Datos de Archivos</h3>
               <button
@@ -904,7 +904,7 @@ export const DashboardScreen: React.FC = () => {
                 ×
               </button>
             </div>
-            <div className="space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar">
+            <div className="space-y-4 max-h-[75vh] overflow-y-auto custom-scrollbar">
               {selectedFiles.map((file, idx) => (
                 <div key={file.name} className="border rounded-lg p-4 mb-2 bg-slate-50 dark:bg-[#17202b]">
                   <div className="flex items-center gap-2 mb-2">
@@ -1112,7 +1112,7 @@ export const DashboardScreen: React.FC = () => {
       {/* Sync Modal */}
       {isSyncModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 pt-20">
-          <div className="bg-white dark:bg-[#1c2936] rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-hidden">
+          <div className="bg-white dark:bg-[#1c2936] rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
             <div className="p-4 border-b border-slate-200 dark:border-slate-700">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">Sincronización Selectiva</h2>
               <p className="text-sm text-slate-500">Selecciona los dispositivos a sincronizar</p>
@@ -1202,7 +1202,7 @@ export const DashboardScreen: React.FC = () => {
       {/* Edit Modal */}
       {isEditModalOpen && editingVideo && (
         <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 pt-20">
-          <div className="bg-white dark:bg-[#1c2936] rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
+          <div className="bg-white dark:bg-[#1c2936] rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
             <div className="p-4 border-b border-slate-200 dark:border-slate-700 shrink-0">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">Editar Publicidad</h2>
               <p className="text-sm text-slate-500">Modifica los datos de la publicidad</p>

@@ -1114,13 +1114,13 @@ export const DashboardScreen: React.FC = () => {
       {/* Sync Modal */}
       {isSyncModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 pt-20">
-          <div className="bg-white dark:bg-[#1c2936] rounded-xl shadow-2xl w-full max-w-5xl max-h-[97vh] overflow-hidden flex flex-col">
-            <div className="p-5 border-b border-slate-200 dark:border-slate-700 shrink-0">
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Sincronización Selectiva</h2>
+          <div className="bg-white dark:bg-[#1c2936] rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-700 shrink-0">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Sincronización Selectiva</h2>
               <p className="text-base text-slate-500">Selecciona los dispositivos a sincronizar</p>
             </div>
             
-            <div className="p-5 overflow-y-auto flex-1">
+            <div className="p-4 overflow-y-auto flex-1">
               <label className="flex items-center gap-2 mb-4">
                 <input
                   type="checkbox"
@@ -1168,11 +1168,12 @@ export const DashboardScreen: React.FC = () => {
                         : [...prev, id]
                     );
                   }}
+                  maxHeight="max-h-72"
                 />
               )}
             </div>
 
-            <div className="mt-auto flex justify-end gap-4 p-6 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#17202b]">
+            <div className="mt-4 flex justify-end gap-2 p-4 border-t border-slate-200 dark:border-slate-700">
               <button
                 type="button"
                 onClick={() => {
@@ -1182,7 +1183,7 @@ export const DashboardScreen: React.FC = () => {
                   setSyncDispositivoIds([]);
                   setSyncExpandedServers([]);
                 }}
-                className="px-6 py-3 rounded-lg border border-slate-300 dark:border-slate-700 text-lg text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium"
+                className="px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 Cancelar
               </button>
@@ -1193,7 +1194,7 @@ export const DashboardScreen: React.FC = () => {
                   await executeSync();
                 }}
                 disabled={!syncAllDevices && syncServidorIds.length === 0 && syncDispositivoIds.length === 0}
-                className="px-6 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-lg font-semibold disabled:opacity-60 shadow-lg"
+                className="px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-base font-semibold disabled:opacity-60"
               >
                 Sincronizar
               </button>

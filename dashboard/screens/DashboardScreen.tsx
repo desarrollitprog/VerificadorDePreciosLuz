@@ -906,27 +906,29 @@ export const DashboardScreen: React.FC = () => {
             </div>
             <div className="space-y-4 max-h-[75vh] overflow-y-auto custom-scrollbar">
               {selectedFiles.map((file, idx) => (
-                <div key={file.name} className="border rounded-lg p-4 mb-2 bg-slate-50 dark:bg-[#17202b]">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="font-semibold text-slate-900 dark:text-white">{file.name}</span>
-                    <span className="text-xs text-slate-500">({Math.round(file.size / 1024)} KB)</span>
+                <div key={file.name} className="border rounded-lg p-6 mb-3 bg-slate-50 dark:bg-[#17202b]">
+                  <div className="flex items-start gap-4 mb-2">
                     {file.type.startsWith('image') && (
                       <img
                         src={URL.createObjectURL(file)}
                         alt={file.name}
-                        className="h-12 w-12 object-cover rounded ml-2"
+                        className="h-20 w-20 object-cover rounded shrink-0"
                       />
                     )}
                     {file.type.startsWith('video') && (
                       <video
                         src={URL.createObjectURL(file)}
-                        className="h-12 w-12 rounded ml-2"
+                        className="h-20 w-20 rounded shrink-0"
                         controls
                       />
                     )}
+                    <div className="flex-1 min-w-0">
+                      <span className="font-semibold text-slate-900 dark:text-white block">{file.name}</span>
+                      <span className="text-xs text-slate-500">({Math.round(file.size / 1024)} KB)</span>
+                    </div>
                     <button
                       type="button"
-                      className="ml-auto px-2 py-1 rounded bg-slate-200 dark:bg-slate-700 text-xs"
+                      className="px-2 py-1 rounded bg-slate-200 dark:bg-slate-700 text-xs shrink-0"
                       onClick={() => {
                         const next = [...expandedFiles];
                         next[idx] = !next[idx];
@@ -1112,13 +1114,13 @@ export const DashboardScreen: React.FC = () => {
       {/* Sync Modal */}
       {isSyncModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 pt-20">
-          <div className="bg-white dark:bg-[#1c2936] rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+          <div className="bg-white dark:bg-[#1c2936] rounded-xl shadow-2xl w-full max-w-5xl max-h-[95vh] overflow-hidden">
             <div className="p-4 border-b border-slate-200 dark:border-slate-700">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">Sincronización Selectiva</h2>
               <p className="text-sm text-slate-500">Selecciona los dispositivos a sincronizar</p>
             </div>
             
-            <div className="p-4 overflow-y-auto max-h-[50vh]">
+            <div className="p-4 overflow-y-auto max-h-[75vh]">
               <label className="flex items-center gap-2 mb-4">
                 <input
                   type="checkbox"

@@ -167,8 +167,8 @@ export const VideoListScreen: React.FC = () => {
     try {
       await updateBannerMetadata(editItem.id, {
         activo: editForm.activo,
-        fecha_inicio: toIsoOrNull(editForm.fechaInicio),
-        fecha_fin: toIsoOrNull(editForm.fechaFin),
+        fechaInicio: toIsoOrNull(editForm.fechaInicio),
+        fechaFin: toIsoOrNull(editForm.fechaFin),
       });
 
       setVideos((prev) =>

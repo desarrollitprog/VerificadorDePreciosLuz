@@ -62,7 +62,7 @@ export const DashboardScreen: React.FC = () => {
     // Feedback por archivo
     const [uploadStatuses, setUploadStatuses] = useState<Array<'pending' | 'uploading' | 'success' | 'error'>>([]);
   const showNotification = useNotification();
-  const [preview, setPreview] = useState<{url: string, tipo: string, titulo: string} | null>(null);
+  const [preview, setPreview] = useState<{url: string, tipo: string, titulo: string, thumbnail?: string} | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   
   const handlePreview = useCallback((video: Video) => {
@@ -1077,6 +1077,7 @@ export const DashboardScreen: React.FC = () => {
                                   : [...prev, id]
                               );
                             }}
+                            maxHeight="max-h-[50vh]"
                           />
                         )}
                       </div>
@@ -1168,7 +1169,7 @@ export const DashboardScreen: React.FC = () => {
                         : [...prev, id]
                     );
                   }}
-                  maxHeight="max-h-72"
+                  maxHeight="max-h-[65vh]"
                 />
               )}
             </div>
@@ -1309,7 +1310,7 @@ export const DashboardScreen: React.FC = () => {
                           : [...prev, id]
                       );
                     }}
-                    maxHeight="max-h-40"
+                    maxHeight="max-h-[50vh]"
                   />
                 )}
               </div>

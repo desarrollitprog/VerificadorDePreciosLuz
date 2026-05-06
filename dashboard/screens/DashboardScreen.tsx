@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNotification } from '../components/useNotification';
-import { Search, UploadCloud, MoreVertical, Eye, Trash, Film, Plus, Server, Smartphone, ChevronDown, ChevronRight, Clock } from 'lucide-react';
+import { Search, UploadCloud, MoreVertical, Eye, Trash, Film, Plus, Server, Smartphone, ChevronDown, ChevronRight, Clock, Check, Pencil, RefreshCw } from 'lucide-react';
 import { getVideos, uploadMedia, deleteVideo, sincronizarServidores, updateBannerMetadata, updateBannerAsignations, FileMetadata } from '../services/videoService';
 import { Video, Servidor } from '../types';
 import { ServerDeviceSelector } from '../components/ServerDeviceSelector';
@@ -891,19 +891,22 @@ export const DashboardScreen: React.FC = () => {
       </div>
 
       {isUploadModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 px-4 pt-20">
-          <div className="w-full max-w-6xl bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl p-5">
-            <div className="flex items-start justify-between mb-4">
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Datos de Archivos</h3>
-              <button
-                type="button"
-                className="text-slate-500 hover:text-red-500 text-xl leading-none"
-                onClick={resetUploadModal}
-                disabled={uploading}
-              >
-                ×
-              </button>
-            </div>
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-gradient-to-br from-black/70 via-black/60 to-black/80 px-4 pt-20">
+          <div className="w-full max-w-6xl bg-white dark:bg-[#1c2936] rounded-2xl border border-slate-300/50 dark:border-slate-600/50 shadow-[0_20px_60px_rgba(0,0,0,0.3)] p-6">
+            <div className="flex items-start justify-between mb-6 pb-4 border-b border-gradient-to-r from-transparent via-slate-300 to-transparent">
+              <div>
+                <h3 className="text-xl font-mono font-bold text-slate-900 dark:text-white tracking-wide">DATOS DE ARCHIVOS</h3>
+                <p className="text-sm text-slate-500 mt-1 font-mono">Configura antes de subir</p>
+              </div>
+               <button
+                 type="button"
+                 className="text-slate-400 hover:text-red-500 text-2xl leading-none transition-all duration-200 hover:rotate-90 active:scale-90"
+                 onClick={resetUploadModal}
+                 disabled={uploading}
+               >
+                 ×
+               </button>
+             </div>
             <div className="space-y-4 max-h-[75vh] overflow-y-auto custom-scrollbar">
               {selectedFiles.map((file, idx) => (
                 <div key={file.name} className="border rounded-lg p-8 mb-4 bg-slate-50 dark:bg-[#17202b]">
@@ -940,90 +943,102 @@ export const DashboardScreen: React.FC = () => {
                   </div>
                   {expandedFiles[idx] && (
                     <div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {/* Título */}
-                        <div>
-                          <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2">Título</label>
-                          <input
-                            type="text"
-                            className="w-full rounded-lg border border-slate-200/50 dark:border-slate-700/50 bg-white/50 dark:bg-[#17202b]/50 px-3 py-2 text-sm text-slate-800 dark:text-white focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all duration-200"
-                            value={fileMetadatas[idx]?.titulo || ''}
-                            onChange={e => {
-                              const newMetas = [...fileMetadatas];
-                              newMetas[idx].titulo = e.target.value;
-                              setFileMetadatas(newMetas);
-                            }}
-                            placeholder="Ej: Promo principal - Sucursal Centro"
-                          />
-                        </div>
-                        {/* Estado */}
-                        <div>
-                          <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2">Estado</label>
-                          <select
-                        className="w-full rounded-lg border border-slate-200/50 dark:border-slate-700/50 bg-white/50 dark:bg-[#17202b]/50 px-4 py-2.5 text-base text-slate-800 dark:text-white focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all duration-200"
-                        value={fileMetadatas[idx]?.activo ? 'activo' : 'inactivo'}
-                        onChange={e => {
-                          const newMetas = [...fileMetadatas];
-                          newMetas[idx].activo = e.target.value === 'activo';
-                          setFileMetadatas(newMetas);
-                        }}
-                      >
-                        <option value="activo">Activo</option>
-                        <option value="inactivo">Inactivo</option>
-                      </select>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                         {/* Título */}
+                         <div>
+                           <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2 font-mono">TÍTULO</label>
+                           <input
+                             type="text"
+                             className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-800 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200 font-mono"
+                             value={fileMetadatas[idx]?.titulo || ''}
+                             onChange={e => {
+                               const newMetas = [...fileMetadatas];
+                               newMetas[idx].titulo = e.target.value;
+                               setFileMetadatas(newMetas);
+                             }}
+                             placeholder="Ej: Promo principal - Sucursal Centro"
+                           />
+                         </div>
+                         {/* Estado */}
+                         <div>
+                           <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2 font-mono">ESTADO</label>
+                         <select
+                         className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-800 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200 font-mono"
+                         value={fileMetadatas[idx]?.activo ? 'activo' : 'inactivo'}
+                         onChange={e => {
+                           const newMetas = [...fileMetadatas];
+                           newMetas[idx].activo = e.target.value === 'activo';
+                           setFileMetadatas(newMetas);
+                         }}
+                       >
+                         <option value="activo">ACTIVE</option>
+                         <option value="inactivo">INACTIVE</option>
+                       </select>
                         </div>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-                        {/* Fecha Inicio */}
-                        <div>
-                          <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2">Fecha Inicio</label>
-                          <input
-                            type="datetime-local"
-                            className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
-                            value={fileMetadatas[idx]?.fechaInicio || ''}
-                            onChange={e => {
-                              const newMetas = [...fileMetadatas];
-                              newMetas[idx].fechaInicio = e.target.value;
-                              setFileMetadatas(newMetas);
-                            }}
-                          />
+                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                         {/* Fecha Inicio */}
+                         <div>
+                           <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2 font-mono">FECHA INICIO</label>
+                           <input
+                             type="datetime-local"
+                             className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-900 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200 font-mono"
+                             value={fileMetadatas[idx]?.fechaInicio || ''}
+                             onChange={e => {
+                               const newMetas = [...fileMetadatas];
+                               newMetas[idx].fechaInicio = e.target.value;
+                               setFileMetadatas(newMetas);
+                             }}
+                           />
                         </div>
-                        {/* Fecha Fin */}
-                        <div>
-                          <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2">Fecha Fin</label>
-                          <input
-                            type="datetime-local"
-                        className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-4 py-2.5 text-base text-slate-900 dark:text-white"
-                        value={fileMetadatas[idx]?.fechaFin || ''}
-                            onChange={e => {
-                              const newMetas = [...fileMetadatas];
-                              newMetas[idx].fechaFin = e.target.value;
-                              setFileMetadatas(newMetas);
-                            }}
-                          />
-                        </div>
+                         {/* Fecha Fin */}
+                         <div>
+                           <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2 font-mono">FECHA FIN</label>
+                           <input
+                             type="datetime-local"
+                             className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-900 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200 font-mono"
+                             value={fileMetadatas[idx]?.fechaFin || ''}
+                             onChange={e => {
+                               const newMetas = [...fileMetadatas];
+                               newMetas[idx].fechaFin = e.target.value;
+                               setFileMetadatas(newMetas);
+                             }}
+                           />
+                         </div>
                       </div>
                       {/* Asignación */}
                       <div className="mt-3 border-t border-slate-200 dark:border-slate-700 pt-3">
-                        <label className="flex items-center gap-2 mb-3">
-                          <input
-                            type="checkbox"
-                            checked={fileMetadatas[idx]?.asignacionTodos ?? true}
-                            onChange={e => {
-                              const newMetas = [...fileMetadatas];
-                              newMetas[idx].asignacionTodos = e.target.checked;
-                              if (e.target.checked) {
-                                newMetas[idx].servidorIds = [];
-                                newMetas[idx].dispositivoIds = [];
-                              }
-                              setFileMetadatas(newMetas);
-                            }}
-                            className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
-                          />
-                          <span className="text-base font-medium text-slate-700 dark:text-slate-200">
-                            Asignar a TODOS los servidores y dispositivos
+                        <div 
+                          className="flex items-center gap-3 mb-4 p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/30 cursor-pointer transition-colors"
+                          onClick={() => {
+                            const newMetas = [...fileMetadatas];
+                            const nuevoEstado = !(newMetas[idx]?.asignacionTodos ?? true);
+                            newMetas[idx].asignacionTodos = nuevoEstado;
+                            if (nuevoEstado) {
+                              newMetas[idx].servidorIds = [];
+                              newMetas[idx].dispositivoIds = [];
+                            }
+                            setFileMetadatas(newMetas);
+                          }}
+                        >
+                          <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all duration-200 ${
+                            (fileMetadatas[idx]?.asignacionTodos ?? true)
+                              ? 'bg-primary border-primary scale-110'
+                              : 'border-slate-300 dark:border-slate-600 hover:border-primary/50 scale-100'
+                          }`}>
+                            {(fileMetadatas[idx]?.asignacionTodos ?? true) && <Check size={14} className="text-white" />}
+                          </div>
+                          <span className="text-base font-medium text-slate-700 dark:text-slate-200 font-mono tracking-wide">
+                            ASSIGN TO ALL SERVERS & DEVICES
                           </span>
-                        </label>
+                          <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                            (fileMetadatas[idx]?.asignacionTodos ?? true)
+                              ? 'bg-amber-500/10 text-amber-500' 
+                              : 'bg-slate-500/10 text-slate-500'
+                          }`}>
+                            {(fileMetadatas[idx]?.asignacionTodos ?? true) ? 'ACTIVE' : 'INACTIVE'}
+                          </span>
+                        </div>
                         {!fileMetadatas[idx]?.asignacionTodos && (
                           <ServerDeviceSelector
                             servidores={servidores}
@@ -1095,17 +1110,17 @@ export const DashboardScreen: React.FC = () => {
                 type="button"
                 onClick={resetUploadModal}
                 disabled={uploading}
-                className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                className="px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform duration-150"
               >
-                Cancelar
+                CANCELAR
               </button>
               <button
                 type="button"
                 onClick={handleSubmitUpload}
                 disabled={uploading}
-                className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-semibold disabled:opacity-60"
+                className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-white text-base font-semibold disabled:opacity-60 active:scale-95 transition-all duration-150"
               >
-                {uploading ? 'Subiendo...' : 'Guardar y Subir'}
+                {uploading ? 'SUBIENDO...' : 'GUARDAR Y SUBIR'}
               </button>
             </div>
           </div>
@@ -1114,31 +1129,50 @@ export const DashboardScreen: React.FC = () => {
 
       {/* Sync Modal */}
       {isSyncModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 pt-20">
-          <div className="bg-white dark:bg-[#1c2936] rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="p-4 border-b border-slate-200 dark:border-slate-700 shrink-0">
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Sincronización Selectiva</h2>
-              <p className="text-base text-slate-500">Selecciona los dispositivos a sincronizar</p>
+        <div className="fixed inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/80 flex items-start justify-center z-50 p-4 pt-20">
+          <div className="bg-white dark:bg-[#1c2936] rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.3)] w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-gradient-to-r from-transparent via-slate-300 to-transparent shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-amber-500/10">
+                  <RefreshCcw size={20} className="text-amber-500" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-mono font-bold text-slate-900 dark:text-white tracking-wide">SINCRONIZACIÓN SELECTIVA</h2>
+                  <p className="text-sm text-slate-500 mt-1 font-mono">Selecciona los dispositivos a sincronizar</p>
+                </div>
+              </div>
             </div>
             
             <div className="p-4 overflow-y-auto flex-1">
-              <label className="flex items-center gap-2 mb-4">
-                <input
-                  type="checkbox"
-                  checked={syncAllDevices}
-                  onChange={e => {
-                    setSyncAllDevices(e.target.checked);
-                    if (e.target.checked) {
-                      setSyncServidorIds([]);
-                      setSyncDispositivoIds([]);
-                    }
-                  }}
-                  className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
-                />
-                <span className="text-base font-medium text-slate-700 dark:text-slate-200">
-                  Sincronizar a TODOS los dispositivos
+              <div 
+                className="flex items-center gap-3 mb-4 p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/30 cursor-pointer transition-colors"
+                onClick={() => {
+                  const nuevoEstado = !syncAllDevices;
+                  setSyncAllDevices(nuevoEstado);
+                  if (nuevoEstado) {
+                    setSyncServidorIds([]);
+                    setSyncDispositivoIds([]);
+                  }
+                }}
+              >
+                <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all duration-200 ${
+                  syncAllDevices
+                    ? 'bg-primary border-primary scale-110'
+                    : 'border-slate-300 dark:border-slate-600 hover:border-primary/50 scale-100'
+                }`}>
+                  {syncAllDevices && <Check size={14} className="text-white" />}
+                </div>
+                  <span className="text-base font-medium text-slate-700 dark:text-slate-200 font-mono tracking-wide">
+                    SINCRONIZAR A TODOS LOS DISPOSITIVOS
+                  </span>
+                <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                  syncAllDevices
+                    ? 'bg-amber-500/10 text-amber-500' 
+                    : 'bg-slate-500/10 text-slate-500'
+                }`}>
+                  {syncAllDevices ? 'ACTIVE' : 'INACTIVE'}
                 </span>
-              </label>
+              </div>
               
               {!syncAllDevices && (
                 <ServerDeviceSelector
@@ -1174,7 +1208,7 @@ export const DashboardScreen: React.FC = () => {
               )}
             </div>
 
-            <div className="mt-4 flex justify-end gap-2 p-4 border-t border-slate-200 dark:border-slate-700">
+            <div className="mt-4 flex justify-end gap-2 p-6 border-t border-gradient-to-r from-transparent via-slate-300 to-transparent">
               <button
                 type="button"
                 onClick={() => {
@@ -1184,9 +1218,9 @@ export const DashboardScreen: React.FC = () => {
                   setSyncDispositivoIds([]);
                   setSyncExpandedServers([]);
                 }}
-                className="px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                className="px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform duration-150"
               >
-                Cancelar
+                CANCELAR
               </button>
               <button
                 type="button"
@@ -1195,9 +1229,9 @@ export const DashboardScreen: React.FC = () => {
                   await executeSync();
                 }}
                 disabled={!syncAllDevices && syncServidorIds.length === 0 && syncDispositivoIds.length === 0}
-                className="px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-base font-semibold disabled:opacity-60"
+                className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-base font-semibold disabled:opacity-60 active:scale-95 transition-all duration-150"
               >
-                Sincronizar
+                SINCRONIZAR
               </button>
             </div>
           </div>
@@ -1205,83 +1239,114 @@ export const DashboardScreen: React.FC = () => {
       )}
       {/* Edit Modal */}
       {isEditModalOpen && editingVideo && (
-        <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 pt-20">
-          <div className="bg-white dark:bg-[#1c2936] rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-            <div className="p-4 border-b border-slate-200 dark:border-slate-700 shrink-0">
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Editar Publicidad</h2>
-              <p className="text-sm text-slate-500">Modifica los datos de la publicidad</p>
+        <div className="fixed inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/80 flex items-start justify-center z-50 p-4 pt-20">
+          <div className="bg-white dark:bg-[#1c2936] rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.3)] w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-gradient-to-r from-transparent via-slate-300 to-transparent shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-amber-500/10">
+                  <Pencil size={20} className="text-amber-500" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-mono font-bold text-slate-900 dark:text-white tracking-wide">EDITAR PUBLICIDAD</h2>
+                  <p className="text-sm text-slate-500 mt-1 font-mono">Modifica los datos de la publicidad</p>
+                </div>
+              </div>
             </div>
             
-            <div className="p-4 space-y-4 overflow-y-auto flex-1">
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
               <div>
-                <label className="block text-base font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  Título
+                  <label className="block text-base font-medium text-slate-700 dark:text-slate-300 mb-2 font-mono">
+                  TÍTULO
                 </label>
                 <input
                   type="text"
                   value={editFormData.titulo}
                   onChange={e => setEditFormData({ ...editFormData, titulo: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-base text-slate-900 dark:text-white"
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-300/70 dark:border-slate-600/70 rounded-lg text-base text-slate-900 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200 font-mono"
                 />
               </div>
               
               <div>
-                <label className="block text-base font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  Fecha Inicio
+                  <label className="block text-base font-medium text-slate-700 dark:text-slate-300 mb-2 font-mono">
+                  FECHA INICIO
                 </label>
                 <input
                   type="datetime-local"
                   value={editFormData.fechaInicio}
                   onChange={e => setEditFormData({ ...editFormData, fechaInicio: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-base text-slate-900 dark:text-white"
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-300/70 dark:border-slate-600/70 rounded-lg text-base text-slate-900 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200 font-mono"
                 />
               </div>
               
               <div>
-                <label className="block text-base font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  Fecha Fin
+                  <label className="block text-base font-medium text-slate-700 dark:text-slate-300 mb-2 font-mono">
+                  FECHA FIN
                 </label>
                 <input
                   type="datetime-local"
                   value={editFormData.fechaFin}
                   onChange={e => setEditFormData({ ...editFormData, fechaFin: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-base text-slate-900 dark:text-white"
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-300/70 dark:border-slate-600/70 rounded-lg text-base text-slate-900 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200 font-mono"
                 />
               </div>
               
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="editActivo"
-                  checked={editFormData.activo}
-                  onChange={e => setEditFormData({ ...editFormData, activo: e.target.checked })}
-                  className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
-                />
-                <label className="text-base text-slate-700 dark:text-slate-300">
-                  Activo
+              <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/30 cursor-pointer transition-colors">
+                <div 
+                  className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all duration-200 ${
+                    editFormData.activo
+                      ? 'bg-amber-500 border-amber-500 scale-110'
+                      : 'border-slate-300 dark:border-slate-600 hover:border-amber-500/50 scale-100'
+                  }`}
+                  onClick={() => setEditFormData({ ...editFormData, activo: !editFormData.activo })}
+                >
+                  {editFormData.activo && <Check size={14} className="text-white" />}
+                </div>
+                  <label 
+                  className="text-base text-slate-700 dark:text-slate-300 font-mono tracking-wide cursor-pointer"
+                  onClick={() => setEditFormData({ ...editFormData, activo: !editFormData.activo })}
+                >
+                  ACTIVO
                 </label>
+                <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                  editFormData.activo
+                    ? 'bg-amber-500/10 text-amber-500' 
+                    : 'bg-slate-500/10 text-slate-500'
+                }`}>
+                  {editFormData.activo ? 'ON' : 'OFF'}
+                </span>
               </div>
-              
-              {/* Sección de asignación */}
-              <div className="border-t border-slate-200 dark:border-slate-700 pt-4 mt-2">
-                <label className="flex items-center gap-2 mb-3">
-                  <input
-                    type="checkbox"
-                    id="editAsignacionTodos"
-                    checked={editAsignacionTodos}
-                    onChange={e => {
-                      setEditAsignacionTodos(e.target.checked);
-                      if (e.target.checked) {
-                        setEditServidorIds([]);
-                        setEditDispositivoIds([]);
-                      }
-                    }}
-                    className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
-                  />
-                  <span className="text-base font-medium text-slate-700 dark:text-slate-300">
-                    Asignar a TODOS los dispositivos
-                  </span>
-                </label>
+               
+               {/* Sección de asignación */}
+               <div className="border-t border-slate-200 dark:border-slate-700 pt-4 mt-2">
+                 <div 
+                   className="flex items-center gap-3 mb-4 p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/30 cursor-pointer transition-colors"
+                   onClick={() => {
+                     const nuevoEstado = !editAsignacionTodos;
+                     setEditAsignacionTodos(nuevoEstado);
+                     if (nuevoEstado) {
+                       setEditServidorIds([]);
+                       setEditDispositivoIds([]);
+                     }
+                   }}
+                 >
+                   <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all duration-200 ${
+                     editAsignacionTodos
+                       ? 'bg-primary border-primary scale-110'
+                       : 'border-slate-300 dark:border-slate-600 hover:border-primary/50 scale-100'
+                   }`}>
+                     {editAsignacionTodos && <Check size={14} className="text-white" />}
+                   </div>
+                   <span className="text-base font-medium text-slate-700 dark:text-slate-200 font-mono tracking-wide">
+                     ASSIGN TO ALL DEVICES
+                   </span>
+                   <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                     editAsignacionTodos
+                       ? 'bg-amber-500/10 text-amber-500' 
+                       : 'bg-slate-500/10 text-slate-500'
+                   }`}>
+                     {editAsignacionTodos ? 'ACTIVE' : 'INACTIVE'}
+                   </span>
+                 </div>
                 
                 {!editAsignacionTodos && (
                   <ServerDeviceSelector
@@ -1327,29 +1392,29 @@ export const DashboardScreen: React.FC = () => {
                   setEditDispositivoIds([]);
                   setEditExpandedServers([]);
                 }}
-                disabled={isSavingEdit}
-                className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  const fechaInicio = editFormData.fechaInicio;
-                  const fechaFin = editFormData.fechaFin;
-                  if (fechaInicio && fechaFin && new Date(fechaInicio) > new Date(fechaFin)) {
-                    showNotification('La fecha de inicio no puede ser mayor a la fecha fin', 'warning');
-                    return;
-                  }
-                  setIsSavingEdit(true);
-                  try {
-                    // Actualizar metadata
-                    await updateBannerMetadata(editingVideo.id, {
-                      activo: editFormData.activo,
-                      titulo: editFormData.titulo || '',
-                      fechaInicio: editFormData.fechaInicio || null,
-                      fechaFin: editFormData.fechaFin || null,
-                    });
+                 disabled={isSavingEdit}
+                 className="px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform duration-150"
+               >
+                 CANCELAR
+               </button>
+               <button
+                 type="button"
+                 onClick={async () => {
+                   const fechaInicio = editFormData.fechaInicio;
+                   const fechaFin = editFormData.fechaFin;
+                   if (fechaInicio && fechaFin && new Date(fechaInicio) > new Date(fechaFin)) {
+                     showNotification('La fecha de inicio no puede ser mayor a la fecha fin', 'warning');
+                     return;
+                   }
+                   setIsSavingEdit(true);
+                   try {
+                     // Actualizar metadata
+                     await updateBannerMetadata(editingVideo.id, {
+                       activo: editFormData.activo,
+                       titulo: editFormData.titulo || '',
+                       fechaInicio: editFormData.fechaInicio || null,
+                       fechaFin: editFormData.fechaFin || null,
+                     });
                     
                     // Actualizar asignaciones
                     await updateBannerAsignations(
@@ -1382,9 +1447,9 @@ export const DashboardScreen: React.FC = () => {
                   }
                 }}
                 disabled={isSavingEdit}
-                className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-semibold disabled:opacity-60"
+                className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-white text-base font-semibold disabled:opacity-60 active:scale-95 transition-all duration-150"
               >
-                {isSavingEdit ? 'Guardando...' : 'Guardar'}
+                {isSavingEdit ? 'GUARDANDO...' : 'GUARDAR CAMBIOS'}
               </button>
             </div>
           </div>

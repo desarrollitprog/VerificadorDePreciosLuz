@@ -149,12 +149,12 @@ async def replicar_archivo(
     else:
         raise HTTPException(status_code=400, detail=f"Tipo de archivo no permitido: .{ext}")
 
-    max_size = 500 * 1024 * 1024  # 20 MB
+    max_size = 100 * 1024 * 1024  # 100 MB
     file.file.seek(0, 2)
     file_size = file.file.tell()
     file.file.seek(0)
     if file_size > max_size:
-        raise HTTPException(status_code=400, detail="El archivo excede el tamaño máximo permitido (20 MB).")
+        raise HTTPException(status_code=400, detail="El archivo excede el tamaño máximo permitido (100 MB).")
 
     filename = file.filename
     file_location = os.path.join(banners_dir, filename)
@@ -389,12 +389,12 @@ async def replicar_archivos_batch(
         else:
             resultados.append({"filename": file.filename, "success": False, "error": f"Tipo de archivo no permitido: .{ext}"})
             continue
-        max_size = 20 * 1024 * 1024
+        max_size = 100 * 1024 * 1024  # 100 MB
         file.file.seek(0, 2)
         file_size = file.file.tell()
         file.file.seek(0)
         if file_size > max_size:
-            resultados.append({"filename": file.filename, "success": False, "error": "El archivo excede el tamaño máximo permitido (20 MB)."})
+            resultados.append({"filename": file.filename, "success": False, "error": "El archivo excede el tamaño máximo permitido (100 MB)."})
             continue
         filename = file.filename
         file_location = os.path.join(banners_dir, filename)

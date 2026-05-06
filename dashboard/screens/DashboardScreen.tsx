@@ -225,7 +225,7 @@ export const DashboardScreen: React.FC = () => {
       setUploadStatuses([]);
     if (!event.target.files?.length) return;
     const files = Array.from(event.target.files);
-    const maxSize = 20 * 1024 * 1024;
+    const maxSize = 500 * 1024 * 1024;
     const validFiles: File[] = [];
     const metadatas: FileMetadata[] = [];
     let rejected = 0;
@@ -247,8 +247,8 @@ export const DashboardScreen: React.FC = () => {
       });
     });
     if (rejected > 0) {
-      setError(`Se rechazaron ${rejected} archivos por tamaño (max 20MB).`);
-      showNotification(`Se rechazaron ${rejected} archivos por tamaño (max 20MB)`, 'warning');
+      setError(`Se rechazaron ${rejected} archivos por tamaño (max 500MB).`);
+      showNotification(`Se rechazaron ${rejected} archivos por tamaño (max 500MB)`, 'warning');
     }
     if (validFiles.length === 0) return;
     setSelectedFiles(validFiles);
@@ -892,7 +892,7 @@ export const DashboardScreen: React.FC = () => {
 
       {isUploadModalOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 px-4 pt-20">
-          <div className="w-full max-w-2xl bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl p-5">
+          <div className="w-full max-w-6xl bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl p-5">
             <div className="flex items-start justify-between mb-4">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white">Datos de Archivos</h3>
               <button
@@ -904,29 +904,31 @@ export const DashboardScreen: React.FC = () => {
                 ×
               </button>
             </div>
-            <div className="space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar">
+            <div className="space-y-4 max-h-[75vh] overflow-y-auto custom-scrollbar">
               {selectedFiles.map((file, idx) => (
-                <div key={file.name} className="border rounded-lg p-4 mb-2 bg-slate-50 dark:bg-[#17202b]">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="font-semibold text-slate-900 dark:text-white">{file.name}</span>
-                    <span className="text-xs text-slate-500">({Math.round(file.size / 1024)} KB)</span>
+                <div key={file.name} className="border rounded-lg p-8 mb-4 bg-slate-50 dark:bg-[#17202b]">
+                  <div className="flex items-start gap-6 mb-3">
                     {file.type.startsWith('image') && (
                       <img
                         src={URL.createObjectURL(file)}
                         alt={file.name}
-                        className="h-12 w-12 object-cover rounded ml-2"
+                        className="h-28 w-28 object-cover rounded-lg shrink-0"
                       />
                     )}
                     {file.type.startsWith('video') && (
                       <video
                         src={URL.createObjectURL(file)}
-                        className="h-12 w-12 rounded ml-2"
-                        controls
+                        className="h-28 w-28 rounded-lg shrink-0"
+                        controls={false}
                       />
                     )}
+                    <div className="flex-1 min-w-0">
+                      <span className="font-bold text-slate-900 dark:text-white block text-xl">{file.name}</span>
+                      <span className="text-base text-slate-500">({Math.round(file.size / 1024)} KB)</span>
+                    </div>
                     <button
                       type="button"
-                      className="ml-auto px-2 py-1 rounded bg-slate-200 dark:bg-slate-700 text-xs"
+                      className="px-3 py-1.5 rounded bg-slate-200 dark:bg-slate-700 text-sm shrink-0"
                       onClick={() => {
                         const next = [...expandedFiles];
                         next[idx] = !next[idx];
@@ -941,7 +943,7 @@ export const DashboardScreen: React.FC = () => {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {/* Título */}
                         <div>
-                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Título</label>
+                          <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2">Título</label>
                           <input
                             type="text"
                             className="w-full rounded-lg border border-slate-200/50 dark:border-slate-700/50 bg-white/50 dark:bg-[#17202b]/50 px-3 py-2 text-sm text-slate-800 dark:text-white focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all duration-200"
@@ -956,25 +958,25 @@ export const DashboardScreen: React.FC = () => {
                         </div>
                         {/* Estado */}
                         <div>
-                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Estado</label>
+                          <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2">Estado</label>
                           <select
-                            className="w-full rounded-lg border border-slate-200/50 dark:border-slate-700/50 bg-white/50 dark:bg-[#17202b]/50 px-3 py-2 text-sm text-slate-800 dark:text-white focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all duration-200"
-                            value={fileMetadatas[idx]?.activo ? 'activo' : 'inactivo'}
-                            onChange={e => {
-                              const newMetas = [...fileMetadatas];
-                              newMetas[idx].activo = e.target.value === 'activo';
-                              setFileMetadatas(newMetas);
-                            }}
-                          >
-                            <option value="activo">Activo</option>
-                            <option value="inactivo">Inactivo</option>
-                          </select>
+                        className="w-full rounded-lg border border-slate-200/50 dark:border-slate-700/50 bg-white/50 dark:bg-[#17202b]/50 px-4 py-2.5 text-base text-slate-800 dark:text-white focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all duration-200"
+                        value={fileMetadatas[idx]?.activo ? 'activo' : 'inactivo'}
+                        onChange={e => {
+                          const newMetas = [...fileMetadatas];
+                          newMetas[idx].activo = e.target.value === 'activo';
+                          setFileMetadatas(newMetas);
+                        }}
+                      >
+                        <option value="activo">Activo</option>
+                        <option value="inactivo">Inactivo</option>
+                      </select>
                         </div>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
                         {/* Fecha Inicio */}
                         <div>
-                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Fecha Inicio</label>
+                          <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2">Fecha Inicio</label>
                           <input
                             type="datetime-local"
                             className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
@@ -988,11 +990,11 @@ export const DashboardScreen: React.FC = () => {
                         </div>
                         {/* Fecha Fin */}
                         <div>
-                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Fecha Fin</label>
+                          <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2">Fecha Fin</label>
                           <input
                             type="datetime-local"
-                            className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
-                            value={fileMetadatas[idx]?.fechaFin || ''}
+                        className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-4 py-2.5 text-base text-slate-900 dark:text-white"
+                        value={fileMetadatas[idx]?.fechaFin || ''}
                             onChange={e => {
                               const newMetas = [...fileMetadatas];
                               newMetas[idx].fechaFin = e.target.value;
@@ -1018,7 +1020,7 @@ export const DashboardScreen: React.FC = () => {
                             }}
                             className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
                           />
-                          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                          <span className="text-base font-medium text-slate-700 dark:text-slate-200">
                             Asignar a TODOS los servidores y dispositivos
                           </span>
                         </label>
@@ -1112,13 +1114,13 @@ export const DashboardScreen: React.FC = () => {
       {/* Sync Modal */}
       {isSyncModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 pt-20">
-          <div className="bg-white dark:bg-[#1c2936] rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-hidden">
-            <div className="p-4 border-b border-slate-200 dark:border-slate-700">
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Sincronización Selectiva</h2>
-              <p className="text-sm text-slate-500">Selecciona los dispositivos a sincronizar</p>
+          <div className="bg-white dark:bg-[#1c2936] rounded-xl shadow-2xl w-full max-w-5xl max-h-[97vh] overflow-hidden flex flex-col">
+            <div className="p-5 border-b border-slate-200 dark:border-slate-700 shrink-0">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Sincronización Selectiva</h2>
+              <p className="text-base text-slate-500">Selecciona los dispositivos a sincronizar</p>
             </div>
             
-            <div className="p-4 overflow-y-auto max-h-[50vh]">
+            <div className="p-5 overflow-y-auto flex-1">
               <label className="flex items-center gap-2 mb-4">
                 <input
                   type="checkbox"
@@ -1132,7 +1134,7 @@ export const DashboardScreen: React.FC = () => {
                   }}
                   className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
                 />
-                <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                <span className="text-base font-medium text-slate-700 dark:text-slate-200">
                   Sincronizar a TODOS los dispositivos
                 </span>
               </label>
@@ -1170,7 +1172,7 @@ export const DashboardScreen: React.FC = () => {
               )}
             </div>
 
-            <div className="mt-4 flex justify-end gap-2 p-4 border-t border-slate-200 dark:border-slate-700">
+            <div className="mt-auto flex justify-end gap-4 p-6 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#17202b]">
               <button
                 type="button"
                 onClick={() => {
@@ -1180,7 +1182,7 @@ export const DashboardScreen: React.FC = () => {
                   setSyncDispositivoIds([]);
                   setSyncExpandedServers([]);
                 }}
-                className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                className="px-6 py-3 rounded-lg border border-slate-300 dark:border-slate-700 text-lg text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium"
               >
                 Cancelar
               </button>
@@ -1191,7 +1193,7 @@ export const DashboardScreen: React.FC = () => {
                   await executeSync();
                 }}
                 disabled={!syncAllDevices && syncServidorIds.length === 0 && syncDispositivoIds.length === 0}
-                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold disabled:opacity-60"
+                className="px-6 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-lg font-semibold disabled:opacity-60 shadow-lg"
               >
                 Sincronizar
               </button>
@@ -1202,7 +1204,7 @@ export const DashboardScreen: React.FC = () => {
       {/* Edit Modal */}
       {isEditModalOpen && editingVideo && (
         <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 pt-20">
-          <div className="bg-white dark:bg-[#1c2936] rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
+          <div className="bg-white dark:bg-[#1c2936] rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
             <div className="p-4 border-b border-slate-200 dark:border-slate-700 shrink-0">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">Editar Publicidad</h2>
               <p className="text-sm text-slate-500">Modifica los datos de la publicidad</p>
@@ -1210,38 +1212,38 @@ export const DashboardScreen: React.FC = () => {
             
             <div className="p-4 space-y-4 overflow-y-auto flex-1">
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-base font-medium text-slate-700 dark:text-slate-300 mb-2">
                   Título
                 </label>
                 <input
                   type="text"
                   value={editFormData.titulo}
                   onChange={e => setEditFormData({ ...editFormData, titulo: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-sm text-slate-900 dark:text-white"
+                  className="w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-base text-slate-900 dark:text-white"
                 />
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-base font-medium text-slate-700 dark:text-slate-300 mb-2">
                   Fecha Inicio
                 </label>
                 <input
                   type="datetime-local"
                   value={editFormData.fechaInicio}
                   onChange={e => setEditFormData({ ...editFormData, fechaInicio: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-sm text-slate-900 dark:text-white"
+                  className="w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-base text-slate-900 dark:text-white"
                 />
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-base font-medium text-slate-700 dark:text-slate-300 mb-2">
                   Fecha Fin
                 </label>
                 <input
                   type="datetime-local"
                   value={editFormData.fechaFin}
                   onChange={e => setEditFormData({ ...editFormData, fechaFin: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-sm text-slate-900 dark:text-white"
+                  className="w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-base text-slate-900 dark:text-white"
                 />
               </div>
               
@@ -1253,7 +1255,7 @@ export const DashboardScreen: React.FC = () => {
                   onChange={e => setEditFormData({ ...editFormData, activo: e.target.checked })}
                   className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
                 />
-                <label htmlFor="editActivo" className="text-sm text-slate-700 dark:text-slate-300">
+                <label className="text-base text-slate-700 dark:text-slate-300">
                   Activo
                 </label>
               </div>
@@ -1274,7 +1276,7 @@ export const DashboardScreen: React.FC = () => {
                     }}
                     className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
                   />
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  <span className="text-base font-medium text-slate-700 dark:text-slate-300">
                     Asignar a TODOS los dispositivos
                   </span>
                 </label>

@@ -44,7 +44,8 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
       <div className={`${maxHeight} overflow-y-auto space-y-3 pr-2 custom-scrollbar`}>
         {servidores.map(srv => (
           <div key={srv.id} className="border border-slate-200/70 dark:border-slate-700/50 rounded-xl overflow-hidden hover:border-primary/30 transition-all duration-300 server-card-glow">
-            <label className="flex items-center gap-3 p-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+            <div className="flex items-center gap-3 p-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
+                 onClick={() => onServidorChange(Number(srv.id), !selectedServidorIds.includes(Number(srv.id)))}>
               <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all duration-200 ${
                 selectedServidorIds.includes(Number(srv.id))
                   ? 'bg-primary border-primary scale-110'
@@ -55,7 +56,7 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
 
               <Server size={18} className="text-slate-400 flex-shrink-0" />
               <div className="flex-1 min-w-0">
-                <span className="text-base font-medium text-slate-700 dark:text-slate-200 block truncate">
+                <span className="text-lg font-medium text-slate-700 dark:text-slate-200 block truncate">
                   {srv.nombre}
                 </span>
                 <span className="text-xs text-slate-500 flex items-center gap-1">
@@ -77,7 +78,7 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
               <button
                 type="button"
                 onClick={(e) => {
-                  e.preventDefault();
+                  e.stopPropagation();
                   onToggleExpand(srv.id);
                 }}
                 className="ml-auto p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
@@ -88,15 +89,16 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
                   <ChevronRight size={18} className="text-slate-500" />
                 )}
               </button>
-            </label>
+            </div>
 
             {expandedServidores.includes(srv.id) && srv.dispositivos && srv.dispositivos.length > 0 && (
               <div className="bg-slate-50/50 dark:bg-slate-800/30 px-3 pb-3">
                 <div className="grid grid-cols-2 gap-2">
                   {srv.dispositivos.map(disp => (
-                    <label
+                    <div
                       key={`${srv.id}-${disp.id}`}
                       className="flex items-center gap-2 p-2 rounded-lg hover:bg-white dark:hover:bg-slate-700/50 cursor-pointer transition-colors group"
+                      onClick={() => onDispositivoChange(String(disp.id), !selectedDispositivoIds.includes(String(disp.id)))}
                     >
                       <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all duration-200 ${
                         selectedDispositivoIds.includes(String(disp.id))
@@ -106,10 +108,16 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
                         {selectedDispositivoIds.includes(String(disp.id)) && <Check size={12} className="text-white" />}
                       </div>
                       <Smartphone size={12} className="text-slate-400 flex-shrink-0" />
-                      <span className="text-sm text-slate-600 dark:text-slate-300 truncate">
+                      <span className="text-base text-slate-600 dark:text-slate-300 truncate">
                         {disp.nombre_amigable || String(disp.codigo_kiosko)}
                       </span>
-                    </label>
+                      <span className={`text-[10px] flex items-center gap-1 ml-1 ${
+                        disp.online ? 'text-emerald-500' : 'text-slate-400'
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${disp.online ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                        {disp.online ? 'Online' : 'Offline'}
+                      </span>
+                    </div>
                   ))}
                 </div>
               </div>

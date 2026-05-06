@@ -895,8 +895,8 @@ export const DashboardScreen: React.FC = () => {
           <div className="w-full max-w-6xl bg-white dark:bg-[#1c2936] rounded-2xl border border-slate-300/50 dark:border-slate-600/50 shadow-[0_20px_60px_rgba(0,0,0,0.3)] p-6">
             <div className="flex items-start justify-between mb-6 pb-4 border-b border-gradient-to-r from-transparent via-slate-300 to-transparent">
               <div>
-                <h3 className="text-xl font-mono font-bold text-slate-900 dark:text-white tracking-wide">DATOS DE ARCHIVOS</h3>
-                <p className="text-sm text-slate-500 mt-1 font-mono">Configura antes de subir</p>
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white tracking-wide">DATOS DE ARCHIVOS</h3>
+                <p className="text-sm text-slate-500 mt-1">Configura antes de subir</p>
               </div>
                <button
                  type="button"
@@ -946,10 +946,10 @@ export const DashboardScreen: React.FC = () => {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                          {/* Título */}
                          <div>
-                           <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2 font-mono">TÍTULO</label>
+                           <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2">TÍTULO</label>
                            <input
                              type="text"
-                             className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-800 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200 font-mono"
+                             className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-800 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200 "
                              value={fileMetadatas[idx]?.titulo || ''}
                              onChange={e => {
                                const newMetas = [...fileMetadatas];
@@ -961,9 +961,9 @@ export const DashboardScreen: React.FC = () => {
                          </div>
                          {/* Estado */}
                          <div>
-                           <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2 font-mono">ESTADO</label>
+                           <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2">ESTADO</label>
                          <select
-                         className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-800 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200 font-mono"
+                         className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-800 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200"
                          value={fileMetadatas[idx]?.activo ? 'activo' : 'inactivo'}
                          onChange={e => {
                            const newMetas = [...fileMetadatas];
@@ -979,10 +979,10 @@ export const DashboardScreen: React.FC = () => {
                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
                          {/* Fecha Inicio */}
                          <div>
-                           <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2 font-mono">FECHA INICIO</label>
+                           <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2 ">FECHA INICIO</label>
                            <input
                              type="datetime-local"
-                             className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-900 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200 font-mono"
+                             className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-900 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200"
                              value={fileMetadatas[idx]?.fechaInicio || ''}
                              onChange={e => {
                                const newMetas = [...fileMetadatas];
@@ -993,10 +993,10 @@ export const DashboardScreen: React.FC = () => {
                         </div>
                          {/* Fecha Fin */}
                          <div>
-                           <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2 font-mono">FECHA FIN</label>
+                           <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2">FECHA FIN</label>
                            <input
                              type="datetime-local"
-                             className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-900 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200 font-mono"
+                             className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-900 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200"
                              value={fileMetadatas[idx]?.fechaFin || ''}
                              onChange={e => {
                                const newMetas = [...fileMetadatas];
@@ -1028,7 +1028,7 @@ export const DashboardScreen: React.FC = () => {
                           }`}>
                             {(fileMetadatas[idx]?.asignacionTodos ?? true) && <Check size={14} className="text-white" />}
                           </div>
-                          <span className="text-base font-medium text-slate-700 dark:text-slate-200 font-mono tracking-wide">
+                          <span className="text-base font-medium text-slate-700 dark:text-slate-200 tracking-wide">
                             ASSIGN TO ALL SERVERS & DEVICES
                           </span>
                           <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${
@@ -1134,11 +1134,11 @@ export const DashboardScreen: React.FC = () => {
             <div className="p-6 border-b border-gradient-to-r from-transparent via-slate-300 to-transparent shrink-0">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-amber-500/10">
-                  <RefreshCcw size={20} className="text-amber-500" />
+                  <RefreshCw size={20} className="text-amber-500" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-mono font-bold text-slate-900 dark:text-white tracking-wide">SINCRONIZACIÓN SELECTIVA</h2>
-                  <p className="text-sm text-slate-500 mt-1 font-mono">Selecciona los dispositivos a sincronizar</p>
+                  <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-wide">SINCRONIZACIÓN SELECTIVA</h2>
+                  <p className="text-sm text-slate-500 mt-1">Selecciona los dispositivos a sincronizar</p>
                 </div>
               </div>
             </div>
@@ -1162,7 +1162,7 @@ export const DashboardScreen: React.FC = () => {
                 }`}>
                   {syncAllDevices && <Check size={14} className="text-white" />}
                 </div>
-                  <span className="text-base font-medium text-slate-700 dark:text-slate-200 font-mono tracking-wide">
+                  <span className="text-base font-medium text-slate-700 dark:text-slate-200 tracking-wide">
                     SINCRONIZAR A TODOS LOS DISPOSITIVOS
                   </span>
                 <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${
@@ -1247,46 +1247,46 @@ export const DashboardScreen: React.FC = () => {
                   <Pencil size={20} className="text-amber-500" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-mono font-bold text-slate-900 dark:text-white tracking-wide">EDITAR PUBLICIDAD</h2>
-                  <p className="text-sm text-slate-500 mt-1 font-mono">Modifica los datos de la publicidad</p>
+                  <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-wide">EDITAR PUBLICIDAD</h2>
+                  <p className="text-sm text-slate-500 mt-1 ">Modifica los datos de la publicidad</p>
                 </div>
               </div>
             </div>
             
             <div className="p-6 space-y-4 overflow-y-auto flex-1">
               <div>
-                  <label className="block text-base font-medium text-slate-700 dark:text-slate-300 mb-2 font-mono">
+                  <label className="block text-base font-medium text-slate-700 dark:text-slate-300 mb-2">
                   TÍTULO
                 </label>
                 <input
                   type="text"
                   value={editFormData.titulo}
                   onChange={e => setEditFormData({ ...editFormData, titulo: e.target.value })}
-                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-300/70 dark:border-slate-600/70 rounded-lg text-base text-slate-900 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200 font-mono"
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-300/70 dark:border-slate-600/70 rounded-lg text-base text-slate-900 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200"
                 />
               </div>
               
               <div>
-                  <label className="block text-base font-medium text-slate-700 dark:text-slate-300 mb-2 font-mono">
-                  FECHA INICIO
+                <label className="block text-base font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  START DATE
                 </label>
                 <input
                   type="datetime-local"
                   value={editFormData.fechaInicio}
                   onChange={e => setEditFormData({ ...editFormData, fechaInicio: e.target.value })}
-                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-300/70 dark:border-slate-600/70 rounded-lg text-base text-slate-900 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200 font-mono"
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-300/70 dark:border-slate-600/70 rounded-lg text-base text-slate-900 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200"
                 />
               </div>
               
               <div>
-                  <label className="block text-base font-medium text-slate-700 dark:text-slate-300 mb-2 font-mono">
-                  FECHA FIN
+                <label className="block text-base font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  END DATE
                 </label>
                 <input
                   type="datetime-local"
                   value={editFormData.fechaFin}
                   onChange={e => setEditFormData({ ...editFormData, fechaFin: e.target.value })}
-                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-300/70 dark:border-slate-600/70 rounded-lg text-base text-slate-900 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200 font-mono"
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-300/70 dark:border-slate-600/70 rounded-lg text-base text-slate-900 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200"
                 />
               </div>
               
@@ -1301,11 +1301,11 @@ export const DashboardScreen: React.FC = () => {
                 >
                   {editFormData.activo && <Check size={14} className="text-white" />}
                 </div>
-                  <label 
-                  className="text-base text-slate-700 dark:text-slate-300 font-mono tracking-wide cursor-pointer"
+                <label 
+                  className="text-base text-slate-700 dark:text-slate-300 tracking-wide cursor-pointer"
                   onClick={() => setEditFormData({ ...editFormData, activo: !editFormData.activo })}
                 >
-                  ACTIVO
+                  ACTIVE
                 </label>
                 <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${
                   editFormData.activo
@@ -1336,8 +1336,8 @@ export const DashboardScreen: React.FC = () => {
                    }`}>
                      {editAsignacionTodos && <Check size={14} className="text-white" />}
                    </div>
-                   <span className="text-base font-medium text-slate-700 dark:text-slate-200 font-mono tracking-wide">
-                     ASSIGN TO ALL DEVICES
+                   <span className="text-base font-medium text-slate-700 dark:text-slate-200 tracking-wide">
+                     ASIGNAR A TODAS LAS SEDES Y DISPOSITIVOS
                    </span>
                    <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${
                      editAsignacionTodos
@@ -1395,7 +1395,7 @@ export const DashboardScreen: React.FC = () => {
                  disabled={isSavingEdit}
                  className="px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform duration-150"
                >
-                 CANCELAR
+                 CANCEL
                </button>
                <button
                  type="button"
@@ -1447,9 +1447,9 @@ export const DashboardScreen: React.FC = () => {
                   }
                 }}
                 disabled={isSavingEdit}
-                className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-white text-base font-semibold disabled:opacity-60 active:scale-95 transition-all duration-150"
-              >
-                {isSavingEdit ? 'GUARDANDO...' : 'GUARDAR CAMBIOS'}
+                 className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-white text-base font-semibold disabled:opacity-60 active:scale-95 transition-all duration-150"
+               >
+                 {isSavingEdit ? 'SAVING...' : 'SAVE CHANGES'}
               </button>
             </div>
           </div>

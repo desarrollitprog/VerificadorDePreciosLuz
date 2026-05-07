@@ -546,7 +546,7 @@ export const DashboardScreen: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h2 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">Mis Videos</h2>
-          <p className="text-slate-500 mt-1">ADMINISTRA TUS VIDEOS YA SEA SUBIR, ELIMINAR y SINCRONIZAR.</p>
+          <p className="text-slate-500 mt-1">ADMINISTRA TUS VIDEOS YA SEA SUBIR, ELIMINAR Y SINCRONIZAR.</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative">
@@ -962,11 +962,10 @@ export const DashboardScreen: React.FC = () => {
                        className="rounded border-slate-300 dark:border-slate-600"
                      />
                    </div>
-                  <div className="col-span-1">Tipo</div>
-                  <div className="col-span-5">Archivo</div>
+                  <div className="col-span-4">Archivo</div>
                   <div className="col-span-1">Subida</div>
                   <div className="col-span-1">Tamaño</div>
-                  <div className="col-span-1 relative group/estado-header">Estado</div>
+                  <div className="col-span-2 relative group/estado-header">Estado</div>
                   <div className="col-span-1">Asign</div>
                   <div className="col-span-2 text-right">Acciones</div>
                 </div>
@@ -987,15 +986,7 @@ export const DashboardScreen: React.FC = () => {
                           className="rounded border-slate-300 dark:border-slate-600"
                         />
                       </div>
-                      <div className="col-span-1 flex items-center">
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${
-                          video.tipo === 'image' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
-                          'bg-purple-500/10 text-purple-500 border-purple-500/20'
-                        }`}>
-                          {video.tipo === 'image' ? 'IMG' : 'VID'}
-                        </span>
-                      </div>
-                      <div className="col-span-5 flex items-center gap-2 overflow-hidden">
+                      <div className="col-span-4 flex items-center gap-2 overflow-hidden">
                         <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded bg-slate-100 dark:bg-slate-800">
                           {video.tipo === 'image' ? (
                             <img src={video.thumbnail || video.url} alt={video.titulo} className="w-6 h-6 object-cover rounded" />
@@ -1013,7 +1004,7 @@ export const DashboardScreen: React.FC = () => {
                       <div className="col-span-1 text-sm text-slate-600 dark:text-slate-400 font-mono">
                         {video.size}
                       </div>
-                      <div className="col-span-1 relative group/estado">
+                      <div className="col-span-2 relative group/estado">
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${
                           video.estado === 'activo' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
                           video.estado === 'inactivo' ? 'bg-slate-500/10 text-slate-500 border-slate-500/20' :
@@ -1022,10 +1013,10 @@ export const DashboardScreen: React.FC = () => {
                         }`}>
                           {(video.estado || 'activo').toUpperCase()}
                         </span>
-                        {/* Tooltip para fechas de programación */}
-                        {(video.fechaInicio || video.fechaFin) && (
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 dark:bg-slate-800 text-white text-xs rounded-lg shadow-xl opacity-0 invisible group-hover/estado:opacity-100 group-hover/estado:visible transition-all duration-200 z-50 whitespace-nowrap">
+                        {/* Tooltip: Programación + Tipo de archivo */}
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 dark:bg-slate-800 text-white text-xs rounded-lg shadow-xl opacity-0 invisible group-hover/estado:opacity-100 group-hover/estado:visible transition-all duration-200 z-50 whitespace-nowrap">
                             <div className="font-semibold mb-1">Programación</div>
+                            <div className="text-slate-300">Tipo: <span className="text-white">{video.tipo === 'image' ? 'Imagen' : 'Video'}</span></div>
                             {video.fechaInicio && (
                               <div className="text-slate-300">Inicio: <span className="text-white">{video.fechaInicio}</span></div>
                             )}
@@ -1034,7 +1025,6 @@ export const DashboardScreen: React.FC = () => {
                             )}
                             <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900 dark:border-t-slate-800"></div>
                           </div>
-                        )}
                       </div>
                       <div className="col-span-1 text-sm text-slate-600 dark:text-slate-400">
                         {video.asignacion_todos ? (

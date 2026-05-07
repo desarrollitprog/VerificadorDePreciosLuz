@@ -1116,20 +1116,20 @@ export const DashboardScreen: React.FC = () => {
               </div>
              <div className="space-y-3 max-h-[65vh] overflow-y-auto custom-scrollbar">
                {selectedFiles.map((file, idx) => (
-                 <div key={file.name} className="border rounded-lg p-6 mb-3 bg-slate-50 dark:bg-[#17202b]">
+                 <div key={file.name} className="border rounded-lg p-4 mb-2 bg-slate-50 dark:bg-[#17202b]">
                     <div className="flex items-start gap-4 mb-3">
-                      <div className="shrink-0">
+                     <div className="shrink-0">
                         {file.type.startsWith('image') && (
                           <img
                             src={URL.createObjectURL(file)}
                             alt={file.name}
-                            className="h-19 w-19 object-cover rounded-lg"
+                            className="h-20 w-20 object-cover rounded-lg"
                           />
                         )}
                         {file.type.startsWith('video') && (
                           <video
                             src={URL.createObjectURL(file)}
-                            className="h-16 w-16 rounded-lg"
+                            className="h-20 w-20 rounded-lg"
                             controls={false}
                           />
                         )}

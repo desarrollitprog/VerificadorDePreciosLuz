@@ -1099,39 +1099,39 @@ export const DashboardScreen: React.FC = () => {
 
       {isUploadModalOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-gradient-to-br from-black/70 via-black/60 to-black/80 px-4 pt-20">
-          <div className="w-full max-w-6xl bg-white dark:bg-[#1c2936] rounded-2xl border border-slate-300/50 dark:border-slate-600/50 shadow-[0_20px_60px_rgba(0,0,0,0.3)] p-6">
-            <div className="flex items-start justify-between mb-6 pb-4 border-b border-gradient-to-r from-transparent via-slate-300 to-transparent">
-              <div>
-                <h3 className="text-xl font-bold text-slate-900 dark:text-white tracking-wide">DATOS DE ARCHIVOS</h3>
-                <p className="text-sm text-slate-500 mt-1">Configura antes de subir</p>
+           <div className="w-full max-w-6xl bg-white dark:bg-[#1c2936] rounded-2xl border border-slate-300/50 dark:border-slate-600/50 shadow-[0_20px_60px_rgba(0,0,0,0.3)] p-6">
+             <div className="flex items-start justify-between mb-6 pb-4 border-b border-gradient-to-r from-transparent via-slate-300 to-transparent">
+               <div>
+                 <h3 className="text-xl font-bold text-slate-900 dark:text-white tracking-wide">DATOS DE ARCHIVOS</h3>
+                 <p className="text-sm text-slate-500 mt-1">Configura antes de subir</p>
+               </div>
+                <button
+                  type="button"
+                  className="text-slate-400 hover:text-red-500 text-2xl leading-none transition-all duration-200 hover:rotate-90 active:scale-90"
+                  onClick={resetUploadModal}
+                  disabled={uploading}
+                >
+                  ×
+                </button>
               </div>
-               <button
-                 type="button"
-                 className="text-slate-400 hover:text-red-500 text-2xl leading-none transition-all duration-200 hover:rotate-90 active:scale-90"
-                 onClick={resetUploadModal}
-                 disabled={uploading}
-               >
-                 ×
-               </button>
-             </div>
-            <div className="space-y-4 max-h-[75vh] overflow-y-auto custom-scrollbar">
-              {selectedFiles.map((file, idx) => (
-                <div key={file.name} className="border rounded-lg p-8 mb-4 bg-slate-50 dark:bg-[#17202b]">
-                  <div className="flex items-start gap-6 mb-3">
-                    {file.type.startsWith('image') && (
-                      <img
-                        src={URL.createObjectURL(file)}
-                        alt={file.name}
-                        className="h-28 w-28 object-cover rounded-lg shrink-0"
-                      />
-                    )}
-                    {file.type.startsWith('video') && (
-                      <video
-                        src={URL.createObjectURL(file)}
-                        className="h-28 w-28 rounded-lg shrink-0"
-                        controls={false}
-                      />
-                    )}
+             <div className="space-y-3 max-h-[65vh] overflow-y-auto custom-scrollbar">
+               {selectedFiles.map((file, idx) => (
+                 <div key={file.name} className="border rounded-lg p-6 mb-3 bg-slate-50 dark:bg-[#17202b]">
+                   <div className="flex items-start gap-6 mb-3">
+                     {file.type.startsWith('image') && (
+                       <img
+                         src={URL.createObjectURL(file)}
+                         alt={file.name}
+                         className="h-22 w-22 object-cover rounded-lg shrink-0"
+                       />
+                     )}
+                     {file.type.startsWith('video') && (
+                       <video
+                         src={URL.createObjectURL(file)}
+                         className="h-22 w-22 rounded-lg shrink-0"
+                         controls={false}
+                       />
+                     )}
                     <div className="flex-1 min-w-0">
                       <span className="font-bold text-slate-900 dark:text-white block text-xl">{file.name}</span>
                       <span className="text-base text-slate-500">({Math.round(file.size / 1024)} KB)</span>
@@ -1299,7 +1299,7 @@ export const DashboardScreen: React.FC = () => {
                                   : [...prev, id]
                               );
                             }}
-                            maxHeight="max-h-[50vh]"
+                            maxHeight="max-h-[30vh]"
                           />
                         )}
                       </div>
@@ -1582,7 +1582,7 @@ export const DashboardScreen: React.FC = () => {
                           : [...prev, id]
                       );
                     }}
-                    maxHeight="max-h-[50vh]"
+                    maxHeight="max-h-[30vh]"
                   />
                 )}
               </div>

@@ -1123,7 +1123,7 @@ export const DashboardScreen: React.FC = () => {
                           <img
                             src={URL.createObjectURL(file)}
                             alt={file.name}
-                            className="h-16 w-16 object-cover rounded-lg"
+                            className="h-19 w-19 object-cover rounded-lg"
                           />
                         )}
                         {file.type.startsWith('video') && (

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNotification } from '../components/useNotification';
-import { Search, UploadCloud, MoreVertical, Eye, Trash, Film, Plus, Server, Smartphone, ChevronDown, ChevronRight, Clock, Check, Pencil, RefreshCw } from 'lucide-react';
+import { Search, UploadCloud, MoreVertical, Eye, Trash, Film, Plus, Server, Smartphone, ChevronDown, ChevronRight, Clock, Check, Pencil, RefreshCw, List, Grid, Download } from 'lucide-react';
 import { getVideos, uploadMedia, deleteVideo, sincronizarServidores, updateBannerMetadata, updateBannerAsignations, FileMetadata } from '../services/videoService';
 import { Video, Servidor } from '../types';
 import { ServerDeviceSelector } from '../components/ServerDeviceSelector';
@@ -94,6 +94,7 @@ export const DashboardScreen: React.FC = () => {
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const videosPerPage = 12;
+  const tableVideosPerPage = 20;
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,9 +120,13 @@ export const DashboardScreen: React.FC = () => {
   const [selectedSecondaryServerId, setSelectedSecondaryServerId] = useState<string>('');
   
   // Edit modal states
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editingVideo, setEditingVideo] = useState<Video | null>(null);
-  const [editFormData, setEditFormData] = useState({
+   // View mode and selection states (Fase 16)
+   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
+   const [selected, setSelected] = useState<string[]>([]);
+
+   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+   const [editingVideo, setEditingVideo] = useState<Video | null>(null);
+   const [editFormData, setEditFormData] = useState({
     titulo: '',
     activo: true,
     fechaInicio: '',
@@ -374,6 +379,20 @@ export const DashboardScreen: React.FC = () => {
         setVideos(data);
       } catch {}
     }
+  };
+
+  // Fase 16.5: Descargar archivo
+  const downloadVideoFile = (video: Video) => {
+    if (!video.url) {
+      showNotification('No hay URL disponible para descargar', 'warning');
+      return;
+    }
+    const link = document.createElement('a');
+    link.href = video.url;
+    link.download = video.filename || video.url.split('/').pop() || 'download';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleDeleteCancel = () => {
@@ -670,224 +689,211 @@ export const DashboardScreen: React.FC = () => {
         </div>
       </div>
 
-      {/* Grid */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-slate-900 dark:text-white">Contenido Subido Recientemente</h3>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {(() => {
-            // Filtrar videos por búsqueda
-            const filteredVideos = videos.filter(v => {
-              const searchLower = search.toLowerCase();
-              return (
-                v.titulo?.toLowerCase().includes(searchLower) ||
-                v.filename?.toLowerCase().includes(searchLower) ||
-                v.id?.toString().includes(searchLower)
-              );
-            });
-            // Calcular paginación
-            const totalPages = Math.ceil(filteredVideos.length / videosPerPage);
-            const startIndex = (currentPage - 1) * videosPerPage;
-            const paginatedVideos = filteredVideos.slice(startIndex, startIndex + videosPerPage);
-            // Renderizar tarjetas
-            return paginatedVideos.length > 0 ? paginatedVideos.map((video) => (
-              <div key={video.id} className="group relative bg-white dark:bg-[#1c2936] rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 hover:border-primary/40 transition-all hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-900/10 dark:hover:shadow-black/30 flex flex-col">
-                {/* Thumbnail */}
-                <div className="aspect-video bg-slate-800 relative overflow-hidden">
-                  {video.tipo === 'image' ? (
-                    <img src={video.thumbnail} alt={video.titulo || video.filename} className="w-full h-full object-cover" />
-                  ) : (
-                    <img src={video.thumbnail || video.url} alt={video.titulo || video.filename} className="w-full h-full object-cover" />
-                  )}
-                  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors"></div>
-                  {video.duration && video.tipo === 'video' && (
-                    <div className="absolute bottom-2 right-2 bg-black/70 text-white text-[10px] font-bold px-1.5 py-0.5 rounded backdrop-blur-sm">
-                      {video.duration} seg
-                    </div>
-                  )}
-                </div>
-                {/* Info */}
-                <div className="p-4 flex-1 flex flex-col">
-                  <div className="flex justify-between items-start gap-2 mb-2">
-                    <h4 className="text-slate-900 dark:text-white font-semibold text-sm leading-tight line-clamp-2" title={video.titulo || video.filename}>
-                      {video.titulo || video.filename}
-                    </h4>
-                    <button 
-                      onClick={() => {
-                        setEditingVideo(video);
-                        setEditFormData({
-                          titulo: video.titulo || video.filename || '',
-                          activo: video.activo ?? true,
-                          fechaInicio: video.fechaInicio || '',
-                          fechaFin: video.fechaFin || '',
-                        });
-                        // Inicializar estados de asignación
-                        const asignacionTodos = video.asignacion_todos ?? true;
-                        setEditAsignacionTodos(asignacionTodos);
-                        if (!asignacionTodos && video.asignaciones) {
-                          const srvIds = [...new Set(video.asignaciones.map((a: any) => a.servidor_id).filter(Boolean))];
-                          const dispIds = video.asignaciones.map((a: any) => a.dispositivo_id).filter(Boolean);
-                          setEditServidorIds(srvIds);
-                          setEditDispositivoIds(dispIds);
-                        } else {
-                          setEditServidorIds([]);
-                          setEditDispositivoIds([]);
-                        }
-                        setIsEditModalOpen(true);
-                        setTimeout(() => {
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                        }, 50);
-                      }}
-                      className="text-slate-400 hover:text-primary dark:hover:text-primary transition-colors"
-                      title="Editar"
-                    >
-                      <MoreVertical size={16} />
-                    </button>
-                  </div>
-                  {/* Badges de asignación */}
-                  <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold border ${video.estado === 'activo' ? 'bg-green-500/10 text-green-500 border-green-500/20' : video.estado === 'inactivo' ? 'bg-slate-500/10 text-slate-500 border-slate-500/20' : video.estado === 'vencido' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-amber-500/10 text-amber-500 border-amber-500/20'}`}>
-                      {(video.estado || 'activo').toUpperCase()}
-                    </span>
-                    {/* Badge de programado */}
-                    {(video.fechaInicio || video.fechaFin) && (
-                      <span className="relative group/badges">
-                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold bg-purple-500/10 text-purple-500 border border-purple-500/20">
-                          <Clock size={10} />
-                          PROGRAMADO
-                        </span>
-                        {/* Tooltip con fechas */}
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 dark:bg-slate-800 text-white text-xs rounded-lg shadow-xl opacity-0 invisible group-hover/badges:opacity-100 group-hover/badges:visible transition-all duration-200 z-50 whitespace-nowrap">
-                          <div className="font-semibold mb-1">Programación</div>
-                          {video.fechaInicio && (
-                            <div className="text-slate-300">Inicio: <span className="text-white">{video.fechaInicio}</span></div>
-                          )}
-                          {video.fechaFin && (
-                            <div className="text-slate-300">Fin: <span className="text-white">{video.fechaFin}</span></div>
-                          )}
-                          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900 dark:border-t-slate-800"></div>
-                        </div>
-                      </span>
-                    )}
-                    {video.asignacion_todos ? (
-                      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                        <Server size={10} />
-                        Todos
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold bg-blue-500/10 text-blue-500 border border-blue-500/20">
-                        <Smartphone size={10} />
-                        {video.dispositivos_count || 0} devs
-                      </span>
-                    )}
-                  </div>
-                  {/* Texto de asignación */}
-                  <div className="mb-2">
-                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
-                      Asignado a: {video.asignacion_todos ? 'Todos los dispositivos' : `${video.dispositivos_count || 0} dispositivos`}
-                    </p>
-                    {video.asignacion_todos ? (
-                      <p className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1">
-                        <Server size={10} />
-                        Todos los servidores y dispositivos del sistema
-                      </p>
-                    ) : (
-                      <div className="space-y-0.5">
-                        {video.asignaciones && video.asignaciones.slice(0, 3).map((asig, idx) => (
-                          <div key={idx} className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1">
-                            <Smartphone size={10} />
-                            <span className="truncate">
-                              {asig.dispositivo_nombre || asig.dispositivo_codigo || 'Dispositivo'} - {asig.servidor_nombre || 'Servidor'}
-                            </span>
-                          </div>
-                        ))}
-                        {video.asignaciones && video.asignaciones.length > 3 && (
-                          <p className="text-xs text-slate-400">+{video.asignaciones.length - 3} más</p>
-                        )}
-                        {(!video.asignaciones || video.asignaciones.length === 0) && (
-                          <p className="text-xs text-slate-400 italic">Sin asignaciones específicas</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between mt-auto pt-2">
-                    <span className="text-slate-500 text-xs">
-                      Fecha subida: {video.date ? formatCaracasTime(video.date) : 'Fecha desconocida'}
-                    </span>
-                  </div>
-                  {/* Action Buttons */}
-                  <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100 dark:border-slate-700/50">
-                    <button className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-xs font-medium" onClick={() => handlePreview(video)}>
-                      <Eye size={14} />
-                      Reproducir
-                    </button>
-                    <button className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors text-xs font-medium disabled:opacity-50" onClick={() => handleDeleteClick(video.id, video.titulo || video.filename)} disabled={deletingVideoId === video.id}>
-                      {deletingVideoId === video.id ? (
-                        <>Borrando...</>
-                      ) : (
-                        <>
-                          <Trash size={14} />
-                          Borrar
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )) : (
-              <div className="col-span-full text-center text-slate-500 py-8">No se encontraron videos.</div>
-            );
-          })()}
-        </div>
-        
-        {/* Pagination */}
-        {(() => {
-          const filteredVideos = videos.filter(v => {
-            const searchLower = search.toLowerCase();
-            return (
-              v.titulo?.toLowerCase().includes(searchLower) ||
-              v.filename?.toLowerCase().includes(searchLower) ||
-              v.id?.toString().includes(searchLower)
-            );
-          });
-          const totalPages = Math.ceil(filteredVideos.length / videosPerPage);
-          if (totalPages <= 1) return null;
-          return (
-            <div className="flex items-center justify-center gap-2 mt-6">
-              <button
-                type="button"
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
+       {/* Grid */}
+       <div>
+         <div className="flex items-center justify-between mb-4">
+           <h3 className="text-lg font-bold text-slate-900 dark:text-white">Contenido Subido Recientemente</h3>
+          <div className="flex items-center gap-2">
+              <button 
+                onClick={() => { setViewMode('cards'); setCurrentPage(1); }} 
+                className={`p-2 rounded-lg transition-colors ${viewMode === 'cards' ? 'bg-slate-200 dark:bg-slate-700 text-primary' : 'text-slate-500 hover:text-slate-700 dark:hover:text-white'}`}
+                title="Vista de tarjetas"
               >
-                Anterior
+                <Grid size={18} />
               </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                <button
-                  key={page}
-                  type="button"
-                  onClick={() => setCurrentPage(page)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    currentPage === page
-                      ? 'bg-primary text-white'
-                      : 'border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  {page}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
+              <button 
+                onClick={() => { setViewMode('table'); setCurrentPage(1); }} 
+                className={`p-2 rounded-lg transition-colors ${viewMode === 'table' ? 'bg-slate-200 dark:bg-slate-700 text-primary' : 'text-slate-500 hover:text-slate-700 dark:hover:text-white'}`}
+                title="Vista de tabla"
               >
-                Siguiente
+                <List size={18} />
               </button>
             </div>
-          );
-        })()}
+         </div>
+          {viewMode === 'cards' ? (
+            /* VISTA DE TARJETAS */
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {(() => {
+                const filteredVideos = videos.filter(v => {
+                  const searchLower = search.toLowerCase();
+                  return (
+                    v.titulo?.toLowerCase().includes(searchLower) ||
+                    v.filename?.toLowerCase().includes(searchLower) ||
+                    v.id?.toString().includes(searchLower)
+                  );
+                });
+                const startIndex = (currentPage - 1) * videosPerPage;
+                const paginatedVideos = filteredVideos.slice(startIndex, startIndex + videosPerPage);
+
+                return paginatedVideos.length > 0 ? paginatedVideos.map((video) => (
+                  <div key={video.id} className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 bg-white dark:bg-slate-800 hover:shadow-md transition-shadow">
+                    <div className="flex items-start gap-3 mb-3">
+                      <div className="shrink-0">
+                        {video.tipo === 'image' ? (
+                          <img src={video.thumbnail || video.url} alt={video.titulo} className="w-16 h-16 object-cover rounded-lg" />
+                        ) : (
+                          <video src={video.url} className="w-16 h-16 object-cover rounded-lg" poster={video.thumbnail} />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-medium text-slate-900 dark:text-white truncate">{video.titulo || video.filename}</h3>
+                        <p className="text-xs text-slate-500">{video.size}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold border ${
+                        video.estado === 'activo' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                        video.estado === 'inactivo' ? 'bg-slate-500/10 text-slate-500 border-slate-500/20' :
+                        video.estado === 'vencido' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
+                        'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                      }`}>
+                        {(video.estado || 'activo').toUpperCase()}
+                      </span>
+                      <div className="flex gap-1">
+                        <button onClick={() => handlePreview(video)} className="p-1.5 rounded text-slate-400 hover:text-primary transition-colors" title="Reproducir">
+                          <Eye size={16} />
+                        </button>
+                        <button onClick={() => downloadVideoFile(video)} className="p-1.5 rounded text-slate-600 dark:text-slate-300 hover:text-blue-500 transition-colors" title="Descargar">
+                          <Download size={16} />
+                        </button>
+                        <button onClick={() => handleDeleteClick(video.id, video.titulo || video.filename)} className="p-1.5 rounded text-red-500 hover:text-red-600 transition-colors" title="Borrar" disabled={deletingVideoId === video.id}>
+                          {deletingVideoId === video.id ? '...' : <Trash size={16} />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )) : (
+                  <div className="col-span-full px-3 py-8 text-center text-slate-500">No se encontraron videos.</div>
+                );
+              })()}
+            </div>
+          ) : (
+            /* VISTA DE TABLA */
+            <div>
+              <div className="grid grid-cols-12 gap-2 border-b border-slate-200 dark:border-slate-700 px-3 py-2 bg-slate-50 dark:bg-slate-800/50 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase">
+                <div className="col-span-4 sm:col-span-3 lg:col-span-2">Archivo</div>
+                <div className="col-span-2 hidden sm:flex">Subida</div>
+                <div className="col-span-2 hidden lg:flex">Inicio</div>
+                <div className="col-span-2 hidden lg:flex">Fin</div>
+                <div className="col-span-1">Tamaño</div>
+                <div className="col-span-3 sm:col-span-2 lg:col-span-1">Estado</div>
+                <div className="col-span-3 sm:col-span-3 lg:col-span-1 text-right">Acciones</div>
+              </div>
+              {(() => {
+                const filteredVideos = videos.filter(v => {
+                  const searchLower = search.toLowerCase();
+                  return (
+                    v.titulo?.toLowerCase().includes(searchLower) ||
+                    v.filename?.toLowerCase().includes(searchLower) ||
+                    v.id?.toString().includes(searchLower)
+                  );
+                });
+                const startIndex = (currentPage - 1) * tableVideosPerPage;
+                const paginatedVideos = filteredVideos.slice(startIndex, startIndex + tableVideosPerPage);
+
+                return paginatedVideos.length > 0 ? paginatedVideos.map((video) => (
+                  <div key={video.id} className="grid grid-cols-12 gap-2 border-b border-slate-100 dark:border-slate-700/30 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors items-center">
+                    <div className="col-span-4 sm:col-span-3 lg:col-span-2 flex items-center gap-2 overflow-hidden">
+                      <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded bg-slate-100 dark:bg-slate-800">
+                        {video.tipo === 'image' ? (
+                          <img src={video.thumbnail || video.url} alt={video.titulo} className="w-6 h-6 object-cover rounded" />
+                        ) : (
+                          <Film size={16} className="text-slate-400" />
+                        )}
+                      </div>
+                      <span className="text-sm font-medium text-slate-900 dark:text-white truncate" title={video.titulo || video.filename}>
+                        {video.titulo || video.filename}
+                      </span>
+                    </div>
+                    <div className="col-span-2 hidden sm:flex text-xs text-slate-600 dark:text-slate-400 truncate">
+                      {video.date ? formatCaracasTime(video.date) : '-'}
+                    </div>
+                    <div className="col-span-2 hidden lg:flex text-xs text-slate-600 dark:text-slate-400 truncate">
+                      {video.fechaInicio ? formatCaracasTime(video.fechaInicio) : '-'}
+                    </div>
+                    <div className="col-span-2 hidden lg:flex text-xs text-slate-600 dark:text-slate-400 truncate">
+                      {video.fechaFin ? formatCaracasTime(video.fechaFin) : '-'}
+                    </div>
+                    <div className="col-span-1 text-xs text-slate-600 dark:text-slate-400 font-mono">
+                      {video.size}
+                    </div>
+                    <div className="col-span-3 sm:col-span-2 lg:col-span-1">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold border ${
+                        video.estado === 'activo' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                        video.estado === 'inactivo' ? 'bg-slate-500/10 text-slate-500 border-slate-500/20' :
+                        video.estado === 'vencido' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
+                        'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                      }`}>
+                        {(video.estado || 'activo').toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="col-span-3 sm:col-span-3 lg:col-span-1 flex items-center justify-end gap-1">
+                      <button onClick={() => handlePreview(video)} className="p-1.5 rounded text-slate-400 hover:text-primary transition-colors" title="Reproducir">
+                        <Eye size={16} />
+                      </button>
+                      <button onClick={() => downloadVideoFile(video)} className="p-1.5 rounded text-slate-600 dark:text-slate-300 hover:text-blue-500 transition-colors" title="Descargar">
+                        <Download size={16} />
+                      </button>
+                      <button onClick={() => handleDeleteClick(video.id, video.titulo || video.filename)} className="p-1.5 rounded text-red-500 hover:text-red-600 transition-colors" title="Borrar" disabled={deletingVideoId === video.id}>
+                        {deletingVideoId === video.id ? '...' : <Trash size={16} />}
+                      </button>
+                    </div>
+                  </div>
+                )) : (
+                  <div className="px-3 py-8 text-center text-slate-500">No se encontraron videos.</div>
+                );
+              })()}
+            </div>
+          )}
+         
+          {/* Pagination */}
+          {(() => {
+           const filteredVideos = videos.filter(v => {
+             const searchLower = search.toLowerCase();
+             return (
+               v.titulo?.toLowerCase().includes(searchLower) ||
+               v.filename?.toLowerCase().includes(searchLower) ||
+               v.id?.toString().includes(searchLower)
+             );
+           });
+           const activePerPage = viewMode === 'cards' ? videosPerPage : tableVideosPerPage;
+           const totalPages = Math.ceil(filteredVideos.length / activePerPage);
+           if (totalPages <= 1) return null;
+           return (
+             <div className="flex items-center justify-center gap-2 mt-6">
+               <button
+                 type="button"
+                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                 disabled={currentPage === 1}
+                 className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
+               >
+                 Anterior
+               </button>
+               {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                 <button
+                   key={page}
+                   type="button"
+                   onClick={() => setCurrentPage(page)}
+                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                     currentPage === page
+                       ? 'bg-primary text-white'
+                       : 'border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                   }`}
+                 >
+                   {page}
+                 </button>
+               ))}
+               <button
+                 type="button"
+                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                 disabled={currentPage === totalPages}
+                 className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
+               >
+                 Siguiente
+               </button>
+             </div>
+           );
+         })()}
       </div>
 
       {isUploadModalOpen && (
@@ -971,8 +977,8 @@ export const DashboardScreen: React.FC = () => {
                            setFileMetadatas(newMetas);
                          }}
                        >
-                         <option value="activo">ACTIVE</option>
-                         <option value="inactivo">INACTIVE</option>
+                         <option value="activo">ACTIVO</option>
+                         <option value="inactivo">INACTIVO</option>
                        </select>
                         </div>
                       </div>
@@ -1029,14 +1035,14 @@ export const DashboardScreen: React.FC = () => {
                             {(fileMetadatas[idx]?.asignacionTodos ?? true) && <Check size={14} className="text-white" />}
                           </div>
                           <span className="text-base font-medium text-slate-700 dark:text-slate-200 tracking-wide">
-                            ASSIGN TO ALL SERVERS & DEVICES
+                            ASIGNAR A TODAS LAS SEDES Y DISPOSITIVOS 
                           </span>
                           <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${
                             (fileMetadatas[idx]?.asignacionTodos ?? true)
                               ? 'bg-amber-500/10 text-amber-500' 
                               : 'bg-slate-500/10 text-slate-500'
                           }`}>
-                            {(fileMetadatas[idx]?.asignacionTodos ?? true) ? 'ACTIVE' : 'INACTIVE'}
+                            {(fileMetadatas[idx]?.asignacionTodos ?? true) ? 'ACTIVO' : 'INACTIVO'}
                           </span>
                         </div>
                         {!fileMetadatas[idx]?.asignacionTodos && (
@@ -1170,7 +1176,7 @@ export const DashboardScreen: React.FC = () => {
                     ? 'bg-amber-500/10 text-amber-500' 
                     : 'bg-slate-500/10 text-slate-500'
                 }`}>
-                  {syncAllDevices ? 'ACTIVE' : 'INACTIVE'}
+                  {syncAllDevices ? 'ACTIVO' : 'INACTIVO'}
                 </span>
               </div>
               
@@ -1305,7 +1311,7 @@ export const DashboardScreen: React.FC = () => {
                   className="text-base text-slate-700 dark:text-slate-300 tracking-wide cursor-pointer"
                   onClick={() => setEditFormData({ ...editFormData, activo: !editFormData.activo })}
                 >
-                  ACTIVE
+                  ACTIVO
                 </label>
                 <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${
                   editFormData.activo
@@ -1344,7 +1350,7 @@ export const DashboardScreen: React.FC = () => {
                        ? 'bg-amber-500/10 text-amber-500' 
                        : 'bg-slate-500/10 text-slate-500'
                    }`}>
-                     {editAsignacionTodos ? 'ACTIVE' : 'INACTIVE'}
+                     {editAsignacionTodos ? 'ACTIVO' : 'INACTIVO'}
                    </span>
                  </div>
                 

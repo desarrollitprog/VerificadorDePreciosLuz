@@ -793,6 +793,97 @@ luzapp: WebSocket connect → GET /api/comandos/pendientes → procesar
 
 ---
 
+## FASE 16: Mejoras de UI en DashboardScreen (Vistas y Acciones) ✅ COMPLETADO
+
+### Objetivo
+Agregar vista de tabla extraída de VideoListScreen, botón de cambio de vista (tarjetas ↔ tabla), y acción de descarga en tarjetas de "Contenido Subido Recientemente".
+
+### 16.1: Agregar Estado para Vista y Acciones
+- **Archivo**: `dashboard/screens/DashboardScreen.tsx`
+- **Estados a agregar** (alrededor de línea 93+):
+  ```tsx
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
+  const [selected, setSelected] = useState<string[]>([]);
+  ```
+- **Imports a agregar**: `List`, `Grid`, `Download` de `lucide-react`
+
+### 16.2: Agregar Botón de Cambio de Vista
+- **Ubicación**: Después del título "Contenido Subido Recientemente" (~línea 675-677)
+- **Implementación**:
+  ```tsx
+  <div className="flex items-center gap-2">
+    <button onClick={() => setViewMode('cards')} className={`p-2 rounded-lg ${viewMode === 'cards' ? 'bg-slate-200 dark:bg-slate-700' : ''}`}>
+      <Grid size={18} />
+    </button>
+    <button onClick={() => setViewMode('table')} className={`p-2 rounded-lg ${viewMode === 'table' ? 'bg-slate-200 dark:bg-slate-700' : ''}`}>
+      <List size={18} />
+    </button>
+  </div>
+  ```
+
+### 16.3: Extraer Tabla de VideoListScreen
+- **Fuente**: `VideoListScreen.tsx` (~líneas 331-472)
+- **Estructura a copiar**:
+  - Tabla con grid-cols-12 (headers: Checkbox, Archivo, Fecha, Inicio, Fin, Tamaño, Estatus, Acciones)
+  - Filas mapeadas con `paginatedVideos`
+  - Acciones: Editar (Edit2), Descargar (Download), Activar/Desactivar (Power), Borrar (Trash2)
+  - Paginación inferior
+
+### 16.4: Renderizado Condicional
+- **Ubicación**: Área de contenido (~línea 678+)
+- **Implementación**:
+  ```tsx
+  {viewMode === 'cards' ? (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      {/* Tarjetas existentes */}
+    </div>
+  ) : (
+    <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+      {/* Tabla extraída de VideoListScreen */}
+    </div>
+  )}
+  ```
+
+### 16.5: Agregar Descarga en Tarjetas
+- **Ubicación**: Botones de tarjeta (~línea 820-835)
+- **Función a implementar**:
+  ```tsx
+  const downloadVideoFile = (video: Video) => {
+    if (!video.url) return;
+    const link = document.createElement('a');
+    link.href = video.url;
+    link.download = video.filename || video.url.split('/').pop() || 'download';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+  ```
+- **Agregar botón en tarjeta**:
+  ```tsx
+  <button 
+    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-xs font-medium"
+    onClick={() => downloadVideoFile(video)}
+  >
+    <Download size={14} />
+    Descargar
+  </button>
+  ```
+
+### 16.6: Mantener Descarga/Borrado en Ambas Vistas
+- ✅ **Tarjetas**: Agregar descarga (borrado ya existe)
+- ✅ **Tabla**: Copiar botones de VideoListScreen (líneas 398-431)
+
+### Notas Importantes
+- ❌ **Omitir acciones incompletas**: Editar y Activar/Desactivar ya están contemplados en el botón "MoreVertical" (3 puntos) que abre el modal de edición
+- ✅ **Descargar y Eliminar**: Deben estar presentes en ambas vistas (tarjetas y tabla)
+- ✅ **Modal de edición**: Ya implementado en DashboardScreen (`isEditModalOpen`, `editingVideo`)
+
+### Archivos a Modificar
+1. `dashboard/screens/DashboardScreen.tsx` - Agregar estado, botón de vista, descarga, y vista de tabla
+2. `PLAN_MEJORAS.md` - Documentar fase (este archivo)
+
+---
+
 ## Resumen de Progreso Total (Todas las Fases)
 
 | Grupo | Fases | Completado | Pendiente |
@@ -800,4 +891,5 @@ luzapp: WebSocket connect → GET /api/comandos/pendientes → procesar
 | Originales | 1-10 | 25/28 (89%) | 5/28 |
 | Nuevas | 11-14 | 0/11 (0%) | 11/11 |
 | Nueva | 15 | 0/1 (0%) | 1/1 |
-| **TOTAL** | **1-15** | **25/40 (63%)** | **15/40**
+| **Nueva** | **16** | **6/6 (100%)** | **0/6** |
+| **TOTAL** | **1-16** | **31/46 (67%)** | **15/46**

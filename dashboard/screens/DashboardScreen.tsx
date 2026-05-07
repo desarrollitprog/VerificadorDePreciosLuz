@@ -966,7 +966,7 @@ export const DashboardScreen: React.FC = () => {
                   <div className="col-span-1">Subida</div>
                   <div className="col-span-1">Tamaño</div>
                   <div className="col-span-2 relative group/estado-header">Estado</div>
-                  <div className="col-span-1">Asign</div>
+                  <div className="col-span-1">ASIGNACION</div>
                   <div className="col-span-2 text-right">Acciones</div>
                 </div>
                 {(() => {

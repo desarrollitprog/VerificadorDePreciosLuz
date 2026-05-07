@@ -1117,25 +1117,27 @@ export const DashboardScreen: React.FC = () => {
              <div className="space-y-3 max-h-[65vh] overflow-y-auto custom-scrollbar">
                {selectedFiles.map((file, idx) => (
                  <div key={file.name} className="border rounded-lg p-6 mb-3 bg-slate-50 dark:bg-[#17202b]">
-                   <div className="flex items-start gap-6 mb-3">
-                     {file.type.startsWith('image') && (
-                       <img
-                         src={URL.createObjectURL(file)}
-                         alt={file.name}
-                         className="h-22 w-22 object-cover rounded-lg shrink-0"
-                       />
-                     )}
-                     {file.type.startsWith('video') && (
-                       <video
-                         src={URL.createObjectURL(file)}
-                         className="h-22 w-22 rounded-lg shrink-0"
-                         controls={false}
-                       />
-                     )}
-                    <div className="flex-1 min-w-0">
-                      <span className="font-bold text-slate-900 dark:text-white block text-xl">{file.name}</span>
-                      <span className="text-base text-slate-500">({Math.round(file.size / 1024)} KB)</span>
-                    </div>
+                    <div className="flex items-start gap-4 mb-3">
+                      <div className="shrink-0">
+                        {file.type.startsWith('image') && (
+                          <img
+                            src={URL.createObjectURL(file)}
+                            alt={file.name}
+                            className="h-16 w-16 object-cover rounded-lg"
+                          />
+                        )}
+                        {file.type.startsWith('video') && (
+                          <video
+                            src={URL.createObjectURL(file)}
+                            className="h-16 w-16 rounded-lg"
+                            controls={false}
+                          />
+                        )}
+                      </div>
+                     <div className="flex-1 min-w-0">
+                       <span className="font-bold text-slate-900 dark:text-white block text-lg truncate">{file.name}</span>
+                       <span className="text-sm text-slate-500">({Math.round(file.size / 1024)} KB)</span>
+                     </div>
                     <button
                       type="button"
                       className="px-3 py-1.5 rounded bg-slate-200 dark:bg-slate-700 text-sm shrink-0"

@@ -27,11 +27,21 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
           
-      - name: Build debug APK
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > luzapp/release-key.jks
+        shell: bash
+        
+      - name: Build release APK
         run: |
           cd luzapp
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleRelease
+        env:
+          KEYSTORE_PATH: release-key.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         shell: bash
         
       - name: Update version.json
@@ -44,7 +54,7 @@ jobs:
         shell: bash
           
       - name: Copy APK
-        run: cp luzapp/app/build/outputs/apk/debug/*.apk luzapp.apk
+        run: cp luzapp/app/build/outputs/apk/release/*.apk luzapp.apk
         shell: bash
 
       - name: Commit files to repo

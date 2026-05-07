@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNotification } from '../components/useNotification';
-import { Search, UploadCloud, MoreVertical, Eye, Trash, Film, Plus, Server, Smartphone, ChevronDown, ChevronRight, Clock } from 'lucide-react';
+import { Search, UploadCloud, MoreVertical, Eye, Trash, Film, Plus, Server, Smartphone, ChevronDown, ChevronRight, Clock, Check, Pencil, RefreshCw, List, Grid, Download } from 'lucide-react';
 import { getVideos, uploadMedia, deleteVideo, sincronizarServidores, updateBannerMetadata, updateBannerAsignations, FileMetadata } from '../services/videoService';
 import { Video, Servidor } from '../types';
 import { ServerDeviceSelector } from '../components/ServerDeviceSelector';
@@ -62,7 +62,7 @@ export const DashboardScreen: React.FC = () => {
     // Feedback por archivo
     const [uploadStatuses, setUploadStatuses] = useState<Array<'pending' | 'uploading' | 'success' | 'error'>>([]);
   const showNotification = useNotification();
-  const [preview, setPreview] = useState<{url: string, tipo: string, titulo: string} | null>(null);
+  const [preview, setPreview] = useState<{url: string, tipo: string, titulo: string, thumbnail?: string} | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   
   const handlePreview = useCallback((video: Video) => {
@@ -94,6 +94,28 @@ export const DashboardScreen: React.FC = () => {
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const videosPerPage = 12;
+  const tableVideosPerPage = 20;
+  const [selectedVideoIds, setSelectedVideoIds] = useState<string[]>([]);
+  const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+  
+  // Computed values for views
+  const filteredVideos = videos.filter(v => {
+    const searchLower = search.toLowerCase();
+    return (
+      v.titulo?.toLowerCase().includes(searchLower) ||
+      v.filename?.toLowerCase().includes(searchLower) ||
+      v.id?.toString().includes(searchLower)
+    );
+  });
+  const paginatedCardVideos = filteredVideos.slice(
+    (currentPage - 1) * videosPerPage, 
+    (currentPage - 1) * videosPerPage + videosPerPage
+  );
+  const paginatedTableVideos = filteredVideos.slice(
+    (currentPage - 1) * tableVideosPerPage, 
+    (currentPage - 1) * tableVideosPerPage + tableVideosPerPage
+  );
+  
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,9 +141,13 @@ export const DashboardScreen: React.FC = () => {
   const [selectedSecondaryServerId, setSelectedSecondaryServerId] = useState<string>('');
   
   // Edit modal states
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editingVideo, setEditingVideo] = useState<Video | null>(null);
-  const [editFormData, setEditFormData] = useState({
+   // View mode and selection states (Fase 16)
+   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
+   const [selected, setSelected] = useState<string[]>([]);
+
+   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+   const [editingVideo, setEditingVideo] = useState<Video | null>(null);
+   const [editFormData, setEditFormData] = useState({
     titulo: '',
     activo: true,
     fechaInicio: '',
@@ -376,6 +402,20 @@ export const DashboardScreen: React.FC = () => {
     }
   };
 
+  // Fase 16.5: Descargar archivo
+  const downloadVideoFile = (video: Video) => {
+    if (!video.url) {
+      showNotification('No hay URL disponible para descargar', 'warning');
+      return;
+    }
+    const link = document.createElement('a');
+    link.href = video.url;
+    link.download = video.filename || video.url.split('/').pop() || 'download';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleDeleteCancel = () => {
     setConfirmDelete({ open: false, videoId: null, titulo: '' });
   };
@@ -501,12 +541,12 @@ export const DashboardScreen: React.FC = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto flex flex-col gap-8">
+    <div className="max-w-screen-xl mx-auto flex flex-col gap-8">
       {/* Title & Search */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h2 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">Mis Videos</h2>
-          <p className="text-slate-500 mt-1">ADMINISTRA TUS VIDEOS YA SEA SUBIR, ELIMINAR y SINCRONIZAR.</p>
+          <p className="text-slate-500 mt-1">ADMINISTRA TUS VIDEOS YA SEA SUBIR, ELIMINAR Y SINCRONIZAR.</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative">
@@ -670,262 +710,434 @@ export const DashboardScreen: React.FC = () => {
         </div>
       </div>
 
-      {/* Grid */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-slate-900 dark:text-white">Contenido Subido Recientemente</h3>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {(() => {
-            // Filtrar videos por búsqueda
-            const filteredVideos = videos.filter(v => {
-              const searchLower = search.toLowerCase();
-              return (
-                v.titulo?.toLowerCase().includes(searchLower) ||
-                v.filename?.toLowerCase().includes(searchLower) ||
-                v.id?.toString().includes(searchLower)
-              );
-            });
-            // Calcular paginación
-            const totalPages = Math.ceil(filteredVideos.length / videosPerPage);
-            const startIndex = (currentPage - 1) * videosPerPage;
-            const paginatedVideos = filteredVideos.slice(startIndex, startIndex + videosPerPage);
-            // Renderizar tarjetas
-            return paginatedVideos.length > 0 ? paginatedVideos.map((video) => (
-              <div key={video.id} className="group relative bg-white dark:bg-[#1c2936] rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 hover:border-primary/40 transition-all hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-900/10 dark:hover:shadow-black/30 flex flex-col">
-                {/* Thumbnail */}
-                <div className="aspect-video bg-slate-800 relative overflow-hidden">
-                  {video.tipo === 'image' ? (
-                    <img src={video.thumbnail} alt={video.titulo || video.filename} className="w-full h-full object-cover" />
-                  ) : (
-                    <img src={video.thumbnail || video.url} alt={video.titulo || video.filename} className="w-full h-full object-cover" />
-                  )}
-                  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors"></div>
-                  {video.duration && video.tipo === 'video' && (
-                    <div className="absolute bottom-2 right-2 bg-black/70 text-white text-[10px] font-bold px-1.5 py-0.5 rounded backdrop-blur-sm">
-                      {video.duration} seg
-                    </div>
-                  )}
-                </div>
-                {/* Info */}
-                <div className="p-4 flex-1 flex flex-col">
-                  <div className="flex justify-between items-start gap-2 mb-2">
-                    <h4 className="text-slate-900 dark:text-white font-semibold text-sm leading-tight line-clamp-2" title={video.titulo || video.filename}>
-                      {video.titulo || video.filename}
-                    </h4>
-                    <button 
-                      onClick={() => {
-                        setEditingVideo(video);
-                        setEditFormData({
-                          titulo: video.titulo || video.filename || '',
-                          activo: video.activo ?? true,
-                          fechaInicio: video.fechaInicio || '',
-                          fechaFin: video.fechaFin || '',
-                        });
-                        // Inicializar estados de asignación
-                        const asignacionTodos = video.asignacion_todos ?? true;
-                        setEditAsignacionTodos(asignacionTodos);
-                        if (!asignacionTodos && video.asignaciones) {
-                          const srvIds = [...new Set(video.asignaciones.map((a: any) => a.servidor_id).filter(Boolean))];
-                          const dispIds = video.asignaciones.map((a: any) => a.dispositivo_id).filter(Boolean);
-                          setEditServidorIds(srvIds);
-                          setEditDispositivoIds(dispIds);
-                        } else {
-                          setEditServidorIds([]);
-                          setEditDispositivoIds([]);
-                        }
-                        setIsEditModalOpen(true);
-                        setTimeout(() => {
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                        }, 50);
-                      }}
-                      className="text-slate-400 hover:text-primary dark:hover:text-primary transition-colors"
-                      title="Editar"
-                    >
-                      <MoreVertical size={16} />
-                    </button>
-                  </div>
-                  {/* Badges de asignación */}
-                  <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold border ${video.estado === 'activo' ? 'bg-green-500/10 text-green-500 border-green-500/20' : video.estado === 'inactivo' ? 'bg-slate-500/10 text-slate-500 border-slate-500/20' : video.estado === 'vencido' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-amber-500/10 text-amber-500 border-amber-500/20'}`}>
-                      {(video.estado || 'activo').toUpperCase()}
-                    </span>
-                    {/* Badge de programado */}
-                    {(video.fechaInicio || video.fechaFin) && (
-                      <span className="relative group/badges">
-                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold bg-purple-500/10 text-purple-500 border border-purple-500/20">
-                          <Clock size={10} />
-                          PROGRAMADO
-                        </span>
-                        {/* Tooltip con fechas */}
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 dark:bg-slate-800 text-white text-xs rounded-lg shadow-xl opacity-0 invisible group-hover/badges:opacity-100 group-hover/badges:visible transition-all duration-200 z-50 whitespace-nowrap">
-                          <div className="font-semibold mb-1">Programación</div>
-                          {video.fechaInicio && (
-                            <div className="text-slate-300">Inicio: <span className="text-white">{video.fechaInicio}</span></div>
-                          )}
-                          {video.fechaFin && (
-                            <div className="text-slate-300">Fin: <span className="text-white">{video.fechaFin}</span></div>
-                          )}
-                          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900 dark:border-t-slate-800"></div>
-                        </div>
-                      </span>
-                    )}
-                    {video.asignacion_todos ? (
-                      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                        <Server size={10} />
-                        Todos
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold bg-blue-500/10 text-blue-500 border border-blue-500/20">
-                        <Smartphone size={10} />
-                        {video.dispositivos_count || 0} devs
-                      </span>
-                    )}
-                  </div>
-                  {/* Texto de asignación */}
-                  <div className="mb-2">
-                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
-                      Asignado a: {video.asignacion_todos ? 'Todos los dispositivos' : `${video.dispositivos_count || 0} dispositivos`}
-                    </p>
-                    {video.asignacion_todos ? (
-                      <p className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1">
-                        <Server size={10} />
-                        Todos los servidores y dispositivos del sistema
-                      </p>
-                    ) : (
-                      <div className="space-y-0.5">
-                        {video.asignaciones && video.asignaciones.slice(0, 3).map((asig, idx) => (
-                          <div key={idx} className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1">
-                            <Smartphone size={10} />
-                            <span className="truncate">
-                              {asig.dispositivo_nombre || asig.dispositivo_codigo || 'Dispositivo'} - {asig.servidor_nombre || 'Servidor'}
-                            </span>
-                          </div>
-                        ))}
-                        {video.asignaciones && video.asignaciones.length > 3 && (
-                          <p className="text-xs text-slate-400">+{video.asignaciones.length - 3} más</p>
-                        )}
-                        {(!video.asignaciones || video.asignaciones.length === 0) && (
-                          <p className="text-xs text-slate-400 italic">Sin asignaciones específicas</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between mt-auto pt-2">
-                    <span className="text-slate-500 text-xs">
-                      Fecha subida: {video.date ? formatCaracasTime(video.date) : 'Fecha desconocida'}
-                    </span>
-                  </div>
-                  {/* Action Buttons */}
-                  <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100 dark:border-slate-700/50">
-                    <button className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-xs font-medium" onClick={() => handlePreview(video)}>
-                      <Eye size={14} />
-                      Reproducir
-                    </button>
-                    <button className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors text-xs font-medium disabled:opacity-50" onClick={() => handleDeleteClick(video.id, video.titulo || video.filename)} disabled={deletingVideoId === video.id}>
-                      {deletingVideoId === video.id ? (
-                        <>Borrando...</>
-                      ) : (
-                        <>
-                          <Trash size={14} />
-                          Borrar
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )) : (
-              <div className="col-span-full text-center text-slate-500 py-8">No se encontraron videos.</div>
-            );
-          })()}
-        </div>
-        
-        {/* Pagination */}
-        {(() => {
-          const filteredVideos = videos.filter(v => {
-            const searchLower = search.toLowerCase();
-            return (
-              v.titulo?.toLowerCase().includes(searchLower) ||
-              v.filename?.toLowerCase().includes(searchLower) ||
-              v.id?.toString().includes(searchLower)
-            );
-          });
-          const totalPages = Math.ceil(filteredVideos.length / videosPerPage);
-          if (totalPages <= 1) return null;
-          return (
-            <div className="flex items-center justify-center gap-2 mt-6">
-              <button
-                type="button"
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
+       {/* Grid */}
+       <div>
+         <div className="flex items-center justify-between mb-4">
+           <h3 className="text-lg font-bold text-slate-900 dark:text-white">Contenido Subido Recientemente</h3>
+          <div className="flex items-center gap-2">
+              <button 
+                onClick={() => { setViewMode('cards'); setCurrentPage(1); }} 
+                className={`p-2 rounded-lg transition-colors ${viewMode === 'cards' ? 'bg-slate-200 dark:bg-slate-700 text-primary' : 'text-slate-500 hover:text-slate-700 dark:hover:text-white'}`}
+                title="Vista de tarjetas"
               >
-                Anterior
+                <Grid size={18} />
               </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                <button
-                  key={page}
-                  type="button"
-                  onClick={() => setCurrentPage(page)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    currentPage === page
-                      ? 'bg-primary text-white'
-                      : 'border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  {page}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
+              <button 
+                onClick={() => { setViewMode('table'); setCurrentPage(1); }} 
+                className={`p-2 rounded-lg transition-colors ${viewMode === 'table' ? 'bg-slate-200 dark:bg-slate-700 text-primary' : 'text-slate-500 hover:text-slate-700 dark:hover:text-white'}`}
+                title="Vista de tabla"
               >
-                Siguiente
+                <List size={18} />
               </button>
             </div>
-          );
-        })()}
+         </div>
+          {viewMode === 'cards' ? (
+            /* VISTA DE TARJETAS - Diseño original restaurado + nuevos botones */
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {paginatedCardVideos.length > 0 ? paginatedCardVideos.map((video) => (
+                  <div key={video.id} className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-800 hover:shadow-md transition-shadow flex flex-col">
+                    {/* Thumbnail */}
+                    <div className="relative aspect-video bg-slate-100 dark:bg-slate-700">
+                      {video.tipo === 'image' ? (
+                        <img src={video.thumbnail || video.url} alt={video.titulo || video.filename} className="w-full h-full object-cover" />
+                      ) : (
+                        <video src={video.url} className="w-full h-full object-cover" poster={video.thumbnail} />
+                      )}
+                      <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors"></div>
+                      {video.duration && video.tipo === 'video' && (
+                        <div className="absolute bottom-2 right-2 bg-black/70 text-white text-[10px] font-bold px-1.5 py-0.5 rounded backdrop-blur-sm">
+                          {video.duration} seg
+                        </div>
+                      )}
+                    </div>
+                    {/* Info */}
+                    <div className="p-4 flex-1 flex flex-col">
+                      <div className="flex justify-between items-start gap-2 mb-2">
+                        <h4 className="text-slate-900 dark:text-white font-semibold text-sm leading-tight line-clamp-2" title={video.titulo || video.filename}>
+                          {video.titulo || video.filename}
+                        </h4>
+                        <button
+                          onClick={() => {
+                            setEditingVideo(video);
+                            setEditFormData({
+                              titulo: video.titulo || video.filename || '',
+                              activo: video.activo ?? true,
+                              fechaInicio: video.fechaInicio || '',
+                              fechaFin: video.fechaFin || '',
+                            });
+                            const asignacionTodos = video.asignacion_todos ?? true;
+                            setEditAsignacionTodos(asignacionTodos);
+                            if (!asignacionTodos && video.asignaciones) {
+                              const srvIds = [...new Set(video.asignaciones.map((a: any) => a.servidor_id).filter(Boolean))];
+                              const dispIds = video.asignaciones.map((a: any) => a.dispositivo_id).filter(Boolean);
+                              setEditServidorIds(srvIds);
+                              setEditDispositivoIds(dispIds);
+                            } else {
+                              setEditServidorIds([]);
+                              setEditDispositivoIds([]);
+                            }
+                            setIsEditModalOpen(true);
+                            setTimeout(() => {
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }, 50);
+                          }}
+                          className="text-slate-400 hover:text-primary dark:hover:text-primary transition-colors shrink-0"
+                          title="Editar"
+                        >
+                          <MoreVertical size={16} />
+                        </button>
+                      </div>
+                      {/* Badges de asignación */}
+                       <div className="flex items-center gap-2 mb-2 flex-wrap">
+                         <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold border ${
+                           video.estado === 'activo' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                           video.estado === 'inactivo' ? 'bg-slate-500/10 text-slate-500 border-slate-500/20' :
+                           video.estado === 'vencido' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
+                           'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                         }`}>
+                           {(video.estado || 'activo').toUpperCase()}
+                         </span>
+                         {/* Badge de tipo de archivo */}
+                         <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold border ${
+                           video.tipo === 'image' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
+                           'bg-purple-500/10 text-purple-500 border-purple-500/20'
+                         }`}>
+                           {video.tipo === 'image' ? 'IMAGEN' : 'VIDEO'}
+                         </span>
+                        {/* Badge de programado */}
+                        {(video.fechaInicio || video.fechaFin) && (
+                          <span className="relative group/badges">
+                            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold bg-purple-500/10 text-purple-500 border border-purple-500/20">
+                              <Clock size={10} />
+                              PROGRAMADO
+                            </span>
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 dark:bg-slate-800 text-white text-xs rounded-lg shadow-xl opacity-0 invisible group-hover/badges:opacity-100 group-hover/badges:visible transition-all duration-200 z-50 whitespace-nowrap">
+                              <div className="font-semibold mb-1">Programación</div>
+                              {video.fechaInicio && (
+                                <div className="text-slate-300">Inicio: <span className="text-white">{video.fechaInicio}</span></div>
+                              )}
+                              {video.fechaFin && (
+                                <div className="text-slate-300">Fin: <span className="text-white">{video.fechaFin}</span></div>
+                              )}
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900 dark:border-t-slate-800"></div>
+                            </div>
+                          </span>
+                        )}
+                        {video.asignacion_todos ? (
+                          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                            <Server size={10} />
+                            Todos
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold bg-blue-500/10 text-blue-500 border border-blue-500/20">
+                            <Smartphone size={10} />
+                            {video.dispositivos_count || 0} devs
+                          </span>
+                        )}
+                      </div>
+                      {/* Texto de asignación */}
+                      <div className="mb-2">
+                        <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
+                          Asignado a: {video.asignacion_todos ? 'Todos los dispositivos' : `${video.dispositivos_count || 0} dispositivos`}
+                        </p>
+                        {video.asignacion_todos ? (
+                          <p className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1">
+                            <Server size={10} />
+                            Todos los servidores y dispositivos del sistema
+                          </p>
+                        ) : (
+                          <div className="space-y-0.5">
+                        {video.asignaciones && video.asignaciones.slice(0, 3).map((asig: any, idx: number) => (
+                               <div key={idx} className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                                 <Smartphone size={10} />
+                                 <span className="truncate">
+                                   {asig.dispositivo_nombre || asig.dispositivo_codigo || 'Dispositivo'} - {asig.servidor_nombre || 'Servidor'}
+                                 </span>
+                               </div>
+                             ))}
+                             {video.asignaciones && video.asignaciones.length > 3 && (
+                               <button 
+                                 onClick={() => setExpandedCardId(expandedCardId === video.id ? null : video.id)}
+                                 className="text-xs text-primary hover:underline font-medium"
+                               >
+                                 {expandedCardId === video.id ? 'Ver menos' : `Ver más (${video.asignaciones.length - 3})`}
+                               </button>
+                             )}
+                             {expandedCardId === video.id && video.asignaciones && video.asignaciones.slice(3).map((asig: any, idx: number) => (
+                               <div key={idx} className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                                 <Smartphone size={10} />
+                                 <span className="truncate">
+                                   {asig.dispositivo_nombre || asig.dispositivo_codigo || 'Dispositivo'} - {asig.servidor_nombre || 'Servidor'}
+                                 </span>
+                               </div>
+                             ))}
+                             {(!video.asignaciones || video.asignaciones.length === 0) && (
+                               <p className="text-xs text-slate-400 italic">Sin asignaciones específicas</p>
+                             )}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between mt-auto pt-2">
+                        <span className="text-slate-500 text-xs">
+                          Fecha subida: {video.date ? formatCaracasTime(video.date) : 'Fecha desconocida'}
+                        </span>
+                      </div>
+                      {/* Action Buttons - Original + Nuevos */}
+                      <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100 dark:border-slate-700/50">
+                        <button className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-xs font-medium" onClick={() => handlePreview(video)}>
+                          <Eye size={14} />
+                          Reproducir
+                        </button>
+                        <button className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-blue-500 hover:bg-blue-500/10 transition-colors text-xs font-medium" onClick={() => downloadVideoFile(video)}>
+                          <Download size={14} />
+                          Descargar
+                        </button>
+                        <button className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors text-xs font-medium disabled:opacity-50" onClick={() => handleDeleteClick(video.id, video.titulo || video.filename)} disabled={deletingVideoId === video.id}>
+                          {deletingVideoId === video.id ? (
+                            <>Borrando...</>
+                          ) : (
+                            <>
+                              <Trash size={14} />
+                              Borrar
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                   </div>
+                )) : (
+                  <div className="col-span-full text-center text-slate-500 py-8">No se encontraron videos.</div>
+                )}
+            </div>
+           ) : (
+             /* VISTA DE TABLA */
+             <div>
+               {/* Botones de acción masiva */}
+               {selectedVideoIds.length > 0 && (
+                 <div className="flex items-center gap-4 mb-4 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                   <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                     {selectedVideoIds.length} seleccionado{selectedVideoIds.length > 1 ? 's' : ''}
+                   </span>
+                   <button 
+                     onClick={() => {
+                       const videosToDownload = videos.filter(v => selectedVideoIds.includes(v.id));
+                       videosToDownload.forEach(v => downloadVideoFile(v));
+                     }}
+                     className="text-sm text-blue-500 hover:text-blue-600 font-medium"
+                   >
+                     Descargar seleccionados
+                   </button>
+                   <button 
+                     onClick={async () => {
+                       if (!confirm(`¿Eliminar ${selectedVideoIds.length} archivo${selectedVideoIds.length > 1 ? 's' : ''}?`)) return;
+                       for (const id of selectedVideoIds) {
+                         await handleDeleteClick(id, videos.find(v => v.id === id)?.titulo || '');
+                       }
+                       setSelectedVideoIds([]);
+                     }}
+                     className="text-sm text-red-500 hover:text-red-600 font-medium"
+                   >
+                     Eliminar seleccionados
+                   </button>
+                   <button 
+                     onClick={() => setSelectedVideoIds([])}
+                     className="text-sm text-slate-500 hover:text-slate-600 font-medium ml-auto"
+                   >
+                     Limpiar selección
+                   </button>
+                 </div>
+               )}
+                <div className="grid grid-cols-12 gap-4 border-b border-slate-200 dark:border-slate-700 px-3 py-2 bg-slate-50 dark:bg-slate-800/50 text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase">
+                   <div className="col-span-1 flex items-center">
+                     <input 
+                       type="checkbox" 
+                       checked={selectedVideoIds.length === paginatedTableVideos.length && paginatedTableVideos.length > 0}
+                       onChange={() => {
+                         if (selectedVideoIds.length === paginatedTableVideos.length) {
+                           setSelectedVideoIds([]);
+                         } else {
+                           setSelectedVideoIds(paginatedTableVideos.map(v => v.id));
+                         }
+                       }}
+                       className="rounded border-slate-300 dark:border-slate-600"
+                     />
+                   </div>
+                  <div className="col-span-4">Archivo</div>
+                  <div className="col-span-1">Subida</div>
+                  <div className="col-span-1">Tamaño</div>
+                  <div className="col-span-2 relative group/estado-header">Estado</div>
+                  <div className="col-span-1">ASIGNACION</div>
+                  <div className="col-span-2 text-right">Acciones</div>
+                </div>
+                {(() => {
+                  return paginatedTableVideos.length > 0 ? paginatedTableVideos.map((video) => (
+                    <div key={video.id} className="grid grid-cols-12 gap-4 border-b border-slate-100 dark:border-slate-700/30 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors items-center">
+                      <div className="col-span-1 flex items-center">
+                        <input 
+                          type="checkbox" 
+                          checked={selectedVideoIds.includes(video.id)}
+                          onChange={() => {
+                            if (selectedVideoIds.includes(video.id)) {
+                              setSelectedVideoIds(selectedVideoIds.filter(id => id !== video.id));
+                            } else {
+                              setSelectedVideoIds([...selectedVideoIds, video.id]);
+                            }
+                          }}
+                          className="rounded border-slate-300 dark:border-slate-600"
+                        />
+                      </div>
+                      <div className="col-span-4 flex items-center gap-2 overflow-hidden">
+                        <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded bg-slate-100 dark:bg-slate-800">
+                          {video.tipo === 'image' ? (
+                            <img src={video.thumbnail || video.url} alt={video.titulo} className="w-6 h-6 object-cover rounded" />
+                          ) : (
+                            <Film size={16} className="text-slate-400" />
+                          )}
+                        </div>
+                        <span className="text-sm font-medium text-slate-900 dark:text-white truncate min-w-0" title={video.titulo || video.filename}>
+                          {video.titulo || video.filename}
+                        </span>
+                      </div>
+                      <div className="col-span-1 text-sm text-slate-600 dark:text-slate-400 truncate">
+                        {video.date ? formatCaracasTime(video.date) : '-'}
+                      </div>
+                      <div className="col-span-1 text-sm text-slate-600 dark:text-slate-400 font-mono">
+                        {video.size}
+                      </div>
+                      <div className="col-span-2 relative group/estado">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${
+                          video.estado === 'activo' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                          video.estado === 'inactivo' ? 'bg-slate-500/10 text-slate-500 border-slate-500/20' :
+                          video.estado === 'vencido' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
+                          'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                        }`}>
+                          {(video.estado || 'activo').toUpperCase()}
+                        </span>
+                        {/* Tooltip: Programación + Tipo de archivo */}
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 dark:bg-slate-800 text-white text-xs rounded-lg shadow-xl opacity-0 invisible group-hover/estado:opacity-100 group-hover/estado:visible transition-all duration-200 z-50 whitespace-nowrap">
+                            <div className="font-semibold mb-1">Programación</div>
+                            <div className="text-slate-300">Tipo: <span className="text-white">{video.tipo === 'image' ? 'Imagen' : 'Video'}</span></div>
+                            {video.fechaInicio && (
+                              <div className="text-slate-300">Inicio: <span className="text-white">{video.fechaInicio}</span></div>
+                            )}
+                            {video.fechaFin && (
+                              <div className="text-slate-300">Fin: <span className="text-white">{video.fechaFin}</span></div>
+                            )}
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900 dark:border-t-slate-800"></div>
+                          </div>
+                      </div>
+                      <div className="col-span-1 text-sm text-slate-600 dark:text-slate-400">
+                        {video.asignacion_todos ? (
+                          <span className="inline-flex items-center gap-1">
+                            <Server size={12} />
+                            Todos
+                          </span>
+                        ) : (
+                          <span>{video.dispositivos_count || 0} devs</span>
+                        )}
+                      </div>
+                      <div className="col-span-2 flex items-center justify-end gap-3">
+                        <button onClick={() => handlePreview(video)} className="p-2 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-transform hover:scale-110" title="Reproducir">
+                          <Eye size={16} />
+                        </button>
+                        <button onClick={() => downloadVideoFile(video)} className="p-2 rounded hover:bg-blue-500/10 transition-transform hover:scale-110" title="Descargar">
+                          <Download size={16} />
+                        </button>
+                        <button onClick={() => handleDeleteClick(video.id, video.titulo || video.filename)} className="p-2 rounded hover:bg-red-500/10 transition-transform hover:scale-110" title="Borrar" disabled={deletingVideoId === video.id}>
+                          {deletingVideoId === video.id ? '...' : <Trash size={16} />}
+                        </button>
+                      </div>
+                    </div>
+                 )) : (
+                  <div className="px-3 py-8 text-center text-slate-500">No se encontraron videos.</div>
+                );
+              })()}
+            </div>
+          )}
+         
+          {/* Pagination */}
+          {(() => {
+            const activePerPage = viewMode === 'cards' ? videosPerPage : tableVideosPerPage;
+            const totalPages = Math.ceil(filteredVideos.length / activePerPage);
+            if (totalPages <= 1) return null;
+            return (
+              <div className="flex items-center justify-center gap-2 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
+                >
+                  Anterior
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                  <button
+                    key={page}
+                    type="button"
+                    onClick={() => setCurrentPage(page)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      currentPage === page
+                        ? 'bg-primary text-white'
+                        : 'border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
+                >
+                  Siguiente
+                </button>
+              </div>
+            );
+          })()}
       </div>
 
       {isUploadModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 px-4 pt-20">
-          <div className="w-full max-w-6xl bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl p-5">
-            <div className="flex items-start justify-between mb-4">
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Datos de Archivos</h3>
-              <button
-                type="button"
-                className="text-slate-500 hover:text-red-500 text-xl leading-none"
-                onClick={resetUploadModal}
-                disabled={uploading}
-              >
-                ×
-              </button>
-            </div>
-            <div className="space-y-4 max-h-[75vh] overflow-y-auto custom-scrollbar">
-              {selectedFiles.map((file, idx) => (
-                <div key={file.name} className="border rounded-lg p-8 mb-4 bg-slate-50 dark:bg-[#17202b]">
-                  <div className="flex items-start gap-6 mb-3">
-                    {file.type.startsWith('image') && (
-                      <img
-                        src={URL.createObjectURL(file)}
-                        alt={file.name}
-                        className="h-28 w-28 object-cover rounded-lg shrink-0"
-                      />
-                    )}
-                    {file.type.startsWith('video') && (
-                      <video
-                        src={URL.createObjectURL(file)}
-                        className="h-28 w-28 rounded-lg shrink-0"
-                        controls={false}
-                      />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <span className="font-bold text-slate-900 dark:text-white block text-xl">{file.name}</span>
-                      <span className="text-base text-slate-500">({Math.round(file.size / 1024)} KB)</span>
-                    </div>
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-gradient-to-br from-black/70 via-black/60 to-black/80 px-4 pt-20">
+           <div className="w-full max-w-6xl bg-white dark:bg-[#1c2936] rounded-2xl border border-slate-300/50 dark:border-slate-600/50 shadow-[0_20px_60px_rgba(0,0,0,0.3)] p-6">
+             <div className="flex items-start justify-between mb-6 pb-4 border-b border-gradient-to-r from-transparent via-slate-300 to-transparent">
+               <div>
+                 <h3 className="text-xl font-bold text-slate-900 dark:text-white tracking-wide">DATOS DE ARCHIVOS</h3>
+                 <p className="text-sm text-slate-500 mt-1">Configura antes de subir</p>
+               </div>
+                <button
+                  type="button"
+                  className="text-slate-400 hover:text-red-500 text-2xl leading-none transition-all duration-200 hover:rotate-90 active:scale-90"
+                  onClick={resetUploadModal}
+                  disabled={uploading}
+                >
+                  ×
+                </button>
+              </div>
+             <div className="space-y-3 max-h-[65vh] overflow-y-auto custom-scrollbar">
+               {selectedFiles.map((file, idx) => (
+                 <div key={file.name} className="border rounded-lg p-4 mb-2 bg-slate-50 dark:bg-[#17202b]">
+                    <div className="flex items-start gap-4 mb-3">
+                     <div className="shrink-0">
+                        {file.type.startsWith('image') && (
+                          <img
+                            src={URL.createObjectURL(file)}
+                            alt={file.name}
+                            className="h-28 w-28 object-cover rounded-lg"
+                          />
+                        )}
+                        {file.type.startsWith('video') && (
+                          <video
+                            src={URL.createObjectURL(file)}
+                            className="h-28 w-28 rounded-lg"
+                            controls={false}
+                          />
+                        )}
+                      </div>
+                     <div className="flex-1 min-w-0">
+                       <span className="font-bold text-slate-900 dark:text-white block text-lg truncate">{file.name}</span>
+                       <span className="text-sm text-slate-500">({Math.round(file.size / 1024)} KB)</span>
+                     </div>
                     <button
                       type="button"
                       className="px-3 py-1.5 rounded bg-slate-200 dark:bg-slate-700 text-sm shrink-0"
@@ -940,115 +1152,149 @@ export const DashboardScreen: React.FC = () => {
                   </div>
                   {expandedFiles[idx] && (
                     <div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {/* Título */}
-                        <div>
-                          <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2">Título</label>
-                          <input
-                            type="text"
-                            className="w-full rounded-lg border border-slate-200/50 dark:border-slate-700/50 bg-white/50 dark:bg-[#17202b]/50 px-3 py-2 text-sm text-slate-800 dark:text-white focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all duration-200"
-                            value={fileMetadatas[idx]?.titulo || ''}
-                            onChange={e => {
-                              const newMetas = [...fileMetadatas];
-                              newMetas[idx].titulo = e.target.value;
-                              setFileMetadatas(newMetas);
-                            }}
-                            placeholder="Ej: Promo principal - Sucursal Centro"
-                          />
-                        </div>
-                        {/* Estado */}
-                        <div>
-                          <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2">Estado</label>
-                          <select
-                        className="w-full rounded-lg border border-slate-200/50 dark:border-slate-700/50 bg-white/50 dark:bg-[#17202b]/50 px-4 py-2.5 text-base text-slate-800 dark:text-white focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all duration-200"
-                        value={fileMetadatas[idx]?.activo ? 'activo' : 'inactivo'}
-                        onChange={e => {
-                          const newMetas = [...fileMetadatas];
-                          newMetas[idx].activo = e.target.value === 'activo';
-                          setFileMetadatas(newMetas);
-                        }}
-                      >
-                        <option value="activo">Activo</option>
-                        <option value="inactivo">Inactivo</option>
-                      </select>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                         {/* Título */}
+                         <div>
+                           <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2">TÍTULO</label>
+                           <input
+                             type="text"
+                             className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-800 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200 "
+                             value={fileMetadatas[idx]?.titulo || ''}
+                             onChange={e => {
+                               const newMetas = [...fileMetadatas];
+                               newMetas[idx].titulo = e.target.value;
+                               setFileMetadatas(newMetas);
+                             }}
+                             placeholder="Ej: Promo principal - Sucursal Centro"
+                           />
+                         </div>
+                         {/* Estado */}
+                         <div>
+                           <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2">ESTADO</label>
+                         <select
+                         className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-800 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200"
+                         value={fileMetadatas[idx]?.activo ? 'activo' : 'inactivo'}
+                         onChange={e => {
+                           const newMetas = [...fileMetadatas];
+                           newMetas[idx].activo = e.target.value === 'activo';
+                           setFileMetadatas(newMetas);
+                         }}
+                       >
+                         <option value="activo">ACTIVO</option>
+                         <option value="inactivo">INACTIVO</option>
+                       </select>
                         </div>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-                        {/* Fecha Inicio */}
-                        <div>
-                          <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2">Fecha Inicio</label>
-                          <input
-                            type="datetime-local"
-                            className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-3 py-2 text-sm text-slate-900 dark:text-white"
-                            value={fileMetadatas[idx]?.fechaInicio || ''}
-                            onChange={e => {
-                              const newMetas = [...fileMetadatas];
-                              newMetas[idx].fechaInicio = e.target.value;
-                              setFileMetadatas(newMetas);
-                            }}
-                          />
+                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                         {/* Fecha Inicio */}
+                         <div>
+                           <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2 ">FECHA INICIO</label>
+                           <input
+                             type="datetime-local"
+                             className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-900 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200"
+                             value={fileMetadatas[idx]?.fechaInicio || ''}
+                             onChange={e => {
+                               const newMetas = [...fileMetadatas];
+                               newMetas[idx].fechaInicio = e.target.value;
+                               setFileMetadatas(newMetas);
+                             }}
+                           />
                         </div>
-                        {/* Fecha Fin */}
-                        <div>
-                          <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2">Fecha Fin</label>
-                          <input
-                            type="datetime-local"
-                        className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#17202b] px-4 py-2.5 text-base text-slate-900 dark:text-white"
-                        value={fileMetadatas[idx]?.fechaFin || ''}
-                            onChange={e => {
-                              const newMetas = [...fileMetadatas];
-                              newMetas[idx].fechaFin = e.target.value;
-                              setFileMetadatas(newMetas);
-                            }}
-                          />
-                        </div>
+                         {/* Fecha Fin */}
+                         <div>
+                           <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2">FECHA FIN</label>
+                           <input
+                             type="datetime-local"
+                             className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-900 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200"
+                             value={fileMetadatas[idx]?.fechaFin || ''}
+                             onChange={e => {
+                               const newMetas = [...fileMetadatas];
+                               newMetas[idx].fechaFin = e.target.value;
+                               setFileMetadatas(newMetas);
+                             }}
+                           />
+                         </div>
                       </div>
                       {/* Asignación */}
                       <div className="mt-3 border-t border-slate-200 dark:border-slate-700 pt-3">
-                        <label className="flex items-center gap-2 mb-3">
-                          <input
-                            type="checkbox"
-                            checked={fileMetadatas[idx]?.asignacionTodos ?? true}
-                            onChange={e => {
-                              const newMetas = [...fileMetadatas];
-                              newMetas[idx].asignacionTodos = e.target.checked;
-                              if (e.target.checked) {
-                                newMetas[idx].servidorIds = [];
-                                newMetas[idx].dispositivoIds = [];
-                              }
-                              setFileMetadatas(newMetas);
-                            }}
-                            className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
-                          />
-                          <span className="text-base font-medium text-slate-700 dark:text-slate-200">
-                            Asignar a TODOS los servidores y dispositivos
+                        <div 
+                          className="flex items-center gap-3 mb-4 p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/30 cursor-pointer transition-colors"
+                          onClick={() => {
+                            const newMetas = [...fileMetadatas];
+                            const nuevoEstado = !(newMetas[idx]?.asignacionTodos ?? true);
+                            newMetas[idx].asignacionTodos = nuevoEstado;
+                            if (nuevoEstado) {
+                              newMetas[idx].servidorIds = [];
+                              newMetas[idx].dispositivoIds = [];
+                            }
+                            setFileMetadatas(newMetas);
+                          }}
+                        >
+                          <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all duration-200 ${
+                            (fileMetadatas[idx]?.asignacionTodos ?? true)
+                              ? 'bg-primary border-primary scale-110'
+                              : 'border-slate-300 dark:border-slate-600 hover:border-primary/50 scale-100'
+                          }`}>
+                            {(fileMetadatas[idx]?.asignacionTodos ?? true) && <Check size={14} className="text-white" />}
+                          </div>
+                          <span className="text-base font-medium text-slate-700 dark:text-slate-200 tracking-wide">
+                            ASIGNAR A TODAS LAS SEDES Y DISPOSITIVOS 
                           </span>
-                        </label>
+                          <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                            (fileMetadatas[idx]?.asignacionTodos ?? true)
+                              ? 'bg-amber-500/10 text-amber-500' 
+                              : 'bg-slate-500/10 text-slate-500'
+                          }`}>
+                            {(fileMetadatas[idx]?.asignacionTodos ?? true) ? 'ACTIVO' : 'INACTIVO'}
+                          </span>
+                        </div>
                         {!fileMetadatas[idx]?.asignacionTodos && (
                           <ServerDeviceSelector
                             servidores={servidores}
                             selectedServidorIds={fileMetadatas[idx]?.servidorIds || []}
                             selectedDispositivoIds={fileMetadatas[idx]?.dispositivoIds || []}
-                            onServidorChange={(servidorId, checked) => {
-                              setFileMetadatas(prevMetas => {
-                                const newMetas = [...prevMetas];
-                                const currentIds = [...(newMetas[idx]?.servidorIds || [])];
-                                if (checked) {
-                                  newMetas[idx] = {
-                                    ...newMetas[idx],
-                                    asignacionTodos: false,
-                                    servidorIds: [...currentIds, servidorId]
-                                  };
-                                } else {
-                                  newMetas[idx] = {
-                                    ...newMetas[idx],
-                                    asignacionTodos: false,
-                                    servidorIds: currentIds.filter(id => id !== servidorId)
-                                  };
-                                }
-                                return newMetas;
-                              });
-                            }}
+                             onServidorChange={(servidorId, checked) => {
+                               setFileMetadatas(prevMetas => {
+                                 const newMetas = [...prevMetas];
+                                 const currentServidorIds = [...(newMetas[idx]?.servidorIds || [])];
+                                 const currentDispositivoIds = [...(newMetas[idx]?.dispositivoIds || [])];
+                                 
+                                 if (checked) {
+                                   // Add server
+                                   const updatedServidorIds = [...currentServidorIds, servidorId];
+                                   
+                                   // Find devices of this server
+                                   const servidor = servidores.find(s => s.id === servidorId);
+                                   const newDispIds = servidor?.dispositivos?.map(d => String(d.id)) || [];
+                                   
+                                   // Add devices that are not already selected
+                                   const updatedDispositivoIds = [...currentDispositivoIds, ...newDispIds.filter(id => !currentDispositivoIds.includes(id))];
+                                   
+                                   newMetas[idx] = {
+                                     ...newMetas[idx],
+                                     asignacionTodos: false,
+                                     servidorIds: updatedServidorIds,
+                                     dispositivoIds: updatedDispositivoIds
+                                   };
+                                 } else {
+                                   // Remove server
+                                   const updatedServidorIds = currentServidorIds.filter(id => id !== servidorId);
+                                   
+                                   // Remove devices of this server
+                                   const servidor = servidores.find(s => s.id === servidorId);
+                                   const dispIdsToRemove = servidor?.dispositivos?.map(d => String(d.id)) || [];
+                                   const updatedDispositivoIds = currentDispositivoIds.filter(id => !dispIdsToRemove.includes(id));
+                                   
+                                   newMetas[idx] = {
+                                     ...newMetas[idx],
+                                     asignacionTodos: false,
+                                     servidorIds: updatedServidorIds,
+                                     dispositivoIds: updatedDispositivoIds
+                                   };
+                                 }
+                                 return newMetas;
+                               });
+                             }}
                             onDispositivoChange={(dispositivoId, checked) => {
                               setFileMetadatas(prevMetas => {
                                 const newMetas = [...prevMetas];
@@ -1077,6 +1323,7 @@ export const DashboardScreen: React.FC = () => {
                                   : [...prev, id]
                               );
                             }}
+                            maxHeight="max-h-[30vh]"
                           />
                         )}
                       </div>
@@ -1094,17 +1341,17 @@ export const DashboardScreen: React.FC = () => {
                 type="button"
                 onClick={resetUploadModal}
                 disabled={uploading}
-                className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                className="px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform duration-150"
               >
-                Cancelar
+                CANCELAR
               </button>
               <button
                 type="button"
                 onClick={handleSubmitUpload}
                 disabled={uploading}
-                className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-semibold disabled:opacity-60"
+                className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-white text-base font-semibold disabled:opacity-60 active:scale-95 transition-all duration-150"
               >
-                {uploading ? 'Subiendo...' : 'Guardar y Subir'}
+                {uploading ? 'SUBIENDO...' : 'GUARDAR Y SUBIR'}
               </button>
             </div>
           </div>
@@ -1113,31 +1360,50 @@ export const DashboardScreen: React.FC = () => {
 
       {/* Sync Modal */}
       {isSyncModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 pt-20">
-          <div className="bg-white dark:bg-[#1c2936] rounded-xl shadow-2xl w-full max-w-5xl max-h-[97vh] overflow-hidden flex flex-col">
-            <div className="p-5 border-b border-slate-200 dark:border-slate-700 shrink-0">
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Sincronización Selectiva</h2>
-              <p className="text-base text-slate-500">Selecciona los dispositivos a sincronizar</p>
+        <div className="fixed inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/80 flex items-start justify-center z-50 p-4 pt-20">
+          <div className="bg-white dark:bg-[#1c2936] rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.3)] w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-gradient-to-r from-transparent via-slate-300 to-transparent shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-amber-500/10">
+                  <RefreshCw size={20} className="text-amber-500" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-wide">SINCRONIZACIÓN SELECTIVA</h2>
+                  <p className="text-sm text-slate-500 mt-1">Selecciona los dispositivos a sincronizar</p>
+                </div>
+              </div>
             </div>
             
-            <div className="p-5 overflow-y-auto flex-1">
-              <label className="flex items-center gap-2 mb-4">
-                <input
-                  type="checkbox"
-                  checked={syncAllDevices}
-                  onChange={e => {
-                    setSyncAllDevices(e.target.checked);
-                    if (e.target.checked) {
-                      setSyncServidorIds([]);
-                      setSyncDispositivoIds([]);
-                    }
-                  }}
-                  className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
-                />
-                <span className="text-base font-medium text-slate-700 dark:text-slate-200">
-                  Sincronizar a TODOS los dispositivos
+            <div className="p-4 overflow-y-auto flex-1">
+              <div 
+                className="flex items-center gap-3 mb-4 p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/30 cursor-pointer transition-colors"
+                onClick={() => {
+                  const nuevoEstado = !syncAllDevices;
+                  setSyncAllDevices(nuevoEstado);
+                  if (nuevoEstado) {
+                    setSyncServidorIds([]);
+                    setSyncDispositivoIds([]);
+                  }
+                }}
+              >
+                <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all duration-200 ${
+                  syncAllDevices
+                    ? 'bg-primary border-primary scale-110'
+                    : 'border-slate-300 dark:border-slate-600 hover:border-primary/50 scale-100'
+                }`}>
+                  {syncAllDevices && <Check size={14} className="text-white" />}
+                </div>
+                  <span className="text-base font-medium text-slate-700 dark:text-slate-200 tracking-wide">
+                    SINCRONIZAR A TODOS LOS DISPOSITIVOS
+                  </span>
+                <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                  syncAllDevices
+                    ? 'bg-amber-500/10 text-amber-500' 
+                    : 'bg-slate-500/10 text-slate-500'
+                }`}>
+                  {syncAllDevices ? 'ACTIVO' : 'INACTIVO'}
                 </span>
-              </label>
+              </div>
               
               {!syncAllDevices && (
                 <ServerDeviceSelector
@@ -1147,9 +1413,26 @@ export const DashboardScreen: React.FC = () => {
                   onServidorChange={(id, checked) => {
                     setSyncServidorIds(prev => {
                       if (checked) {
-                        return [...prev, id];
+                        const updatedServidorIds = [...prev, id];
+                        
+                        // Find devices of this server
+                        const servidor = servidores.find(s => s.id === id);
+                        const newDispIds = servidor?.dispositivos?.map(d => String(d.id)) || [];
+                        
+                        // Add devices that are not already selected
+                        setSyncDispositivoIds(prevDisp => [...prevDisp, ...newDispIds.filter(dId => !prevDisp.includes(dId))]);
+                        
+                        return updatedServidorIds;
+                      } else {
+                        const updatedServidorIds = prev.filter(srvId => srvId !== id);
+                        
+                        // Remove devices of this server
+                        const servidor = servidores.find(s => s.id === id);
+                        const dispIdsToRemove = servidor?.dispositivos?.map(d => String(d.id)) || [];
+                        setSyncDispositivoIds(prevDisp => prevDisp.filter(dId => !dispIdsToRemove.includes(dId)));
+                        
+                        return updatedServidorIds;
                       }
-                      return prev.filter(srvId => srvId !== id);
                     });
                   }}
                   onDispositivoChange={(id, checked) => {
@@ -1168,11 +1451,12 @@ export const DashboardScreen: React.FC = () => {
                         : [...prev, id]
                     );
                   }}
+                  maxHeight="max-h-[65vh]"
                 />
               )}
             </div>
 
-            <div className="mt-auto flex justify-end gap-4 p-6 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#17202b]">
+            <div className="mt-4 flex justify-end gap-2 p-6 border-t border-gradient-to-r from-transparent via-slate-300 to-transparent">
               <button
                 type="button"
                 onClick={() => {
@@ -1182,9 +1466,9 @@ export const DashboardScreen: React.FC = () => {
                   setSyncDispositivoIds([]);
                   setSyncExpandedServers([]);
                 }}
-                className="px-6 py-3 rounded-lg border border-slate-300 dark:border-slate-700 text-lg text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium"
+                className="px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform duration-150"
               >
-                Cancelar
+                CANCELAR
               </button>
               <button
                 type="button"
@@ -1193,9 +1477,9 @@ export const DashboardScreen: React.FC = () => {
                   await executeSync();
                 }}
                 disabled={!syncAllDevices && syncServidorIds.length === 0 && syncDispositivoIds.length === 0}
-                className="px-6 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-lg font-semibold disabled:opacity-60 shadow-lg"
+                className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-base font-semibold disabled:opacity-60 active:scale-95 transition-all duration-150"
               >
-                Sincronizar
+                SINCRONIZAR
               </button>
             </div>
           </div>
@@ -1203,96 +1487,139 @@ export const DashboardScreen: React.FC = () => {
       )}
       {/* Edit Modal */}
       {isEditModalOpen && editingVideo && (
-        <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 pt-20">
-          <div className="bg-white dark:bg-[#1c2936] rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-            <div className="p-4 border-b border-slate-200 dark:border-slate-700 shrink-0">
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Editar Publicidad</h2>
-              <p className="text-sm text-slate-500">Modifica los datos de la publicidad</p>
+        <div className="fixed inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/80 flex items-start justify-center z-50 p-4 pt-20">
+          <div className="bg-white dark:bg-[#1c2936] rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.3)] w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-gradient-to-r from-transparent via-slate-300 to-transparent shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-amber-500/10">
+                  <Pencil size={20} className="text-amber-500" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-wide">EDITAR PUBLICIDAD</h2>
+                  <p className="text-sm text-slate-500 mt-1 ">Modifica los datos de la publicidad</p>
+                </div>
+              </div>
             </div>
             
-            <div className="p-4 space-y-4 overflow-y-auto flex-1">
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
               <div>
-                <label className="block text-base font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  Título
+                  <label className="block text-base font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  TÍTULO
                 </label>
                 <input
                   type="text"
                   value={editFormData.titulo}
                   onChange={e => setEditFormData({ ...editFormData, titulo: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-base text-slate-900 dark:text-white"
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-300/70 dark:border-slate-600/70 rounded-lg text-base text-slate-900 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200"
                 />
               </div>
               
               <div>
                 <label className="block text-base font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  Fecha Inicio
+                  START DATE
                 </label>
                 <input
                   type="datetime-local"
                   value={editFormData.fechaInicio}
                   onChange={e => setEditFormData({ ...editFormData, fechaInicio: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-base text-slate-900 dark:text-white"
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-300/70 dark:border-slate-600/70 rounded-lg text-base text-slate-900 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200"
                 />
               </div>
               
               <div>
                 <label className="block text-base font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  Fecha Fin
+                  END DATE
                 </label>
                 <input
                   type="datetime-local"
                   value={editFormData.fechaFin}
                   onChange={e => setEditFormData({ ...editFormData, fechaFin: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-base text-slate-900 dark:text-white"
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-300/70 dark:border-slate-600/70 rounded-lg text-base text-slate-900 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200"
                 />
               </div>
               
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="editActivo"
-                  checked={editFormData.activo}
-                  onChange={e => setEditFormData({ ...editFormData, activo: e.target.checked })}
-                  className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
-                />
-                <label className="text-base text-slate-700 dark:text-slate-300">
-                  Activo
+              <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/30 cursor-pointer transition-colors">
+                <div 
+                  className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all duration-200 ${
+                    editFormData.activo
+                      ? 'bg-amber-500 border-amber-500 scale-110'
+                      : 'border-slate-300 dark:border-slate-600 hover:border-amber-500/50 scale-100'
+                  }`}
+                  onClick={() => setEditFormData({ ...editFormData, activo: !editFormData.activo })}
+                >
+                  {editFormData.activo && <Check size={14} className="text-white" />}
+                </div>
+                <label 
+                  className="text-base text-slate-700 dark:text-slate-300 tracking-wide cursor-pointer"
+                  onClick={() => setEditFormData({ ...editFormData, activo: !editFormData.activo })}
+                >
+                  ACTIVO
                 </label>
+                <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                  editFormData.activo
+                    ? 'bg-amber-500/10 text-amber-500' 
+                    : 'bg-slate-500/10 text-slate-500'
+                }`}>
+                  {editFormData.activo ? 'ON' : 'OFF'}
+                </span>
               </div>
-              
-              {/* Sección de asignación */}
-              <div className="border-t border-slate-200 dark:border-slate-700 pt-4 mt-2">
-                <label className="flex items-center gap-2 mb-3">
-                  <input
-                    type="checkbox"
-                    id="editAsignacionTodos"
-                    checked={editAsignacionTodos}
-                    onChange={e => {
-                      setEditAsignacionTodos(e.target.checked);
-                      if (e.target.checked) {
-                        setEditServidorIds([]);
-                        setEditDispositivoIds([]);
-                      }
-                    }}
-                    className="rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
-                  />
-                  <span className="text-base font-medium text-slate-700 dark:text-slate-300">
-                    Asignar a TODOS los dispositivos
-                  </span>
-                </label>
+               
+               {/* Sección de asignación */}
+               <div className="border-t border-slate-200 dark:border-slate-700 pt-4 mt-2">
+                 <div 
+                   className="flex items-center gap-3 mb-4 p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/30 cursor-pointer transition-colors"
+                   onClick={() => {
+                     const nuevoEstado = !editAsignacionTodos;
+                     setEditAsignacionTodos(nuevoEstado);
+                     if (nuevoEstado) {
+                       setEditServidorIds([]);
+                       setEditDispositivoIds([]);
+                     }
+                   }}
+                 >
+                   <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all duration-200 ${
+                     editAsignacionTodos
+                       ? 'bg-primary border-primary scale-110'
+                       : 'border-slate-300 dark:border-slate-600 hover:border-primary/50 scale-100'
+                   }`}>
+                     {editAsignacionTodos && <Check size={14} className="text-white" />}
+                   </div>
+                   <span className="text-base font-medium text-slate-700 dark:text-slate-200 tracking-wide">
+                     ASIGNAR A TODAS LAS SEDES Y DISPOSITIVOS
+                   </span>
+                   <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                     editAsignacionTodos
+                       ? 'bg-amber-500/10 text-amber-500' 
+                       : 'bg-slate-500/10 text-slate-500'
+                   }`}>
+                     {editAsignacionTodos ? 'ACTIVO' : 'INACTIVO'}
+                   </span>
+                 </div>
                 
                 {!editAsignacionTodos && (
                   <ServerDeviceSelector
                     servidores={servidores}
                     selectedServidorIds={editServidorIds}
                     selectedDispositivoIds={editDispositivoIds}
-                    onServidorChange={(id, checked) => {
-                      if (checked) {
-                        setEditServidorIds([...editServidorIds, id]);
-                      } else {
-                        setEditServidorIds(editServidorIds.filter(srvId => srvId !== id));
-                      }
-                    }}
+                     onServidorChange={(id, checked) => {
+                       if (checked) {
+                         // Add server
+                         setEditServidorIds([...editServidorIds, id]);
+                         
+                         // Find devices of this server and add them
+                         const servidor = servidores.find(s => s.id === id);
+                         const newDispIds = servidor?.dispositivos?.map(d => String(d.id)) || [];
+                         setEditDispositivoIds(prev => [...prev, ...newDispIds.filter(dId => !prev.includes(dId))]);
+                       } else {
+                         // Remove server
+                         setEditServidorIds(editServidorIds.filter(srvId => srvId !== id));
+                         
+                         // Remove devices of this server
+                         const servidor = servidores.find(s => s.id === id);
+                         const dispIdsToRemove = servidor?.dispositivos?.map(d => String(d.id)) || [];
+                         setEditDispositivoIds(prev => prev.filter(dId => !dispIdsToRemove.includes(dId)));
+                       }
+                     }}
                     onDispositivoChange={(id, checked) => {
                       if (checked) {
                         setEditDispositivoIds([...editDispositivoIds, id]);
@@ -1308,7 +1635,7 @@ export const DashboardScreen: React.FC = () => {
                           : [...prev, id]
                       );
                     }}
-                    maxHeight="max-h-40"
+                    maxHeight="max-h-[30vh]"
                   />
                 )}
               </div>
@@ -1325,29 +1652,29 @@ export const DashboardScreen: React.FC = () => {
                   setEditDispositivoIds([]);
                   setEditExpandedServers([]);
                 }}
-                disabled={isSavingEdit}
-                className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  const fechaInicio = editFormData.fechaInicio;
-                  const fechaFin = editFormData.fechaFin;
-                  if (fechaInicio && fechaFin && new Date(fechaInicio) > new Date(fechaFin)) {
-                    showNotification('La fecha de inicio no puede ser mayor a la fecha fin', 'warning');
-                    return;
-                  }
-                  setIsSavingEdit(true);
-                  try {
-                    // Actualizar metadata
-                    await updateBannerMetadata(editingVideo.id, {
-                      activo: editFormData.activo,
-                      titulo: editFormData.titulo || '',
-                      fechaInicio: editFormData.fechaInicio || null,
-                      fechaFin: editFormData.fechaFin || null,
-                    });
+                 disabled={isSavingEdit}
+                 className="px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform duration-150"
+               >
+                 CANCEL
+               </button>
+               <button
+                 type="button"
+                 onClick={async () => {
+                   const fechaInicio = editFormData.fechaInicio;
+                   const fechaFin = editFormData.fechaFin;
+                   if (fechaInicio && fechaFin && new Date(fechaInicio) > new Date(fechaFin)) {
+                     showNotification('La fecha de inicio no puede ser mayor a la fecha fin', 'warning');
+                     return;
+                   }
+                   setIsSavingEdit(true);
+                   try {
+                     // Actualizar metadata
+                     await updateBannerMetadata(editingVideo.id, {
+                       activo: editFormData.activo,
+                       titulo: editFormData.titulo || '',
+                       fechaInicio: editFormData.fechaInicio || null,
+                       fechaFin: editFormData.fechaFin || null,
+                     });
                     
                     // Actualizar asignaciones
                     await updateBannerAsignations(
@@ -1380,9 +1707,9 @@ export const DashboardScreen: React.FC = () => {
                   }
                 }}
                 disabled={isSavingEdit}
-                className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-semibold disabled:opacity-60"
-              >
-                {isSavingEdit ? 'Guardando...' : 'Guardar'}
+                 className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-white text-base font-semibold disabled:opacity-60 active:scale-95 transition-all duration-150"
+               >
+                 {isSavingEdit ? 'SAVING...' : 'SAVE CHANGES'}
               </button>
             </div>
           </div>

@@ -796,91 +796,59 @@ luzapp: WebSocket connect → GET /api/comandos/pendientes → procesar
 ## FASE 16: Mejoras de UI en DashboardScreen (Vistas y Acciones) ✅ COMPLETADO
 
 ### Objetivo
-Agregar vista de tabla extraída de VideoListScreen, botón de cambio de vista (tarjetas ↔ tabla), y acción de descarga en tarjetas de "Contenido Subido Recientemente".
+Implementar vista dual (tarjetas/tabla) en DashboardScreen con diseño original de tarjetas restaurado + nuevos botones de acción (descargar, previsualizar, borrar).
 
 ### 16.1: Agregar Estado para Vista y Acciones
 - **Archivo**: `dashboard/screens/DashboardScreen.tsx`
-- **Estados a agregar** (alrededor de línea 93+):
+- **Estados agregados** (línea 97+):
   ```tsx
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
-  const [selected, setSelected] = useState<string[]>([]);
+  const [tableVideosPerPage, setTableVideosPerPage] = useState(20);
   ```
-- **Imports a agregar**: `List`, `Grid`, `Download` de `lucide-react`
+- **Imports agregados**: `List`, `Grid`, `Download`, `MoreVertical`, `Clock`, `Server`, `Smartphone` de `lucide-react`
 
 ### 16.2: Agregar Botón de Cambio de Vista
-- **Ubicación**: Después del título "Contenido Subido Recientemente" (~línea 675-677)
-- **Implementación**:
-  ```tsx
-  <div className="flex items-center gap-2">
-    <button onClick={() => setViewMode('cards')} className={`p-2 rounded-lg ${viewMode === 'cards' ? 'bg-slate-200 dark:bg-slate-700' : ''}`}>
-      <Grid size={18} />
-    </button>
-    <button onClick={() => setViewMode('table')} className={`p-2 rounded-lg ${viewMode === 'table' ? 'bg-slate-200 dark:bg-slate-700' : ''}`}>
-      <List size={18} />
-    </button>
-  </div>
-  ```
+- **Ubicación**: Después del título "Contenido Subido Recientemente" (línea 694-711)
+- **Funcionalidad**: Cambia entre vista de tarjetas y tabla, resetea página a 1 al cambiar
 
-### 16.3: Extraer Tabla de VideoListScreen
-- **Fuente**: `VideoListScreen.tsx` (~líneas 331-472)
-- **Estructura a copiar**:
-  - Tabla con grid-cols-12 (headers: Checkbox, Archivo, Fecha, Inicio, Fin, Tamaño, Estatus, Acciones)
-  - Filas mapeadas con `paginatedVideos`
-  - Acciones: Editar (Edit2), Descargar (Download), Activar/Desactivar (Power), Borrar (Trash2)
-  - Paginación inferior
+### 16.3: Vista de Tarjetas (Diseño Original Restaurado)
+- **Diseño visual restaurado**:
+  - Miniatura ancho completo (`aspect-video`) con overlay
+  - Badge de duración para videos (`video.duration`)
+  - Botón `MoreVertical` (3 puntos) para abrir modal de edición
+  - Badges: Estado, PROGRAMADO (con tooltip), Todos/dispositivos count
+  - Texto de asignación con lista de dispositivos (max 3 + "+N más")
+  - Fecha subida: "Fecha subida: {formatCaracasTime(video.date)}"
+- **Nuevos botones integrados**:
+  - Reproducir (Eye icon + texto)
+  - Descargar (Download icon + texto) ← NUEVO
+  - Borrar (Trash icon + texto)
+- **Paginación**: 12 tarjetas por página (`videosPerPage`)
 
-### 16.4: Renderizado Condicional
-- **Ubicación**: Área de contenido (~línea 678+)
-- **Implementación**:
-  ```tsx
-  {viewMode === 'cards' ? (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-      {/* Tarjetas existentes */}
-    </div>
-  ) : (
-    <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-      {/* Tabla extraída de VideoListScreen */}
-    </div>
-  )}
-  ```
+### 16.4: Vista de Tabla (Extraída de VideoListScreen)
+- **Estructura**: `grid-cols-12` con headers: Archivo, Subida, Inicio, Fin, Tamaño, Estado, Acciones
+- **Acciones en tabla**: Reproducir (Eye), Descargar (Download), Borrar (Trash)
+- **Paginación**: 20 filas por página (`tableVideosPerPage = 20`)
 
-### 16.5: Agregar Descarga en Tarjetas
-- **Ubicación**: Botones de tarjeta (~línea 820-835)
-- **Función a implementar**:
-  ```tsx
-  const downloadVideoFile = (video: Video) => {
-    if (!video.url) return;
-    const link = document.createElement('a');
-    link.href = video.url;
-    link.download = video.filename || video.url.split('/').pop() || 'download';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-  ```
-- **Agregar botón en tarjeta**:
-  ```tsx
-  <button 
-    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-xs font-medium"
-    onClick={() => downloadVideoFile(video)}
-  >
-    <Download size={14} />
-    Descargar
-  </button>
-  ```
+### 16.5: Función de Descarga
+- **Implementada**: `downloadVideoFile(video)` usa `fetch()` + `blob()` para descargar archivos
+- **Disponible en**: Ambas vistas (tarjetas y tabla)
 
-### 16.6: Mantener Descarga/Borrado en Ambas Vistas
-- ✅ **Tarjetas**: Agregar descarga (borrado ya existe)
-- ✅ **Tabla**: Copiar botones de VideoListScreen (líneas 398-431)
+### 16.6: Paginación Dual
+- **Cards**: `videosPerPage = 12`
+- **Tabla**: `tableVideosPerPage = 20`
+- **Reset automático**: `setCurrentPage(1)` al cambiar vista
 
 ### Notas Importantes
-- ❌ **Omitir acciones incompletas**: Editar y Activar/Desactivar ya están contemplados en el botón "MoreVertical" (3 puntos) que abre el modal de edición
-- ✅ **Descargar y Eliminar**: Deben estar presentes en ambas vistas (tarjetas y tabla)
-- ✅ **Modal de edición**: Ya implementado en DashboardScreen (`isEditModalOpen`, `editingVideo`)
+- ✅ **Diseño original restaurado**: Tarjetas con miniatura grande, badges completos, botón MoreVertical
+- ✅ **Nuevos botones**: Descargar integrado en ambas vistas
+- ✅ **Modal de edición**: Accesible vía MoreVertical (3 puntos) en tarjeta
+- ✅ **TypeScript**: Sin errores de compilación
+- ✅ **Build**: Exitoso (582.20 kB)
 
-### Archivos a Modificar
-1. `dashboard/screens/DashboardScreen.tsx` - Agregar estado, botón de vista, descarga, y vista de tabla
-2. `PLAN_MEJORAS.md` - Documentar fase (este archivo)
+### Archivos Modificados
+1. `dashboard/screens/DashboardScreen.tsx` - Vista dual implementada, diseño restaurado, botones integrados
+2. `PLAN_MEJORAS.md` - Documentación actualizada (esta sección)
 
 ---
 

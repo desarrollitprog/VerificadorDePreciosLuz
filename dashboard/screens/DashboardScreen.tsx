@@ -711,7 +711,7 @@ export const DashboardScreen: React.FC = () => {
             </div>
          </div>
           {viewMode === 'cards' ? (
-            /* VISTA DE TARJETAS */
+            /* VISTA DE TARJETAS - Diseño original restaurado + nuevos botones */
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {(() => {
                 const filteredVideos = videos.filter(v => {
@@ -726,44 +726,158 @@ export const DashboardScreen: React.FC = () => {
                 const paginatedVideos = filteredVideos.slice(startIndex, startIndex + videosPerPage);
 
                 return paginatedVideos.length > 0 ? paginatedVideos.map((video) => (
-                  <div key={video.id} className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 bg-white dark:bg-slate-800 hover:shadow-md transition-shadow">
-                    <div className="flex items-start gap-3 mb-3">
-                      <div className="shrink-0">
-                        {video.tipo === 'image' ? (
-                          <img src={video.thumbnail || video.url} alt={video.titulo} className="w-16 h-16 object-cover rounded-lg" />
+                  <div key={video.id} className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-800 hover:shadow-md transition-shadow flex flex-col">
+                    {/* Thumbnail */}
+                    <div className="relative aspect-video bg-slate-100 dark:bg-slate-700">
+                      {video.tipo === 'image' ? (
+                        <img src={video.thumbnail || video.url} alt={video.titulo || video.filename} className="w-full h-full object-cover" />
+                      ) : (
+                        <video src={video.url} className="w-full h-full object-cover" poster={video.thumbnail} />
+                      )}
+                      <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors"></div>
+                      {video.duration && video.tipo === 'video' && (
+                        <div className="absolute bottom-2 right-2 bg-black/70 text-white text-[10px] font-bold px-1.5 py-0.5 rounded backdrop-blur-sm">
+                          {video.duration} seg
+                        </div>
+                      )}
+                    </div>
+                    {/* Info */}
+                    <div className="p-4 flex-1 flex flex-col">
+                      <div className="flex justify-between items-start gap-2 mb-2">
+                        <h4 className="text-slate-900 dark:text-white font-semibold text-sm leading-tight line-clamp-2" title={video.titulo || video.filename}>
+                          {video.titulo || video.filename}
+                        </h4>
+                        <button
+                          onClick={() => {
+                            setEditingVideo(video);
+                            setEditFormData({
+                              titulo: video.titulo || video.filename || '',
+                              activo: video.activo ?? true,
+                              fechaInicio: video.fechaInicio || '',
+                              fechaFin: video.fechaFin || '',
+                            });
+                            const asignacionTodos = video.asignacion_todos ?? true;
+                            setEditAsignacionTodos(asignacionTodos);
+                            if (!asignacionTodos && video.asignaciones) {
+                              const srvIds = [...new Set(video.asignaciones.map((a: any) => a.servidor_id).filter(Boolean))];
+                              const dispIds = video.asignaciones.map((a: any) => a.dispositivo_id).filter(Boolean);
+                              setEditServidorIds(srvIds);
+                              setEditDispositivoIds(dispIds);
+                            } else {
+                              setEditServidorIds([]);
+                              setEditDispositivoIds([]);
+                            }
+                            setIsEditModalOpen(true);
+                            setTimeout(() => {
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }, 50);
+                          }}
+                          className="text-slate-400 hover:text-primary dark:hover:text-primary transition-colors shrink-0"
+                          title="Editar"
+                        >
+                          <MoreVertical size={16} />
+                        </button>
+                      </div>
+                      {/* Badges de asignación */}
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold border ${
+                          video.estado === 'activo' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                          video.estado === 'inactivo' ? 'bg-slate-500/10 text-slate-500 border-slate-500/20' :
+                          video.estado === 'vencido' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
+                          'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                        }`}>
+                          {(video.estado || 'activo').toUpperCase()}
+                        </span>
+                        {/* Badge de programado */}
+                        {(video.fechaInicio || video.fechaFin) && (
+                          <span className="relative group/badges">
+                            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold bg-purple-500/10 text-purple-500 border border-purple-500/20">
+                              <Clock size={10} />
+                              PROGRAMADO
+                            </span>
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 dark:bg-slate-800 text-white text-xs rounded-lg shadow-xl opacity-0 invisible group-hover/badges:opacity-100 group-hover/badges:visible transition-all duration-200 z-50 whitespace-nowrap">
+                              <div className="font-semibold mb-1">Programación</div>
+                              {video.fechaInicio && (
+                                <div className="text-slate-300">Inicio: <span className="text-white">{video.fechaInicio}</span></div>
+                              )}
+                              {video.fechaFin && (
+                                <div className="text-slate-300">Fin: <span className="text-white">{video.fechaFin}</span></div>
+                              )}
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900 dark:border-t-slate-800"></div>
+                            </div>
+                          </span>
+                        )}
+                        {video.asignacion_todos ? (
+                          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                            <Server size={10} />
+                            Todos
+                          </span>
                         ) : (
-                          <video src={video.url} className="w-16 h-16 object-cover rounded-lg" poster={video.thumbnail} />
+                          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold bg-blue-500/10 text-blue-500 border border-blue-500/20">
+                            <Smartphone size={10} />
+                            {video.dispositivos_count || 0} devs
+                          </span>
                         )}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-slate-900 dark:text-white truncate">{video.titulo || video.filename}</h3>
-                        <p className="text-xs text-slate-500">{video.size}</p>
+                      {/* Texto de asignación */}
+                      <div className="mb-2">
+                        <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
+                          Asignado a: {video.asignacion_todos ? 'Todos los dispositivos' : `${video.dispositivos_count || 0} dispositivos`}
+                        </p>
+                        {video.asignacion_todos ? (
+                          <p className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1">
+                            <Server size={10} />
+                            Todos los servidores y dispositivos del sistema
+                          </p>
+                        ) : (
+                          <div className="space-y-0.5">
+                            {video.asignaciones && video.asignaciones.slice(0, 3).map((asig: any, idx: number) => (
+                              <div key={idx} className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                                <Smartphone size={10} />
+                                <span className="truncate">
+                                  {asig.dispositivo_nombre || asig.dispositivo_codigo || 'Dispositivo'} - {asig.servidor_nombre || 'Servidor'}
+                                </span>
+                              </div>
+                            ))}
+                            {video.asignaciones && video.asignaciones.length > 3 && (
+                              <p className="text-xs text-slate-400">+{video.asignaciones.length - 3} más</p>
+                            )}
+                            {(!video.asignaciones || video.asignaciones.length === 0) && (
+                              <p className="text-xs text-slate-400 italic">Sin asignaciones específicas</p>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold border ${
-                        video.estado === 'activo' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
-                        video.estado === 'inactivo' ? 'bg-slate-500/10 text-slate-500 border-slate-500/20' :
-                        video.estado === 'vencido' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
-                        'bg-amber-500/10 text-amber-500 border-amber-500/20'
-                      }`}>
-                        {(video.estado || 'activo').toUpperCase()}
-                      </span>
-                      <div className="flex gap-1">
-                        <button onClick={() => handlePreview(video)} className="p-1.5 rounded text-slate-400 hover:text-primary transition-colors" title="Reproducir">
-                          <Eye size={16} />
+                      <div className="flex items-center justify-between mt-auto pt-2">
+                        <span className="text-slate-500 text-xs">
+                          Fecha subida: {video.date ? formatCaracasTime(video.date) : 'Fecha desconocida'}
+                        </span>
+                      </div>
+                      {/* Action Buttons - Original + Nuevos */}
+                      <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100 dark:border-slate-700/50">
+                        <button className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-xs font-medium" onClick={() => handlePreview(video)}>
+                          <Eye size={14} />
+                          Reproducir
                         </button>
-                        <button onClick={() => downloadVideoFile(video)} className="p-1.5 rounded text-slate-600 dark:text-slate-300 hover:text-blue-500 transition-colors" title="Descargar">
-                          <Download size={16} />
+                        <button className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-blue-500 hover:bg-blue-500/10 transition-colors text-xs font-medium" onClick={() => downloadVideoFile(video)}>
+                          <Download size={14} />
+                          Descargar
                         </button>
-                        <button onClick={() => handleDeleteClick(video.id, video.titulo || video.filename)} className="p-1.5 rounded text-red-500 hover:text-red-600 transition-colors" title="Borrar" disabled={deletingVideoId === video.id}>
-                          {deletingVideoId === video.id ? '...' : <Trash size={16} />}
+                        <button className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors text-xs font-medium disabled:opacity-50" onClick={() => handleDeleteClick(video.id, video.titulo || video.filename)} disabled={deletingVideoId === video.id}>
+                          {deletingVideoId === video.id ? (
+                            <>Borrando...</>
+                          ) : (
+                            <>
+                              <Trash size={14} />
+                              Borrar
+                            </>
+                          )}
                         </button>
                       </div>
                     </div>
                   </div>
                 )) : (
-                  <div className="col-span-full px-3 py-8 text-center text-slate-500">No se encontraron videos.</div>
+                  <div className="col-span-full text-center text-slate-500 py-8">No se encontraron videos.</div>
                 );
               })()}
             </div>

@@ -796,58 +796,60 @@ luzapp: WebSocket connect → GET /api/comandos/pendientes → procesar
 ## FASE 16: Mejoras de UI en DashboardScreen (Vistas y Acciones) ✅ COMPLETADO
 
 ### Objetivo
-Implementar vista dual (tarjetas/tabla) en DashboardScreen con diseño original de tarjetas restaurado + nuevos botones de acción (descargar, previsualizar, borrar).
+Implementar vista dual (tarjetas/tabla) en DashboardScreen con diseño original de tarjetas restaurado + nuevos botones de acción (descargar, previsualizar, borrar) + selector de archivos y acciones masivas.
 
-### 16.1: Agregar Estado para Vista y Acciones
+### 16.1: Agregar Estados para Vista y Acciones
 - **Archivo**: `dashboard/screens/DashboardScreen.tsx`
 - **Estados agregados** (línea 97+):
   ```tsx
-  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
-  const [tableVideosPerPage, setTableVideosPerPage] = useState(20);
+  const [selectedVideoIds, setSelectedVideoIds] = useState<string[]>([]);
+  const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   ```
-- **Imports agregados**: `List`, `Grid`, `Download`, `MoreVertical`, `Clock`, `Server`, `Smartphone` de `lucide-react`
+- **Valores computados**:
+  ```tsx
+  const filteredVideos = videos.filter(...); // Filtrado por búsqueda
+  const paginatedCardVideos = filteredVideos.slice(...); // 12 por página
+  const paginatedTableVideos = filteredVideos.slice(...); // 20 por página
+  ```
 
-### 16.2: Agregar Botón de Cambio de Vista
-- **Ubicación**: Después del título "Contenido Subido Recientemente" (línea 694-711)
-- **Funcionalidad**: Cambia entre vista de tarjetas y tabla, resetea página a 1 al cambiar
+### 16.2: Vista de Tarjetas (Mejoras Adicionales)
+- **Tipo de archivo**: Badge visual (IMG/VID) agregado junto a badges de estado
+- **Botón "Ver más"**: Reemplaza "+N más" en asignaciones. Despliega todos los dispositivos asignados
+- **Acciones**: Reproducir, Descargar, Borrar (todos con icono + texto)
 
-### 16.3: Vista de Tarjetas (Diseño Original Restaurado)
-- **Diseño visual restaurado**:
-  - Miniatura ancho completo (`aspect-video`) con overlay
-  - Badge de duración para videos (`video.duration`)
-  - Botón `MoreVertical` (3 puntos) para abrir modal de edición
-  - Badges: Estado, PROGRAMADO (con tooltip), Todos/dispositivos count
-  - Texto de asignación con lista de dispositivos (max 3 + "+N más")
-  - Fecha subida: "Fecha subida: {formatCaracasTime(video.date)}"
-- **Nuevos botones integrados**:
-  - Reproducir (Eye icon + texto)
-  - Descargar (Download icon + texto) ← NUEVO
-  - Borrar (Trash icon + texto)
-- **Paginación**: 12 tarjetas por página (`videosPerPage`)
+### 16.3: Vista de Tabla (Nuevas Columnas y Acciones Masivas)
+- **Nuevas columnas**:
+  - **Tipo** (IMG/VID): Badge de tipo de archivo
+  - **Asignaciones**: Muestra "Todos" o cantidad de dispositivos
+- **Checkboxes**:
+  - En header: "Seleccionar todos" para la página actual
+  - En cada fila: Checkbox individual
+- **Acciones masivas** (aparecen al seleccionar):
+  - "Descargar seleccionados": Descarga todos los archivos seleccionados
+  - "Eliminar seleccionados": Elimina todos los archivos seleccionados (con confirmación)
+  - "Limpiar selección": Deselecciona todos
+- **Tamaño de letra**: Aumentado a `text-sm` en toda la tabla
 
-### 16.4: Vista de Tabla (Extraída de VideoListScreen)
-- **Estructura**: `grid-cols-12` con headers: Archivo, Subida, Inicio, Fin, Tamaño, Estado, Acciones
-- **Acciones en tabla**: Reproducir (Eye), Descargar (Download), Borrar (Trash)
-- **Paginación**: 20 filas por página (`tableVideosPerPage = 20`)
+### 16.4: Acciones en Ambas Vistas
+- **Tarjetas**: Reproducir, Descargar, Borrar + Ver más asignaciones
+- **Tabla**: Reproducir, Descargar, Borrar + Selección múltiple
 
-### 16.5: Función de Descarga
-- **Implementada**: `downloadVideoFile(video)` usa `fetch()` + `blob()` para descargar archivos
-- **Disponible en**: Ambas vistas (tarjetas y tabla)
-
-### 16.6: Paginación Dual
-- **Cards**: `videosPerPage = 12`
-- **Tabla**: `tableVideosPerPage = 20`
+### 16.5: Paginación Dual
+- **Cards**: `videosPerPage = 12` (calculado en `paginatedCardVideos`)
+- **Tabla**: `tableVideosPerPage = 20` (calculado en `paginatedTableVideos`)
 - **Reset automático**: `setCurrentPage(1)` al cambiar vista
 
 ### Notas Importantes
-- ✅ **Diseño original restaurado**: Tarjetas con miniatura grande, badges completos, botón MoreVertical
-- ✅ **Nuevos botones**: Descargar integrado en ambas vistas
-- ✅ **Modal de edición**: Accesible vía MoreVertical (3 puntos) en tarjeta
+- ✅ **Tipo de archivo visible**: Badge IMG/VID en ambas vistas
+- ✅ **Selector múltiple**: Checkboxes en tabla para acciones masivas
+- ✅ **Botón "Ver más"**: Expande lista completa de dispositivos en tarjetas
+- ✅ **Acciones masivas**: Descargar y eliminar múltiples archivos
+- ✅ **Texto ampliado**: `text-sm` en tabla para mejor legibilidad
 - ✅ **TypeScript**: Sin errores de compilación
-- ✅ **Build**: Exitoso (582.20 kB)
+- ✅ **Build**: Exitoso (584.51 kB)
 
 ### Archivos Modificados
-1. `dashboard/screens/DashboardScreen.tsx` - Vista dual implementada, diseño restaurado, botones integrados
+1. `dashboard/screens/DashboardScreen.tsx` - Vistas duales, tipo de archivo, selector múltiple, acciones masivas
 2. `PLAN_MEJORAS.md` - Documentación actualizada (esta sección)
 
 ---

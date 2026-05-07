@@ -95,6 +95,27 @@ export const DashboardScreen: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const videosPerPage = 12;
   const tableVideosPerPage = 20;
+  const [selectedVideoIds, setSelectedVideoIds] = useState<string[]>([]);
+  const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+  
+  // Computed values for views
+  const filteredVideos = videos.filter(v => {
+    const searchLower = search.toLowerCase();
+    return (
+      v.titulo?.toLowerCase().includes(searchLower) ||
+      v.filename?.toLowerCase().includes(searchLower) ||
+      v.id?.toString().includes(searchLower)
+    );
+  });
+  const paginatedCardVideos = filteredVideos.slice(
+    (currentPage - 1) * videosPerPage, 
+    (currentPage - 1) * videosPerPage + videosPerPage
+  );
+  const paginatedTableVideos = filteredVideos.slice(
+    (currentPage - 1) * tableVideosPerPage, 
+    (currentPage - 1) * tableVideosPerPage + tableVideosPerPage
+  );
+  
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -713,19 +734,7 @@ export const DashboardScreen: React.FC = () => {
           {viewMode === 'cards' ? (
             /* VISTA DE TARJETAS - Diseño original restaurado + nuevos botones */
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {(() => {
-                const filteredVideos = videos.filter(v => {
-                  const searchLower = search.toLowerCase();
-                  return (
-                    v.titulo?.toLowerCase().includes(searchLower) ||
-                    v.filename?.toLowerCase().includes(searchLower) ||
-                    v.id?.toString().includes(searchLower)
-                  );
-                });
-                const startIndex = (currentPage - 1) * videosPerPage;
-                const paginatedVideos = filteredVideos.slice(startIndex, startIndex + videosPerPage);
-
-                return paginatedVideos.length > 0 ? paginatedVideos.map((video) => (
+              {paginatedCardVideos.length > 0 ? paginatedCardVideos.map((video) => (
                   <div key={video.id} className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-800 hover:shadow-md transition-shadow flex flex-col">
                     {/* Thumbnail */}
                     <div className="relative aspect-video bg-slate-100 dark:bg-slate-700">
@@ -779,15 +788,22 @@ export const DashboardScreen: React.FC = () => {
                         </button>
                       </div>
                       {/* Badges de asignación */}
-                      <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold border ${
-                          video.estado === 'activo' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
-                          video.estado === 'inactivo' ? 'bg-slate-500/10 text-slate-500 border-slate-500/20' :
-                          video.estado === 'vencido' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
-                          'bg-amber-500/10 text-amber-500 border-amber-500/20'
-                        }`}>
-                          {(video.estado || 'activo').toUpperCase()}
-                        </span>
+                       <div className="flex items-center gap-2 mb-2 flex-wrap">
+                         <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold border ${
+                           video.estado === 'activo' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                           video.estado === 'inactivo' ? 'bg-slate-500/10 text-slate-500 border-slate-500/20' :
+                           video.estado === 'vencido' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
+                           'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                         }`}>
+                           {(video.estado || 'activo').toUpperCase()}
+                         </span>
+                         {/* Badge de tipo de archivo */}
+                         <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold border ${
+                           video.tipo === 'image' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
+                           'bg-purple-500/10 text-purple-500 border-purple-500/20'
+                         }`}>
+                           {video.tipo === 'image' ? 'IMAGEN' : 'VIDEO'}
+                         </span>
                         {/* Badge de programado */}
                         {(video.fechaInicio || video.fechaFin) && (
                           <span className="relative group/badges">
@@ -831,20 +847,33 @@ export const DashboardScreen: React.FC = () => {
                           </p>
                         ) : (
                           <div className="space-y-0.5">
-                            {video.asignaciones && video.asignaciones.slice(0, 3).map((asig: any, idx: number) => (
-                              <div key={idx} className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1">
-                                <Smartphone size={10} />
-                                <span className="truncate">
-                                  {asig.dispositivo_nombre || asig.dispositivo_codigo || 'Dispositivo'} - {asig.servidor_nombre || 'Servidor'}
-                                </span>
-                              </div>
-                            ))}
-                            {video.asignaciones && video.asignaciones.length > 3 && (
-                              <p className="text-xs text-slate-400">+{video.asignaciones.length - 3} más</p>
-                            )}
-                            {(!video.asignaciones || video.asignaciones.length === 0) && (
-                              <p className="text-xs text-slate-400 italic">Sin asignaciones específicas</p>
-                            )}
+                        {video.asignaciones && video.asignaciones.slice(0, 3).map((asig: any, idx: number) => (
+                               <div key={idx} className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                                 <Smartphone size={10} />
+                                 <span className="truncate">
+                                   {asig.dispositivo_nombre || asig.dispositivo_codigo || 'Dispositivo'} - {asig.servidor_nombre || 'Servidor'}
+                                 </span>
+                               </div>
+                             ))}
+                             {video.asignaciones && video.asignaciones.length > 3 && (
+                               <button 
+                                 onClick={() => setExpandedCardId(expandedCardId === video.id ? null : video.id)}
+                                 className="text-xs text-primary hover:underline font-medium"
+                               >
+                                 {expandedCardId === video.id ? 'Ver menos' : `Ver más (${video.asignaciones.length - 3})`}
+                               </button>
+                             )}
+                             {expandedCardId === video.id && video.asignaciones && video.asignaciones.slice(3).map((asig: any, idx: number) => (
+                               <div key={idx} className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                                 <Smartphone size={10} />
+                                 <span className="truncate">
+                                   {asig.dispositivo_nombre || asig.dispositivo_codigo || 'Dispositivo'} - {asig.servidor_nombre || 'Servidor'}
+                                 </span>
+                               </div>
+                             ))}
+                             {(!video.asignaciones || video.asignaciones.length === 0) && (
+                               <p className="text-xs text-slate-400 italic">Sin asignaciones específicas</p>
+                             )}
                           </div>
                         )}
                       </div>
@@ -875,38 +904,99 @@ export const DashboardScreen: React.FC = () => {
                         </button>
                       </div>
                     </div>
-                  </div>
+                   </div>
                 )) : (
                   <div className="col-span-full text-center text-slate-500 py-8">No se encontraron videos.</div>
-                );
-              })()}
+                )}
             </div>
-          ) : (
-            /* VISTA DE TABLA */
-            <div>
-              <div className="grid grid-cols-12 gap-2 border-b border-slate-200 dark:border-slate-700 px-3 py-2 bg-slate-50 dark:bg-slate-800/50 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase">
-                <div className="col-span-4 sm:col-span-3 lg:col-span-2">Archivo</div>
-                <div className="col-span-2 hidden sm:flex">Subida</div>
-                <div className="col-span-2 hidden lg:flex">Inicio</div>
-                <div className="col-span-2 hidden lg:flex">Fin</div>
-                <div className="col-span-1">Tamaño</div>
-                <div className="col-span-3 sm:col-span-2 lg:col-span-1">Estado</div>
-                <div className="col-span-3 sm:col-span-3 lg:col-span-1 text-right">Acciones</div>
-              </div>
-              {(() => {
-                const filteredVideos = videos.filter(v => {
-                  const searchLower = search.toLowerCase();
-                  return (
-                    v.titulo?.toLowerCase().includes(searchLower) ||
-                    v.filename?.toLowerCase().includes(searchLower) ||
-                    v.id?.toString().includes(searchLower)
-                  );
-                });
-                const startIndex = (currentPage - 1) * tableVideosPerPage;
-                const paginatedVideos = filteredVideos.slice(startIndex, startIndex + tableVideosPerPage);
-
-                return paginatedVideos.length > 0 ? paginatedVideos.map((video) => (
-                  <div key={video.id} className="grid grid-cols-12 gap-2 border-b border-slate-100 dark:border-slate-700/30 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors items-center">
+           ) : (
+             /* VISTA DE TABLA */
+             <div>
+               {/* Botones de acción masiva */}
+               {selectedVideoIds.length > 0 && (
+                 <div className="flex items-center gap-4 mb-4 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                   <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                     {selectedVideoIds.length} seleccionado{selectedVideoIds.length > 1 ? 's' : ''}
+                   </span>
+                   <button 
+                     onClick={() => {
+                       const videosToDownload = videos.filter(v => selectedVideoIds.includes(v.id));
+                       videosToDownload.forEach(v => downloadVideoFile(v));
+                     }}
+                     className="text-sm text-blue-500 hover:text-blue-600 font-medium"
+                   >
+                     Descargar seleccionados
+                   </button>
+                   <button 
+                     onClick={async () => {
+                       if (!confirm(`¿Eliminar ${selectedVideoIds.length} archivo${selectedVideoIds.length > 1 ? 's' : ''}?`)) return;
+                       for (const id of selectedVideoIds) {
+                         await handleDeleteClick(id, videos.find(v => v.id === id)?.titulo || '');
+                       }
+                       setSelectedVideoIds([]);
+                     }}
+                     className="text-sm text-red-500 hover:text-red-600 font-medium"
+                   >
+                     Eliminar seleccionados
+                   </button>
+                   <button 
+                     onClick={() => setSelectedVideoIds([])}
+                     className="text-sm text-slate-500 hover:text-slate-600 font-medium ml-auto"
+                   >
+                     Limpiar selección
+                   </button>
+                 </div>
+               )}
+                <div className="grid grid-cols-14 gap-2 border-b border-slate-200 dark:border-slate-700 px-3 py-2 bg-slate-50 dark:bg-slate-800/50 text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase">
+                  <div className="col-span-1 flex items-center">
+                    <input 
+                      type="checkbox" 
+                      checked={selectedVideoIds.length === paginatedTableVideos.length && paginatedTableVideos.length > 0}
+                      onChange={() => {
+                        if (selectedVideoIds.length === paginatedTableVideos.length) {
+                          setSelectedVideoIds([]);
+                        } else {
+                          setSelectedVideoIds(paginatedTableVideos.map(v => v.id));
+                        }
+                      }}
+                      className="rounded border-slate-300 dark:border-slate-600"
+                    />
+                  </div>
+                 <div className="col-span-2 sm:col-span-2">Tipo</div>
+                 <div className="col-span-4 sm:col-span-3 lg:col-span-2">Archivo</div>
+                 <div className="col-span-2 hidden sm:flex">Subida</div>
+                 <div className="col-span-2 hidden lg:flex">Inicio</div>
+                 <div className="col-span-2 hidden lg:flex">Fin</div>
+                 <div className="col-span-1">Tamaño</div>
+                 <div className="col-span-3 sm:col-span-2 lg:col-span-1">Estado</div>
+                 <div className="col-span-2">Asignaciones</div>
+                 <div className="col-span-3 sm:col-span-3 lg:col-span-1 text-right">Acciones</div>
+               </div>
+               {(() => {
+                 return paginatedTableVideos.length > 0 ? paginatedTableVideos.map((video) => (
+                  <div key={video.id} className="grid grid-cols-14 gap-2 border-b border-slate-100 dark:border-slate-700/30 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors items-center">
+                    <div className="col-span-1 flex items-center">
+                      <input 
+                        type="checkbox" 
+                        checked={selectedVideoIds.includes(video.id)}
+                        onChange={() => {
+                          if (selectedVideoIds.includes(video.id)) {
+                            setSelectedVideoIds(selectedVideoIds.filter(id => id !== video.id));
+                          } else {
+                            setSelectedVideoIds([...selectedVideoIds, video.id]);
+                          }
+                        }}
+                        className="rounded border-slate-300 dark:border-slate-600"
+                      />
+                    </div>
+                    <div className="col-span-2 sm:col-span-2 flex items-center">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${
+                        video.tipo === 'image' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
+                        'bg-purple-500/10 text-purple-500 border-purple-500/20'
+                      }`}>
+                        {video.tipo === 'image' ? 'IMG' : 'VID'}
+                      </span>
+                    </div>
                     <div className="col-span-4 sm:col-span-3 lg:col-span-2 flex items-center gap-2 overflow-hidden">
                       <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded bg-slate-100 dark:bg-slate-800">
                         {video.tipo === 'image' ? (
@@ -919,20 +1009,20 @@ export const DashboardScreen: React.FC = () => {
                         {video.titulo || video.filename}
                       </span>
                     </div>
-                    <div className="col-span-2 hidden sm:flex text-xs text-slate-600 dark:text-slate-400 truncate">
+                    <div className="col-span-2 hidden sm:flex text-sm text-slate-600 dark:text-slate-400 truncate">
                       {video.date ? formatCaracasTime(video.date) : '-'}
                     </div>
-                    <div className="col-span-2 hidden lg:flex text-xs text-slate-600 dark:text-slate-400 truncate">
+                    <div className="col-span-2 hidden lg:flex text-sm text-slate-600 dark:text-slate-400 truncate">
                       {video.fechaInicio ? formatCaracasTime(video.fechaInicio) : '-'}
                     </div>
-                    <div className="col-span-2 hidden lg:flex text-xs text-slate-600 dark:text-slate-400 truncate">
+                    <div className="col-span-2 hidden lg:flex text-sm text-slate-600 dark:text-slate-400 truncate">
                       {video.fechaFin ? formatCaracasTime(video.fechaFin) : '-'}
                     </div>
-                    <div className="col-span-1 text-xs text-slate-600 dark:text-slate-400 font-mono">
+                    <div className="col-span-1 text-sm text-slate-600 dark:text-slate-400 font-mono">
                       {video.size}
                     </div>
                     <div className="col-span-3 sm:col-span-2 lg:col-span-1">
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold border ${
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${
                         video.estado === 'activo' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
                         video.estado === 'inactivo' ? 'bg-slate-500/10 text-slate-500 border-slate-500/20' :
                         video.estado === 'vencido' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
@@ -940,6 +1030,16 @@ export const DashboardScreen: React.FC = () => {
                       }`}>
                         {(video.estado || 'activo').toUpperCase()}
                       </span>
+                    </div>
+                    <div className="col-span-2 text-sm text-slate-600 dark:text-slate-400">
+                      {video.asignacion_todos ? (
+                        <span className="inline-flex items-center gap-1">
+                          <Server size={12} />
+                          Todos
+                        </span>
+                      ) : (
+                        <span>{video.dispositivos_count || 0} devs</span>
+                      )}
                     </div>
                     <div className="col-span-3 sm:col-span-3 lg:col-span-1 flex items-center justify-end gap-1">
                       <button onClick={() => handlePreview(video)} className="p-1.5 rounded text-slate-400 hover:text-primary transition-colors" title="Reproducir">
@@ -962,52 +1062,44 @@ export const DashboardScreen: React.FC = () => {
          
           {/* Pagination */}
           {(() => {
-           const filteredVideos = videos.filter(v => {
-             const searchLower = search.toLowerCase();
-             return (
-               v.titulo?.toLowerCase().includes(searchLower) ||
-               v.filename?.toLowerCase().includes(searchLower) ||
-               v.id?.toString().includes(searchLower)
-             );
-           });
-           const activePerPage = viewMode === 'cards' ? videosPerPage : tableVideosPerPage;
-           const totalPages = Math.ceil(filteredVideos.length / activePerPage);
-           if (totalPages <= 1) return null;
-           return (
-             <div className="flex items-center justify-center gap-2 mt-6">
-               <button
-                 type="button"
-                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                 disabled={currentPage === 1}
-                 className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
-               >
-                 Anterior
-               </button>
-               {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                 <button
-                   key={page}
-                   type="button"
-                   onClick={() => setCurrentPage(page)}
-                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                     currentPage === page
-                       ? 'bg-primary text-white'
-                       : 'border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                   }`}
-                 >
-                   {page}
-                 </button>
-               ))}
-               <button
-                 type="button"
-                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                 disabled={currentPage === totalPages}
-                 className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
-               >
-                 Siguiente
-               </button>
-             </div>
-           );
-         })()}
+            const activePerPage = viewMode === 'cards' ? videosPerPage : tableVideosPerPage;
+            const totalPages = Math.ceil(filteredVideos.length / activePerPage);
+            if (totalPages <= 1) return null;
+            return (
+              <div className="flex items-center justify-center gap-2 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
+                >
+                  Anterior
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                  <button
+                    key={page}
+                    type="button"
+                    onClick={() => setCurrentPage(page)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      currentPage === page
+                        ? 'bg-primary text-white'
+                        : 'border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
+                >
+                  Siguiente
+                </button>
+              </div>
+            );
+          })()}
       </div>
 
       {isUploadModalOpen && (

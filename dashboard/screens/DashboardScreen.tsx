@@ -541,7 +541,7 @@ export const DashboardScreen: React.FC = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto flex flex-col gap-8">
+    <div className="max-w-screen-xl mx-auto flex flex-col gap-8">
       {/* Title & Search */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>

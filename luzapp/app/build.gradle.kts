@@ -13,12 +13,22 @@ android {
         // Android 7.0 en adelante (API 24)
         minSdk = 24
         targetSdk = 36
-        versionCode = 5
+        versionCode = 6
         versionName = "1.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            val keystorePath = System.getenv("KEYSTORE_PATH") ?: "release-key.jks"
+            storeFile = file(keystorePath)
+            storePassword = System.getenv("KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("KEY_ALIAS") ?: "luzapp"
+            keyPassword = System.getenv("KEY_PASSWORD")
+        }
+    }
+    
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -26,6 +36,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("release")
+        }
+        debug {
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutGrid, Video, LogOut, X, Users, Server, User, Calendar, History } from 'lucide-react';
+import { LayoutGrid, LogOut, X, Users, Server, User, Calendar, History } from 'lucide-react';
 import { Screen } from '../types';
 import { getUserRole, getUserName } from '../services/tokenUtils';
 
@@ -62,22 +62,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, on
           )}
           <LayoutGrid size={20} className={currentScreen === 'dashboard' ? 'text-primary' : 'text-slate-500 group-hover:text-white'} />
           <span className="text-sm">Mis Videos</span>
-        </button>
-
-        <button 
-          onClick={() => { onNavigate('list'); onClose(); }}
-          title="Biblioteca de Videos"
-          className={`group relative flex items-center gap-3 px-3 justify-start py-3 rounded-lg transition-colors w-full text-left
-            ${currentScreen === 'list' 
-              ? 'text-primary font-semibold' 
-              : 'text-slate-400 hover:bg-slate-800 hover:text-white font-medium'
-            }`}
-        >
-          {currentScreen === 'list' && (
-            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full"></span>
-          )}
-          <Video size={20} className={currentScreen === 'list' ? 'text-primary' : 'text-slate-500 group-hover:text-white'} />
-          <span className="text-sm">Biblioteca de Videos</span>
         </button>
 
         <button 

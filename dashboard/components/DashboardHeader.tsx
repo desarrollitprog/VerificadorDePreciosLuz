@@ -11,7 +11,6 @@ export const Header: React.FC<HeaderProps> = ({ currentScreen }) => {
   const getBreadcrumb = () => {
     switch (currentScreen) {
       case 'dashboard': return 'Mis Videos';
-      case 'list': return 'Biblioteca de Videos';
       case 'servers': return 'Servidores';
       case 'users': return 'Gestión de Usuarios';
       case 'auditoria': return 'Auditoría';

@@ -947,113 +947,113 @@ export const DashboardScreen: React.FC = () => {
                    </button>
                  </div>
                )}
-                <div className="grid grid-cols-14 gap-2 border-b border-slate-200 dark:border-slate-700 px-3 py-2 bg-slate-50 dark:bg-slate-800/50 text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase">
-                  <div className="col-span-1 flex items-center">
-                    <input 
-                      type="checkbox" 
-                      checked={selectedVideoIds.length === paginatedTableVideos.length && paginatedTableVideos.length > 0}
-                      onChange={() => {
-                        if (selectedVideoIds.length === paginatedTableVideos.length) {
-                          setSelectedVideoIds([]);
-                        } else {
-                          setSelectedVideoIds(paginatedTableVideos.map(v => v.id));
-                        }
-                      }}
-                      className="rounded border-slate-300 dark:border-slate-600"
-                    />
-                  </div>
-                 <div className="col-span-2 sm:col-span-2">Tipo</div>
-                 <div className="col-span-4 sm:col-span-3 lg:col-span-2">Archivo</div>
-                 <div className="col-span-2 hidden sm:flex">Subida</div>
-                 <div className="col-span-2 hidden lg:flex">Inicio</div>
-                 <div className="col-span-2 hidden lg:flex">Fin</div>
-                 <div className="col-span-1">Tamaño</div>
-                 <div className="col-span-3 sm:col-span-2 lg:col-span-1">Estado</div>
-                 <div className="col-span-2">Asignaciones</div>
-                 <div className="col-span-3 sm:col-span-3 lg:col-span-1 text-right">Acciones</div>
-               </div>
-               {(() => {
-                 return paginatedTableVideos.length > 0 ? paginatedTableVideos.map((video) => (
-                  <div key={video.id} className="grid grid-cols-14 gap-2 border-b border-slate-100 dark:border-slate-700/30 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors items-center">
-                    <div className="col-span-1 flex items-center">
-                      <input 
-                        type="checkbox" 
-                        checked={selectedVideoIds.includes(video.id)}
-                        onChange={() => {
-                          if (selectedVideoIds.includes(video.id)) {
-                            setSelectedVideoIds(selectedVideoIds.filter(id => id !== video.id));
-                          } else {
-                            setSelectedVideoIds([...selectedVideoIds, video.id]);
-                          }
-                        }}
-                        className="rounded border-slate-300 dark:border-slate-600"
-                      />
-                    </div>
-                    <div className="col-span-2 sm:col-span-2 flex items-center">
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${
-                        video.tipo === 'image' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
-                        'bg-purple-500/10 text-purple-500 border-purple-500/20'
-                      }`}>
-                        {video.tipo === 'image' ? 'IMG' : 'VID'}
-                      </span>
-                    </div>
-                    <div className="col-span-4 sm:col-span-3 lg:col-span-2 flex items-center gap-2 overflow-hidden">
-                      <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded bg-slate-100 dark:bg-slate-800">
-                        {video.tipo === 'image' ? (
-                          <img src={video.thumbnail || video.url} alt={video.titulo} className="w-6 h-6 object-cover rounded" />
-                        ) : (
-                          <Film size={16} className="text-slate-400" />
-                        )}
-                      </div>
-                      <span className="text-sm font-medium text-slate-900 dark:text-white truncate" title={video.titulo || video.filename}>
-                        {video.titulo || video.filename}
-                      </span>
-                    </div>
-                    <div className="col-span-2 hidden sm:flex text-sm text-slate-600 dark:text-slate-400 truncate">
-                      {video.date ? formatCaracasTime(video.date) : '-'}
-                    </div>
-                    <div className="col-span-2 hidden lg:flex text-sm text-slate-600 dark:text-slate-400 truncate">
-                      {video.fechaInicio ? formatCaracasTime(video.fechaInicio) : '-'}
-                    </div>
-                    <div className="col-span-2 hidden lg:flex text-sm text-slate-600 dark:text-slate-400 truncate">
-                      {video.fechaFin ? formatCaracasTime(video.fechaFin) : '-'}
-                    </div>
-                    <div className="col-span-1 text-sm text-slate-600 dark:text-slate-400 font-mono">
-                      {video.size}
-                    </div>
-                    <div className="col-span-3 sm:col-span-2 lg:col-span-1">
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${
-                        video.estado === 'activo' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
-                        video.estado === 'inactivo' ? 'bg-slate-500/10 text-slate-500 border-slate-500/20' :
-                        video.estado === 'vencido' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
-                        'bg-amber-500/10 text-amber-500 border-amber-500/20'
-                      }`}>
-                        {(video.estado || 'activo').toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="col-span-2 text-sm text-slate-600 dark:text-slate-400">
-                      {video.asignacion_todos ? (
-                        <span className="inline-flex items-center gap-1">
-                          <Server size={12} />
-                          Todos
-                        </span>
-                      ) : (
-                        <span>{video.dispositivos_count || 0} devs</span>
-                      )}
-                    </div>
-                    <div className="col-span-3 sm:col-span-3 lg:col-span-1 flex items-center justify-end gap-1">
-                      <button onClick={() => handlePreview(video)} className="p-1.5 rounded text-slate-400 hover:text-primary transition-colors" title="Reproducir">
-                        <Eye size={16} />
-                      </button>
-                      <button onClick={() => downloadVideoFile(video)} className="p-1.5 rounded text-slate-600 dark:text-slate-300 hover:text-blue-500 transition-colors" title="Descargar">
-                        <Download size={16} />
-                      </button>
-                      <button onClick={() => handleDeleteClick(video.id, video.titulo || video.filename)} className="p-1.5 rounded text-red-500 hover:text-red-600 transition-colors" title="Borrar" disabled={deletingVideoId === video.id}>
-                        {deletingVideoId === video.id ? '...' : <Trash size={16} />}
-                      </button>
-                    </div>
-                  </div>
-                )) : (
+                <div className="grid grid-cols-12 gap-2 border-b border-slate-200 dark:border-slate-700 px-3 py-2 bg-slate-50 dark:bg-slate-800/50 text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase">
+                   <div className="col-span-1 flex items-center">
+                     <input 
+                       type="checkbox" 
+                       checked={selectedVideoIds.length === paginatedTableVideos.length && paginatedTableVideos.length > 0}
+                       onChange={() => {
+                         if (selectedVideoIds.length === paginatedTableVideos.length) {
+                           setSelectedVideoIds([]);
+                         } else {
+                           setSelectedVideoIds(paginatedTableVideos.map(v => v.id));
+                         }
+                       }}
+                       className="rounded border-slate-300 dark:border-slate-600"
+                     />
+                   </div>
+                  <div className="col-span-1">Tipo</div>
+                  <div className="col-span-3 sm:col-span-3 lg:col-span-2">Archivo</div>
+                  <div className="col-span-2 hidden sm:flex">Subida</div>
+                  <div className="col-span-2 hidden lg:flex">Inicio</div>
+                  <div className="col-span-2 hidden lg:flex">Fin</div>
+                  <div className="col-span-1">Tamaño</div>
+                  <div className="col-span-1">Estado</div>
+                  <div className="col-span-1">Asign</div>
+                  <div className="col-span-1 text-right">Acciones</div>
+                </div>
+                {(() => {
+                  return paginatedTableVideos.length > 0 ? paginatedTableVideos.map((video) => (
+                   <div key={video.id} className="grid grid-cols-12 gap-2 border-b border-slate-100 dark:border-slate-700/30 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors items-center">
+                     <div className="col-span-1 flex items-center">
+                       <input 
+                         type="checkbox" 
+                         checked={selectedVideoIds.includes(video.id)}
+                         onChange={() => {
+                           if (selectedVideoIds.includes(video.id)) {
+                             setSelectedVideoIds(selectedVideoIds.filter(id => id !== video.id));
+                           } else {
+                             setSelectedVideoIds([...selectedVideoIds, video.id]);
+                           }
+                         }}
+                         className="rounded border-slate-300 dark:border-slate-600"
+                       />
+                     </div>
+                     <div className="col-span-1 flex items-center">
+                       <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${
+                         video.tipo === 'image' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
+                         'bg-purple-500/10 text-purple-500 border-purple-500/20'
+                       }`}>
+                         {video.tipo === 'image' ? 'IMG' : 'VID'}
+                       </span>
+                     </div>
+                     <div className="col-span-3 sm:col-span-3 lg:col-span-2 flex items-center gap-2 overflow-hidden">
+                       <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded bg-slate-100 dark:bg-slate-800">
+                         {video.tipo === 'image' ? (
+                           <img src={video.thumbnail || video.url} alt={video.titulo} className="w-6 h-6 object-cover rounded" />
+                         ) : (
+                           <Film size={16} className="text-slate-400" />
+                         )}
+                       </div>
+                       <span className="text-sm font-medium text-slate-900 dark:text-white truncate" title={video.titulo || video.filename}>
+                         {video.titulo || video.filename}
+                       </span>
+                     </div>
+                     <div className="col-span-2 hidden sm:flex text-sm text-slate-600 dark:text-slate-400 truncate">
+                       {video.date ? formatCaracasTime(video.date) : '-'}
+                     </div>
+                     <div className="col-span-2 hidden lg:flex text-sm text-slate-600 dark:text-slate-400 truncate">
+                       {video.fechaInicio ? formatCaracasTime(video.fechaInicio) : '-'}
+                     </div>
+                     <div className="col-span-2 hidden lg:flex text-sm text-slate-600 dark:text-slate-400 truncate">
+                       {video.fechaFin ? formatCaracasTime(video.fechaFin) : '-'}
+                     </div>
+                     <div className="col-span-1 text-sm text-slate-600 dark:text-slate-400 font-mono">
+                       {video.size}
+                     </div>
+                     <div className="col-span-1">
+                       <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${
+                         video.estado === 'activo' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                         video.estado === 'inactivo' ? 'bg-slate-500/10 text-slate-500 border-slate-500/20' :
+                         video.estado === 'vencido' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
+                         'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                       }`}>
+                         {(video.estado || 'activo').toUpperCase()}
+                       </span>
+                     </div>
+                     <div className="col-span-1 text-sm text-slate-600 dark:text-slate-400">
+                       {video.asignacion_todos ? (
+                         <span className="inline-flex items-center gap-1">
+                           <Server size={12} />
+                           Todos
+                         </span>
+                       ) : (
+                         <span>{video.dispositivos_count || 0} devs</span>
+                       )}
+                     </div>
+                     <div className="col-span-1 flex items-center justify-end gap-1">
+                       <button onClick={() => handlePreview(video)} className="p-1.5 rounded text-slate-400 hover:text-primary transition-colors" title="Reproducir">
+                         <Eye size={16} />
+                       </button>
+                       <button onClick={() => downloadVideoFile(video)} className="p-1.5 rounded text-slate-600 dark:text-slate-300 hover:text-blue-500 transition-colors" title="Descargar">
+                         <Download size={16} />
+                       </button>
+                       <button onClick={() => handleDeleteClick(video.id, video.titulo || video.filename)} className="p-1.5 rounded text-red-500 hover:text-red-600 transition-colors" title="Borrar" disabled={deletingVideoId === video.id}>
+                         {deletingVideoId === video.id ? '...' : <Trash size={16} />}
+                       </button>
+                     </div>
+                   </div>
+                 )) : (
                   <div className="px-3 py-8 text-center text-slate-500">No se encontraron videos.</div>
                 );
               })()}

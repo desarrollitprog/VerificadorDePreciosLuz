@@ -2348,6 +2348,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         if (now - wsLastReconnectTime > 5 * 60 * 1000) {
             wsReconnectAttempts = 0
             wsReconnectDelay = 5000L
+            isReconnecting = false
         }
         wsLastReconnectTime = now
         

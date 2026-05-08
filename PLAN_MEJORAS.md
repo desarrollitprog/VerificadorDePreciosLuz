@@ -1052,14 +1052,14 @@ La implementación se divide en **4 lotes** desplegables de forma independiente.
 | L1.5 | Límite de cola: max 100 msg por dispositivo + TTL 24h por mensaje | `main.py` | Ninguna |
 | L1.6 | Endpoint `GET /api/queue/health` para monitoreo en tiempo real | `main.py` | Ninguna |
 
-### Lote 2 — Cola Persistente en Redis (2-3 días)
+### Lote 2 — Cola Persistente en Redis ✅ COMPLETADO
 
-| # | Tarea | Archivo | Dependencias |
-|---|-------|---------|:------------:|
-| L2.1 | Crear `PendingCommandQueue` service con Redis LIST + LMOVE inflight | `services/pending_queue.py` | L1.2, L1.3 |
-| L2.2 | Reemplazar `_message_queues` (asyncio.Queue) por cola Redis | `main.py` | L2.1 |
-| L2.3 | Integrar cola Redis en `send_to_device()` y `connect()` | `main.py` | L2.1 |
-| L2.4 | Consumir `device:pending:banner:*` al reconectar (actual dead-end) | `main.py:connect()` | L2.1 |
+| # | Tarea | Archivo | Estado |
+|---|-------|---------|:------:|
+| L2.1 | Crear `PendingCommandQueue` service con Redis LIST + LMOVE inflight | `services/pending_queue.py` | ✅ |
+| L2.2 | Reemplazar `_message_queues` (asyncio.Queue) por cola Redis | `main.py` | ✅ |
+| L2.3 | Integrar cola Redis en `send_to_device()` y `connect()` | `main.py` | ✅ |
+| L2.4 | Consumir `device:pending:banner:*` al reconectar (actual dead-end) | `main.py` | ✅ |
 
 ### Lote 3 — Flags de Pendientes + Dead-Letter Queue (1-2 días)
 

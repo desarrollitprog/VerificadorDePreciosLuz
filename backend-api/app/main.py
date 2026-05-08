@@ -67,6 +67,7 @@ device_state_store: DeviceStateStore | None = None
 device_command_bus: DeviceCommandBus | None = None
 device_bus_listener_task: asyncio.Task | None = None
 command_acker: Any = None
+pending_queue: Any = None
 
 # Endpoint para consultar el estado de los dispositivos
 @app.get("/devices/status")
@@ -415,7 +416,7 @@ async def schedule_banner_notification(
 
 @app.on_event("startup")
 async def start_device_monitor():
-    global device_state_store, device_command_bus, device_bus_listener_task, banner_check_task
+    global device_state_store, device_command_bus, device_bus_listener_task, banner_check_task, pending_queue
     try:
         device_state_store = await DeviceStateStore.create()
         logger.info("DeviceStateStore inicializado con Redis")
@@ -459,6 +460,17 @@ async def start_device_monitor():
         logger.info("SchedulerNotifications inicializado con Redis (TTL=2h)")
     except Exception as e:
         logger.warning(f"SchedulerNotifications no disponible: {e}")
+
+    # Inicializar PendingCommandQueue (cola persistente en Redis)
+    try:
+        from app.services.pending_queue import PendingCommandQueue
+        global pending_queue
+        pending_queue = await PendingCommandQueue.create()
+        # Asignar al manager para que lo use en send_to_device
+        tablet_ws_manager.pending_queue = pending_queue
+        logger.info("PendingCommandQueue inicializado con Redis")
+    except Exception as e:
+        logger.error("No se pudo inicializar PendingCommandQueue: %s", e)
 
 
 @app.on_event("shutdown")
@@ -512,6 +524,11 @@ async def shutdown_device_state_store():
     if device_state_store is not None:
         await device_state_store.close()
         device_state_store = None
+
+    global pending_queue
+    if pending_queue is not None:
+        await pending_queue.close()
+        pending_queue = None
     
     logger.info("[Shutdown] Cierre completo")
 
@@ -1439,9 +1456,12 @@ class TabletWebSocketManager:
         self.ping_tasks: dict[int, asyncio.Task] = {}  # id(websocket) -> Task
         self.pending_pong: dict[int, asyncio.Event] = {}  # id(websocket) -> Event (set by main loop when pong arrives)
         self._lock = asyncio.Lock()  # Protege acceso concurrente a estructuras compartidas
-        self._message_queues: dict[str, asyncio.Queue] = {}  # device_id -> Cola de mensajes pendientes
-        self._cleanup_task: asyncio.Task | None = None  # Tarea de cleanup periódico
-        self._started = False  # Indica si el manager ya inició
+        # L2: Cola persistente en Redis (se asigna en startup)
+        self.pending_queue = None
+        # L2: Mantener _message_queues como fallback local (se escribe y lee igual, pero prioriza Redis)
+        self._message_queues: dict[str, asyncio.Queue] = {}
+        self._cleanup_task: asyncio.Task | None = None
+        self._started = False
 
     async def start_ping_loop(self, websocket: WebSocket):
         ws_id = id(websocket)
@@ -1562,9 +1582,8 @@ class TabletWebSocketManager:
                 except Exception as e:
                     logger.error(f"[Heartbeat] Error actualizando estado para {device_id}: {e}")
             
-            # Flush de cola de mensajes pendientes
-            if device_id in self._message_queues:
-                asyncio.create_task(self.flush_message_queue(device_id, websocket))
+            # Flush de cola de mensajes pendientes (L2: Redis + local)
+            asyncio.create_task(self._flush_all_queues(device_id, websocket))
                 
         except asyncio.TimeoutError:
             logger.warning("[WebSocket] Timeout esperando IDENTIFY (10s)")
@@ -1591,13 +1610,16 @@ class TabletWebSocketManager:
                 self.active_connections.remove(websocket)
                 logger.info(f"[WebSocket] Conexión cerrada. Total conexiones restantes: {len(self.active_connections)}")
 
-            # Eliminar cola de mensajes si existe
+            # Eliminar cola de mensajes y recuperar inflight
             device_id = None
             for k, v in list(self.device_map.items()):
                 if v is websocket:
                     device_id = k
                     del self.device_map[k]
                     self._message_queues.pop(k, None)
+                    # L2: Recuperar mensajes inflight de Redis
+                    if self.pending_queue is not None:
+                        asyncio.create_task(self.pending_queue.recover_inflight(k))
                     break
 
             # Marcar offline en Redis
@@ -1638,6 +1660,12 @@ class TabletWebSocketManager:
         return False
 
     async def _enqueue_message(self, device_id: str, message: dict):
+        # L2: Priorizar cola persistente en Redis
+        if self.pending_queue is not None:
+            await self.pending_queue.enqueue(device_id, message)
+            return
+        
+        # Fallback: cola local en memoria
         import time
         MAX_QUEUE_PER_DEVICE = 100
         if device_id not in self._message_queues:
@@ -1649,6 +1677,29 @@ class TabletWebSocketManager:
         else:
             logger.warning(f"[WS] Cola llena para {device_id} ({MAX_QUEUE_PER_DEVICE} msgs), descartando mensaje")
 
+    async def _flush_all_queues(self, device_id: str, websocket: WebSocket):
+        """L2: Flush de cola Redis + cola local + pending banners."""
+        # 1. Cola persistente Redis
+        if self.pending_queue is not None:
+            await self.pending_queue.flush_all_to_device(
+                device_id,
+                lambda msg: websocket.send_json(msg)
+            )
+        
+        # 2. Cola local en memoria (fallback)
+        if device_id in self._message_queues:
+            await self.flush_message_queue(device_id, websocket)
+        
+        # 3. Consumir pending banners legacy
+        if self.pending_queue is not None:
+            try:
+                banner = await self.pending_queue.consume_pending_banner(device_id)
+                if banner:
+                    await websocket.send_json(banner)
+                    logger.info(f"[QUEUE] Banner pendiente entregado a {device_id}: {banner.get('command')}")
+            except Exception as e:
+                logger.error(f"[QUEUE] Error consumiendo pending banner para {device_id}: {e}")
+    
     async def send_to_websocket(self, websocket: WebSocket, message: dict) -> bool:
         try:
             await websocket.send_json(message)
@@ -1663,8 +1714,17 @@ class TabletWebSocketManager:
         return None
 
     async def flush_message_queue(self, device_id: str, websocket: WebSocket) -> int:
-        """Entrega mensajes pendientes de la cola al dispositivo. Retorna cantidad entregada.
-        L1.3: No popea la cola hasta confirmar envío. Re-encola si falla."""
+        """Entrega mensajes pendientes al dispositivo. Retorna cantidad entregada.
+        L2: Usa cola Redis si está disponible, fallback a cola local."""
+        # Priorizar cola Redis
+        if self.pending_queue is not None:
+            delivered = await self.pending_queue.flush_all_to_device(
+                device_id,
+                lambda msg: websocket.send_json(msg)
+            )
+            return delivered
+        
+        # Fallback: cola local en memoria
         if device_id not in self._message_queues:
             return 0
         
@@ -1682,15 +1742,12 @@ class TabletWebSocketManager:
                 failed_messages.append(msg)
                 break
         
-        # Re-encolar los que fallaron
         for msg in failed_messages:
             try:
                 queue.put_nowait(msg)
             except asyncio.QueueFull:
-                logger.warning(f"[WS] Cola llena al re-encolar mensaje fallido para {device_id}")
                 break
         
-        # Si la cola quedó vacía, removerla
         if queue.empty():
             self._message_queues.pop(device_id, None)
         
@@ -1729,6 +1786,8 @@ class TabletWebSocketManager:
                     device_id = k
                     del self.device_map[k]
                     self._message_queues.pop(k, None)
+                    if self.pending_queue is not None:
+                        asyncio.create_task(self.pending_queue.recover_inflight(k))
                     break
             
             if device_id:
@@ -1752,6 +1811,9 @@ class TabletWebSocketManager:
                 await asyncio.sleep(60)
                 await self.cleanup_dead_connections()
                 await self._cleanup_old_queues()
+                # L2: Cleanup de mensajes antiguos en Redis
+                if self.pending_queue is not None:
+                    asyncio.create_task(self.pending_queue.cleanup_old_messages())
             except asyncio.CancelledError:
                 logger.info("[WS] Tarea de cleanup cancelada")
                 break
@@ -2296,17 +2358,31 @@ async def retry_sync_with_device(device_id: str):
 
 @app.get("/api/queue/health")
 async def queue_health():
-    """L1.6: Endpoint de monitoreo de colas de mensajes."""
+    """L1.6/L2: Endpoint de monitoreo de colas de mensajes."""
     stats = {
         "total_connections": len(tablet_ws_manager.active_connections),
-        "total_queues": len(tablet_ws_manager._message_queues),
+        "total_local_queues": len(tablet_ws_manager._message_queues),
+        "redis_available": tablet_ws_manager.pending_queue is not None,
         "queues": {},
     }
-    for device_id, queue in tablet_ws_manager._message_queues.items():
-        stats["queues"][device_id] = {
-            "pending": queue.qsize(),
-            "online": device_id in tablet_ws_manager.device_map,
-        }
+    # Intentar obtener stats de Redis
+    if tablet_ws_manager.pending_queue is not None:
+        try:
+            redis_stats = await tablet_ws_manager.pending_queue.get_all_stats()
+            for device_id, qstats in redis_stats.items():
+                stats["queues"][device_id] = {
+                    **qstats,
+                    "online": device_id in tablet_ws_manager.device_map,
+                }
+        except Exception:
+            pass
+    # Fallback: stats de colas locales
+    if not stats["queues"]:
+        for device_id, queue in tablet_ws_manager._message_queues.items():
+            stats["queues"][device_id] = {
+                "pending": queue.qsize(),
+                "online": device_id in tablet_ws_manager.device_map,
+            }
     return stats
 
 

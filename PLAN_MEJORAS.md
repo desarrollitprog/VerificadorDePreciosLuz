@@ -156,8 +156,9 @@ Mejorar seguridad, performance, observabilidad y code quality del sistema de ges
 | FASE 8 (Background Monitoring Sesiones) | 4/4 ✅ | 0/4 |
 | FASE 9 (Thumbnails Videos) | 6/6 ✅ | 0/6 |
 | FASE 10 (Limpieza Columnas) | 5/5 ✅ | 0/5 |
+| FASE 15 (Blindaje WebSocket) | 0/17 | 17/17 |
 
-**Total: 16/27 completados (59%)**
+**Total: 31/44 completados (70%)**
 
 ---
 
@@ -692,165 +693,394 @@ nuevo_banner = Publicidad(..., ThumbnailUrl=thumbnail_url)
 
 ---
 
-## FASE 15: Comunicación MQTT (FUTURO - BAJA PRIORIDAD)
+## FASE 15: Blindaje de Entrega de Comandos WebSocket (Cola Persistente)
 
-### Objetivo
-Implementar MQTT como vía adicional de comunicación para comandos cuando WebSocket no está disponible.
+*Prioridad: CRÍTICA | Objetivo: Garantizar que los comandos (WIPE_AND_RESYNC, REINICIAR, BANNER_INICIADO, BANNER_FINALIZADO) lleguen al dispositivo incluso en conexiones inestables.*
 
-### Problema Actual
-- Comandos que no llegan cuando el dispositivo se reconecta
-- Cola Redis que no es consumida
-- Multi-worker con limitaciones de memoria
+### Problema Raíz
 
-### Arquitectura Propuesta
+Cuando un WebSocket se cae y reconecta múltiples veces al día, existen **7 puntos de fallo** identificados:
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│ backend-api ──▶ Redis pub/sub ──▶ MQTT ──▶ dispositivo    │
-│                      │                    │              │
-│                      │              ┌────┘              │
-│                      ▼            ▼                   │
-│                 Cola Redis (fallback)  ← También usa  │
-└────────────────────────────────────────────────────────────────────────┘
-```
+| # | Problema | Impacto |
+|---|---------|---------|
+| P1 | Bus listener muere silenciosamente si `send_to_device()` raisea | Todos los comandos vía Redis pub/sub se pierden hasta reiniciar |
+| P2 | Socket zombie en `device_map` hasta 30s (pong timeout) | Comandos se envían al vacío sin encolar |
+| P3 | Race condition en `flush_message_queue`: cola se popea antes de enviar | Si el WS cae durante el flush, mensajes perdidos sin rollback |
+| P4 | `_message_queues` es `asyncio.Queue` en RAM | Se pierde al reiniciar servidor; límite 10 msg, TTL 5 min |
+| P5 | `device:pending:banner:*` se escribe pero **nunca se consume** | Dead-end: datos que nadie lee |
+| P6 | No hay `pending_sync` flag en Redis | No se puede detectar que un sync falta al reconectar |
+| P7 | REINICIAR sin reintentos (solo timeout 60s) | Si no llega, se abandona para siempre |
 
-### Componentes
+---
 
-| # | Componente | Cambio | Complejidad |
-|---|----------|-------|-----------|
-| 1 | **Docker**: Agregar MQTT broker | Baja |
-| 2 | **Backend**: Cliente MQTT | Media |
-| 3 | **Backend**: Integrar en envío | Media |
-| 4 | **luzapp**: Cliente MQTT | Alta |
+### Fase 15.1 — Fix Críticos Inmediatos (backend-api)
 
-### Paso 1: MQTT Broker (Docker)
+| # | Tarea | Estado | Ubicación |
+|---|-------|--------|-----------|
+| 15.1.1 | Envolver `_on_bus_command` y `_on_bus_confirmation` en try/except para evitar muerte del bus listener | ⏳ Pendiente | `backend-api/app/main.py:1836-1847` |
+| 15.1.2 | Agregar reconexión automática del bus listener si muere (wrap con restart loop) | ⏳ Pendiente | `backend-api/app/main.py:1890-1901` |
+| 15.1.3 | En `send_to_device()`: si falla el envío por socket zombie, encolar mensaje **después** del disconnect | ⏳ Pendiente | `backend-api/app/main.py:1620-1640` |
+| 15.1.4 | En `flush_message_queue()`: no `pop()`ear la cola hasta confirmar envío. Si falla, re-encolar | ⏳ Pendiente | `backend-api/app/main.py:1655-1674` |
 
-```yaml
-# docker-compose.yml
-mqtt:
-    image: eclipse-mosquitto:2
-    ports:
-        - "1883:1883"
-```
-
-### Paso 2: Cliente MQTT (Python)
+**Detalle técnico 15.1.1 — Protección del bus listener:**
 
 ```python
-# backend-api/app/services/mqtt_client.py
-import paho.mqtt.client as mqtt
+async def _on_bus_command(device_id, command, payload):
+    try:
+        if command == "WIPE_AND_RESYNC":
+            await tablet_ws_manager.send_to_device(device_id, {"command": "WIPE_AND_RESYNC"})
+        elif command == "REINICIAR":
+            message = {"command": "REINICIAR"}
+            if payload:
+                message.update(payload)
+            await tablet_ws_manager.send_to_device(device_id, message)
+        elif command in ("BANNER_INICIADO", "BANNER_FINALIZADO"):
+            await tablet_ws_manager.send_to_device(device_id, payload)
+    except Exception as e:
+        logger.error(f"[BUS] Error procesando comando para {device_id}: {e}")
+```
 
-class MqttClient:
-    def __init__(self):
-        self.client = mqtt.Client()
+**Detalle técnico 15.1.2 — Auto-restart del listener:**
+
+```python
+async def _start_device_bus_listener_with_retry():
+    while True:
+        try:
+            await _start_device_bus_listener()
+        except Exception as e:
+            logger.error(f"[BUS] Listener murió, reiniciando en 5s: {e}")
+            await asyncio.sleep(5)
+```
+
+**Detalle técnico 15.1.3 — Encolar después de zombie:**
+
+```python
+async def send_to_device(self, device_id, message):
+    ws = self.device_map.get(device_id)
+    if ws:
+        try:
+            await ws.send_json(message)
+            return True
+        except Exception as e:
+            await self.disconnect(ws)
+            # NO raise — encolar después del disconnect
+    # Encolar siempre si no hay socket vivo
+    await self._enqueue_message(device_id, message)
+    return False
+```
+
+**Detalle técnico 15.1.4 — Flush atómico:**
+
+```python
+async def flush_message_queue(self, device_id, websocket):
+    if device_id not in self._message_queues:
+        return 0
+    queue = self._message_queues[device_id]
+    delivered = 0
+    failed_messages = []
+    while not queue.empty():
+        try:
+            msg = queue.get_nowait()
+            await websocket.send_json(msg)
+            delivered += 1
+        except Exception as e:
+            failed_messages.append(msg)
+            break
+    # Re-encolar los que fallaron
+    for msg in failed_messages:
+        await queue.put(msg)
+    if not queue.empty():
+        self._message_queues[device_id] = queue
+    else:
+        self._message_queues.pop(device_id, None)
+    return delivered
+```
+
+---
+
+### Fase 15.2 — Cola Persistente en Redis (backend-api)
+
+| # | Tarea | Estado | Ubicación |
+|---|-------|--------|-----------|
+| 15.2.1 | Crear `PendingCommandQueue` service con Redis LIST | ⏳ Pendiente | `backend-api/app/services/pending_queue.py` |
+| 15.2.2 | Reemplazar `_message_queues` (asyncio.Queue) por cola Redis | ⏳ Pendiente | `backend-api/app/main.py` |
+| 15.2.3 | Implementar patrón LMOVE (queue → inflight) con cleanup periódico | ⏳ Pendiente | `backend-api/app/main.py` |
+| 15.2.4 | Integrar cola Redis en `send_to_device()` y `connect()` | ⏳ Pendiente | `backend-api/app/main.py` |
+| 15.2.5 | Consumir `device:pending:banner:*` al reconectar (actual dead-end) | ⏳ Pendiente | `backend-api/app/main.py` |
+
+**Estructura en Redis:**
+
+```
+device:queue:{device_id}                   → LIST - comandos pendientes de enviar
+device:queue:{device_id}:inflight          → LIST - enviados pero no confirmados
+device:pending:sync:{device_id}            → STRING "true"/"false"
+device:pending:reboot:{device_id}          → STRING - JSON último REINICIAR
+```
+
+**Diagrama de flujo:**
+
+```
+Comando llega
+    │
+    ▼
+┌──────────────────────────────┐
+│ 1. RPUSH device:queue:{id}   │ ◄── Redis (persistente, sobrevive crashes)
+└──────────────┬───────────────┘
+               │
+               ▼
+┌──────────────────────────────────────┐
+│ 2. LPUSH → LMOVE a inflight         │ ◄── Transacción atómica
+│    → send_json() vía WebSocket      │
+└──────────────┬───────────────────────┘
+               │
+        ┌──────┴──────┐
+        ▼              ▼
+   ¿CONFIRMATION?   ¿Fallo/Timeout?
+        │              │
+        ▼              ▼
+┌──────────────┐ ┌──────────────────────┐
+│ LREM inflight│ │ LMOVE inflight→queue │ ◄── Rollback automático
+│ ✓ Comando OK │ │ + cleanup periódico  │
+└──────────────┘ └──────────────────────┘
+```
+
+**Detalle técnico 15.2.1 — PendingCommandQueue:**
+
+```python
+# backend-api/app/services/pending_queue.py
+class PendingCommandQueue:
+    def __init__(self, redis: Redis):
+        self.redis = redis
     
-    def publish(self, topic, payload):
-        self.client.publish(topic, json.dumps(payload))
+    async def enqueue(self, device_id: str, message: dict) -> None:
+        key = f"device:queue:{device_id}"
+        await self.redis.rpush(key, json.dumps(message))
+    
+    async def dequeue(self, device_id: str) -> dict | None:
+        key = f"device:queue:{device_id}"
+        inflight_key = f"{key}:inflight"
+        # LMOVE atómico: saca de queue y pasa a inflight
+        data = await self.redis.lmove(key, inflight_key, "LEFT", "RIGHT")
+        if data:
+            return json.loads(data)
+        return None
+    
+    async def confirm(self, device_id: str, message_id: str) -> None:
+        # Eliminar de inflight (confirmado por el dispositivo)
+        inflight_key = f"device:queue:{device_id}:inflight"
+        await self.redis.lrem(inflight_key, 1, message_id)
+    
+    async def recover_inflight(self, device_id: str) -> int:
+        """Mueve todos los inflight de vuelta a queue (en disconnect)."""
+        key = f"device:queue:{device_id}"
+        inflight_key = f"{key}:inflight"
+        count = 0
+        while await self.redis.llen(inflight_key) > 0:
+            data = await self.redis.lmove(inflight_key, key, "LEFT", "RIGHT")
+            if data:
+                count += 1
+        return count
+    
+    async def get_all_pending(self, device_id: str) -> list[dict]:
+        key = f"device:queue:{device_id}"
+        inflight_key = f"{key}:inflight"
+        items = await self.redis.lrange(key, 0, -1)
+        inflight = await self.redis.lrange(inflight_key, 0, -1)
+        return [json.loads(i) for i in items] + [json.loads(i) for i in inflight]
 ```
 
-### Paso 3: Integración Backend
+**Detalle técnico 15.2.5 — Consumir pending banners al reconectar:**
 
 ```python
-# Fallback strategy:
-# 1. Redis pub/sub
-# 2. WebSocket  
-# 3. MQTT
-# 4. Cola Redis
+# En connect(), después del IDENTIFY exitoso:
+# 1. Flush message_queues (actual)
+# 2. NUEVO: procesar cola Redis
+async def process_pending_queue(self, device_id, websocket):
+    queue = PendingCommandQueue(redis)
+    while True:
+        msg = await queue.dequeue(device_id)
+        if not msg:
+            break
+        try:
+            await websocket.send_json(msg)
+            await queue.confirm(device_id, json.dumps(msg))
+        except Exception:
+            # Re-encolar si falla
+            await queue.enqueue(device_id, msg)
+            break
+
+# 3. NUEVO: consumir device:pending:banner:{device_id}
+async def consume_pending_banners(self, device_id, websocket):
+    key = f"device:pending:banner:{device_id}"
+    data = await redis.get(key)
+    if data:
+        banner_info = json.loads(data)
+        await websocket.send_json(banner_info)
+        await redis.delete(key)
+
+# 4. NUEVO: check pending_sync
+async def check_pending_sync(self, device_id):
+    key = f"device:pending:sync:{device_id}"
+    pending = await redis.get(key)
+    if pending == "true":
+        await device_command_bus.publish_command(
+            device_id=device_id,
+            command="WIPE_AND_RESYNC",
+            payload={}
+        )
+        await redis.delete(key)
 ```
-
-### Paso 4: Cliente MQTT (luzapp)
-
-```kotlin
-// dependencies
-implementation('org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5')
-
-// Connect en ScanActivity
-mqttClient.connect("tcp://server:1883")
-```
-
-### Alternativa: Opción D (Más Simple)
-
-Si MQTT es muy complejo, implementar solo consulta de cola al reconectar:
-
-```
-luzapp: WebSocket connect → GET /api/comandos/pendientes → procesar
-```
-
-### Comparación
-
-| Aspecto | MQTT | Opción D |
-|--------|------|---------|
-| Complejidad | Alta | Baja |
-| Infra extra | MQTT broker | Ninguna |
-| Tiempo | 5-7 horas | 2-3 horas |
-| Efectividad | Alta | Media |
-| Prioridad | Baja | Media |
-
-**Nota**: La Opción D (cola + consulta) se propone como alternativa más simple que resuelve ~80% del problema con 30% del esfuerzo.
 
 ---
 
-*Prioridad: BAJA | Objetivo: Comunicación robusta cuando WebSocket no está disponible.*
+### Fase 15.3 — Flag de Pendientes y Reinteligencia en IDENTIFY (backend-api)
+
+| # | Tarea | Estado | Ubicación |
+|---|-------|--------|-----------|
+| 15.3.1 | Crear flag `device:pending:sync:{device_id}` en Redis al fallar envío de WIPE_AND_RESYNC | ⏳ Pendiente | `backend-api/app/main.py` |
+| 15.3.2 | En `connect()`: al recibir IDENTIFY, verificar flags y disparar comandos pendientes | ⏳ Pendiente | `backend-api/app/main.py:1564-1566` |
+| 15.3.3 | Setear flag `pending:reboot:{device_id}` al enviar REINICIAR sin confirmación | ⏳ Pendiente | `backend-api/app/main.py:1254-1316` |
+| 15.3.4 | Cleanup periódico de flags huérfanos (más de 1 hora) | ⏳ Pendiente | `backend-api/app/main.py` |
+
+**Flujo completo en IDENTIFY:**
+
+```
+luzapp conecta → envía IDENTIFY
+                    │
+                    ▼
+          ┌─────────────────┐
+          │ 1. Flush queue  │ ◄── message_queues (actual)
+          └────────┬────────┘
+                   ▼
+          ┌──────────────────────┐
+          │ 2. Consume pending   │ ◄── device:pending:banner:* (NUEVO)
+          │    banners           │
+          └────────┬────────────┘
+                   ▼
+          ┌──────────────────────┐
+          │ 3. Check pending     │ ◄── device:pending:sync:{id} (NUEVO)
+          │    sync flag         │ → Si true, auto-trigger WIPE_AND_RESYNC
+          └────────┬────────────┘
+                   ▼
+          ┌──────────────────────┐
+          │ 4. Check pending     │ ◄── device:pending:reboot:{id} (NUEVO)
+          │    reboot flag       │ → Si existe, re-enviar REINICIAR
+          └────────┬────────────┘
+                   ▼
+          ┌──────────────────────┐
+          │ 5. Process Redis     │ ◄── device:queue:{id} (NUEVO)
+          │    persistent queue  │ → Enviar todos los pendientes
+          └──────────────────────┘
+```
 
 ---
 
-## FASE 16: Mejoras de UI en DashboardScreen (Vistas y Acciones) ✅ COMPLETADO
+### Fase 15.4 — REINICIAR Robusto con Reintentos (backend-api)
 
-### Objetivo
-Implementar vista dual (tarjetas/tabla) en DashboardScreen con diseño original de tarjetas restaurado + nuevos botones de acción (descargar, previsualizar, borrar) + selector de archivos y acciones masivas.
+| # | Tarea | Estado | Ubicación |
+|---|-------|--------|-----------|
+| 15.4.1 | Agregar reintentos automáticos para REINICIAR (máx 5, backoff 30s) | ⏳ Pendiente | `backend-api/app/main.py` |
+| 15.4.2 | Guardar `device:pending:reboot:{device_id}` en Redis si falla el envío | ⏳ Pendiente | `backend-api/app/main.py:1254-1316` |
+| 15.4.3 | Re-enviar REINICIAR automáticamente en IDENTIFY si flag existe | ⏳ Pendiente | `backend-api/app/main.py:connect()` |
+| 15.4.4 | Limpiar flag cuando el dispositivo confirma COMPLETED | ⏳ Pendiente | `backend-api/app/main.py:process_sync_confirmation` |
 
-### 16.1: Agregar Estados para Vista y Acciones
-- **Archivo**: `dashboard/screens/DashboardScreen.tsx`
-- **Estados agregados** (línea 97+):
-  ```tsx
-  const [selectedVideoIds, setSelectedVideoIds] = useState<string[]>([]);
-  const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
-  ```
-- **Valores computados**:
-  ```tsx
-  const filteredVideos = videos.filter(...); // Filtrado por búsqueda
-  const paginatedCardVideos = filteredVideos.slice(...); // 12 por página
-  const paginatedTableVideos = filteredVideos.slice(...); // 20 por página
-  ```
+**Detalle técnico 15.4.1 — Reintentos para REINICIAR:**
 
-### 16.2: Vista de Tarjetas (Mejoras Adicionales)
-- **Tipo de archivo**: Badge visual (IMG/VID) agregado junto a badges de estado
-- **Botón "Ver más"**: Reemplaza "+N más" en asignaciones. Despliega todos los dispositivos asignados
-- **Acciones**: Reproducir, Descargar, Borrar (todos con icono + texto)
+```python
+REBOOT_RETRY_LIMIT = 5
+REBOOT_RETRY_DELAY = 30  # segundos
+reboot_retry_counters: dict[str, int] = {}
 
-### 16.3: Vista de Tabla (Nuevas Columnas y Acciones Masivas)
-- **Nuevas columnas**:
-  - **Tipo** (IMG/VID): Badge de tipo de archivo
-  - **Asignaciones**: Muestra "Todos" o cantidad de dispositivos
-- **Checkboxes**:
-  - En header: "Seleccionar todos" para la página actual
-  - En cada fila: Checkbox individual
-- **Acciones masivas** (aparecen al seleccionar):
-  - "Descargar seleccionados": Descarga todos los archivos seleccionados
-  - "Eliminar seleccionados": Elimina todos los archivos seleccionados (con confirmación)
-  - "Limpiar selección": Deselecciona todos
-- **Tamaño de letra**: Aumentado a `text-sm` en toda la tabla
+async def retry_reboot_with_device(device_id: str):
+    count = reboot_retry_counters.get(device_id, 0)
+    if count < REBOOT_RETRY_LIMIT:
+        reboot_retry_counters[device_id] = count + 1
+        await asyncio.sleep(REBOOT_RETRY_DELAY)
+        # Re-enviar REINICIAR
+        await device_command_bus.publish_command(
+            device_id=device_id,
+            command="REINICIAR",
+            payload={}
+        )
+    else:
+        reboot_retry_counters.pop(device_id, None)
+        logger.error(f"Dispositivo {device_id} falló reinicio tras {REBOOT_RETRY_LIMIT} reintentos.")
+```
 
-### 16.4: Acciones en Ambas Vistas
-- **Tarjetas**: Reproducir, Descargar, Borrar + Ver más asignaciones
-- **Tabla**: Reproducir, Descargar, Borrar + Selección múltiple
+---
 
-### 16.5: Paginación Dual
-- **Cards**: `videosPerPage = 12` (calculado en `paginatedCardVideos`)
-- **Tabla**: `tableVideosPerPage = 20` (calculado en `paginatedTableVideos`)
-- **Reset automático**: `setCurrentPage(1)` al cambiar vista
+### Fase 15.5 — Versión Objetivo (Estado vs Evento) — LARGO PLAZO
 
-### Notas Importantes
-- ✅ **Tipo de archivo visible**: Badge IMG/VID en ambas vistas
-- ✅ **Selector múltiple**: Checkboxes en tabla para acciones masivas
-- ✅ **Botón "Ver más"**: Expande lista completa de dispositivos en tarjetas
-- ✅ **Acciones masivas**: Descargar y eliminar múltiples archivos
-- ✅ **Texto ampliado**: `text-sm` en tabla para mejor legibilidad
-- ✅ **TypeScript**: Sin errores de compilación
-- ✅ **Build**: Exitoso (584.51 kB)
+| # | Tarea | Estado | Ubicación |
+|---|-------|--------|-----------|
+| 15.5.1 | Guardar `device:target_version:{device_id}` en Redis con versión actual de banners | ⏳ Pendiente | `backend-api + backend-dashboard` |
+| 15.5.2 | Enviar `target_version` en respuesta al IDENTIFY (IDENTIFY_ACK) | ⏳ Pendiente | `backend-api/app/main.py:connect()` |
+| 15.5.3 | En luzapp: almacenar `local_version` y comparar contra `target_version` al reconectar | ⏳ Pendiente | `luzapp/ScanActivity.kt` |
+| 15.5.4 | Si versiones difieren, luzapp solicita sync automáticamente | ⏳ Pendiente | `luzapp/ScanActivity.kt` |
 
-### Archivos Modificados
-1. `dashboard/screens/DashboardScreen.tsx` - Vistas duales, tipo de archivo, selector múltiple, acciones masivas
-2. `PLAN_MEJORAS.md` - Documentación actualizada (esta sección)
+**Concepto:**
+
+```
+En lugar de:  {"command": "WIPE_AND_RESYNC"}  ← evento
+Usar:         {"target_version": 15}           ← estado
+
+Flujo:
+1. Servidor guarda: device:target_version:{id} = 15
+2. IDENTIFY → servidor responde: {"type": "IDENTIFY_ACK", "target_version": 15}
+3. luzapp compara: local_version(14) != target_version(15) → auto-sync
+4. No importa si el comando se pierde — en la próxima reconexión se auto-corrige
+```
+
+---
+
+**Nota sobre MQTT**: Se evaluó MQTT (Mosquitto) como alternativa y se descartó para esta fase por su complejidad operativa (nuevo broker, puertos, librería Android). Se reconsiderará en una actualización futura si la cola persistente Redis no es suficiente.
+
+---
+
+## Orden de Implementación (FASE 15)
+
+La implementación se divide en **4 lotes** desplegables de forma independiente. Cada lote incluye pruebas unitarias + verificación manual antes de pasar al siguiente.
+
+### Lote 1 — Fix Críticos + Salvaguardas inmediatas (2-3 días)
+
+| # | Tarea | Archivo | Dependencias |
+|---|-------|---------|:------------:|
+| L1.1 | Proteger bus listener: try/except en `_on_bus_command` + reconexión automática | `main.py:1836-1847, 1890-1901` | Ninguna |
+| L1.2 | Zombie socket → encola: quitar `raise`, always enqueue after disconnect | `main.py:1620-1640` | Ninguna |
+| L1.3 | Flush atómico: no popear hasta confirmar send, re-encolar si falla | `main.py:1655-1674` | Ninguna |
+| L1.4 | Command ID + dedup en luzapp: UUID por comando, HashSet últimos 20 IDs | `main.py` + `ScanActivity.kt` | L1.1 |
+| L1.5 | Límite de cola: max 100 msg por dispositivo + TTL 24h por mensaje | `main.py` | Ninguna |
+| L1.6 | Endpoint `GET /api/queue/health` para monitoreo en tiempo real | `main.py` | Ninguna |
+
+### Lote 2 — Cola Persistente en Redis (2-3 días)
+
+| # | Tarea | Archivo | Dependencias |
+|---|-------|---------|:------------:|
+| L2.1 | Crear `PendingCommandQueue` service con Redis LIST + LMOVE inflight | `services/pending_queue.py` | L1.2, L1.3 |
+| L2.2 | Reemplazar `_message_queues` (asyncio.Queue) por cola Redis | `main.py` | L2.1 |
+| L2.3 | Integrar cola Redis en `send_to_device()` y `connect()` | `main.py` | L2.1 |
+| L2.4 | Consumir `device:pending:banner:*` al reconectar (actual dead-end) | `main.py:connect()` | L2.1 |
+
+### Lote 3 — Flags de Pendientes + Dead-Letter Queue (1-2 días)
+
+| # | Tarea | Archivo | Dependencias |
+|---|-------|---------|:------------:|
+| L3.1 | Flag `device:pending:sync:{id}` en Redis, setear al fallar WIPE_AND_RESYNC | `main.py` | L2.2 |
+| L3.2 | Flag `device:pending:reboot:{id}` para REINICIAR no confirmado | `main.py` | L2.2 |
+| L3.3 | En `connect()`: verificar flags al recibir IDENTIFY y disparar comandos | `main.py:connect()` | L3.1, L3.2 |
+| L3.4 | Dead-letter queue: máximo 5 reintentos por mensaje, luego a DLQ | `services/pending_queue.py` | L2.1 |
+
+### Lote 4 — REINICIAR Robusto + Reconciliación (1-2 días)
+
+| # | Tarea | Archivo | Dependencias |
+|---|-------|---------|:------------:|
+| L4.1 | Reintentos automáticos REINICIAR (máx 5, backoff 30s) | `main.py` | L3.2 |
+| L4.2 | Job de reconciliación periódico (30 min): verificar colas vs online, recuperar inflight | `main.py` o scheduler | L2.1, L2.2 |
+| L4.3 | Cleanup de flags huérfanos y DLQ antigua (> 24h) | `main.py` | L3.4 |
+
+### Fase 15.5 — Versión Objetivo (PENDIENTE, no incluida en lotes actuales)
+
+Se deja para después por requerir cambios en backend-dashboard + luzapp. No es crítica para la entrega de comandos.
 
 ---
 
@@ -860,6 +1090,6 @@ Implementar vista dual (tarjetas/tabla) en DashboardScreen con diseño original 
 |-------|-------|------------|-----------|
 | Originales | 1-10 | 25/28 (89%) | 5/28 |
 | Nuevas | 11-14 | 0/11 (0%) | 11/11 |
-| Nueva | 15 | 0/1 (0%) | 1/1 |
+| **Nueva** | **15** (Blindaje WebSocket) | **0/17 (0%)** | **17/17** |
 | **Nueva** | **16** | **6/6 (100%)** | **0/6** |
-| **TOTAL** | **1-16** | **31/46 (67%)** | **15/46**
+| **TOTAL** | **1-16** | **31/62 (50%)** | **31/62** |

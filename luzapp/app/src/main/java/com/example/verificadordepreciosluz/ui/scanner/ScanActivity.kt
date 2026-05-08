@@ -763,6 +763,13 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private var lastBannerCheckMs: Long = 0L
     private val notifiedBannersStart = mutableSetOf<Int>()
     private val notifiedBannersEnd = mutableSetOf<Int>()
+    // L1.4: Dedup de comandos por command_id (últimos 20 IDs)
+    private val processedCommandIds = object : LinkedHashSet<String>() {
+        override fun add(element: String): Boolean {
+            if (size >= 20) remove(first())
+            return super.add(element)
+        }
+    }
     
     private fun startBannerPolling() {
         val runnable = object : Runnable {
@@ -1900,6 +1907,13 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                             return
                         }
                         
+                        // L1.4: Dedup por command_id - ignorar comandos ya procesados
+                        val commandId = message.optString("command_id", "")
+                        if (commandId.isNotEmpty() && !processedCommandIds.add(commandId)) {
+                            Log.w(TAG, "[WebSocket] Comando duplicado ignorado: command=$command command_id=$commandId")
+                            return
+                        }
+                        
                         try {
                             sendSyncConfirmation(webSocket, command, "RECEIVED")
                             Log.i(TAG, "[WebSocket] Confirmación enviada para comando: $command")
@@ -2157,6 +2171,13 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                         
                         val command = message.optString("command")
                         if (command.isEmpty()) {
+                            return
+                        }
+                        
+                        // L1.4: Dedup por command_id - ignorar comandos ya procesados
+                        val commandId = message.optString("command_id", "")
+                        if (commandId.isNotEmpty() && !processedCommandIds.add(commandId)) {
+                            Log.w(TAG, "[WebSocket] Comando duplicado ignorado (binario): command=$command command_id=$commandId")
                             return
                         }
                         

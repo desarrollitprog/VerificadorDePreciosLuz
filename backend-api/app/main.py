@@ -466,8 +466,6 @@ async def start_device_monitor():
         from app.services.pending_queue import PendingCommandQueue
         global pending_queue
         pending_queue = await PendingCommandQueue.create()
-        # Asignar al manager para que lo use en send_to_device
-        tablet_ws_manager.pending_queue = pending_queue
         logger.info("PendingCommandQueue inicializado con Redis")
     except Exception as e:
         logger.error("No se pudo inicializar PendingCommandQueue: %s", e)
@@ -1456,10 +1454,8 @@ class TabletWebSocketManager:
         self.ping_tasks: dict[int, asyncio.Task] = {}  # id(websocket) -> Task
         self.pending_pong: dict[int, asyncio.Event] = {}  # id(websocket) -> Event (set by main loop when pong arrives)
         self._lock = asyncio.Lock()  # Protege acceso concurrente a estructuras compartidas
-        # L2: Cola persistente en Redis (se asigna en startup)
-        self.pending_queue = None
-        # L2: Mantener _message_queues como fallback local (se escribe y lee igual, pero prioriza Redis)
-        self._message_queues: dict[str, asyncio.Queue] = {}
+        # L2: Cola persistente en Redis (se usa global pending_queue)
+        self._message_queues: dict[str, asyncio.Queue] = {}  # fallback local
         self._cleanup_task: asyncio.Task | None = None
         self._started = False
 
@@ -1618,8 +1614,8 @@ class TabletWebSocketManager:
                     del self.device_map[k]
                     self._message_queues.pop(k, None)
                     # L2: Recuperar mensajes inflight de Redis
-                    if self.pending_queue is not None:
-                        asyncio.create_task(self.pending_queue.recover_inflight(k))
+                    if pending_queue is not None:
+                        asyncio.create_task(pending_queue.recover_inflight(k))
                     break
 
             # Marcar offline en Redis
@@ -1661,8 +1657,8 @@ class TabletWebSocketManager:
 
     async def _enqueue_message(self, device_id: str, message: dict):
         # L2: Priorizar cola persistente en Redis
-        if self.pending_queue is not None:
-            await self.pending_queue.enqueue(device_id, message)
+        if pending_queue is not None:
+            await pending_queue.enqueue(device_id, message)
             return
         
         # Fallback: cola local en memoria
@@ -1680,8 +1676,8 @@ class TabletWebSocketManager:
     async def _flush_all_queues(self, device_id: str, websocket: WebSocket):
         """L2: Flush de cola Redis + cola local + pending banners."""
         # 1. Cola persistente Redis
-        if self.pending_queue is not None:
-            await self.pending_queue.flush_all_to_device(
+        if pending_queue is not None:
+            await pending_queue.flush_all_to_device(
                 device_id,
                 lambda msg: websocket.send_json(msg)
             )
@@ -1691,9 +1687,9 @@ class TabletWebSocketManager:
             await self.flush_message_queue(device_id, websocket)
         
         # 3. Consumir pending banners legacy
-        if self.pending_queue is not None:
+        if pending_queue is not None:
             try:
-                banner = await self.pending_queue.consume_pending_banner(device_id)
+                banner = await pending_queue.consume_pending_banner(device_id)
                 if banner:
                     await websocket.send_json(banner)
                     logger.info(f"[QUEUE] Banner pendiente entregado a {device_id}: {banner.get('command')}")
@@ -1717,8 +1713,8 @@ class TabletWebSocketManager:
         """Entrega mensajes pendientes al dispositivo. Retorna cantidad entregada.
         L2: Usa cola Redis si está disponible, fallback a cola local."""
         # Priorizar cola Redis
-        if self.pending_queue is not None:
-            delivered = await self.pending_queue.flush_all_to_device(
+        if pending_queue is not None:
+            delivered = await pending_queue.flush_all_to_device(
                 device_id,
                 lambda msg: websocket.send_json(msg)
             )
@@ -1786,8 +1782,8 @@ class TabletWebSocketManager:
                     device_id = k
                     del self.device_map[k]
                     self._message_queues.pop(k, None)
-                    if self.pending_queue is not None:
-                        asyncio.create_task(self.pending_queue.recover_inflight(k))
+                    if pending_queue is not None:
+                        asyncio.create_task(pending_queue.recover_inflight(k))
                     break
             
             if device_id:
@@ -1812,8 +1808,8 @@ class TabletWebSocketManager:
                 await self.cleanup_dead_connections()
                 await self._cleanup_old_queues()
                 # L2: Cleanup de mensajes antiguos en Redis
-                if self.pending_queue is not None:
-                    asyncio.create_task(self.pending_queue.cleanup_old_messages())
+                if pending_queue is not None:
+                    asyncio.create_task(pending_queue.cleanup_old_messages())
             except asyncio.CancelledError:
                 logger.info("[WS] Tarea de cleanup cancelada")
                 break

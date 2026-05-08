@@ -1658,6 +1658,7 @@ class TabletWebSocketManager:
     async def _enqueue_message(self, device_id: str, message: dict):
         # L2: Priorizar cola persistente en Redis
         if pending_queue is not None:
+            logger.info(f"[WS] Encolando en Redis para {device_id}: command={message.get('command')} command_id={message.get('command_id')}")
             await pending_queue.enqueue(device_id, message)
             return
         
@@ -1921,6 +1922,7 @@ async def _apply_sync_confirmation(device_id: str, status: str, reason: str = ""
 async def _on_bus_command(device_id: str, command: str, payload: dict):
     if not device_id or not command:
         return
+    logger.info(f"[BUS] Comando recibido: '{command}' para dispositivo {device_id}")
     try:
         if command == "WIPE_AND_RESYNC":
             await tablet_ws_manager.send_to_device(device_id, {"command": "WIPE_AND_RESYNC"})

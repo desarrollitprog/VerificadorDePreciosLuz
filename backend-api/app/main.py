@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from dateutil.parser import isoparse
 import asyncio
 import logging
+logging.basicConfig(level=logging.INFO, force=True)
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect 
 from fastapi.staticfiles import StaticFiles

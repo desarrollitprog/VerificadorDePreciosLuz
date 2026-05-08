@@ -92,21 +92,32 @@ export const DashboardScreen: React.FC = () => {
   }, [preview]);
   const [videos, setVideos] = useState<Video[]>([]);
   const [search, setSearch] = useState('');
+  const [filterType, setFilterType] = useState<'all' | 'image' | 'video'>('all');
+  const [filterDateFrom, setFilterDateFrom] = useState<string>('');
+  const [filterDateTo, setFilterDateTo] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
   const videosPerPage = 12;
   const tableVideosPerPage = 20;
   const [selectedVideoIds, setSelectedVideoIds] = useState<string[]>([]);
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   
-  // Computed values for views
+  // Computed values for views - filters apply to BOTH views
   const filteredVideos = videos.filter(v => {
     const searchLower = search.toLowerCase();
-    return (
+    const matchesSearch = (
       v.titulo?.toLowerCase().includes(searchLower) ||
       v.filename?.toLowerCase().includes(searchLower) ||
       v.id?.toString().includes(searchLower)
     );
+    
+    const matchesType = filterType === 'all' || v.tipo === filterType;
+    
+    const matchesDateFrom = !filterDateFrom || (v.date && new Date(v.date) >= new Date(filterDateFrom + 'T00:00:00'));
+    const matchesDateTo = !filterDateTo || (v.date && new Date(v.date) <= new Date(filterDateTo + 'T23:59:59'));
+    
+    return matchesSearch && matchesType && matchesDateFrom && matchesDateTo;
   });
+  
   const paginatedCardVideos = filteredVideos.slice(
     (currentPage - 1) * videosPerPage, 
     (currentPage - 1) * videosPerPage + videosPerPage
@@ -570,46 +581,27 @@ export const DashboardScreen: React.FC = () => {
 
   return (
     <div className="max-w-screen-xl mx-auto flex flex-col gap-8">
-      {/* Title & Search */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">Mis Videos</h2>
-          <p className="text-slate-500 mt-1">ADMINISTRA TUS VIDEOS YA SEA SUBIR, ELIMINAR Y SINCRONIZAR.</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input
-              type="text"
-              className="pl-10 pr-8 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-500 focus:ring-2 focus:ring-primary w-full sm:w-64 transition-all"
-              placeholder="Buscar Videos..."
-              value={search}
-              onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-              >
-                ×
-              </button>
-            )}
-          </div>
-          <button
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition disabled:opacity-50"
-            onClick={() => {
-              setIsSyncModalOpen(true);
-              setTimeout(() => {
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }, 50);
-            }}
-            disabled={syncLoading}
-          >
-            {syncLoading ? 'Sincronizando...' : 'Sincronizar'}
-          </button>
-        </div>
-      </div>
+       {/* Title & Sync Button */}
+       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+         <div>
+           <h2 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">Mis Videos</h2>
+           <p className="text-slate-500 mt-1">ADMINISTRA TUS VIDEOS YA SEA SUBIR, ELIMINAR Y SINCRONIZAR.</p>
+         </div>
+         <div className="flex items-center gap-3">
+           <button
+             className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition disabled:opacity-50"
+             onClick={() => {
+               setIsSyncModalOpen(true);
+               setTimeout(() => {
+                 window.scrollTo({ top: 0, behavior: 'smooth' });
+               }, 50);
+             }}
+             disabled={syncLoading}
+           >
+             {syncLoading ? 'Sincronizando...' : 'Sincronizar'}
+           </button>
+         </div>
+       </div>
 
       {/* Upload Area */}
       <div
@@ -739,26 +731,77 @@ export const DashboardScreen: React.FC = () => {
       </div>
 
        {/* Grid */}
-       <div>
-         <div className="flex items-center justify-between mb-4">
-           <h3 className="text-lg font-bold text-slate-900 dark:text-white">Contenido Subido Recientemente</h3>
-          <div className="flex items-center gap-2">
-              <button 
-                onClick={() => { setViewMode('cards'); setCurrentPage(1); }} 
-                className={`p-2 rounded-lg transition-colors ${viewMode === 'cards' ? 'bg-slate-200 dark:bg-slate-700 text-primary' : 'text-slate-500 hover:text-slate-700 dark:hover:text-white'}`}
-                title="Vista de tarjetas"
+        <div>
+          <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Contenido Subido Recientemente</h3>
+           <div className="flex items-center gap-2 flex-wrap">
+              {/* Search bar (moved from top) */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input
+                  type="text"
+                  className="pl-10 pr-8 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-500 focus:ring-2 focus:ring-primary w-48 transition-all"
+                  placeholder="Buscar..."
+                  value={search}
+                  onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+              
+              {/* Type filter */}
+              <select
+                value={filterType}
+                onChange={e => { setFilterType(e.target.value as any); setCurrentPage(1); }}
+                className="px-3 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary"
               >
-                <Grid size={18} />
-              </button>
-              <button 
-                onClick={() => { setViewMode('table'); setCurrentPage(1); }} 
-                className={`p-2 rounded-lg transition-colors ${viewMode === 'table' ? 'bg-slate-200 dark:bg-slate-700 text-primary' : 'text-slate-500 hover:text-slate-700 dark:hover:text-white'}`}
-                title="Vista de tabla"
-              >
-                <List size={18} />
-              </button>
-            </div>
-         </div>
+                <option value="all">Todos</option>
+                <option value="image">Imágenes</option>
+                <option value="video">Videos</option>
+              </select>
+              
+              {/* Date range filters */}
+              <input
+                type="date"
+                value={filterDateFrom}
+                onChange={e => { setFilterDateFrom(e.target.value); setCurrentPage(1); }}
+                className="px-3 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary"
+                placeholder="Desde"
+                title="Fecha desde"
+              />
+              <input
+                type="date"
+                value={filterDateTo}
+                onChange={e => { setFilterDateTo(e.target.value); setCurrentPage(1); }}
+                className="px-3 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary"
+                placeholder="Hasta"
+                title="Fecha hasta"
+              />
+              
+              {/* View Toggle Buttons */}
+               <button 
+                 onClick={() => { setViewMode('cards'); setCurrentPage(1); }} 
+                 className={`p-2 rounded-lg transition-colors ${viewMode === 'cards' ? 'bg-slate-200 dark:bg-slate-700 text-primary' : 'text-slate-500 hover:text-slate-700 dark:hover:text-white'}`}
+                 title="Vista de tarjetas"
+               >
+                 <Grid size={18} />
+               </button>
+               <button 
+                 onClick={() => { setViewMode('table'); setCurrentPage(1); }} 
+                 className={`p-2 rounded-lg transition-colors ${viewMode === 'table' ? 'bg-slate-200 dark:bg-slate-700 text-primary' : 'text-slate-500 hover:text-slate-700 dark:hover:text-white'}`}
+                 title="Vista de tabla"
+               >
+                 <List size={18} />
+               </button>
+             </div>
+          </div>
           {viewMode === 'cards' ? (
             /* VISTA DE TARJETAS - Diseño original restaurado + nuevos botones */
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -1069,6 +1112,36 @@ export const DashboardScreen: React.FC = () => {
                         </button>
                         <button onClick={() => downloadVideoFile(video)} className="p-2 rounded hover:bg-blue-500/10 transition-transform hover:scale-110" title="Descargar">
                           <Download size={16} />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingVideo(video);
+                            setEditFormData({
+                              titulo: video.titulo || video.filename || '',
+                              activo: video.activo ?? true,
+                              fechaInicio: video.fechaInicio || '',
+                              fechaFin: video.fechaFin || '',
+                            });
+                            const asignacionTodos = video.asignacion_todos ?? true;
+                            setEditAsignacionTodos(asignacionTodos);
+                            if (!asignacionTodos && video.asignaciones) {
+                              const srvIds = [...new Set(video.asignaciones.map((a: any) => a.servidor_id).filter(Boolean))];
+                              const dispIds = video.asignaciones.map((a: any) => a.dispositivo_id).filter(Boolean);
+                              setEditServidorIds(srvIds);
+                              setEditDispositivoIds(dispIds);
+                            } else {
+                              setEditServidorIds([]);
+                              setEditDispositivoIds([]);
+                            }
+                            setIsEditModalOpen(true);
+                            setTimeout(() => {
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }, 50);
+                          }}
+                          className="p-2 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-transform hover:scale-110"
+                          title="Editar"
+                        >
+                          <MoreVertical size={16} />
                         </button>
                         <button onClick={() => handleDeleteClick(video.id, video.titulo || video.filename)} className="p-2 rounded hover:bg-red-500/10 transition-transform hover:scale-110" title="Borrar" disabled={deletingVideoId === video.id}>
                           {deletingVideoId === video.id ? '...' : <Trash size={16} />}
@@ -1682,7 +1755,7 @@ export const DashboardScreen: React.FC = () => {
                  disabled={isSavingEdit}
                  className="px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform duration-150"
                >
-                 CANCEL
+                 CANCELAR
                </button>
                <button
                  type="button"

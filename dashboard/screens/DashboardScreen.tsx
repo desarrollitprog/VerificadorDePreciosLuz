@@ -156,6 +156,7 @@ export const DashboardScreen: React.FC = () => {
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [deletingVideoId, setDeletingVideoId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; videoId: string | null; titulo: string }>({ open: false, videoId: null, titulo: '' });
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState<{ open: boolean; videoIds: string[] }>({ open: false, videoIds: [] });
   const [editAsignacionTodos, setEditAsignacionTodos] = useState(true);
   const [editServidorIds, setEditServidorIds] = useState<number[]>([]);
   const [editDispositivoIds, setEditDispositivoIds] = useState<string[]>([]);
@@ -382,25 +383,52 @@ export const DashboardScreen: React.FC = () => {
     setConfirmDelete({ open: true, videoId, titulo });
   };
 
-  const handleDeleteConfirm = async () => {
-    if (!confirmDelete.videoId) return;
-    setError(null);
-    setDeletingVideoId(confirmDelete.videoId);
-    setConfirmDelete({ open: false, videoId: null, titulo: '' });
-    try {
-      await deleteVideo(confirmDelete.videoId);
-      showNotification('Archivo borrado correctamente', 'success');
-    } catch (err: any) {
-      setError('Error deleting video');
-      showNotification('Error al borrar archivo', 'error');
-    } finally {
-      setDeletingVideoId(null);
-      try {
-        const data = await getVideos();
-        setVideos(data);
-      } catch {}
-    }
-  };
+   const handleDeleteConfirm = async () => {
+     if (!confirmDelete.videoId) return;
+     setError(null);
+     setDeletingVideoId(confirmDelete.videoId);
+     setConfirmDelete({ open: false, videoId: null, titulo: '' });
+     try {
+       await deleteVideo(confirmDelete.videoId);
+       showNotification('Archivo borrado correctamente', 'success');
+     } catch (err: any) {
+       setError('Error deleting video');
+       showNotification('Error al borrar archivo', 'error');
+     } finally {
+       setDeletingVideoId(null);
+       try {
+         const data = await getVideos();
+         setVideos(data);
+       } catch {}
+     }
+   };
+
+   // Función para confirmar borrado masivo
+   const handleBulkDeleteConfirm = async () => {
+     if (confirmBulkDelete.videoIds.length === 0) return;
+     
+     setError(null);
+     const idsToDelete = [...confirmBulkDelete.videoIds];
+     
+     try {
+       // Borrar todos los videos seleccionados
+       for (const id of idsToDelete) {
+         await deleteVideo(id);
+       }
+       
+       showNotification(`${idsToDelete.length} archivo${idsToDelete.length > 1 ? 's' : ''} borrado${idsToDelete.length > 1 ? 's' : ''} correctamente`, 'success');
+       setSelectedVideoIds([]);
+       
+       // Refrescar lista
+       const data = await getVideos();
+       setVideos(data);
+     } catch (err: any) {
+       setError('Error al borrar archivos');
+       showNotification('Error al borrar archivos', 'error');
+     } finally {
+       setConfirmBulkDelete({ open: false, videoIds: [] });
+     }
+   };
 
   // Fase 16.5: Descargar archivo
   const downloadVideoFile = (video: Video) => {
@@ -927,18 +955,17 @@ export const DashboardScreen: React.FC = () => {
                    >
                      Descargar seleccionados
                    </button>
-                   <button 
-                     onClick={async () => {
-                       if (!confirm(`¿Eliminar ${selectedVideoIds.length} archivo${selectedVideoIds.length > 1 ? 's' : ''}?`)) return;
-                       for (const id of selectedVideoIds) {
-                         await handleDeleteClick(id, videos.find(v => v.id === id)?.titulo || '');
-                       }
-                       setSelectedVideoIds([]);
-                     }}
-                     className="text-sm text-red-500 hover:text-red-600 font-medium"
-                   >
-                     Eliminar seleccionados
-                   </button>
+                    <button 
+                      onClick={() => {
+                        setConfirmBulkDelete({ 
+                          open: true, 
+                          videoIds: [...selectedVideoIds] 
+                        });
+                      }}
+                      className="text-sm text-red-500 hover:text-red-600 font-medium"
+                    >
+                      Eliminar seleccionados
+                    </button>
                    <button 
                      onClick={() => setSelectedVideoIds([])}
                      className="text-sm text-slate-500 hover:text-slate-600 font-medium ml-auto"
@@ -1709,7 +1736,7 @@ export const DashboardScreen: React.FC = () => {
                 disabled={isSavingEdit}
                  className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-white text-base font-semibold disabled:opacity-60 active:scale-95 transition-all duration-150"
                >
-                 {isSavingEdit ? 'SAVING...' : 'SAVE CHANGES'}
+                 {isSavingEdit ? 'GUARDANDO...' : 'CAMBIOS GUARDADOS'}
               </button>
             </div>
           </div>
@@ -1718,33 +1745,63 @@ export const DashboardScreen: React.FC = () => {
 
       {/* Confirm Delete Modal */}
       {confirmDelete.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white dark:bg-[#1c2936] rounded-xl shadow-2xl w-full max-w-sm p-6">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Confirmar eliminación</h3>
-            <p className="text-sm text-slate-500 mb-4">
-              ¿Estás seguro de que deseas eliminar <strong className="text-slate-700 dark:text-slate-300">{confirmDelete.titulo}</strong>? Esta acción no se puede deshacer.
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-md w-full mx-4 shadow-xl">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">
+              Confirmar eliminación
+            </h3>
+            <p className="text-slate-600 dark:text-slate-300 mb-6">
+              ¿Eliminar <strong className="text-slate-700 dark:text-slate-300">{confirmDelete.titulo}</strong>? Esta acción no se puede deshacer.
             </p>
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end gap-3">
               <button
                 type="button"
                 onClick={handleDeleteCancel}
-                className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                className="px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700"
               >
-                Cancelar
+                CANCELAR
               </button>
               <button
                 type="button"
                 onClick={handleDeleteConfirm}
-                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold"
+                className="px-5 py-2.5 rounded-lg bg-red-500 text-white text-base font-medium hover:bg-red-600 active:scale-95 transition-transform duration-150"
               >
-                Eliminar
+                ELIMINAR
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Preview Modal - Fuera del map para evitar re-renders innecesarios */}
+       {/* Confirm Bulk Delete Modal */}
+       {confirmBulkDelete.open && (
+         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+           <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-md w-full mx-4 shadow-xl">
+             <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">
+               Confirmar eliminación masiva
+             </h3>
+             <p className="text-slate-600 dark:text-slate-300 mb-6">
+               ¿Eliminar {confirmBulkDelete.videoIds.length} archivo{confirmBulkDelete.videoIds.length > 1 ? 's' : ''} seleccionado{confirmBulkDelete.videoIds.length > 1 ? 's' : ''}?
+             </p>
+             <div className="flex justify-end gap-3">
+               <button
+                 onClick={() => setConfirmBulkDelete({ open: false, videoIds: [] })}
+                 className="px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700"
+               >
+                 CANCELAR
+               </button>
+               <button
+                 onClick={handleBulkDeleteConfirm}
+                 className="px-5 py-2.5 rounded-lg bg-red-500 text-white text-base font-medium hover:bg-red-600 active:scale-95 transition-transform duration-150"
+               >
+                 ELIMINAR
+               </button>
+             </div>
+           </div>
+         </div>
+       )}
+
+       {/* Preview Modal - Fuera del map para evitar re-renders innecesarios */}
       {preview && (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 pt-20" onClick={closePreview}>
           <div className="bg-white dark:bg-[#1c2936] rounded-lg shadow-lg p-6 max-w-lg w-full relative" onClick={e => e.stopPropagation()}>

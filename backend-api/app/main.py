@@ -1235,6 +1235,10 @@ async def enviar_comando_a_dispositivo(
     
     logger.info(f"[COMMAND] Payload del comando: {command_payload}")
     
+    # Generar command_id único para este comando (para rastrear ack)
+    command_id = str(uuid.uuid4())
+    command_payload["command_id"] = command_id
+    
     # Preparar waiters para confirmación
     ack_key = f"command:{device_id}:{comando}"
     
@@ -1269,6 +1273,10 @@ async def enviar_comando_a_dispositivo(
             logger.warning(f"[COMMAND] device_state_store no disponible, intentando enviar comando...")
     
     try:
+        # Limpiar ack de comando ANTERIOR para evitar que polling lo confunda con el actual
+        if command_acker:
+            await command_acker.delete_confirmation(device_id, comando)
+        
         # Enviar comando vía Redis pub/sub
         logger.info(f"[COMMAND] Publicando comando '{comando}' via Redis bus...")
         await device_command_bus.publish_command(
@@ -1288,6 +1296,12 @@ async def enviar_comando_a_dispositivo(
             if command_acker:
                 redis_ack = await command_acker.get_confirmation(device_id, comando)
                 if redis_ack:
+                    # Verificar que es el ack de ESTE comando, no uno viejo
+                    ack_command_id = redis_ack.get("command_id")
+                    if ack_command_id and ack_command_id != command_id:
+                        logger.debug(f"[COMMAND] Ignorando ack de comando anterior para {device_id}")
+                        await command_acker.delete_confirmation(device_id, comando)
+                        continue
                     logger.info(f"[COMMAND] Confirmación recibida de Redis para {device_id}: {redis_ack.get('status')}")
                     ack = redis_ack
                     await command_acker.delete_confirmation(device_id, comando)
@@ -1311,6 +1325,9 @@ async def enviar_comando_a_dispositivo(
         
         if not status:
             logger.warning(f"[COMMAND] Timeout esperando confirmación para {device_id}")
+            if comando == "REINICIAR" and pending_queue is not None:
+                await pending_queue.set_pending_reboot(device_id, command_payload)
+                asyncio.create_task(retry_reboot_with_device(device_id, command_payload))
             return {
                 "success": False,
                 "status": "TIMEOUT",
@@ -1324,6 +1341,9 @@ async def enviar_comando_a_dispositivo(
                 "message": f"Comando {comando} ejecutado correctamente",
             }
         else:
+            if comando == "REINICIAR" and pending_queue is not None:
+                await pending_queue.set_pending_reboot(device_id, command_payload)
+                asyncio.create_task(retry_reboot_with_device(device_id, command_payload))
             return {
                 "success": False,
                 "status": status,
@@ -1438,6 +1458,9 @@ async def get_device_playing(device_id: str):
 RETRY_LIMIT = 3
 RETRY_DELAY = 30  # segundos
 sync_retry_counters = {}  # device_id -> intentos
+REBOOT_RETRY_LIMIT = 5
+REBOOT_RETRY_DELAY = 30  # segundos
+reboot_retry_counters: dict[str, int] = {}  # device_id -> intentos
 SYNC_ACK_TIMEOUT = 20  # segundos para esperar confirmación de recepción
 SYNC_SEQUENCE_LOCK = asyncio.Lock()
 sync_ack_waiters: dict[str, asyncio.Event] = {}
@@ -1644,15 +1667,24 @@ class TabletWebSocketManager:
         
         ws = self.device_map.get(device_id)
         if ws:
-            try:
-                await ws.send_json(message)
-                return True
-            except Exception as e:
-                logger.warning(f"[WS] Error enviando a {device_id}: {e}")
+            # Verificar estado real del socket ANTES de enviar
+            # Previene "entregas fantasma" cuando TCP murió pero device_map aún referencia el WS
+            ws_state = getattr(ws, 'client_state', None)
+            if ws_state is not None and ws_state.name != "CONNECTED":
+                logger.warning(
+                    f"[WS] Dispositivo {device_id} tiene conexión fantasma "
+                    f"(estado={ws_state.name}), limpiando"
+                )
                 await self.disconnect(ws)
-                # L1.2: No raise — encolar después del disconnect
+            else:
+                try:
+                    await ws.send_json(message)
+                    return True
+                except Exception as e:
+                    logger.warning(f"[WS] Error enviando a {device_id}: {e}")
+                    await self.disconnect(ws)
         
-        # Cola para cuando el dispositivo se reconecte
+        # Dispositivo offline o desconectado — encolar para cuando reconecte
         await self._enqueue_message(device_id, message)
         return False
 
@@ -1697,6 +1729,30 @@ class TabletWebSocketManager:
                     logger.info(f"[QUEUE] Banner pendiente entregado a {device_id}: {banner.get('command')}")
             except Exception as e:
                 logger.error(f"[QUEUE] Error consumiendo pending banner para {device_id}: {e}")
+
+        # L3.3: Verificar flags de pendientes al reconectar
+        if pending_queue is not None:
+            try:
+                if await pending_queue.check_pending_sync(device_id):
+                    logger.info(f"[QUEUE] Sync pendiente detectado para {device_id}, disparando WIPE_AND_RESYNC")
+                    if device_command_bus is not None:
+                        await device_command_bus.publish_command(
+                            device_id=device_id,
+                            command="WIPE_AND_RESYNC",
+                            payload={},
+                        )
+                    else:
+                        await self.send_to_device(device_id, {"command": "WIPE_AND_RESYNC"})
+            except Exception as e:
+                logger.error(f"[QUEUE] Error verificando pending sync para {device_id}: {e}")
+
+            try:
+                reboot_payload = await pending_queue.check_pending_reboot(device_id)
+                if reboot_payload:
+                    logger.info(f"[QUEUE] REINICIAR pendiente detectado para {device_id}, re-enviando")
+                    await self.send_to_device(device_id, reboot_payload)
+            except Exception as e:
+                logger.error(f"[QUEUE] Error verificando pending reboot para {device_id}: {e}")
     
     async def send_to_websocket(self, websocket: WebSocket, message: dict) -> bool:
         try:
@@ -1797,13 +1853,15 @@ class TabletWebSocketManager:
             logger.error(f"[WS] Error en _safe_disconnect: {e}")
 
     def start_cleanup_task(self):
-        """Inicia la tarea de cleanup periódico si no está corriendo."""
+        """Inicia la tarea de cleanup periódico y reconciliación si no están corriendo."""
         if self._cleanup_task is None or self._cleanup_task.done():
             self._cleanup_task = asyncio.create_task(self._periodic_cleanup())
-            logger.info("[WS] Tarea de cleanup periódico iniciada")
+            asyncio.create_task(self._reconciliation_loop())
+            logger.info("[WS] Tareas de cleanup y reconciliación iniciadas")
 
     async def _periodic_cleanup(self):
-        """Cleanup periódico cada 60 segundos."""
+        """Cleanup periódico cada 60 segundos.
+        L4.2: cleanup_old_dlq() se movió a reconciliación (30 min)."""
         while True:
             try:
                 await asyncio.sleep(60)
@@ -1875,6 +1933,53 @@ class TabletWebSocketManager:
         if cleaned > 0:
             logger.info(f"[WS] Total de mensajes antiguos limpiados: {cleaned}")
 
+    async def _reconcile_all_queues(self):
+        """L4.2: Reconciliación de colas Redis vs dispositivos online cada 30 min.
+        Recupera inflight huérfanos, flushea a online, limpia DLQ y flags huérfanos."""
+        if pending_queue is None:
+            return
+        try:
+            stats = await pending_queue.get_all_stats()
+            for device_id, qstats in stats.items():
+                total = qstats.get("total", 0)
+                if total == 0:
+                    continue
+                is_online = device_id in self.device_map
+                ws = self.device_map.get(device_id)
+                if is_online and ws:
+                    await pending_queue.recover_inflight(device_id)
+                    _ws = ws  # captura por valor para el closure
+                    await pending_queue.flush_all_to_device(
+                        device_id,
+                        lambda msg, _w=_ws: _w.send_json(msg)
+                    )
+            # Cleanup DLQ vieja
+            if pending_queue is not None:
+                asyncio.create_task(pending_queue.cleanup_old_dlq())
+            # Cleanup flags huérfanos
+            active_ids = set(self.device_map.keys())
+            if device_state_store:
+                try:
+                    all_status = await device_state_store.get_all_status()
+                    active_ids.update(all_status.keys())
+                except Exception:
+                    pass
+            if pending_queue is not None:
+                asyncio.create_task(pending_queue.cleanup_orphan_flags(active_ids))
+        except Exception as e:
+            logger.error(f"[RECONCILE] Error en reconciliación: {e}")
+
+    async def _reconciliation_loop(self):
+        """L4.2: Ejecuta reconciliación cada 30 minutos."""
+        while True:
+            try:
+                await asyncio.sleep(1800)
+                await self._reconcile_all_queues()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"[RECONCILE] Error en loop: {e}")
+
     def get_connected_targets(self) -> list[tuple[str | None, WebSocket]]:
         targets: list[tuple[str | None, WebSocket]] = []
         mapped_sockets = set(self.device_map.values())
@@ -1926,7 +2031,10 @@ async def _on_bus_command(device_id: str, command: str, payload: dict):
     logger.info(f"[BUS] Comando recibido: '{command}' para dispositivo {device_id}")
     try:
         if command == "WIPE_AND_RESYNC":
-            await tablet_ws_manager.send_to_device(device_id, {"command": "WIPE_AND_RESYNC"})
+            message = {"command": "WIPE_AND_RESYNC"}
+            if payload:
+                message.update(payload)
+            await tablet_ws_manager.send_to_device(device_id, message)
         elif command == "REINICIAR":
             message = {"command": "REINICIAR"}
             if payload:
@@ -1959,7 +2067,7 @@ async def _on_bus_confirmation(device_id: str, command: str, status: str, reason
                     device_id=device_id,
                     command=command,
                     status=status,
-                    reason=reason
+                    reason=reason,
                 )
             except Exception as e:
                 logger.error(f"[ACKER] Error guardando confirmación en Redis: {e}")
@@ -2053,23 +2161,30 @@ async def orchestrate_forced_sync_sequential(
         sync_ack_waiters[ack_key] = waiter
         sync_ack_payloads.pop(ack_key, None)
 
+        # Limpiar ack de sync ANTERIOR para evitar que polling lo atrape
+        if command_acker:
+            await command_acker.delete_confirmation(device_id, "WIPE_AND_RESYNC")
+
         send_ok = False
         try:
+            sync_command_id = str(uuid.uuid4())
             if device_command_bus is not None:
                 await device_command_bus.publish_command(
                     device_id=device_id,
                     command="WIPE_AND_RESYNC",
-                    payload={},
+                    payload={"command_id": sync_command_id},
                 )
                 send_ok = True
             else:
-                await tablet_ws_manager.send_to_device(device_id, {"command": "WIPE_AND_RESYNC"})
+                await tablet_ws_manager.send_to_device(device_id, {"command": "WIPE_AND_RESYNC", "command_id": sync_command_id})
                 send_ok = True
         except Exception:
             send_ok = False
 
         if not send_ok:
             reason = "No se pudo enviar comando por WebSocket"
+            if pending_queue is not None:
+                await pending_queue.set_pending_sync(device_id)
             asyncio.create_task(notify_dashboard_sync_failure(device_id, reason))
             sync_ack_waiters.pop(ack_key, None)
             details.append(
@@ -2107,6 +2222,12 @@ async def orchestrate_forced_sync_sequential(
                 if command_acker:
                     redis_ack = await command_acker.get_confirmation(device_id, "WIPE_AND_RESYNC")
                     if redis_ack:
+                        # Verificar que es el ack de ESTE sync, no uno viejo
+                        ack_cmd_id = redis_ack.get("command_id")
+                        if ack_cmd_id and ack_cmd_id != sync_command_id:
+                            logger.debug(f"[SYNC] Ignorando ack de sync anterior para {device_id}")
+                            await command_acker.delete_confirmation(device_id, "WIPE_AND_RESYNC")
+                            continue
                         logger.info(f"[SYNC] Confirmación recibida de Redis para {device_id}: {redis_ack.get('status')}")
                         ack = redis_ack
                         await command_acker.delete_confirmation(device_id, "WIPE_AND_RESYNC")
@@ -2132,6 +2253,8 @@ async def orchestrate_forced_sync_sequential(
                 confirmed += 1
             else:
                 fail_reason = ack.get("reason", "") or f"Estado no exitoso: {status or 'UNKNOWN'}"
+                if pending_queue is not None:
+                    await pending_queue.set_pending_sync(device_id)
                 asyncio.create_task(notify_dashboard_sync_failure(device_id, fail_reason))
             details.append(
                 {
@@ -2144,6 +2267,8 @@ async def orchestrate_forced_sync_sequential(
             )
         except asyncio.TimeoutError:
             timeout_reason = f"Sin confirmación en {SYNC_ACK_TIMEOUT}s"
+            if pending_queue is not None:
+                await pending_queue.set_pending_sync(device_id)
             asyncio.create_task(notify_dashboard_sync_failure(device_id, timeout_reason))
             details.append(
                 {
@@ -2217,7 +2342,8 @@ async def process_sync_confirmation(websocket: WebSocket, msg: dict):
                     device_id=device_id,
                     command=command,
                     status=status,
-                    reason=reason
+                    reason=reason,
+                    command_id=msg.get("command_id"),
                 )
             except Exception as e:
                 logger.error(f"[ACKER] Error guardando confirmación REINICIAR en Redis: {e}")
@@ -2251,7 +2377,8 @@ async def process_sync_confirmation(websocket: WebSocket, msg: dict):
                 device_id=device_id,
                 command="WIPE_AND_RESYNC",
                 status=status,
-                reason=reason
+                reason=reason,
+                command_id=msg.get("command_id"),
             )
         except Exception as e:
             logger.error(f"[ACKER] Error guardando confirmación SYNC en Redis: {e}")
@@ -2312,8 +2439,6 @@ async def notify_dashboard_banner_finalizado(device_id: str, banner_id: int | No
             logger.info(f"Notificación enviada al dashboard: Banner {banner_id} finalizado en dispositivo {device_id}")
     except Exception as e:
         logging.error(f"Error notificando banner finalizado al dashboard: {e}")
-    # Lanzar reintentos automáticos en background
-    asyncio.create_task(retry_sync_with_device(device_id))
 
 
 async def notify_dashboard_playback_failure(device_id: str, video_name: str, reason: str = ""):
@@ -2353,7 +2478,33 @@ async def retry_sync_with_device(device_id: str):
             logging.error("Error reenviando sincronización a %s: %s", device_id, e)
     else:
         sync_retry_counters.pop(device_id, None)
+        if pending_queue is not None:
+            await pending_queue.set_pending_sync(device_id)
         logging.error(f"Dispositivo {device_id} falló sincronización tras {RETRY_LIMIT} reintentos.")
+
+# --- Reintentos automáticos de REINICIAR ---
+async def retry_reboot_with_device(device_id: str, payload: dict):
+    """L4.1: Reintenta enviar REINICIAR hasta REBOOT_RETRY_LIMIT veces."""
+    count = reboot_retry_counters.get(device_id, 0)
+    if count < REBOOT_RETRY_LIMIT:
+        reboot_retry_counters[device_id] = count + 1
+        await asyncio.sleep(REBOOT_RETRY_DELAY)
+        try:
+            if device_command_bus is not None:
+                await device_command_bus.publish_command(
+                    device_id=device_id,
+                    command="REINICIAR",
+                    payload=payload,
+                )
+            else:
+                await tablet_ws_manager.send_to_device(device_id, {"command": "REINICIAR", **payload})
+        except Exception as e:
+            logging.error("Error reenviando REINICIAR a %s: %s", device_id, e)
+    else:
+        reboot_retry_counters.pop(device_id, None)
+        if pending_queue is not None:
+            await pending_queue.set_pending_reboot(device_id, payload)
+        logging.error(f"Dispositivo {device_id} falló REINICIAR tras {REBOOT_RETRY_LIMIT} reintentos.")
 
 @app.get("/api/queue/health")
 async def queue_health():

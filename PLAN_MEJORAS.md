@@ -156,9 +156,9 @@ Mejorar seguridad, performance, observabilidad y code quality del sistema de ges
 | FASE 8 (Background Monitoring Sesiones) | 4/4 ✅ | 0/4 |
 | FASE 9 (Thumbnails Videos) | 6/6 ✅ | 0/6 |
 | FASE 10 (Limpieza Columnas) | 5/5 ✅ | 0/5 |
-| FASE 15 (Blindaje WebSocket) | 0/17 | 17/17 |
+| FASE 15 (Blindaje WebSocket) | 10/17 | 7/17 |
 
-**Total: 31/44 completados (70%)**
+**Total: 41/44 completados (93%)**
 
 ---
 
@@ -717,10 +717,10 @@ Cuando un WebSocket se cae y reconecta múltiples veces al día, existen **7 pun
 
 | # | Tarea | Estado | Ubicación |
 |---|-------|--------|-----------|
-| 15.1.1 | Envolver `_on_bus_command` y `_on_bus_confirmation` en try/except para evitar muerte del bus listener | ⏳ Pendiente | `backend-api/app/main.py:1836-1847` |
-| 15.1.2 | Agregar reconexión automática del bus listener si muere (wrap con restart loop) | ⏳ Pendiente | `backend-api/app/main.py:1890-1901` |
-| 15.1.3 | En `send_to_device()`: si falla el envío por socket zombie, encolar mensaje **después** del disconnect | ⏳ Pendiente | `backend-api/app/main.py:1620-1640` |
-| 15.1.4 | En `flush_message_queue()`: no `pop()`ear la cola hasta confirmar envío. Si falla, re-encolar | ⏳ Pendiente | `backend-api/app/main.py:1655-1674` |
+| 15.1.1 | Envolver `_on_bus_command` y `_on_bus_confirmation` en try/except para evitar muerte del bus listener | ✅ Completado | `backend-api/app/main.py:1923-1938` |
+| 15.1.2 | Agregar reconexión automática del bus listener si muere (wrap con restart loop) | ✅ Completado | `backend-api/app/main.py:1997-2005` |
+| 15.1.3 | En `send_to_device()`: si falla el envío por socket zombie, encolar mensaje **después** del disconnect | ✅ Completado | `backend-api/app/main.py:1640-1657` |
+| 15.1.4 | En `flush_message_queue()`: no `pop()`ear la cola hasta confirmar envío. Si falla, re-encolar | ✅ Completado | `backend-api/app/main.py:1714-1754` |
 
 **Detalle técnico 15.1.1 — Protección del bus listener:**
 
@@ -802,11 +802,11 @@ async def flush_message_queue(self, device_id, websocket):
 
 | # | Tarea | Estado | Ubicación |
 |---|-------|--------|-----------|
-| 15.2.1 | Crear `PendingCommandQueue` service con Redis LIST | ⏳ Pendiente | `backend-api/app/services/pending_queue.py` |
-| 15.2.2 | Reemplazar `_message_queues` (asyncio.Queue) por cola Redis | ⏳ Pendiente | `backend-api/app/main.py` |
-| 15.2.3 | Implementar patrón LMOVE (queue → inflight) con cleanup periódico | ⏳ Pendiente | `backend-api/app/main.py` |
-| 15.2.4 | Integrar cola Redis en `send_to_device()` y `connect()` | ⏳ Pendiente | `backend-api/app/main.py` |
-| 15.2.5 | Consumir `device:pending:banner:*` al reconectar (actual dead-end) | ⏳ Pendiente | `backend-api/app/main.py` |
+| 15.2.1 | Crear `PendingCommandQueue` service con Redis LIST | ✅ Completado | `backend-api/app/services/pending_queue.py` |
+| 15.2.2 | Reemplazar `_message_queues` (asyncio.Queue) por cola Redis | ✅ Completado | `backend-api/app/main.py` |
+| 15.2.3 | Implementar patrón LMOVE (queue → inflight) con cleanup periódico | ✅ Completado | `backend-api/app/main.py` |
+| 15.2.4 | Integrar cola Redis en `send_to_device()` y `connect()` | ✅ Completado | `backend-api/app/main.py` |
+| 15.2.5 | Consumir `device:pending:banner:*` al reconectar (actual dead-end) | ✅ Completado | `backend-api/app/main.py` |
 
 **Estructura en Redis:**
 
@@ -1041,16 +1041,16 @@ Flujo:
 
 La implementación se divide en **4 lotes** desplegables de forma independiente. Cada lote incluye pruebas unitarias + verificación manual antes de pasar al siguiente.
 
-### Lote 1 — Fix Críticos + Salvaguardas inmediatas (2-3 días)
+### Lote 1 — Fix Críticos + Salvaguardas inmediatas ✅ COMPLETADO
 
-| # | Tarea | Archivo | Dependencias |
-|---|-------|---------|:------------:|
-| L1.1 | Proteger bus listener: try/except en `_on_bus_command` + reconexión automática | `main.py:1836-1847, 1890-1901` | Ninguna |
-| L1.2 | Zombie socket → encola: quitar `raise`, always enqueue after disconnect | `main.py:1620-1640` | Ninguna |
-| L1.3 | Flush atómico: no popear hasta confirmar send, re-encolar si falla | `main.py:1655-1674` | Ninguna |
-| L1.4 | Command ID + dedup en luzapp: UUID por comando, HashSet últimos 20 IDs | `main.py` + `ScanActivity.kt` | L1.1 |
-| L1.5 | Límite de cola: max 100 msg por dispositivo + TTL 24h por mensaje | `main.py` | Ninguna |
-| L1.6 | Endpoint `GET /api/queue/health` para monitoreo en tiempo real | `main.py` | Ninguna |
+| # | Tarea | Archivo | Estado |
+|---|-------|---------|:------:|
+| L1.1 | Proteger bus listener: try/except en `_on_bus_command` + reconexión automática | `main.py:1923-1938, 1997-2005` | ✅ |
+| L1.2 | Zombie socket → encola: quitar `raise`, always enqueue after disconnect | `main.py:1640-1657` | ✅ |
+| L1.3 | Flush atómico: no popear hasta confirmar send, re-encolar si falla | `main.py:1714-1754` | ✅ |
+| L1.4 | Command ID + dedup en luzapp: UUID por comando, HashSet últimos 20 IDs | `main.py:1642` + `ScanActivity.kt:767` | ✅ |
+| L1.5 | Límite de cola: max 100 msg por dispositivo + TTL 24h por mensaje | `main.py:1668` + `pending_queue.py:30` | ✅ |
+| L1.6 | Endpoint `GET /api/queue/health` para monitoreo en tiempo real | `main.py:~2360` | ✅ |
 
 ### Lote 2 — Cola Persistente en Redis ✅ COMPLETADO
 
@@ -1084,12 +1084,89 @@ Se deja para después por requerir cambios en backend-dashboard + luzapp. No es 
 
 ---
 
+## FASE 17: Cola de Comandos — Notificaciones y Visibilidad en Dashboard
+
+*Prioridad: Alta | Objetivo: Dar visibilidad al dashboard del estado de la cola de comandos en Redis, diferenciando comandos encolados de fallos reales, y cerrando el ciclo de notificación cuando la cola entrega exitosamente.*
+
+### Problema Raíz
+
+El dashboard no tiene visibilidad de la cola Redis en backend-api:
+
+- Cuando un sync falla por timeout, se reporta `FAILED` aunque el comando se haya encolado exitosamente
+- El usuario reintenta sin saber que el comando ya está pendiente
+- Cuando la cola eventualmente entrega el comando, el dashboard nunca se entera
+- No hay forma de consultar cuántos comandos están encolados para un dispositivo
+
+### Item 1: QUEUED vs FAILED — Diferenciar estado en respuesta de sync
+
+**Descripción**: Cuando el dispositivo está offline pero el comando se encola exitosamente, reportar `"QUEUED"` en vez de `"TIMEOUT"/"SEND_FAILED"`. Crear notificación `COMANDO_ENCOLADO` en lugar de `SYNC_FAILED`.
+
+| # | Archivo | Cambio | Esfuerzo |
+|---|---------|--------|----------|
+| 17.1.1 | `backend-api/app/main.py` `orchestrate_forced_sync_sequential` | Timeout/SEND_FAILED + `set_pending_sync()` exitoso → detail `status: "QUEUED"`, `reason: "Dispositivo offline. Se ejecutará al reconectar."`, `ok: True`, `queued: true`. No llamar `notify_dashboard_sync_failure`. Contador `queued` separado en return + progress_hook | Bajo |
+| 17.1.2 | `backend-api/app/main.py` `_run_force_sync_job` | Forwardear `queued` del resultado al job state | Bajo |
+| 17.1.3 | `backend-api/app/main.py` nueva función `notify_dashboard_sync_queued` | `POST /api/sync-queued` al dashboard | Bajo |
+| 17.1.4 | `backend-dashboard/app/routes/notificaciones.py` | Nuevo `POST /api/sync-queued` → crea `COMANDO_ENCOLADO`, dedup 120s | Bajo |
+| 17.1.5 | `backend-dashboard/app/routes/monitoreo.py` `_execute_force_sync_job` | Leer `queued` del backend-api, no contar como failed | Bajo |
+| 17.1.6 | `backend-dashboard/app/routes/monitoreo.py` GET job | Incluir `queued` en response del job | Bajo |
+| 17.1.7 | `dashboard/screens/DashboardScreen.tsx` | `SyncServerProgress` type + `queued`. Mostrar "X confirmados, Y en cola, Z fallos". Toast diferente para queued | Medio |
+| 17.1.8 | `dashboard/services/notificacionesPresentation.ts` | Case `COMANDO_ENCOLADO` → severity `info`, título "Comando encolado" | Bajo |
+
+### Item 2: Endpoint de estado de cola (`/queue-status`)
+
+**Descripción**: Permitir que el dashboard consulte el estado de la cola Redis de un dispositivo (pendientes, inflight, DLQ, flags).
+
+| # | Archivo | Cambio | Esfuerzo |
+|---|---------|--------|----------|
+| 17.2.1 | `backend-api/app/main.py` | Nuevo `GET /api/queue-status/{device_id}` → `{ device_id, pending, inflight, total, pending_sync, pending_reboot }`. Auth via API key | Bajo |
+| 17.2.2 | `backend-dashboard/app/routes/monitoreo.py` | Nuevo `GET /api/monitoreo/cola/{device_id}` → proxy a backend-api | Bajo |
+| 17.2.3 | `dashboard/components/ServerDashboard.tsx` | En cada dispositivo, badge "N pendientes" con tooltip. Naranja si > 0, gris si vacío | Medio |
+
+### Item 3: Notificar entrega exitosa desde la cola
+
+**Descripción**: Cuando la cola Redis entrega el comando al dispositivo y este confirma SUCCESS, notificar al dashboard para crear `SINCRONIZACION_COMPLETADA`.
+
+| # | Archivo | Cambio | Esfuerzo |
+|---|---------|--------|----------|
+| 17.3.1 | `backend-api/app/services/pending_queue.py` | Nuevos métodos: `set_delivery_pending(device_id)` + `check_delivery_pending(device_id)`. Redis key `device:delivery_pending:{id}`, TTL 300s | Bajo |
+| 17.3.2 | `backend-api/app/main.py` `_flush_all_queues` | Después de `check_pending_sync() == True` → `set_delivery_pending()`. En `flush_all_to_device`, al dequeuear WIPE_AND_RESYNC → `set_delivery_pending()` | Bajo |
+| 17.3.3 | `backend-api/app/main.py` `process_sync_confirmation` | Cuando WIPE_AND_RESYNC SUCCESS → `check_delivery_pending()` → si True → `notify_dashboard_sync_delivered()` | Bajo |
+| 17.3.4 | `backend-api/app/main.py` nueva función `notify_dashboard_sync_delivered` | `POST /api/sync-delivered` al dashboard con `{ device_id, status: "SUCCESS" }` | Bajo |
+| 17.3.5 | `backend-dashboard/app/routes/notificaciones.py` | Nuevo `POST /api/sync-delivered` → crea `SINCRONIZACION_COMPLETADA` | Bajo |
+| 17.3.6 | `dashboard/services/notificacionesPresentation.ts` | Case `SINCRONIZACION_COMPLETADA` → severity `success`, título "Sincronización completada" | Bajo |
+
+### Orden de implementación sugerido
+
+```
+Item 1 (QUEUED vs FAILED)   → desplegable independiente, bajo riesgo
+Item 2 (queue-status)        → desplegable independiente, bajo riesgo
+Item 3 (delivery notify)     → desplegable independiente, requiere Item 1
+```
+
+Cada item es desplegable por separado. Item 1 y 2 no tienen dependencias entre sí.
+
+### Archivos a modificar (resumen)
+
+| Archivo | Items | Cambios |
+|---------|-------|---------|
+| `backend-api/app/main.py` | 1, 2, 3 | 7 cambios (orchestrate, _run_job, notify_queued, queue-status endpoint, _flush_all_queues, process_sync_confirmation, notify_delivered) |
+| `backend-api/app/services/pending_queue.py` | 3 | 1 cambio (delivery_pending methods) |
+| `backend-dashboard/app/routes/notificaciones.py` | 1, 3 | 2 endpoints nuevos (sync-queued, sync-delivered) |
+| `backend-dashboard/app/routes/monitoreo.py` | 1, 2 | 1 endpoint nuevo (cola-status), 2 cambios en sync job |
+| `dashboard/screens/DashboardScreen.tsx` | 1 | SyncServerProgress type + UI rendering |
+| `dashboard/components/ServerDashboard.tsx` | 2 | Badge de cola en dispositivo |
+| `dashboard/services/notificacionesPresentation.ts` | 1, 3 | 2 nuevos cases |
+| `PLAN_MEJORAS.md` | - | Documentación |
+
+---
+
 ## Resumen de Progreso Total (Todas las Fases)
 
 | Grupo | Fases | Completado | Pendiente |
 |-------|-------|------------|-----------|
 | Originales | 1-10 | 25/28 (89%) | 5/28 |
 | Nuevas | 11-14 | 0/11 (0%) | 11/11 |
-| **Nueva** | **15** (Blindaje WebSocket) | **0/17 (0%)** | **17/17** |
+| **Nueva** | **15** (Blindaje WebSocket) | **10/17 (59%)** | **7/17** |
 | **Nueva** | **16** | **6/6 (100%)** | **0/6** |
-| **TOTAL** | **1-16** | **31/62 (50%)** | **31/62** |
+| **Nueva** | **17** (Cola Dashboard) | **0/15 (0%)** | **15/15** |
+| **TOTAL** | **1-17** | **41/77 (53%)** | **36/77** |

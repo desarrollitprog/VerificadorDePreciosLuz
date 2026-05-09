@@ -29,6 +29,9 @@ class PendingCommandQueue:
     PENDING_BANNER_PREFIX = "device:pending:banner"
     MAX_QUEUE_PER_DEVICE = 100
     MAX_MESSAGE_AGE = 86400  # 24h
+    MAX_RETRIES = 5
+    DLQ_PREFIX = "device:dlq"
+    DEDUP_COMMANDS = {"WIPE_AND_RESYNC", "REINICIAR"}
 
     def __init__(self, redis: Redis):
         self.redis = redis
@@ -47,7 +50,25 @@ class PendingCommandQueue:
         return f"{self.QUEUE_PREFIX}:{device_id}:{self.INFLIGHT_SUFFIX}"
 
     async def enqueue(self, device_id: str, message: dict) -> bool:
-        """Encola un comando en Redis. Retorna True si se encoló, False si cola llena."""
+        """Encola un comando en Redis. Retorna True si se encoló, False si cola llena.
+        
+        Si el comando está en DEDUP_COMMANDS, verifica si ya existe uno igual en la cola.
+        Si ya existe, omite el encolado (retorna True como faux-success).
+        """
+        command = message.get("command")
+        
+        # Server-side dedup para comandos críticos
+        if command in self.DEDUP_COMMANDS:
+            key = self._queue_key(device_id)
+            existing = await self.redis.lrange(key, 0, -1)
+            for raw in existing:
+                if command in raw:
+                    logger.info(
+                        f"[QUEUE] {command} ya está en cola para {device_id}, "
+                        f"omitiendo duplicado"
+                    )
+                    return True
+        
         key = self._queue_key(device_id)
         inflight_key = self._inflight_key(device_id)
 
@@ -226,6 +247,7 @@ class PendingCommandQueue:
     async def flush_all_to_device(self, device_id: str, send_fn) -> int:
         """Envía todos los mensajes pendientes al dispositivo via send_fn.
         send_fn es un callable async que recibe (message: dict) y retorna True/False.
+        Si un mensaje excede MAX_RETRIES intentos, se mueve a DLQ.
         Retorna cantidad de mensajes entregados exitosamente.
         """
         delivered = 0
@@ -236,6 +258,7 @@ class PendingCommandQueue:
             if msg is None:
                 break
 
+            retry_count = msg.get("retry_count", 0)
             raw = json.dumps(msg)
             try:
                 success = await send_fn(msg)
@@ -243,14 +266,22 @@ class PendingCommandQueue:
                     await self.confirm(device_id, raw)
                     delivered += 1
                 else:
-                    failed_raws.append(raw)
+                    if retry_count >= self.MAX_RETRIES - 1:
+                        await self._move_to_dlq(device_id, msg)
+                    else:
+                        msg["retry_count"] = retry_count + 1
+                        failed_raws.append(json.dumps(msg))
                     break
             except Exception as e:
                 logger.warning(f"[QUEUE] Error enviando a {device_id}: {e}")
-                failed_raws.append(raw)
+                if retry_count >= self.MAX_RETRIES - 1:
+                    await self._move_to_dlq(device_id, msg)
+                else:
+                    msg["retry_count"] = retry_count + 1
+                    failed_raws.append(json.dumps(msg))
                 break
 
-        # Re-encolar los que fallaron
+        # Re-encolar los que fallaron (con retry_count incrementado)
         for raw in failed_raws:
             try:
                 await self.redis.lpush(self._queue_key(device_id), raw)
@@ -260,6 +291,93 @@ class PendingCommandQueue:
         if delivered > 0:
             logger.info(f"[QUEUE] {delivered} mensajes entregados de cola Redis a {device_id}")
         return delivered
+
+    def _dlq_key(self, device_id: str) -> str:
+        return f"{self.DLQ_PREFIX}:{device_id}"
+
+    async def _move_to_dlq(self, device_id: str, message: dict) -> None:
+        """Mueve un mensaje a la dead-letter queue tras exceder reintentos."""
+        dlq_key = self._dlq_key(device_id)
+        message["moved_to_dlq_at"] = time.time()
+        message["retry_count"] = message.get("retry_count", 0)
+        await self.redis.rpush(dlq_key, json.dumps(message))
+        logger.warning(
+            f"[DLQ] Mensaje movido a DLQ para {device_id}: "
+            f"command={message.get('command')} retry_count={message['retry_count']}"
+        )
+
+    async def get_dlq_size(self, device_id: str) -> int:
+        """Retorna cantidad de mensajes en la DLQ para un dispositivo."""
+        dlq_key = self._dlq_key(device_id)
+        return await self.redis.llen(dlq_key)
+
+    async def get_all_dlq(self, device_id: str) -> list[dict]:
+        """Retorna todos los mensajes en la DLQ de un dispositivo."""
+        dlq_key = self._dlq_key(device_id)
+        items = await self.redis.lrange(dlq_key, 0, -1)
+        result = []
+        for item in items:
+            try:
+                result.append(json.loads(item))
+            except Exception:
+                pass
+        return result
+
+    async def cleanup_old_dlq(self) -> int:
+        """Elimina mensajes en DLQ con más de MAX_MESSAGE_AGE. Retorna cantidad limpiada."""
+        cutoff = time.time() - self.MAX_MESSAGE_AGE
+        cleaned = 0
+        pattern = f"{self.DLQ_PREFIX}:*"
+
+        async for key in self.redis.scan_iter(match=pattern):
+            try:
+                messages = await self.redis.lrange(key, 0, -1)
+                if not messages:
+                    continue
+                valid = []
+                for msg in messages:
+                    try:
+                        parsed = json.loads(msg)
+                        moved_at = parsed.get("moved_to_dlq_at", 0)
+                        if moved_at > 0 and moved_at < cutoff:
+                            cleaned += 1
+                        else:
+                            valid.append(msg)
+                    except Exception:
+                        valid.append(msg)
+                if len(valid) != len(messages):
+                    await self.redis.delete(key)
+                    if valid:
+                        await self.redis.rpush(key, *valid)
+            except Exception as e:
+                logger.error(f"[DLQ] Error limpiando DLQ {key}: {e}")
+
+        if cleaned > 0:
+            logger.info(f"[DLQ] {cleaned} mensajes antiguos limpiados de DLQ")
+        return cleaned
+
+    async def cleanup_orphan_flags(self, active_device_ids: set[str]) -> int:
+        """Limpia flags pending:sync y pending:reboot de dispositivos que ya no existen.
+        L4.3: Se llama desde el job de reconciliación cada 30 min.
+        Retorna cantidad de flags limpiados."""
+        cleaned = 0
+        for prefix in (self.PENDING_SYNC_PREFIX, self.PENDING_REBOOT_PREFIX):
+            pattern = f"{prefix}:*"
+            async for key in self.redis.scan_iter(match=pattern):
+                # prefix format: device:pending:sync (3 parts) or device:pending:reboot (3 parts)
+                # key format: device:pending:sync:{device_id} (4 parts)
+                parts = key.split(":")
+                if len(parts) >= 4:
+                    device_id = parts[3]
+                else:
+                    continue
+                if device_id not in active_device_ids:
+                    await self.redis.delete(key)
+                    cleaned += 1
+                    logger.info(f"[CLEANUP] Flag huérfano eliminado: {key}")
+        if cleaned > 0:
+            logger.info(f"[CLEANUP] {cleaned} flags huérfanos limpiados")
+        return cleaned
 
     async def close(self) -> None:
         await self.redis.close()

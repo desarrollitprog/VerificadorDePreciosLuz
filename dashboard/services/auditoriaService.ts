@@ -57,3 +57,17 @@ export async function markNotificacionRead(notificacionId: number): Promise<{ su
   const response = await api.patch<{ success: boolean; message: string }>(`/notificaciones/${notificacionId}/marcar-leida`);
   return response.data;
 }
+
+export async function exportAuditoriaCSV(filtros: AuditoriaFiltros = {}): Promise<Blob> {
+  const params = new URLSearchParams();
+
+  if (filtros.busqueda) params.append('busqueda', filtros.busqueda);
+  if (filtros.tipo) params.append('tipo', filtros.tipo);
+  if (filtros.dispositivo_id) params.append('dispositivo_id', filtros.dispositivo_id);
+  if (filtros.servidor_id) params.append('servidor_id', String(filtros.servidor_id));
+  if (filtros.fecha_desde) params.append('fecha_desde', filtros.fecha_desde);
+  if (filtros.fecha_hasta) params.append('fecha_hasta', filtros.fecha_hasta);
+
+  const response = await api.get(`/auditoria/exportar?${params.toString()}`, { responseType: 'blob' });
+  return response.data as Blob;
+}

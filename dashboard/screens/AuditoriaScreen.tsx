@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Search, Filter, ChevronLeft, ChevronRight, Calendar, Server, Monitor, Clock, X, ChevronDown, ChevronUp, User, RotateCcw, Check, Circle } from 'lucide-react';
-import { getAuditoria, markNotificacionRead, AuditoriaItem, AuditoriaFiltros } from '../services/auditoriaService';
+import { Search, Filter, ChevronLeft, ChevronRight, Calendar, Server, Monitor, Clock, X, ChevronDown, ChevronUp, User, RotateCcw, Check, Circle, Download, XCircle } from 'lucide-react';
+import { getAuditoria, markNotificacionRead, exportAuditoriaCSV, AuditoriaItem, AuditoriaFiltros } from '../services/auditoriaService';
+import { getServersStatus } from '../services/monitoreoService';
 import { useNotification } from '../components/useNotification';
 import { TableSkeleton } from '../components/TableSkeleton';
+import { Spinner } from '../components/Spinner';
 
 const PAGE_SIZE = 20;
 
@@ -76,10 +78,18 @@ function getTypeBadge(tipo: string) {
   return { label: tipo, classes: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300' };
 }
 
+interface ServidorOption {
+  id: string;
+  nombre: string;
+  ip: string;
+}
+
 export const AuditoriaScreen: React.FC = () => {
   const showNotification = useNotification();
   const [items, setItems] = useState<AuditoriaItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(0);
@@ -88,14 +98,18 @@ export const AuditoriaScreen: React.FC = () => {
   const [tipoFiltro, setTipoFiltro] = useState('');
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
+  const [servidorFiltro, setServidorFiltro] = useState('');
+  const [servidores, setServidores] = useState<ServidorOption[]>([]);
   const [showFilters, setShowFilters] = useState(false);
 
   const fetchAuditoria = async (pageNum: number = 1) => {
     setLoading(true);
+    setError(null);
     try {
       const filtros: AuditoriaFiltros = {
         busqueda: busqueda || undefined,
         tipo: tipoFiltro || undefined,
+        servidor_id: servidorFiltro ? Number(servidorFiltro) : undefined,
         fecha_desde: fechaDesde || undefined,
         fecha_hasta: fechaHasta || undefined,
         page: pageNum,
@@ -107,8 +121,10 @@ export const AuditoriaScreen: React.FC = () => {
       setTotal(response.total);
       setPage(response.page);
       setPages(response.pages);
-    } catch (error) {
-      showNotification('Error al cargar el historial de auditoría', 'error', 4000);
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || 'Error al cargar el historial de auditoría';
+      setError(msg);
+      showNotification(msg, 'error', 4000);
     } finally {
       setLoading(false);
     }
@@ -116,6 +132,12 @@ export const AuditoriaScreen: React.FC = () => {
 
   useEffect(() => {
     fetchAuditoria();
+  }, []);
+
+  useEffect(() => {
+    getServersStatus()
+      .then((data) => setServidores(data.map((s) => ({ id: s.id, nombre: s.nombre, ip: s.ip }))))
+      .catch(() => {});
   }, []);
 
   const handleRefresh = () => {
@@ -144,10 +166,38 @@ export const AuditoriaScreen: React.FC = () => {
   const handleClearFilters = () => {
     setBusqueda('');
     setTipoFiltro('');
+    setServidorFiltro('');
     setFechaDesde('');
     setFechaHasta('');
     setPage(1);
     fetchAuditoria(1);
+  };
+
+  const handleExportCSV = async () => {
+    setExporting(true);
+    try {
+      const filtros: AuditoriaFiltros = {
+        busqueda: busqueda || undefined,
+        tipo: tipoFiltro || undefined,
+        servidor_id: servidorFiltro ? Number(servidorFiltro) : undefined,
+        fecha_desde: fechaDesde || undefined,
+        fecha_hasta: fechaHasta || undefined,
+      };
+      const blob = await exportAuditoriaCSV(filtros);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `auditoria_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showNotification('CSV exportado correctamente', 'success');
+    } catch {
+      showNotification('Error al exportar CSV', 'error');
+    } finally {
+      setExporting(false);
+    }
   };
 
   const handlePageChange = (newPage: number) => {
@@ -206,6 +256,15 @@ export const AuditoriaScreen: React.FC = () => {
             <RotateCcw size={16} />
             Actualizar
           </button>
+          <button
+            onClick={handleExportCSV}
+            disabled={exporting}
+            className="px-4 h-10 rounded-lg border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 flex items-center gap-2 text-sm font-medium disabled:opacity-50"
+            title="Exportar a CSV"
+          >
+            {exporting ? <Spinner size="sm" /> : <Download size={16} />}
+            {exporting ? 'Exportando...' : 'Exportar CSV'}
+          </button>
         </div>
 
         {/* Panel de Filtros */}
@@ -227,6 +286,22 @@ export const AuditoriaScreen: React.FC = () => {
                   <option value="SINCRONIZACION_FORZADA">Sincronización Forzada</option>
                   <option value="RENOMBRAR_DISPOSITIVO">Renombrar Dispositivo</option>
                   <option value="RENOMBRAR_SERVIDOR">Renombrar Servidor</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
+                  <Server size={12} className="inline mr-1" />
+                  Servidor
+                </label>
+                <select
+                  value={servidorFiltro}
+                  onChange={(e) => setServidorFiltro(e.target.value)}
+                  className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="">Todos</option>
+                  {servidores.map((s) => (
+                    <option key={s.id} value={s.id}>{s.nombre} ({s.ip})</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -259,6 +334,17 @@ export const AuditoriaScreen: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Error Banner */}
+      {error && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 mb-4 flex items-center gap-3">
+          <XCircle size={20} className="text-red-500 shrink-0" />
+          <p className="text-sm text-red-700 dark:text-red-300 flex-1">{error}</p>
+          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600">
+            <X size={16} />
+          </button>
+        </div>
+      )}
 
       {/* Tabla de Auditoría */}
       <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">

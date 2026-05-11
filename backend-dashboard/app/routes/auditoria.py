@@ -3,7 +3,7 @@ from typing import Optional
 import logging
 
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response
 from fpdf import FPDF
 from pydantic import BaseModel
 from sqlalchemy import select, func, case, or_, literal, and_
@@ -397,9 +397,9 @@ async def exportar_auditoria_pdf(
             break
         offset += page_limit
 
-    pdf_bytes = pdf.output()
-    return StreamingResponse(
-        iter([pdf_bytes]),
+    pdf_bytes = bytes(pdf.output())
+    return Response(
+        content=pdf_bytes,
         media_type="application/pdf",
         headers={"Content-Disposition": "attachment; filename=auditoria_export.pdf"},
     )

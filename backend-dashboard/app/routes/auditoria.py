@@ -324,9 +324,9 @@ async def obtener_auditoria(
 
 class AuditPDF(FPDF):
     def header(self):
-        self.set_font("Helvetica", "B", 9)
-        self.cell(0, 6, "Reporte de Auditoria - VerificadorDePreciosLuz", align="C")
-        self.ln(8)
+        self.set_font("Helvetica", "B", 10)
+        self.cell(0, 7, "Reporte de Auditoria - VerificadorDePreciosLuz", align="C")
+        self.ln(9)
 
     def footer(self):
         self.set_y(-15)
@@ -335,9 +335,9 @@ class AuditPDF(FPDF):
 
     def table_row(self, cols, widths, bold=False, fill=False):
         style = "B" if bold else ""
-        self.set_font("Helvetica", style, 6)
+        self.set_font("Helvetica", style, 7)
         for i, text in enumerate(cols):
-            self.cell(widths[i], 5, str(text), border=1, fill=fill)
+            self.cell(widths[i], 5.5, str(text), border=1, fill=fill)
         self.ln()
 
 
@@ -352,12 +352,12 @@ async def exportar_auditoria_pdf(
     fecha_desde: datetime = Query(None, description="Fecha desde"),
     fecha_hasta: datetime = Query(None, description="Fecha hasta"),
 ):
-    pdf = AuditPDF()
+    pdf = AuditPDF(orientation="L")
     pdf.alias_nb_pages()
     pdf.set_auto_page_break(auto=True, margin=20)
     pdf.add_page()
 
-    col_widths = [30, 22, 70, 25, 22, 18, 12]
+    col_widths = [35, 28, 105, 35, 30, 22, 14]
     headers = ["Fecha", "Tipo", "Descripcion", "Dispositivo", "Servidor", "Usuario", "Duracion"]
     pdf.set_fill_color(220, 220, 220)
     pdf.table_row(headers, col_widths, bold=True, fill=True)
@@ -376,17 +376,17 @@ async def exportar_auditoria_pdf(
 
         for item in result["items"]:
             fecha = (item.get("fecha") or "")[:19].replace("T", " ")
-            tipo_val = (item.get("tipo") or "")[:18]
-            desc = (item.get("descripcion") or "")[:68]
+            tipo_val = (item.get("tipo") or "")[:24]
+            desc = (item.get("descripcion") or "")[:104]
             disp = item.get("dispositivo_nombre") or item.get("dispositivo_id") or "-"
-            disp = disp[:22]
+            disp = disp[:34]
             srv = item.get("servidor_nombre") or "-"
-            srv = srv[:20]
+            srv = srv[:28]
             usr = item.get("usuario") or "-"
-            usr = usr[:16]
+            usr = usr[:20]
             dur = str(item.get("duracion_segundos") or "-")
 
-            if pdf.get_y() > 265:
+            if pdf.get_y() > 175:
                 pdf.add_page()
                 pdf.set_fill_color(220, 220, 220)
                 pdf.table_row(headers, col_widths, bold=True, fill=True)

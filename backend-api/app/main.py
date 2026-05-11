@@ -2270,52 +2270,54 @@ async def orchestrate_forced_sync_sequential(
                     logger.info(f"[SYNC] Confirmación via waiter para {device_id}: {ack.get('status')}")
                     break
             
-            status = str(ack.get("status", "")).upper()
-            ok = status in ("RECEIVED", "SUCCESS", "DONE")
-            if ok:
-                confirmed += 1
-            else:
-                fail_reason = ack.get("reason", "") or f"Estado no exitoso: {status or 'UNKNOWN'}"
+            # No se recibió ack en el timeout → comando encolado en Redis (dispositivo offline)
+            if not ack:
+                timeout_reason = f"Sin confirmación en {SYNC_ACK_TIMEOUT}s"
+                was_queued = False
                 if pending_queue is not None:
                     await pending_queue.set_pending_sync(device_id)
-                asyncio.create_task(notify_dashboard_sync_failure(device_id, fail_reason))
-            details.append(
-                {
-                    "device_id": ack.get("device_id") or device_id,
-                    "ack_key": ack_key,
-                    "ok": ok,
-                    "status": status or "UNKNOWN",
-                    "reason": ack.get("reason", ""),
-                }
-            )
-        except asyncio.TimeoutError:
-            timeout_reason = f"Sin confirmación en {SYNC_ACK_TIMEOUT}s"
-            was_queued = False
-            if pending_queue is not None:
-                await pending_queue.set_pending_sync(device_id)
-                was_queued = True
-            if was_queued:
-                asyncio.create_task(notify_dashboard_sync_queued(device_id, timeout_reason))
-                queued += 1
-                details.append(
-                    {
-                        "device_id": device_id,
-                        "ack_key": ack_key,
-                        "ok": True,
-                        "status": "QUEUED",
-                        "reason": f"Sin confirmación en {SYNC_ACK_TIMEOUT}s. Se ejecutará al reconectar.",
-                        "queued": True,
-                    }
-                )
+                    was_queued = True
+                if was_queued:
+                    asyncio.create_task(notify_dashboard_sync_queued(device_id, timeout_reason))
+                    queued += 1
+                    details.append(
+                        {
+                            "device_id": device_id,
+                            "ack_key": ack_key,
+                            "ok": True,
+                            "status": "QUEUED",
+                            "reason": f"Sin confirmación en {SYNC_ACK_TIMEOUT}s. Se ejecutará al reconectar.",
+                            "queued": True,
+                        }
+                    )
+                else:
+                    asyncio.create_task(notify_dashboard_sync_failure(device_id, timeout_reason))
+                    details.append(
+                        {
+                            "device_id": device_id,
+                            "ack_key": ack_key,
+                            "ok": False,
+                            "status": "TIMEOUT",
+                            "reason": timeout_reason,
+                        }
+                    )
             else:
-                asyncio.create_task(notify_dashboard_sync_failure(device_id, timeout_reason))
+                status = str(ack.get("status", "")).upper()
+                ok = status in ("RECEIVED", "SUCCESS", "DONE")
+                if ok:
+                    confirmed += 1
+                else:
+                    fail_reason = ack.get("reason", "") or f"Estado no exitoso: {status or 'UNKNOWN'}"
+                    if pending_queue is not None:
+                        await pending_queue.set_pending_sync(device_id)
+                    asyncio.create_task(notify_dashboard_sync_failure(device_id, fail_reason))
                 details.append(
                     {
-                        "device_id": device_id,
+                        "device_id": ack.get("device_id") or device_id,
                         "ack_key": ack_key,
-                        "ok": False,
-                        "status": "TIMEOUT",
-                        "reason": timeout_reason,
+                        "ok": ok,
+                        "status": status or "UNKNOWN",
+                        "reason": ack.get("reason", ""),
                     }
                 )
         finally:

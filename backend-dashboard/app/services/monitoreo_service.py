@@ -3,9 +3,6 @@ Servicio de monitoreo de sesiones de dispositivos.
 Ejecutado cada 3.5 minutos por el scheduler.
 """
 from datetime import datetime, timedelta
-from typing import Any
-import logging
-import httpx
 import time
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,51 +10,10 @@ from app.database import AsyncSessionLocalUsuarios
 from app.models.dispositivo import Dispositivo
 from app.models.dispositivo_sesion import DispositivoSesion
 from app.models.servidor_secundario import ServidorSecundario
+from app.services.server_service import HEARTBEAT_OFFLINE_MINUTES, _utcnow, _obtener_dispositivos_de_servidor
 from app.utils.logger import StructuredLogger
 
 log = StructuredLogger("monitoreo")
-
-HEARTBEAT_OFFLINE_MINUTES = 8
-
-
-def _utcnow() -> datetime:
-    return datetime.utcnow().replace(microsecond=0)
-
-
-async def _obtener_dispositivos_de_servidor(ip: str) -> list[dict[str, Any]]:
-    """
-    Consulta al backend-api del servidor secundario:
-    GET http://{ip}:8000/devices/status
-    """
-    url = f"http://{ip}:8000/devices/status"
-    try:
-        async with httpx.AsyncClient(timeout=4) as client:
-            resp = await client.get(url)
-            resp.raise_for_status()
-            payload = resp.json()
-
-        if not isinstance(payload, dict):
-            return []
-
-        dispositivos: list[dict[str, Any]] = []
-        for device_id, info in payload.items():
-            if not isinstance(info, dict):
-                continue
-            dispositivos.append(
-                {
-                    "device_id": str(device_id),
-                    "online": bool(info.get("online", False)),
-                    "last_seen": info.get("last_seen"),
-                    "server_id": info.get("server_id"),
-                }
-            )
-
-        dispositivos.sort(key=lambda d: d["device_id"])
-        log.debug("servidor_reporto_dispositivos", server_ip=ip, cantidad=len(dispositivos))
-        return dispositivos
-    except Exception as e:
-        log.warning("fallo_consultar_servidor", server_ip=ip, error=str(e))
-        return []
 
 
 async def actualizar_sesiones_dispositivos() -> None:

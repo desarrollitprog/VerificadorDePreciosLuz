@@ -637,21 +637,20 @@ nuevo_banner = Publicidad(..., ThumbnailUrl=thumbnail_url)
 
 ---
 
-## FASE 12: Infraestructura de Navegación y Estado (Frontend)
+## FASE 12: Infraestructura de Navegación y Estado (Frontend) ✅ COMPLETADA
 
 *Prioridad: Alta | Objetivo: Crear una base sólida para la expansión de la UI.*
 
-### 12.1 Integración de `react-router-dom` ⏳ PENDIENTE
-- **Descripción**: Migrar estado `currentScreen` a rutas reales
-- **Impacto**: Navegación fluida y enlaces directos
-- **Complejidad**: Media
-- **Dependencias**: react-router-dom
+### 12.1 Integración de `react-router-dom` ✅ COMPLETADO
+- **Archivos**: `dashboard/App.tsx`, `dashboard/components/Sidebar.tsx`, `dashboard/components/DashboardHeader.tsx`, `dashboard/components/GeneralNotifications.tsx`, `dashboard/components/ProtectedLayout.tsx` (nuevo)
+- **Descripción**: Migrado switch de `currentScreen` a rutas reales con react-router-dom v6
+- **Rutas**: `/` (Mis Videos), `/servidores`, `/usuarios`, `/calendario`, `/auditoria`
+- **Layout protegido**: `ProtectedLayout` con verificación de sesión + token expiry watcher + `<Outlet>`
 
-### 12.2 Implementación de `Zustand` ⏳ PENDIENTE
-- **Descripción**: Centralizar estado de sesión y configuraciones
-- **Impacto**: Elimina prop-drilling y optimiza flujo de datos
-- **Complejidad**: Media
-- **Dependencias**: zustand
+### 12.2 Implementación de `Zustand` ✅ COMPLETADO
+- **Archivos**: `dashboard/stores/sessionStore.ts` (nuevo)
+- **Descripción**: Store centralizada de sesión (`isAuthenticated`, `role`, `userName`, `login`, `logout`, `checkSession`)
+- **Impacto**: Elimina prop-drilling de sesión, estado accesible desde cualquier componente
 
 ---
 
@@ -1165,8 +1164,10 @@ Cada item es desplegable por separado. Item 1 y 2 no tienen dependencias entre s
 | Grupo | Fases | Completado | Pendiente |
 |-------|-------|------------|-----------|
 | Originales | 1-10 | 25/28 (89%) | 5/28 |
-| Nuevas | 11-14 | 0/11 (0%) | 11/11 |
-| **Nueva** | **15** (Blindaje WebSocket) | **10/17 (59%)** | **7/17** |
+| Nuevas | 11 | 0/3 (0%) | 3/3 |
+| **Nueva** | **12** (Navegación + Estado) | **2/2 (100%)** | **0/2** |
+| Nuevas | 13-14 | 1/5 (20%) | 4/5 |
+| **Nueva** | **15** (Blindaje WebSocket) | **17/17 (100%)** | **0/17** |
 | **Nueva** | **16** | **6/6 (100%)** | **0/6** |
 | **Nueva** | **17** (Cola Dashboard) | **0/15 (0%)** | **15/15** |
-| **TOTAL** | **1-17** | **41/77 (53%)** | **36/77** |
+| **TOTAL** | **1-17** | **53/79 (67%)** | **26/79** |

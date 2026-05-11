@@ -161,10 +161,10 @@ Mejorar seguridad, performance, observabilidad y code quality del sistema de ges
 | FASE 13 (UX/UI) | 2/2 ✅ | 0/2 |
 | FASE 14 (Pulido Visual) | 2/2 ✅ | 0/2 |
 | FASE 15 (Blindaje WebSocket) | 10/17 | 7/17 |
-| FASE 17 (Cola Dashboard) | 0/17 | 17/17 |
+| FASE 17 (Cola Dashboard) | 16/17 | 1/17 |
 | FASE 18 (Bots Mantenimiento) | 0/5 | 5/5 |
 
-**Total: 57/89 completados (64%)**
+**Total: 73/89 completados (82%)**
 
 ---
 
@@ -693,6 +693,15 @@ nuevo_banner = Publicidad(..., ThumbnailUrl=thumbnail_url)
 - ~~**Helper**: `_get_device_name()` consulta `Dispositivo.nombre_amigable`~~
 - ~~**Complejidad**: Baja~~
 
+### Mejora Adicional: Nombres Amigables en Descripciones + Auditoría ✅ COMPLETADO
+- ~~**Descripción**: Descripciones de notificaciones (`SINCRONIZACION_SELECTIVA`, `BORRADO_MULTIMEDIA`, `EDICION_VIGENCIA_MULTIMEDIA`) ahora muestran `"NombreAmigable (id_disp)"` y `"id_srv - NombreServidor"`. Auditoría resuelve nombres vía JOIN para notificaciones. Columna servidor en frontend muestra nombre + ID secundario.~~
+- ~~**Archivos**: `backend-dashboard/app/services/sync_service.py`, `backend-dashboard/app/routes/publicidad.py`, `backend-dashboard/app/routes/auditoria.py`, `dashboard/screens/AuditoriaScreen.tsx`~~
+- ~~**Helper**: `_resolve_device_names()` en `sync_service.py`~~
+
+### Mejora Adicional: Cards Grid items-baseline ✅ COMPLETADO
+- ~~**Descripción**: Grid de tarjetas de video y servidores usa `items-baseline` para evitar que al expandir una tarjeta, las vecinas se estiren.~~
+- ~~**Archivos**: `dashboard/screens/DashboardScreen.tsx`, `dashboard/components/ServerDashboard.tsx`~~
+
 ---
 
 ## FASE 14: Pulido Visual y Estética (Polishing) ✅ COMPLETADA
@@ -1121,37 +1130,37 @@ El dashboard no tiene visibilidad de la cola Redis en backend-api:
 
 | # | Archivo | Cambio | Esfuerzo |
 |---|---------|--------|----------|
-| 17.1.1 | `backend-api/app/main.py` `orchestrate_forced_sync_sequential` | Timeout/SEND_FAILED + `set_pending_sync()` exitoso → detail `status: "QUEUED"`, `reason: "Dispositivo offline. Se ejecutará al reconectar."`, `ok: True`, `queued: true`. No llamar `notify_dashboard_sync_failure`. Contador `queued` separado en return + progress_hook | Bajo |
-| 17.1.2 | `backend-api/app/main.py` `_run_force_sync_job` | Forwardear `queued` del resultado al job state | Bajo |
-| 17.1.3 | `backend-api/app/main.py` nueva función `notify_dashboard_sync_queued` | `POST /api/sync-queued` al dashboard | Bajo |
-| 17.1.4 | `backend-dashboard/app/routes/notificaciones.py` | Nuevo `POST /api/sync-queued` → crea `COMANDO_ENCOLADO`, dedup 120s | Bajo |
-| 17.1.5 | `backend-dashboard/app/routes/monitoreo.py` `_execute_force_sync_job` | Leer `queued` del backend-api, no contar como failed | Bajo |
-| 17.1.6 | `backend-dashboard/app/routes/monitoreo.py` GET job | Incluir `queued` en response del job | Bajo |
-| 17.1.7 | `dashboard/screens/DashboardScreen.tsx` | `SyncServerProgress` type + `queued`. Mostrar "X confirmados, Y en cola, Z fallos". Toast diferente para queued | Medio |
-| 17.1.8 | `dashboard/services/notificacionesPresentation.ts` | Case `COMANDO_ENCOLADO` → severity `info`, título "Comando encolado" | Bajo |
+| 17.1.1 | `backend-api/app/main.py` `orchestrate_forced_sync_sequential` | Timeout/SEND_FAILED → `set_pending_sync()` exitoso → detail `status: "QUEUED"`, `queued: true`. Contador `queued` separado | ✅ |
+| 17.1.2 | `backend-api/app/main.py` `_run_force_sync_job` | Forwardear `queued` del resultado al job state | ✅ |
+| 17.1.3 | `backend-api/app/main.py` nueva función `notify_dashboard_sync_queued` | `POST /api/sync-queued` al dashboard | ✅ |
+| 17.1.4 | `backend-dashboard/app/routes/notificaciones.py` | Nuevo `POST /api/sync-queued` → crea `COMANDO_ENCOLADO`, dedup 120s | ✅ |
+| 17.1.5 | `backend-dashboard/app/services/sync_service.py` | Leer `queued` del backend-api, no contar como failed | ✅ |
+| 17.1.6 | `backend-dashboard/app/services/sync_service.py` GET job | Incluir `queued` en response del job | ✅ |
+| 17.1.7 | `dashboard/screens/DashboardScreen.tsx` | `SyncServerProgress` type + `queued`. Barra naranja, toast queued | ✅ |
+| 17.1.8 | `dashboard/services/notificacionesPresentation.ts` | Case `COMANDO_ENCOLADO` → severity `info`, título "Comando encolado" | ✅ |
 
 ### Item 2: Endpoint de estado de cola (`/queue-status`)
 
 **Descripción**: Permitir que el dashboard consulte el estado de la cola Redis de un dispositivo (pendientes, inflight, DLQ, flags).
 
-| # | Archivo | Cambio | Esfuerzo |
-|---|---------|--------|----------|
-| 17.2.1 | `backend-api/app/main.py` | Nuevo `GET /api/queue-status/{device_id}` → `{ device_id, pending, inflight, total, pending_sync, pending_reboot }`. Auth via API key | Bajo |
-| 17.2.2 | `backend-dashboard/app/routes/monitoreo.py` | Nuevo `GET /api/monitoreo/cola/{device_id}` → proxy a backend-api | Bajo |
-| 17.2.3 | `dashboard/components/ServerDashboard.tsx` | En cada dispositivo, badge "N pendientes" con tooltip. Naranja si > 0, gris si vacío | Medio |
+| # | Archivo | Cambio | Estado |
+|---|---------|--------|:------:|
+| 17.2.1 | `backend-api/app/main.py` | Nuevo `GET /api/queue-status/{device_id}` → `{ device_id, pending, inflight, total, pending_sync, pending_reboot }`. Auth via API key | ✅ |
+| 17.2.2 | `backend-dashboard/app/routes/monitoreo/sync.py` | Nuevo `GET /api/monitoreo/cola/{device_id}` → proxy a backend-api | ✅ |
+| 17.2.3 | `dashboard/components/ServerDashboard.tsx` | En cada dispositivo, badge "N pendientes" con tooltip. Naranja si > 0, gris si vacío | ⏳ Pendiente |
 
 ### Item 3: Notificar entrega exitosa desde la cola
 
 **Descripción**: Cuando la cola Redis entrega el comando al dispositivo y este confirma SUCCESS, notificar al dashboard para crear `SINCRONIZACION_COMPLETADA`.
 
-| # | Archivo | Cambio | Esfuerzo |
-|---|---------|--------|----------|
-| 17.3.1 | `backend-api/app/services/pending_queue.py` | Nuevos métodos: `set_delivery_pending(device_id)` + `check_delivery_pending(device_id)`. Redis key `device:delivery_pending:{id}`, TTL 300s | Bajo |
-| 17.3.2 | `backend-api/app/main.py` `_flush_all_queues` | Después de `check_pending_sync() == True` → `set_delivery_pending()`. En `flush_all_to_device`, al dequeuear WIPE_AND_RESYNC → `set_delivery_pending()` | Bajo |
-| 17.3.3 | `backend-api/app/main.py` `process_sync_confirmation` | Cuando WIPE_AND_RESYNC SUCCESS → `check_delivery_pending()` → si True → `notify_dashboard_sync_delivered()` | Bajo |
-| 17.3.4 | `backend-api/app/main.py` nueva función `notify_dashboard_sync_delivered` | `POST /api/sync-delivered` al dashboard con `{ device_id, status: "SUCCESS" }` | Bajo |
-| 17.3.5 | `backend-dashboard/app/routes/notificaciones.py` | Nuevo `POST /api/sync-delivered` → crea `SINCRONIZACION_COMPLETADA` | Bajo |
-| 17.3.6 | `dashboard/services/notificacionesPresentation.ts` | Case `SINCRONIZACION_COMPLETADA` → severity `success`, título "Sincronización completada" | Bajo |
+| # | Archivo | Cambio | Estado |
+|---|---------|--------|:------:|
+| 17.3.1 | `backend-api/app/services/pending_queue.py` | Nuevos métodos: `set_delivery_pending(device_id)` + `check_delivery_pending(device_id)`. Redis key `device:delivery_pending:{id}`, TTL 300s | ✅ |
+| 17.3.2 | `backend-api/app/main.py` `_flush_all_queues` | Después de `check_pending_sync() == True` → `set_delivery_pending()`. En `flush_all_to_device`, al dequeuear WIPE_AND_RESYNC → `set_delivery_pending()` | ✅ |
+| 17.3.3 | `backend-api/app/main.py` `process_sync_confirmation` | Cuando WIPE_AND_RESYNC SUCCESS → `check_delivery_pending()` → si True → `notify_dashboard_sync_delivered()` | ✅ |
+| 17.3.4 | `backend-api/app/main.py` nueva función `notify_dashboard_sync_delivered` | `POST /api/sync-delivered` al dashboard con `{ device_id, status: "SUCCESS" }` | ✅ |
+| 17.3.5 | `backend-dashboard/app/routes/notificaciones.py` | Nuevo `POST /api/sync-delivered` → crea `SINCRONIZACION_COMPLETADA` | ✅ |
+| 17.3.6 | `dashboard/services/notificacionesPresentation.ts` | Case `SINCRONIZACION_COMPLETADA` → severity `success`, título "Sincronización completada" | ✅ |
 
 ### Orden de implementación sugerido
 
@@ -1253,7 +1262,7 @@ El sistema no tiene **ningún** job de limpieza automática. Datos que crecen si
 
 | Prioridad | Item | Fase | Dónde | Dependencias |
 |-----------|------|------|-------|-------------|
-| 🔴 **1** | QUEUED vs FAILED + queue-status + delivery notify | FASE 17 | backend-api + dashboard | — |
+| 🟡 **1** | Badge "N pendientes" en ServerDashboard | FASE 17.2.3 | dashboard/components/ServerDashboard.tsx | (ninguna) |
 | 🔴 **2** | Flags de pendientes + DLQ (15.3) | FASE 15 Lote 3 | backend-api | Cola Redis (lista) |
 | 🔴 **3** | REINICIAR robusto + reconciliación (15.4) | FASE 15 Lote 4 | backend-api | Flags pendientes |
 | 🟡 **4** | Bot `limpiar_sesiones` (90 días, c/15d) | FASE 18 | dashboard | — |
@@ -1261,7 +1270,7 @@ El sistema no tiene **ningún** job de limpieza automática. Datos que crecen si
 | 🟡 **6** | Bot `limpiar_archivos` (c/24h) | FASE 18 | dashboard | — |
 | 🟡 **7** | Bot `limpiar_redis_stale` (TTL 48h) | FASE 18 | backend-api + dashboard | — |
 | 🟡 **8** | Bot `limpiar_banners_api` (c/24h) | FASE 18 | backend-api | — |
-| 🟢 **9** | Control vigencia luzapp (S1, S2, S3) | FASE 7.3-7.5 | luzapp + backend-api | — |
+| 🟢 **9** | Control vigencia luzapp (S2, S3) | FASE 7.4-7.5 | luzapp + backend-api | (S1 ya implementado) |
 | 🟢 **10** | Backups SQL Server (manual) | FASE 5.1 | servidor | — |
 | 🟢 **11** | Docker multi-stage build | FASE 5.3 | Dockerfile | — |
 | ⚪ **12** | Versión Objetivo (FASE 15.5) | FASE 15 Lote 5 | backend-api + luzapp | largo plazo |
@@ -1277,6 +1286,6 @@ El sistema no tiene **ningún** job de limpieza automática. Datos que crecen si
 | Frontend Base | 12 | 2/2 ✅ (100%) | 0/2 |
 | UX/UI | 13-14 | 5/5 ✅ (100%) | 0/5 |
 | Blindaje WebSocket | 15 | 10/17 (59%) | 7/17 |
-| Cola Dashboard | 17 | 0/17 (0%) | 17/17 |
+| Cola Dashboard | 17 | 16/17 (94%) | 1/17 |
 | Bots Mantenimiento | 18 | 0/5 (0%) | 5/5 |
-| **TOTAL** | **1-18** | **57/89 (64%)** | **32/89** |
+| **TOTAL** | **1-18** | **73/89 (82%)** | **16/89** |

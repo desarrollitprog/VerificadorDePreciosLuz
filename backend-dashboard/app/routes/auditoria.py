@@ -1,11 +1,10 @@
-import csv
-import io
 from datetime import datetime, timedelta
 from typing import Optional
 import logging
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
+from fpdf import FPDF
 from pydantic import BaseModel
 from sqlalchemy import select, func, case, or_, literal, and_
 from sqlalchemy.sql import literal_column
@@ -323,8 +322,27 @@ async def obtener_auditoria(
     }
 
 
+class AuditPDF(FPDF):
+    def header(self):
+        self.set_font("Helvetica", "B", 9)
+        self.cell(0, 6, "Reporte de Auditoria - VerificadorDePreciosLuz", align="C")
+        self.ln(8)
+
+    def footer(self):
+        self.set_y(-15)
+        self.set_font("Helvetica", "I", 7)
+        self.cell(0, 10, f"Pagina {self.page_no()}/{{nb}}", align="C")
+
+    def table_row(self, cols, widths, bold=False, fill=False):
+        style = "B" if bold else ""
+        self.set_font("Helvetica", style, 6)
+        for i, text in enumerate(cols):
+            self.cell(widths[i], 5, str(text), border=1, fill=fill)
+        self.ln()
+
+
 @router.get("/auditoria/exportar")
-async def exportar_auditoria_csv(
+async def exportar_auditoria_pdf(
     db: AsyncSession = Depends(get_db_usuarios),
     current_user: dict = Depends(get_current_admin),
     busqueda: str = Query(None, description="Texto a buscar"),
@@ -334,47 +352,56 @@ async def exportar_auditoria_csv(
     fecha_desde: datetime = Query(None, description="Fecha desde"),
     fecha_hasta: datetime = Query(None, description="Fecha hasta"),
 ):
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(["Fecha", "Tipo", "Descripción", "Dispositivo ID", "Dispositivo Nombre", "Servidor ID", "Servidor Nombre", "Usuario", "Duración (seg)", "Origen"])
+    pdf = AuditPDF()
+    pdf.alias_nb_pages()
+    pdf.set_auto_page_break(auto=True, margin=20)
+    pdf.add_page()
+
+    col_widths = [30, 22, 70, 25, 22, 18, 12]
+    headers = ["Fecha", "Tipo", "Descripcion", "Dispositivo", "Servidor", "Usuario", "Duracion"]
+    pdf.set_fill_color(220, 220, 220)
+    pdf.table_row(headers, col_widths, bold=True, fill=True)
 
     offset = 0
-    limit = 1000
-    seen_ids = set()
+    page_limit = 500
 
     while True:
-        page = (offset // limit) + 1
-        result = await _fetch_auditoria_page(db, busqueda, tipo, dispositivo_id, servidor_id, fecha_desde, fecha_hasta, page, limit, current_user)
+        page = (offset // page_limit) + 1
+        result = await _fetch_auditoria_page(
+            db, busqueda, tipo, dispositivo_id, servidor_id,
+            fecha_desde, fecha_hasta, page, page_limit, current_user
+        )
         if not result["items"]:
             break
 
         for item in result["items"]:
-            key = (item["origen"], item["id"])
-            if key in seen_ids:
-                continue
-            seen_ids.add(key)
-            writer.writerow([
-                item.get("fecha", ""),
-                item.get("tipo", ""),
-                item.get("descripcion", ""),
-                item.get("dispositivo_id", ""),
-                item.get("dispositivo_nombre", ""),
-                item.get("servidor_id", ""),
-                item.get("servidor_nombre", ""),
-                item.get("usuario", ""),
-                item.get("duracion_segundos", ""),
-                item.get("origen", ""),
-            ])
+            fecha = (item.get("fecha") or "")[:19].replace("T", " ")
+            tipo_val = (item.get("tipo") or "")[:18]
+            desc = (item.get("descripcion") or "")[:68]
+            disp = item.get("dispositivo_nombre") or item.get("dispositivo_id") or "-"
+            disp = disp[:22]
+            srv = item.get("servidor_nombre") or "-"
+            srv = srv[:20]
+            usr = item.get("usuario") or "-"
+            usr = usr[:16]
+            dur = str(item.get("duracion_segundos") or "-")
 
-        if len(result["items"]) < limit:
+            if pdf.get_y() > 265:
+                pdf.add_page()
+                pdf.set_fill_color(220, 220, 220)
+                pdf.table_row(headers, col_widths, bold=True, fill=True)
+
+            pdf.table_row([fecha, tipo_val, desc, disp, srv, usr, dur], col_widths)
+
+        if len(result["items"]) < page_limit:
             break
-        offset += limit
+        offset += page_limit
 
-    output.seek(0)
+    pdf_bytes = pdf.output()
     return StreamingResponse(
-        iter([output.getvalue()]),
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=auditoria_export.csv"},
+        iter([pdf_bytes]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=auditoria_export.pdf"},
     )
 
 

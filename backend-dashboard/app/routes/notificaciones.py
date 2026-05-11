@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query, status
@@ -7,12 +8,28 @@ from sqlalchemy import and_, delete, func, literal
 from sqlalchemy.exc import IntegrityError
 from app.models import Notificacion, NotificacionLeida
 from app.models.usuario import Usuario
+from app.models.dispositivo import Dispositivo
 from app.database import get_db_usuarios
 from app.dependencies import get_current_cliente
 from app.services.notificacion_service import registrar_accion
 from pydantic import BaseModel
 
+logger = logging.getLogger("uvicorn.error")
+
 router = APIRouter()
+
+
+async def _get_device_name(db: AsyncSession, device_id: str) -> str:
+    try:
+        result = await db.execute(
+            select(Dispositivo.nombre_amigable).where(Dispositivo.codigo_kiosko == device_id)
+        )
+        nombre = result.scalar_one_or_none()
+        if nombre:
+            return f"{nombre} ({device_id})"
+    except Exception as e:
+        logger.warning("Error al obtener nombre_amigable para %s: %s", device_id, e)
+    return device_id
 
 @router.get("/notificaciones")
 async def listar_notificaciones(
@@ -238,9 +255,9 @@ async def sync_status(
     body: SyncStatusBody,
     db: AsyncSession = Depends(get_db_usuarios),
 ):
-    # Registrar la notificación en la base de datos (con deduplicación temporal)
+    nombre = await _get_device_name(db, body.device_id)
     reason = (body.reason or "").strip() or "sin detalle"
-    descripcion = f"Dispositivo {body.device_id} falló sincronización: {reason}"
+    descripcion = f"Dispositivo {nombre} falló sincronización: {reason}"
 
     dedupe_since = datetime.utcnow() - timedelta(seconds=120)
     recent_stmt = (
@@ -279,9 +296,10 @@ async def playback_status(
     body: PlaybackStatusBody,
     db: AsyncSession = Depends(get_db_usuarios),
 ):
+    nombre = await _get_device_name(db, body.device_id)
     reason = (body.reason or "").strip() or "sin detalle"
     video_name = (body.video_name or "").strip() or "(sin nombre)"
-    descripcion = f"Dispositivo {body.device_id} no pudo reproducir '{video_name}': {reason}"
+    descripcion = f"Dispositivo {nombre} no pudo reproducir '{video_name}': {reason}"
 
     dedupe_since = datetime.utcnow() - timedelta(seconds=120)
     recent_stmt = (
@@ -330,9 +348,10 @@ async def banner_status(
     body: BannerStatusBody,
     db: AsyncSession = Depends(get_db_usuarios),
 ):
+    nombre = await _get_device_name(db, body.device_id)
     tipo = "BANNER_INICIADO" if body.status == "INICIADO" else "BANNER_FINALIZADO"
     
-    descripcion = f"Dispositivo {body.device_id}"
+    descripcion = f"Dispositivo {nombre}"
     if body.banner_id:
         descripcion += f" - Banner ID {body.banner_id}"
     descripcion += f" - {body.status}"

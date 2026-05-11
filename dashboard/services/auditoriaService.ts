@@ -58,7 +58,7 @@ export async function markNotificacionRead(notificacionId: number): Promise<{ su
   return response.data;
 }
 
-export async function exportAuditoriaCSV(filtros: AuditoriaFiltros = {}): Promise<Blob> {
+export async function exportAuditoriaPDF(filtros: AuditoriaFiltros = {}): Promise<Blob> {
   const params = new URLSearchParams();
 
   if (filtros.busqueda) params.append('busqueda', filtros.busqueda);

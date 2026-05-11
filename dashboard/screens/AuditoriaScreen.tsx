@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Search, Filter, ChevronLeft, ChevronRight, Calendar, Server, Monitor, Clock, X, ChevronDown, ChevronUp, User, RotateCcw, Check, Circle, Download, XCircle } from 'lucide-react';
-import { getAuditoria, markNotificacionRead, exportAuditoriaCSV, AuditoriaItem, AuditoriaFiltros } from '../services/auditoriaService';
+import { getAuditoria, markNotificacionRead, exportAuditoriaPDF, AuditoriaItem, AuditoriaFiltros } from '../services/auditoriaService';
 import { getServersStatus } from '../services/monitoreoService';
 import { useNotification } from '../components/useNotification';
 import { TableSkeleton } from '../components/TableSkeleton';
@@ -183,18 +183,18 @@ export const AuditoriaScreen: React.FC = () => {
         fecha_desde: fechaDesde || undefined,
         fecha_hasta: fechaHasta || undefined,
       };
-      const blob = await exportAuditoriaCSV(filtros);
+      const blob = await exportAuditoriaPDF(filtros);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `auditoria_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `auditoria_${new Date().toISOString().slice(0, 10)}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      showNotification('CSV exportado correctamente', 'success');
+      showNotification('PDF exportado correctamente', 'success');
     } catch {
-      showNotification('Error al exportar CSV', 'error');
+      showNotification('Error al exportar PDF', 'error');
     } finally {
       setExporting(false);
     }
@@ -260,10 +260,10 @@ export const AuditoriaScreen: React.FC = () => {
             onClick={handleExportCSV}
             disabled={exporting}
             className="px-4 h-10 rounded-lg border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 flex items-center gap-2 text-sm font-medium disabled:opacity-50"
-            title="Exportar a CSV"
+            title="Exportar a PDF"
           >
             {exporting ? <Spinner size="sm" /> : <Download size={16} />}
-            {exporting ? 'Exportando...' : 'Exportar CSV'}
+            {exporting ? 'Exportando...' : 'Exportar PDF'}
           </button>
         </div>
 

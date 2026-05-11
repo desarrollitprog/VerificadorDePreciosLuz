@@ -34,13 +34,13 @@ async def rename_device(
     await db.commit()
 
     if user_id is not None:
-        nombre_para_log = dispositivo.nombre_amigable or dispositivo.codigo_kiosko
+        nombre_viejo = dispositivo.nombre_amigable or dispositivo.codigo_kiosko
         try:
             await registrar_accion(
                 db,
                 user_id,
                 "RENOMBRAR_DISPOSITIVO",
-                f"Dispositivo {dispositivo.codigo_kiosko} renombrado a '{nombre_para_log}'",
+                f"Dispositivo '{nombre_viejo}' ({dispositivo.codigo_kiosko}) renombrado a '{nuevo_nombre or ''}'",
                 dispositivo_id=dispositivo.codigo_kiosko,
                 servidor_id=dispositivo.servidor_id,
             )
@@ -209,12 +209,13 @@ async def reboot_device(
             result = response.json()
             logger.info(f"[REINICIAR] Resultado: {result}")
 
+            nombre_disp = dispositivo.nombre_amigable or device_id
             if result.get("success"):
                 await registrar_accion(
                     db,
                     user_id,
                     "REINICIAR_DISPOSITIVO",
-                    f"Dispositivo {device_id} reiniciado exitosamente por {actor_name}",
+                    f"Dispositivo '{nombre_disp}' ({device_id}) reiniciado exitosamente por {actor_name}",
                     dispositivo_id=device_id,
                     servidor_id=servidor.id,
                 )
@@ -223,7 +224,7 @@ async def reboot_device(
                     db,
                     user_id,
                     "REINICIAR_DISPOSITIVO_FALLO",
-                    f"Error al reiniciar {device_id}: {result.get('message', 'Error desconocido')}",
+                    f"Error al reiniciar '{nombre_disp}' ({device_id}): {result.get('message', 'Error desconocido')}",
                     dispositivo_id=device_id,
                     servidor_id=servidor.id,
                 )

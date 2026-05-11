@@ -1745,6 +1745,7 @@ class TabletWebSocketManager:
                         )
                     else:
                         await self.send_to_device(device_id, {"command": "WIPE_AND_RESYNC"})
+                    await pending_queue.set_delivery_pending(device_id)
             except Exception as e:
                 logger.error(f"[QUEUE] Error verificando pending sync para {device_id}: {e}")
 
@@ -2426,6 +2427,15 @@ async def process_sync_confirmation(websocket: WebSocket, msg: dict):
     # Actualizar dict local (para backward compatibility)
     await _apply_sync_confirmation(device_id=device_id, status=status, reason=reason)
 
+    # Notificar entrega exitosa al dashboard (FASE 17.3)
+    if status in ("SUCCESS", "RECEIVED", "DONE"):
+        if pending_queue is not None:
+            try:
+                if await pending_queue.check_delivery_pending(device_id):
+                    asyncio.create_task(notify_dashboard_sync_delivered(device_id))
+            except Exception as e:
+                logger.error(f"[DELIVERY] Error en check_delivery_pending: {e}")
+
 # Endpoint WebSocket para tabletas
 async def notify_dashboard_sync_failure(device_id: str, reason: str = ""):
     dashboard_url = os.getenv("DASHBOARD_URL")
@@ -2652,6 +2662,24 @@ async def websocket_tablet(websocket: WebSocket):
     except Exception as e:
         logger.error(f"[WebSocket] Error inesperado en endpoint: {e}")
         await tablet_ws_manager.disconnect(websocket)
+
+@app.get("/api/queue-status/{device_id}")
+async def queue_status(device_id: str):
+    if pending_queue is None:
+        raise HTTPException(status_code=503, detail="Redis queue not available")
+    try:
+        queue_stats = await pending_queue.get_queue_size(device_id)
+        dlq_size = await pending_queue.get_dlq_size(device_id)
+        return {
+            "device_id": device_id,
+            "pending": queue_stats["pending"],
+            "inflight": queue_stats["inflight"],
+            "total": queue_stats["total"],
+            "dlq": dlq_size,
+        }
+    except Exception as e:
+        logger.error(f"Error obteniendo queue status para {device_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error: {e}")
 
 app.include_router(consultas)
 app.include_router(publicidad)

@@ -76,6 +76,13 @@ export function toNotificationViewModel(notificacion: Notificacion): Notificatio
         severity: 'info',
       };
     }
+    case 'SINCRONIZACION_SELECTIVA':
+      return {
+        title: 'Sincronización iniciada',
+        message: 'Se ejecutó una sincronización selectiva.',
+        detail: descripcion || undefined,
+        severity: 'info',
+      };
     case 'RENOMBRAR_DISPOSITIVO':
       return {
         title: 'Dispositivo actualizado',

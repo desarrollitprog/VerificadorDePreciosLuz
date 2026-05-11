@@ -477,11 +477,20 @@ export const DashboardScreen: React.FC = () => {
       const maxPolls = 90;
       const pollDelayMs = 2000;
       let finalStatus: any = null;
+      let queuedToastShown = false;
 
       for (let i = 0; i < maxPolls; i++) {
         await new Promise((resolve) => setTimeout(resolve, pollDelayMs));
         const status = await getForceSyncJobStatus(start.job_id);
         setSyncServerProgress(normalizeServerProgress(status.details || []));
+
+        if (!queuedToastShown) {
+          const anyQueued = (status.details || []).some((d: any) => Number(d.sync_queued ?? 0) > 0);
+          if (anyQueued) {
+            queuedToastShown = true;
+            showNotification('Uno o más dispositivos están en cola — se ejecutarán al reconectar.', 'warning');
+          }
+        }
 
         if (status.status === 'COMPLETED' || status.status === 'FAILED') {
           finalStatus = status;
@@ -549,11 +558,20 @@ export const DashboardScreen: React.FC = () => {
       const maxPolls = 90;
       const pollDelayMs = 2000;
       let finalStatus: any = null;
+      let queuedToastShown = false;
 
       for (let i = 0; i < maxPolls; i++) {
         await new Promise((resolve) => setTimeout(resolve, pollDelayMs));
         const status = await getForceSyncJobStatus(start.job_id);
         setSyncServerProgress(normalizeServerProgress(status.details || []));
+
+        if (!queuedToastShown) {
+          const anyQueued = (status.details || []).some((d: any) => Number(d.sync_queued ?? 0) > 0);
+          if (anyQueued) {
+            queuedToastShown = true;
+            showNotification('Uno o más dispositivos están en cola — se ejecutarán al reconectar.', 'warning');
+          }
+        }
 
         if (status.status === 'COMPLETED' || status.status === 'FAILED') {
           finalStatus = status;

@@ -1367,6 +1367,7 @@ async def fuerza_sync_status(job_id: str):
         "total": int(job.get("total", 0)),
         "sent": int(job.get("sent", 0)),
         "confirmed": int(job.get("confirmed", 0)),
+        "queued": int(job.get("queued", 0)),
         "failed": int(job.get("failed", 0)),
         "details": job.get("details", []),
         "error": job.get("error"),

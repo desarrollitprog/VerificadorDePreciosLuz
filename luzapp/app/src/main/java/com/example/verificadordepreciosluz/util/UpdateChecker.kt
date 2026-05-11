@@ -288,12 +288,6 @@ object UpdateChecker {
     }
 
     private fun installSilentlyMethod(context: Context, apkFile: File) {
-        // Cerrar app vieja antes de instalar
-        forceStopOldVersion(context)
-        
-        val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-
-        //Instalación silenciosa con device owner
         Log.d(TAG, "installSilently() called")
         try {
             val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
@@ -318,6 +312,10 @@ object UpdateChecker {
                     context, 0, Intent(context, MyDeviceAdminReceiver::class.java), PendingIntent.FLAG_IMMUTABLE
                 )
                 session.commit(pendingIntent.intentSender)
+
+                if (context is Activity) {
+                    context.finishAffinity()
+                }
                 
                 Handler(Looper.getMainLooper()).post {
                     showNotification(context, "Actualización", "Instalación programada", 100)
@@ -368,28 +366,22 @@ object UpdateChecker {
     private fun scheduleRestart(context: Context) {
         Handler(Looper.getMainLooper()).postDelayed({
             try {
-                // Cerrar app completamente sin permisos especiales
-                android.os.Process.killProcess(android.os.Process.myPid())
-                
-            }catch (e: Exception) {
-                Log.e("UpdateChecker", "Error al cerrar para reiniciar: ${e.message}")
-            }
-
-                val intent = Intent(context, ScanActivity::class.java).apply{
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                }
-            try {
                 showNotification(context, "Actualización", "Reiniciando app...", 0)
                 Toast.makeText(context, "Reiniciando app...", Toast.LENGTH_SHORT).show()
-                
+
                 val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
                 intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
-                
+
                 hideNotification(context)
             } catch (e: Exception) {
                 Log.e(TAG, "Error restarting: ${e.message}")
                 hideNotification(context)
+            }
+            try {
+                android.os.Process.killProcess(android.os.Process.myPid())
+            } catch (e: Exception) {
+                Log.e("UpdateChecker", "Error al cerrar para reiniciar: ${e.message}")
             }
         }, 3000)
     }

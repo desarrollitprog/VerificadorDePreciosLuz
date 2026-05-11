@@ -1800,8 +1800,6 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         wsClient?.dispatcher?.executorService?.shutdown()
         wsClient = null
         
-        // Cerrar proceso propio sin permisos especiales
-        android.os.Process.killProcess(android.os.Process.myPid())
     }
 
     override fun onPause() {

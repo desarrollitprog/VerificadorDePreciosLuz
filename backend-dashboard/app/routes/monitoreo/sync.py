@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from typing import List, Optional
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db_usuarios
@@ -9,6 +9,7 @@ from app.dependencies import get_current_cliente
 from app.services.server_service import _utcnow
 from app.services.sync_service import _set_job_state, _get_job_state, _execute_selective_sync_job
 import uuid
+import httpx
 
 router = APIRouter(tags=["monitoreo"])
 logger = logging.getLogger("uvicorn.error")
@@ -79,3 +80,29 @@ async def obtener_estado_sincronizacion(
         "job_id": job_id,
         **job,
     }
+
+
+@router.get("/monitoreo/cola/{device_id}")
+async def obtener_cola_dispositivo(
+    device_id: str,
+    current_user: dict = Depends(get_current_cliente),
+):
+    from app.services.replicacion_service import get_api_urls
+
+    urls = get_api_urls()
+    if not urls:
+        raise HTTPException(status_code=502, detail="No hay URLs de backend-api configuradas")
+
+    last_error = None
+    for base_url in urls:
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.get(f"{base_url.rstrip('/')}/api/queue-status/{device_id}")
+                if resp.status_code == 200:
+                    return resp.json()
+                last_error = f"HTTP {resp.status_code}"
+        except Exception as e:
+            last_error = str(e)
+            continue
+
+    raise HTTPException(status_code=502, detail=f"No se pudo obtener estado de cola: {last_error}")

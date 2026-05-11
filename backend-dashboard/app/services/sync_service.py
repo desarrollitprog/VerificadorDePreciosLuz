@@ -174,6 +174,7 @@ async def _execute_force_sync_job(job_id: str, user_id: int | None, username: st
                     detail["sync_sent"] = progress_payload.get("sent")
                     detail["sync_confirmed"] = progress_payload.get("confirmed")
                     detail["sync_failed"] = progress_payload.get("failed")
+                    detail["sync_queued"] = progress_payload.get("queued", 0)
                     detail["sync_details"] = progress_payload.get("details", [])
                     if str(progress_payload.get("status", "")).upper() == "RUNNING":
                         detail["reason"] = "Sincronizando..."
@@ -197,6 +198,7 @@ async def _execute_force_sync_job(job_id: str, user_id: int | None, username: st
                 detail["sync_sent"] = backend_result.get("sent")
                 detail["sync_confirmed"] = backend_result.get("confirmed")
                 detail["sync_failed"] = backend_result.get("failed")
+                detail["sync_queued"] = backend_result.get("queued", 0)
                 detail["sync_details"] = backend_result.get("details", [])
 
                 if detail["ok"]:
@@ -431,6 +433,7 @@ async def _execute_selective_sync_job(
                     detail["sync_sent"] = progress_payload.get("sent")
                     detail["sync_confirmed"] = progress_payload.get("confirmed")
                     detail["sync_failed"] = progress_payload.get("failed")
+                    detail["sync_queued"] = progress_payload.get("queued", 0)
                     detail["sync_details"] = progress_payload.get("details", [])
                     if str(progress_payload.get("status", "")).upper() == "RUNNING":
                         detail["reason"] = "Sincronizando..."
@@ -453,6 +456,7 @@ async def _execute_selective_sync_job(
                 detail["sync_sent"] = backend_result.get("sent")
                 detail["sync_confirmed"] = backend_result.get("confirmed")
                 detail["sync_failed"] = backend_result.get("failed")
+                detail["sync_queued"] = backend_result.get("queued", 0)
                 detail["sync_details"] = backend_result.get("details", [])
 
                 if detail["ok"]:

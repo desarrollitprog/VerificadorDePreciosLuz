@@ -338,6 +338,53 @@ async def playback_status(
     }
 
 
+@router.post("/sync-queued", status_code=status.HTTP_201_CREATED)
+async def sync_queued_webhook(
+    body: SyncStatusBody,
+    db: AsyncSession = Depends(get_db_usuarios),
+):
+    nombre = await _get_device_name(db, body.device_id)
+    reason = (body.reason or "").strip() or "sin detalle"
+    tipo = "COMANDO_ENCOLADO"
+    descripcion = f"Dispositivo {nombre}: comando de sincronización encolado ({reason})"
+
+    dedupe_since = datetime.utcnow() - timedelta(seconds=120)
+    recent_stmt = (
+        select(Notificacion)
+        .where(
+            Notificacion.tipo == tipo,
+            Notificacion.descripcion == descripcion,
+            Notificacion.fecha_creacion >= dedupe_since,
+        )
+        .order_by(Notificacion.fecha_creacion.desc()).limit(1)
+    )
+    existing = (await db.execute(recent_stmt)).scalars().first()
+    if existing:
+        return {"success": True, "duplicated": True, "id": existing.id}
+
+    await registrar_accion(
+        db=db, usuario_id=None, tipo=tipo,
+        descripcion=descripcion, dispositivo_id=body.device_id,
+    )
+    return {"success": True, "message": "Notificación de comando encolado registrada", "duplicated": False}
+
+
+@router.post("/sync-delivered", status_code=status.HTTP_201_CREATED)
+async def sync_delivered_webhook(
+    body: SyncStatusBody,
+    db: AsyncSession = Depends(get_db_usuarios),
+):
+    nombre = await _get_device_name(db, body.device_id)
+    tipo = "SINCRONIZACION_COMPLETADA"
+    descripcion = f"Dispositivo {nombre}: sincronización completada exitosamente"
+
+    await registrar_accion(
+        db=db, usuario_id=None, tipo=tipo,
+        descripcion=descripcion, dispositivo_id=body.device_id,
+    )
+    return {"success": True, "message": "Notificación de sincronización completada registrada"}
+
+
 class BannerStatusBody(BaseModel):
     device_id: str
     banner_id: int | None = None

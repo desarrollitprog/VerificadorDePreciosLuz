@@ -853,7 +853,7 @@ export const DashboardScreen: React.FC = () => {
             </div>
           ) : viewMode === 'cards' ? (
             /* VISTA DE TARJETAS - Diseño original restaurado + nuevos botones */
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 items-baseline">
               {paginatedCardVideos.length > 0 ? paginatedCardVideos.map((video) => (
                   <div key={video.id} className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-800 hover:shadow-md transition-shadow flex flex-col">
                     {/* Thumbnail */}

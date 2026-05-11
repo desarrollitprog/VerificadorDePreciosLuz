@@ -432,7 +432,7 @@ export function ServerDashboard() {
       ) : error ? (
         <div className="text-red-500">{error}</div>
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-baseline">
           {filteredAndSortedServidores.length === 0 ? (
             <div className="col-span-full text-center text-slate-500 py-8">No se encontraron servidores.</div>
           ) : (

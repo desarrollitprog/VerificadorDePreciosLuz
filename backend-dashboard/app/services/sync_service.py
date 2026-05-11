@@ -273,6 +273,16 @@ async def _get_dispositivos_por_servidor(db: AsyncSession, servidor_ids: List[in
     return mapa
 
 
+async def _resolve_device_names(db: AsyncSession, dispositivo_ids: List[str] = None) -> dict[str, str]:
+    if not dispositivo_ids:
+        return {}
+    stmt = select(Dispositivo.codigo_kiosko, Dispositivo.nombre_amigable).where(
+        Dispositivo.codigo_kiosko.in_(dispositivo_ids)
+    )
+    result = await db.execute(stmt)
+    return {row.codigo_kiosko: row.nombre_amigable or row.codigo_kiosko for row in result.all()}
+
+
 async def _execute_selective_sync_job(
     job_id: str,
     user_id: int | None,
@@ -485,7 +495,9 @@ async def _execute_selective_sync_job(
                 disp_id = dispositivo_ids[0] if dispositivo_ids else None
                 srv_id = servidor_ids_a_buscar[0] if servidor_ids_a_buscar else None
 
-                disp_info = f", Dispositivos: {dispositivo_ids}" if dispositivo_ids else ", Dispositivos: todos"
+                disp_nombre_map = await _resolve_device_names(db, dispositivo_ids)
+                disp_names = [disp_nombre_map.get(d, d) for d in dispositivo_ids] if dispositivo_ids else []
+                disp_info = f", Dispositivos: {disp_names}" if disp_names else ", Dispositivos: todos"
                 srv_info = f", Servidores: {servidor_ids_a_buscar}" if servidor_ids_a_buscar else ""
 
                 await registrar_accion(

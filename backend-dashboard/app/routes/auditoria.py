@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 from fpdf import FPDF
+from fpdf.fonts import FontFace
 from pydantic import BaseModel
 from sqlalchemy import select, func, case, or_, literal, and_
 from sqlalchemy.sql import literal_column
@@ -333,13 +334,6 @@ class AuditPDF(FPDF):
         self.set_font("Helvetica", "I", 7)
         self.cell(0, 10, f"Pagina {self.page_no()}/{{nb}}", align="C")
 
-    def table_row(self, cols, widths, bold=False, fill=False):
-        style = "B" if bold else ""
-        self.set_font("Helvetica", style, 7)
-        for i, text in enumerate(cols):
-            self.cell(widths[i], 5.5, str(text), border=1, fill=fill)
-        self.ln()
-
 
 @router.get("/auditoria/exportar")
 async def exportar_auditoria_pdf(
@@ -356,46 +350,43 @@ async def exportar_auditoria_pdf(
     pdf.alias_nb_pages()
     pdf.set_auto_page_break(auto=True, margin=20)
     pdf.add_page()
+    pdf.set_font("Helvetica", "", 7.5)
 
-    col_widths = [35, 28, 105, 35, 30, 22, 14]
-    headers = ["Fecha", "Tipo", "Descripcion", "Dispositivo", "Servidor", "Usuario", "Duracion"]
-    pdf.set_fill_color(220, 220, 220)
-    pdf.table_row(headers, col_widths, bold=True, fill=True)
+    col_widths = (35, 28, 105, 35, 30, 22, 14)
 
-    offset = 0
-    page_limit = 500
+    with pdf.table(
+        col_widths=col_widths,
+        repeat_headings=True,
+        first_row_as_headings=True,
+        headings_style=FontFace(emphasis="BOLD", color=(255, 255, 255), fill_color=(50, 50, 50)),
+    ) as tbl:
+        tbl.row(["Fecha", "Tipo", "Descripcion", "Dispositivo", "Servidor", "Usuario", "Duracion"])
 
-    while True:
-        page = (offset // page_limit) + 1
-        result = await _fetch_auditoria_page(
-            db, busqueda, tipo, dispositivo_id, servidor_id,
-            fecha_desde, fecha_hasta, page, page_limit, current_user
-        )
-        if not result["items"]:
-            break
+        offset = 0
+        page_limit = 500
 
-        for item in result["items"]:
-            fecha = (item.get("fecha") or "")[:19].replace("T", " ")
-            tipo_val = (item.get("tipo") or "")[:24]
-            desc = (item.get("descripcion") or "")[:104]
-            disp = item.get("dispositivo_nombre") or item.get("dispositivo_id") or "-"
-            disp = disp[:34]
-            srv = item.get("servidor_nombre") or "-"
-            srv = srv[:28]
-            usr = item.get("usuario") or "-"
-            usr = usr[:20]
-            dur = str(item.get("duracion_segundos") or "-")
+        while True:
+            page = (offset // page_limit) + 1
+            result = await _fetch_auditoria_page(
+                db, busqueda, tipo, dispositivo_id, servidor_id,
+                fecha_desde, fecha_hasta, page, page_limit, current_user
+            )
+            if not result["items"]:
+                break
 
-            if pdf.get_y() > 175:
-                pdf.add_page()
-                pdf.set_fill_color(220, 220, 220)
-                pdf.table_row(headers, col_widths, bold=True, fill=True)
+            for item in result["items"]:
+                fecha = (item.get("fecha") or "")[:19].replace("T", " ")
+                tipo_val = item.get("tipo") or ""
+                desc = item.get("descripcion") or ""
+                disp = item.get("dispositivo_nombre") or item.get("dispositivo_id") or "-"
+                srv = item.get("servidor_nombre") or "-"
+                usr = item.get("usuario") or "-"
+                dur = str(item.get("duracion_segundos") or "-")
+                tbl.row([fecha, tipo_val, desc, disp, srv, usr, dur])
 
-            pdf.table_row([fecha, tipo_val, desc, disp, srv, usr, dur], col_widths)
-
-        if len(result["items"]) < page_limit:
-            break
-        offset += page_limit
+            if len(result["items"]) < page_limit:
+                break
+            offset += page_limit
 
     pdf_bytes = bytes(pdf.output())
     return Response(

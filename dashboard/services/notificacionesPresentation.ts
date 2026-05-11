@@ -117,6 +117,18 @@ export function toNotificationViewModel(notificacion: Notificacion): Notificatio
           actionBadge: 'eliminacion',
         };
       }
+    case 'COMANDO_ENCOLADO':
+      return {
+        title: 'Comando encolado',
+        message: descripcion || 'Comando de sincronización encolado para entrega pendiente.',
+        severity: 'info',
+      };
+    case 'SINCRONIZACION_COMPLETADA':
+      return {
+        title: 'Sincronización completada',
+        message: descripcion || 'El dispositivo completó la sincronización exitosamente.',
+        severity: 'success',
+      };
     case 'CAMBIO_ESTADO_SERVIDOR':
       return {
         title: 'Cambio de estado del servidor',

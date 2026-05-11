@@ -83,7 +83,7 @@ export const GeneralNotifications: React.FC = () => {
       normalized
         .filter((n) => {
           const tipo = String(n.tipo || '').toUpperCase();
-          return tipo === 'SYNC_FAILED' || tipo === 'PLAYBACK_FAILED' || tipo === 'PUBLICIDAD_VENCIDA' || tipo === 'SINCRONIZACION_COMPLETADA' || tipo === 'SINCRONIZACION_SELECTIVA';
+          return tipo === 'SYNC_FAILED' || tipo === 'PLAYBACK_FAILED' || tipo === 'PUBLICIDAD_VENCIDA' || tipo === 'SINCRONIZACION_COMPLETADA';
         })
         .filter((n) => !shownErrorNotificationIdsRef.current.has(n.id))
         .forEach((n) => {
@@ -100,9 +100,6 @@ export const GeneralNotifications: React.FC = () => {
           } else if (tipo === 'SINCRONIZACION_COMPLETADA') {
             prefix = 'Sincronización completada';
             tipo_notif = 'success';
-          } else if (tipo === 'SINCRONIZACION_SELECTIVA') {
-            prefix = 'Sincronización iniciada';
-            tipo_notif = 'info';
           } else {
             prefix = 'Fallo de sincronización';
             tipo_notif = 'error';

@@ -161,8 +161,10 @@ Mejorar seguridad, performance, observabilidad y code quality del sistema de ges
 | FASE 13 (UX/UI) | 2/2 ✅ | 0/2 |
 | FASE 14 (Pulido Visual) | 2/2 ✅ | 0/2 |
 | FASE 15 (Blindaje WebSocket) | 10/17 | 7/17 |
+| FASE 17 (Cola Dashboard) | 0/17 | 17/17 |
+| FASE 18 (Bots Mantenimiento) | 0/5 | 5/5 |
 
-**Total: 64/68 completados (94%)**
+**Total: 57/89 completados (64%)**
 
 ---
 
@@ -621,27 +623,27 @@ nuevo_banner = Publicidad(..., ThumbnailUrl=thumbnail_url)
 
 ---
 
-## FASE 11: Refactorización y Estabilidad (Backend)
+## FASE 11: Refactorización y Estabilidad (Backend) ✅ COMPLETADA
 
 *Prioridad: Crítica | Objetivo: Eliminar deuda técnica y mejorar mantenibilidad.*
 
 ### 11.1 Refactorización de `monitoreo.py` ✅ COMPLETADO
-- **Descripción**: Dividir `monitoreo.py` en módulos independientes:
-  - `servers.py` - Gestión de servidores secundarios
-  - `devices.py` - Gestión de dispositivos
-  - `sync.py` - Lógica de sincronización
-- **Impacto**: Estructura modular y mantenible
-- **Complejidad**: Media
+- ~~**Descripción**: Dividir `monitoreo.py` en módulos independientes:~~
+  - ~~`servers.py` - Gestión de servidores secundarios~~
+  - ~~`devices.py` - Gestión de dispositivos~~
+  - ~~`sync.py` - Lógica de sincronización~~
+- ~~**Impacto**: Estructura modular y mantenible~~
+- ~~**Complejidad**: Media~~
 
 ### 11.2 Implementación de `sync_service.py` y servicios ✅ COMPLETADO
-- **Descripción**: Mover lógica de negocio de rutas a servicios
-- **Impacto**: Permite pruebas unitarias y desacopla la API
-- **Complejidad**: Media
+- ~~**Descripción**: Mover lógica de negocio de rutas a servicios~~
+- ~~**Impacto**: Permite pruebas unitarias y desacopla la API~~
+- ~~**Complejidad**: Media~~
 
 ### 11.3 Manejador Global de Excepciones ✅ COMPLETADO
-- **Descripción**: Reemplazar `try-except: pass` por respuestas estandarizadas y logging en 20 sitios silenciosos (9 archivos): `publicidad.py` (4x `ValueError: pass` + 4x bare `except`), `auth.py` (3 silent catches), `main.py` (1 `except: pass`), `sync_service.py` (4 silent fallbacks), `twofa_redis.py` (1), `health.py` (1), `utils/__init__.py` (1), `replicacion_service.py` (1), `notificaciones.py` (1)
-- **Impacto**: Frontend recibe errores claros + visibilidad en logs
-- **Complejidad**: Baja
+- ~~**Descripción**: Reemplazar `try-except: pass` por respuestas estandarizadas y logging en 20 sitios silenciosos (9 archivos): `publicidad.py` (4x `ValueError: pass` + 4x bare `except`), `auth.py` (3 silent catches), `main.py` (1 `except: pass`), `sync_service.py` (4 silent fallbacks), `twofa_redis.py` (1), `health.py` (1), `utils/__init__.py` (1), `replicacion_service.py` (1), `notificaciones.py` (1)~~
+- ~~**Impacto**: Frontend recibe errores claros + visibilidad en logs~~
+- ~~**Complejidad**: Baja~~
 
 ---
 
@@ -650,31 +652,31 @@ nuevo_banner = Publicidad(..., ThumbnailUrl=thumbnail_url)
 *Prioridad: Alta | Objetivo: Crear una base sólida para la expansión de la UI.*
 
 ### 12.1 Integración de `react-router-dom` ✅ COMPLETADO
-- **Archivos**: `dashboard/App.tsx`, `dashboard/components/Sidebar.tsx`, `dashboard/components/DashboardHeader.tsx`, `dashboard/components/GeneralNotifications.tsx`, `dashboard/components/ProtectedLayout.tsx` (nuevo)
-- **Descripción**: Migrado switch de `currentScreen` a rutas reales con react-router-dom v6
-- **Rutas**: `/` (Mis Videos), `/servidores`, `/usuarios`, `/calendario`, `/auditoria`
-- **Layout protegido**: `ProtectedLayout` con verificación de sesión + token expiry watcher + `<Outlet>`
+- ~~**Archivos**: `dashboard/App.tsx`, `dashboard/components/Sidebar.tsx`, `dashboard/components/DashboardHeader.tsx`, `dashboard/components/GeneralNotifications.tsx`, `dashboard/components/ProtectedLayout.tsx` (nuevo)~~
+- ~~**Descripción**: Migrado switch de `currentScreen` a rutas reales con react-router-dom v6~~
+- ~~**Rutas**: `/` (Mis Videos), `/servidores`, `/usuarios`, `/calendario`, `/auditoria`~~
+- ~~**Layout protegido**: `ProtectedLayout` con verificación de sesión + token expiry watcher + `<Outlet>`~~
 
 ### 12.2 Implementación de `Zustand` ✅ COMPLETADO
-- **Archivos**: `dashboard/stores/sessionStore.ts` (nuevo)
-- **Descripción**: Store centralizada de sesión (`isAuthenticated`, `role`, `userName`, `login`, `logout`, `checkSession`)
-- **Impacto**: Elimina prop-drilling de sesión, estado accesible desde cualquier componente
+- ~~**Archivos**: `dashboard/stores/sessionStore.ts` (nuevo)~~
+- ~~**Descripción**: Store centralizada de sesión (`isAuthenticated`, `role`, `userName`, `login`, `logout`, `checkSession`)~~
+- ~~**Impacto**: Elimina prop-drilling de sesión, estado accesible desde cualquier componente~~
 
 ---
 
-## FASE 13: Experiencia de Usuario y Funcionalidades (UX/UI)
+## FASE 13: Experiencia de Usuario y Funcionalidades (UX/UI) ✅ COMPLETADA (parcial)
 
 *Prioridad: Media | Objetivo: Profesionalizar la interacción con el usuario.*
 
 ### 13.1 Sistema de Feedback (Toasts y Modales) ✅ COMPLETADO
-- **Descripción**: Implementar avisos descriptivos y confirmaciones. Añadido: botón X por toast, barra progreso auto-dismiss, removeAll, límite 5, modo persistent, animación slide-fade-out. Backwards-compatible (no rompe consumidores existentes).
-- **Impacto**: Reduce errores accidentales del usuario
-- **Complejidad**: Baja
+- ~~**Descripción**: Implementar avisos descriptivos y confirmaciones. Añadido: botón X por toast, barra progreso auto-dismiss, removeAll, límite 5, modo persistent, animación slide-fade-out. Backwards-compatible (no rompe consumidores existentes).~~
+- ~~**Impacto**: Reduce errores accidentales del usuario~~
+- ~~**Complejidad**: Baja~~
 
 ### 13.2 Vista de Auditoría Detallada + PDF ✅ COMPLETADO
-- **Descripción**: Crear pantalla de logs con filtros avanzados. Backend: `GET /auditoria/exportar` genera PDF landscape con fpdf2, tabla word-wrap, header repetido. Frontend: botón "Exportar PDF", filtro servidor `<select>`, `<TableSkeleton>`.
-- **Impacto**: Aprovecha robustez del backend (FASE 11)
-- **Complejidad**: Media
+- ~~**Descripción**: Crear pantalla de logs con filtros avanzados. Backend: `GET /auditoria/exportar` genera PDF landscape con fpdf2, tabla word-wrap, header repetido. Frontend: botón "Exportar PDF", filtro servidor `<select>`, `<TableSkeleton>`.~~
+- ~~**Impacto**: Aprovecha robustez del backend (FASE 11)~~
+- ~~**Complejidad**: Media~~
 
 ### 13.3 Visualización de Datos (`Recharts`) ❌ POSPUESTO
 - **Descripción**: Implementar gráficas de almacenamiento y uptime
@@ -686,26 +688,26 @@ nuevo_banner = Publicidad(..., ThumbnailUrl=thumbnail_url)
 ---
 
 ### Mejora Adicional: Nombres Amigables en Notificaciones ✅ COMPLETADO
-- **Descripción**: Las notificaciones ahora muestran `"NombreAmigable (device_id)"` en lugar de solo `device_id`. Aplicado en webhooks entrantes (`SYNC_FAILED`, `PLAYBACK_FAILED`, `BANNER_INICIADO/FINALIZADO`) y operaciones internas (`RENOMBRAR_DISPOSITIVO`, `REINICIAR_DISPOSITIVO`, `FALLO`).
-- **Archivos**: `backend-dashboard/app/routes/notificaciones.py`, `backend-dashboard/app/services/device_service.py`
-- **Helper**: `_get_device_name()` consulta `Dispositivo.nombre_amigable`
-- **Complejidad**: Baja
+- ~~**Descripción**: Las notificaciones ahora muestran `"NombreAmigable (device_id)"` en lugar de solo `device_id`. Aplicado en webhooks entrantes (`SYNC_FAILED`, `PLAYBACK_FAILED`, `BANNER_INICIADO/FINALIZADO`) y operaciones internas (`RENOMBRAR_DISPOSITIVO`, `REINICIAR_DISPOSITIVO`, `FALLO`).~~
+- ~~**Archivos**: `backend-dashboard/app/routes/notificaciones.py`, `backend-dashboard/app/services/device_service.py`~~
+- ~~**Helper**: `_get_device_name()` consulta `Dispositivo.nombre_amigable`~~
+- ~~**Complejidad**: Baja~~
 
 ---
 
-## FASE 14: Pulido Visual y Estética (Polishing)
+## FASE 14: Pulido Visual y Estética (Polishing) ✅ COMPLETADA
 
 *Prioridad: Baja | Objetivo: Lograr un acabado de producto final.*
 
 ### 14.1 Sistemas de Carga (Skeleton Screens) ✅ COMPLETADO
-- **Descripción**: Añadir estados de carga visuales. Creados: `Spinner.tsx`, `Skeleton.tsx`, `TableSkeleton.tsx`, `CardSkeleton.tsx`. Aplicados en `DashboardScreen.tsx`, `UsersScreen.tsx`, `AuditoriaScreen.tsx`, `CalendarScreen.tsx`.
-- **Impacto**: Mejora la percepción de velocidad
-- **Complejidad**: Baja
+- ~~**Descripción**: Añadir estados de carga visuales. Creados: `Spinner.tsx`, `Skeleton.tsx`, `TableSkeleton.tsx`, `CardSkeleton.tsx`. Aplicados en `DashboardScreen.tsx`, `UsersScreen.tsx`, `AuditoriaScreen.tsx`, `CalendarScreen.tsx`.~~
+- ~~**Impacto**: Mejora la percepción de velocidad~~
+- ~~**Complejidad**: Baja~~
 
 ### 14.2 Selector de Tema (Dark/Light Mode) ✅ COMPLETADO
-- **Descripción**: Implementar persistencia con `localStorage`. Creado `stores/themeStore.ts` (Zustand), script anti-flash en `index.html`, quitado `class="dark"` hardcodeado, `DashboardHeader.tsx` migrado de `useState` a `useThemeStore`.
-- **Impacto**: Mejora el confort visual del operador (tema persiste entre recargas)
-- **Complejidad**: Baja
+- ~~**Descripción**: Implementar persistencia con `localStorage`. Creado `stores/themeStore.ts` (Zustand), script anti-flash en `index.html`, quitado `class="dark"` hardcodeado, `DashboardHeader.tsx` migrado de `useState` a `useThemeStore`.~~
+- ~~**Impacto**: Mejora el confort visual del operador (tema persiste entre recargas)~~
+- ~~**Complejidad**: Baja~~
 
 ---
 
@@ -1176,15 +1178,105 @@ Cada item es desplegable por separado. Item 1 y 2 no tienen dependencias entre s
 
 ---
 
+## FASE 18: Bots de Mantenimiento y Limpieza de Datos
+
+*Prioridad: Media | Objetivo: Evitar crecimiento infinito de BD, disco y Redis.*
+
+### Problema Raíz
+
+El sistema no tiene **ningún** job de limpieza automática. Datos que crecen sin control:
+
+| Dato | Crecimiento | Riesgo |
+|------|-------------|--------|
+| `DispositivoSesion` | ~8,000 filas/día (3M/año) | Queries lentas en auditoría |
+| `Notificacion` + `NotificacionLeida` | ~100 filas/día | BD crece sin límite |
+| `static/banners/` archivos huérfanos | Archivos de uploads fallidos, renombrados, banners eliminados | Disco lleno |
+| `device:state:*` en Redis | Dispositivos dados de baja nunca se limpian | Redis retiene datos stale |
+| Banners en servidores API (archivos huérfanos) | Archivos no referenciados en cada servidor | Disco lleno en servidores remotos |
+
+---
+
+### Bot 1: `limpiar_sesiones` ⏳ PENDIENTE
+
+| Propiedad | Valor |
+|-----------|-------|
+| **Tabla** | `DispositivoSesion` |
+| **Acción** | `DELETE WHERE fecha_fin < DATEADD(DAY, -90, GETDATE())` |
+| **Retención** | 90 días |
+| **Frecuencia** | Cada 15 días |
+| **Log** | `"cleanup_old_sessions: deleted 8421 rows"` |
+| **Ubicación** | `backend-dashboard/app/cleanup_service.py` + `scheduler.py` |
+
+### Bot 2: `limpiar_notificaciones` ⏳ PENDIENTE
+
+| Propiedad | Valor |
+|-----------|-------|
+| **Tablas** | `Notificacion` + `NotificacionLeida` (cascada) |
+| **Acción** | `DELETE WHERE fecha_creacion < DATEADD(DAY, -15, GETDATE())` |
+| **Retención** | 15 días |
+| **Frecuencia** | Cada 15 días (mismo job que sesiones) |
+| **Log** | `"cleanup_old_notifications: deleted 340 rows"` |
+| **Ubicación** | `backend-dashboard/app/cleanup_service.py` + `scheduler.py` |
+
+### Bot 3: `limpiar_archivos` (dashboard) ⏳ PENDIENTE
+
+| Propiedad | Valor |
+|-----------|-------|
+| **Directorio** | `backend-dashboard/static/banners/` |
+| **Acción** | `os.listdir()` → cruzar contra `SELECT Url, ThumbnailUrl FROM Publicidad` → `os.remove()` no referenciados |
+| **Frecuencia** | Cada 24h |
+| **Log** | `"cleanup_orphan_files: removed 12 files (85.3 MB)"` |
+| **Ubicación** | `backend-dashboard/app/cleanup_service.py` + `scheduler.py` |
+
+### Bot 4: `limpiar_redis_stale` ⏳ PENDIENTE
+
+| Propiedad | Valor |
+|-----------|-------|
+| **Target** | `device:state:{device_id}`, `devices:all`, `device:pending:banner:{device_id}` |
+| **Acción** | Agregar `EXPIRE key 172800` (48h TTL) al crear/actualizar `device:state:*`. Renovar en cada heartbeat. Agregar TTL a `device:pending:banner:*`. |
+| **Frecuencia** | Auto-gestionado por TTL de Redis (sin scheduler) |
+| **Log** | No aplica (automático) |
+| **Ubicación** | `backend-api/app/main.py` (heartbeat/connect) + `backend-dashboard/app/services/device_service.py` |
+
+### Bot 5: `limpiar_banners_api` (backend-api) ⏳ PENDIENTE
+
+| Propiedad | Valor |
+|-----------|-------|
+| **Directorio** | Carpeta local de banners en cada servidor backend-api |
+| **Acción** | `os.listdir()` → cruzar contra `SELECT Url FROM Publicidad` → `os.remove()` no referenciados |
+| **Frecuencia** | Cada 24h |
+| **Ubicación** | `backend-api/app/cleanup_service.py` + scheduler en `main.py` |
+
+---
+
+## Prioridades de Implementación (Pendientes)
+
+| Prioridad | Item | Fase | Dónde | Dependencias |
+|-----------|------|------|-------|-------------|
+| 🔴 **1** | QUEUED vs FAILED + queue-status + delivery notify | FASE 17 | backend-api + dashboard | — |
+| 🔴 **2** | Flags de pendientes + DLQ (15.3) | FASE 15 Lote 3 | backend-api | Cola Redis (lista) |
+| 🔴 **3** | REINICIAR robusto + reconciliación (15.4) | FASE 15 Lote 4 | backend-api | Flags pendientes |
+| 🟡 **4** | Bot `limpiar_sesiones` (90 días, c/15d) | FASE 18 | dashboard | — |
+| 🟡 **5** | Bot `limpiar_notificaciones` (15 días, c/15d) | FASE 18 | dashboard | — |
+| 🟡 **6** | Bot `limpiar_archivos` (c/24h) | FASE 18 | dashboard | — |
+| 🟡 **7** | Bot `limpiar_redis_stale` (TTL 48h) | FASE 18 | backend-api + dashboard | — |
+| 🟡 **8** | Bot `limpiar_banners_api` (c/24h) | FASE 18 | backend-api | — |
+| 🟢 **9** | Control vigencia luzapp (S1, S2, S3) | FASE 7.3-7.5 | luzapp + backend-api | — |
+| 🟢 **10** | Backups SQL Server (manual) | FASE 5.1 | servidor | — |
+| 🟢 **11** | Docker multi-stage build | FASE 5.3 | Dockerfile | — |
+| ⚪ **12** | Versión Objetivo (FASE 15.5) | FASE 15 Lote 5 | backend-api + luzapp | largo plazo |
+
+---
+
 ## Resumen de Progreso Total (Todas las Fases)
 
 | Grupo | Fases | Completado | Pendiente |
 |-------|-------|------------|-----------|
-| Originales | 1-10 | 25/28 (89%) | 5/28 |
-| Nuevas | 11 | 0/3 (0%) | 3/3 |
-| **Nueva** | **12** (Navegación + Estado) | **2/2 (100%)** | **0/2** |
-| Nuevas | 13-14 | 1/5 (20%) | 4/5 |
-| **Nueva** | **15** (Blindaje WebSocket) | **17/17 (100%)** | **0/17** |
-| **Nueva** | **16** | **6/6 (100%)** | **0/6** |
-| **Nueva** | **17** (Cola Dashboard) | **0/15 (0%)** | **15/15** |
-| **TOTAL** | **1-17** | **53/79 (67%)** | **26/79** |
+| Originales | 1-10 | 37/40 (93%) | 3/40 |
+| Refactor Backend | 11 | 3/3 ✅ (100%) | 0/3 |
+| Frontend Base | 12 | 2/2 ✅ (100%) | 0/2 |
+| UX/UI | 13-14 | 5/5 ✅ (100%) | 0/5 |
+| Blindaje WebSocket | 15 | 10/17 (59%) | 7/17 |
+| Cola Dashboard | 17 | 0/17 (0%) | 17/17 |
+| Bots Mantenimiento | 18 | 0/5 (0%) | 5/5 |
+| **TOTAL** | **1-18** | **57/89 (64%)** | **32/89** |

@@ -50,5 +50,3 @@ export interface Dispositivo {
   nombre_amigable: string | null;
   online: boolean;
 }
-
-export type Screen = 'login' | 'dashboard' | 'servers' | 'users' | 'calendar' | 'auditoria';

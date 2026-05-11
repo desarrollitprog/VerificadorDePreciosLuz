@@ -11,8 +11,10 @@ import {
   deleteDevice,
   deleteServer,
   scheduleRestart,
+  getQueueStatus,
   ServerStatusDetail,
   DeviceContent,
+  QueueStatus,
 } from '../services/monitoreoService';
 
 type RenameModalState =
@@ -47,6 +49,10 @@ export function ServerDashboard() {
   // Modal de eliminar dispositivo
   const [deleteDeviceModal, setDeleteDeviceModal] = useState<{ deviceId: string; deviceName: string } | null>(null);
   const [deletingDevice, setDeletingDevice] = useState(false);
+
+  // Estado de cola por dispositivo (FASE 17.2.3)
+  const [queueStatusMap, setQueueStatusMap] = useState<Record<string, QueueStatus>>({});
+  const [loadingQueues, setLoadingQueues] = useState(false);
 
   // Modal de eliminar servidor
   const [deleteServerModal, setDeleteServerModal] = useState<{ serverId: string; serverName: string } | null>(null);
@@ -120,6 +126,24 @@ export function ServerDashboard() {
     setRenameModal(null);
     setRenameValue('');
   };
+
+  const fetchQueueStatus = async (deviceId: string) => {
+    try {
+      const status = await getQueueStatus(deviceId);
+      setQueueStatusMap(prev => ({ ...prev, [deviceId]: status }));
+    } catch {
+      // Silently fail — endpoint might not be available
+    }
+  };
+
+  useEffect(() => {
+    if (!expandedServerId) return;
+    const server = servidores.find(s => s.id === expandedServerId);
+    if (!server) return;
+    setLoadingQueues(true);
+    Promise.all(server.dispositivos.map(d => fetchQueueStatus(d.device_id)))
+      .finally(() => setLoadingQueues(false));
+  }, [expandedServerId, servidores]);
 
   const submitRename = async () => {
     if (!renameModal) return;
@@ -490,6 +514,14 @@ export function ServerDashboard() {
                                     }`}>
                                       {getDeviceUptime(d)}
                                     </span>
+                                  )}
+                                  {queueStatusMap[d.device_id] && queueStatusMap[d.device_id]!.total > 0 && (
+                                    <span className="ml-1 text-xs font-medium px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300" title={`${queueStatusMap[d.device_id]!.pending} pendientes, ${queueStatusMap[d.device_id]!.inflight} en vuelo`}>
+                                      {queueStatusMap[d.device_id]!.total} pendientes
+                                    </span>
+                                  )}
+                                  {loadingQueues && !queueStatusMap[d.device_id] && (
+                                    <span className="ml-1 text-xs text-slate-400">...</span>
                                   )}
                                 </div>
                                 <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">

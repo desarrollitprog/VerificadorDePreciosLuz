@@ -142,6 +142,7 @@ async def debug_bcv(
 
 
 banner_check_task: asyncio.Task | None = None
+banner_cleanup_task: asyncio.Task | None = None
 notified_banners_start: set[int] = set()
 notified_banners_end: set[int] = set()
 scheduler_notifications: Any = None
@@ -160,6 +161,19 @@ async def _check_banners_starting():
             break
         except Exception as e:
             logger.error("Error en task de verificación de banners: %s", e)
+
+
+async def _periodic_banner_cleanup():
+    while True:
+        try:
+            from app.cleanup_service import cleanup_orphan_banners
+            await cleanup_orphan_banners()
+            await asyncio.sleep(86400)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"Error en limpieza de banners: {e}")
+            await asyncio.sleep(86400)
 
 
 async def _notify_banners_started():
@@ -454,6 +468,9 @@ async def start_device_monitor():
     banner_check_task = asyncio.create_task(_check_banners_starting())
     logger.info("Banner check task iniciada")
 
+    banner_cleanup_task = asyncio.create_task(_periodic_banner_cleanup())
+    logger.info("Banner cleanup task iniciada")
+
     try:
         from app.services.scheduler_notifications import SchedulerNotifications, scheduler_notifications as sn
         global scheduler_notifications
@@ -511,6 +528,11 @@ async def shutdown_device_state_store():
     if banner_check_task is not None:
         banner_check_task.cancel()
         banner_check_task = None
+
+    global banner_cleanup_task
+    if banner_cleanup_task is not None:
+        banner_cleanup_task.cancel()
+        banner_cleanup_task = None
 
     if device_bus_listener_task is not None:
         device_bus_listener_task.cancel()
@@ -2683,6 +2705,18 @@ async def queue_status(device_id: str):
     except Exception as e:
         logger.error(f"Error obteniendo queue status para {device_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Error: {e}")
+
+@app.post("/ws/broadcast")
+async def ws_broadcast(message: dict):
+    if tablet_ws_manager is None:
+        raise HTTPException(status_code=503, detail="WebSocket manager not available")
+    msg_type = message.get("type", "")
+    if msg_type == "BANNER_EXPIRED":
+        logger.info(f"[ws/broadcast] BANNER_EXPIRED: banner_id={message.get('banner_id')} titulo={message.get('titulo')}")
+        await tablet_ws_manager.broadcast(message)
+        return {"success": True, "forwarded": len(tablet_ws_manager.active_connections)}
+    logger.warning(f"[ws/broadcast] Unknown message type: {msg_type}")
+    raise HTTPException(status_code=400, detail=f"Unknown message type: {msg_type}")
 
 app.include_router(consultas)
 app.include_router(publicidad)

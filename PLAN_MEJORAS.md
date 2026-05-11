@@ -130,7 +130,7 @@ Mejorar seguridad, performance, observabilidad y code quality del sistema de ges
 - **Razón**: Servidor propio con NOIP, no usa Vercel/Heroku
 - **Alternativa**: Deploy manual con `docker-compose pull && docker-compose up -d`
 
-### 5.3 Docker Multi-stage Build ⏳ PENDIENTE
+### 5.3 Docker Multi-stage Build ✅ COMPLETADO
 - **Archivo**: `backend-dashboard/Dockerfile`
 - **Descripción**: Usar multi-stage para reducir tamaño de imagen (~900MB → ~250MB)
 - **Impacto**: Imágenes más pequeñas, builds más rápidos
@@ -160,11 +160,11 @@ Mejorar seguridad, performance, observabilidad y code quality del sistema de ges
 | FASE 12 (Frontend Base) | 2/2 ✅ | 0/2 |
 | FASE 13 (UX/UI) | 2/2 ✅ | 0/2 |
 | FASE 14 (Pulido Visual) | 2/2 ✅ | 0/2 |
-| FASE 15 (Blindaje WebSocket) | 10/17 | 7/17 |
-| FASE 17 (Cola Dashboard) | 16/17 | 1/17 |
-| FASE 18 (Bots Mantenimiento) | 0/5 | 5/5 |
+| FASE 15 (Blindaje WebSocket) | 17/17 ✅ | 0/17 |
+| FASE 17 (Cola Dashboard) | 17/17 ✅ | 0/17 |
+| FASE 18 (Bots Mantenimiento) | 5/5 ✅ | 0/5 |
 
-**Total: 73/89 completados (82%)**
+**Total: 88/89 completados (99%) — solo falta FASE 5.1 (backups manuales en servidor)**
 
 ---
 
@@ -333,8 +333,8 @@ DASHBOARD                      BACKEND-API                   LUZAPP
 | 7.1 | Fix caso específico→específico | ✅ Completado | backend-dashboard/publicidad.py |
 | 7.2 | Fix estado "borrador" | ✅ Completado | backend-dashboard/publicidad.py |
 | 7.3 | Pre-validation (S1) - validar fechaFin antes de reproducir | ⏳ Pendiente | luzapp/ScanActivity.kt |
-| 7.4 | Cache cleanup (S2) - eliminar banners vencidos | ⏳ Pendiente | luzapp/BannerRepository.kt |
-| 7.5 | WebSocket push (S3) - invalidación inmediata | ⏳ Pendiente | backend-api + luzapp |
+| 7.4 | Cache cleanup (S2) - eliminar banners vencidos | ✅ Completado | luzapp/BannerRepository.kt |
+| 7.5 | WebSocket push (S3) - invalidación inmediata | ✅ Completado | backend-api + luzapp |
 
 ---
 
@@ -1088,22 +1088,22 @@ La implementación se divide en **4 lotes** desplegables de forma independiente.
 | L2.3 | Integrar cola Redis en `send_to_device()` y `connect()` | `main.py` | ✅ |
 | L2.4 | Consumir `device:pending:banner:*` al reconectar (actual dead-end) | `main.py` | ✅ |
 
-### Lote 3 — Flags de Pendientes + Dead-Letter Queue (1-2 días)
+### Lote 3 — Flags de Pendientes + Dead-Letter Queue ✅ COMPLETADO
 
-| # | Tarea | Archivo | Dependencias |
-|---|-------|---------|:------------:|
-| L3.1 | Flag `device:pending:sync:{id}` en Redis, setear al fallar WIPE_AND_RESYNC | `main.py` | L2.2 |
-| L3.2 | Flag `device:pending:reboot:{id}` para REINICIAR no confirmado | `main.py` | L2.2 |
-| L3.3 | En `connect()`: verificar flags al recibir IDENTIFY y disparar comandos | `main.py:connect()` | L3.1, L3.2 |
-| L3.4 | Dead-letter queue: máximo 5 reintentos por mensaje, luego a DLQ | `services/pending_queue.py` | L2.1 |
+| # | Tarea | Archivo | Estado |
+|---|-------|---------|:------:|
+| L3.1 | Flag `device:pending:sync:{id}` en Redis, setear al fallar WIPE_AND_RESYNC | `main.py:2195,2279,2313,2561` + `pending_queue.py:205` | ✅ |
+| L3.2 | Flag `device:pending:reboot:{id}` para REINICIAR no confirmado | `main.py:1331,1347,2585` + `pending_queue.py:219` | ✅ |
+| L3.3 | En `connect()`: verificar flags al recibir IDENTIFY y disparar comandos | `main.py:_flush_all_queues():1736-1759` | ✅ |
+| L3.4 | Dead-letter queue: máximo 5 reintentos por mensaje, luego a DLQ | `pending_queue.py:262-324` (flush_all_to_device + _move_to_dlq) | ✅ |
 
-### Lote 4 — REINICIAR Robusto + Reconciliación (1-2 días)
+### Lote 4 — REINICIAR Robusto + Reconciliación ✅ COMPLETADO
 
-| # | Tarea | Archivo | Dependencias |
-|---|-------|---------|:------------:|
-| L4.1 | Reintentos automáticos REINICIAR (máx 5, backoff 30s) | `main.py` | L3.2 |
-| L4.2 | Job de reconciliación periódico (30 min): verificar colas vs online, recuperar inflight | `main.py` o scheduler | L2.1, L2.2 |
-| L4.3 | Cleanup de flags huérfanos y DLQ antigua (> 24h) | `main.py` | L3.4 |
+| # | Tarea | Archivo | Estado |
+|---|-------|---------|:------:|
+| L4.1 | Reintentos automáticos REINICIAR (máx 5, backoff 30s) | `main.py:2565-2586` (retry_reboot_with_device) | ✅ |
+| L4.2 | Job de reconciliación periódico (30 min): verificar colas vs online, recuperar inflight, cleanup DLQ y flags | `main.py:1976-1985` (_reconciliation_loop cada 1800s) + `main.py:1940-1974` (_reconcile_all_queues) | ✅ |
+| L4.3 | Cleanup de flags huérfanos y DLQ antigua (> 24h) | `pending_queue.py:343-397` (cleanup_old_dlq + cleanup_orphan_flags) | ✅ |
 
 ### Fase 15.5 — Versión Objetivo (PENDIENTE, no incluida en lotes actuales)
 
@@ -1205,7 +1205,7 @@ El sistema no tiene **ningún** job de limpieza automática. Datos que crecen si
 
 ---
 
-### Bot 1: `limpiar_sesiones` ⏳ PENDIENTE
+### Bot 1: `limpiar_sesiones` ✅ COMPLETADO
 
 | Propiedad | Valor |
 |-----------|-------|
@@ -1216,7 +1216,7 @@ El sistema no tiene **ningún** job de limpieza automática. Datos que crecen si
 | **Log** | `"cleanup_old_sessions: deleted 8421 rows"` |
 | **Ubicación** | `backend-dashboard/app/cleanup_service.py` + `scheduler.py` |
 
-### Bot 2: `limpiar_notificaciones` ⏳ PENDIENTE
+### Bot 2: `limpiar_notificaciones` ✅ COMPLETADO
 
 | Propiedad | Valor |
 |-----------|-------|
@@ -1227,7 +1227,7 @@ El sistema no tiene **ningún** job de limpieza automática. Datos que crecen si
 | **Log** | `"cleanup_old_notifications: deleted 340 rows"` |
 | **Ubicación** | `backend-dashboard/app/cleanup_service.py` + `scheduler.py` |
 
-### Bot 3: `limpiar_archivos` (dashboard) ⏳ PENDIENTE
+### Bot 3: `limpiar_archivos` (dashboard) ✅ COMPLETADO
 
 | Propiedad | Valor |
 |-----------|-------|
@@ -1237,7 +1237,7 @@ El sistema no tiene **ningún** job de limpieza automática. Datos que crecen si
 | **Log** | `"cleanup_orphan_files: removed 12 files (85.3 MB)"` |
 | **Ubicación** | `backend-dashboard/app/cleanup_service.py` + `scheduler.py` |
 
-### Bot 4: `limpiar_redis_stale` ⏳ PENDIENTE
+### Bot 4: `limpiar_redis_stale` ✅ COMPLETADO
 
 | Propiedad | Valor |
 |-----------|-------|
@@ -1247,7 +1247,7 @@ El sistema no tiene **ningún** job de limpieza automática. Datos que crecen si
 | **Log** | No aplica (automático) |
 | **Ubicación** | `backend-api/app/main.py` (heartbeat/connect) + `backend-dashboard/app/services/device_service.py` |
 
-### Bot 5: `limpiar_banners_api` (backend-api) ⏳ PENDIENTE
+### Bot 5: `limpiar_banners_api` (backend-api) ✅ COMPLETADO
 
 | Propiedad | Valor |
 |-----------|-------|
@@ -1262,18 +1262,16 @@ El sistema no tiene **ningún** job de limpieza automática. Datos que crecen si
 
 | Prioridad | Item | Fase | Dónde | Dependencias |
 |-----------|------|------|-------|-------------|
-| 🟡 **1** | Badge "N pendientes" en ServerDashboard | FASE 17.2.3 | dashboard/components/ServerDashboard.tsx | (ninguna) |
-| 🔴 **2** | Flags de pendientes + DLQ (15.3) | FASE 15 Lote 3 | backend-api | Cola Redis (lista) |
-| 🔴 **3** | REINICIAR robusto + reconciliación (15.4) | FASE 15 Lote 4 | backend-api | Flags pendientes |
-| 🟡 **4** | Bot `limpiar_sesiones` (90 días, c/15d) | FASE 18 | dashboard | — |
-| 🟡 **5** | Bot `limpiar_notificaciones` (15 días, c/15d) | FASE 18 | dashboard | — |
-| 🟡 **6** | Bot `limpiar_archivos` (c/24h) | FASE 18 | dashboard | — |
-| 🟡 **7** | Bot `limpiar_redis_stale` (TTL 48h) | FASE 18 | backend-api + dashboard | — |
-| 🟡 **8** | Bot `limpiar_banners_api` (c/24h) | FASE 18 | backend-api | — |
-| 🟢 **9** | Control vigencia luzapp (S2, S3) | FASE 7.4-7.5 | luzapp + backend-api | (S1 ya implementado) |
-| 🟢 **10** | Backups SQL Server (manual) | FASE 5.1 | servidor | — |
-| 🟢 **11** | Docker multi-stage build | FASE 5.3 | Dockerfile | — |
-| ⚪ **12** | Versión Objetivo (FASE 15.5) | FASE 15 Lote 5 | backend-api + luzapp | largo plazo |
+| 🟢 **1** | Badge "N pendientes" en ServerDashboard | FASE 17.2.3 | dashboard/components/ServerDashboard.tsx | ✅ |
+| 🟢 **2** | Bot `limpiar_sesiones` (90 días, c/15d) | FASE 18 | backend-dashboard | ✅ |
+| 🟢 **3** | Bot `limpiar_notificaciones` (15 días, c/15d) | FASE 18 | backend-dashboard | ✅ |
+| 🟢 **4** | Bot `limpiar_archivos` (c/24h) | FASE 18 | backend-dashboard | ✅ |
+| 🟢 **5** | Bot `limpiar_redis_stale` (TTL 48h) | FASE 18 | backend-api + dashboard | ✅ |
+| 🟢 **6** | Bot `limpiar_banners_api` (c/24h) | FASE 18 | backend-api | ✅ |
+| 🟢 **7** | Control vigencia luzapp (S2, S3) | FASE 7.4-7.5 | luzapp + backend-api | ✅ |
+| 🟢 **8** | Backups SQL Server (manual) | FASE 5.1 | servidor | — |
+| 🟢 **9** | Docker multi-stage build | FASE 5.3 | Dockerfile | ✅ |
+| ⚪ **10** | Versión Objetivo (FASE 15.5) | FASE 15 Lote 5 | backend-api + luzapp | largo plazo |
 
 ---
 
@@ -1281,11 +1279,11 @@ El sistema no tiene **ningún** job de limpieza automática. Datos que crecen si
 
 | Grupo | Fases | Completado | Pendiente |
 |-------|-------|------------|-----------|
-| Originales | 1-10 | 37/40 (93%) | 3/40 |
+| Originales | 1-10 | 39/40 (98%) | 1/40 |
 | Refactor Backend | 11 | 3/3 ✅ (100%) | 0/3 |
 | Frontend Base | 12 | 2/2 ✅ (100%) | 0/2 |
 | UX/UI | 13-14 | 5/5 ✅ (100%) | 0/5 |
-| Blindaje WebSocket | 15 | 10/17 (59%) | 7/17 |
-| Cola Dashboard | 17 | 16/17 (94%) | 1/17 |
-| Bots Mantenimiento | 18 | 0/5 (0%) | 5/5 |
-| **TOTAL** | **1-18** | **73/89 (82%)** | **16/89** |
+| Blindaje WebSocket | 15 | 17/17 ✅ (100%) | 0/17 |
+| Cola Dashboard | 17 | 17/17 ✅ (100%) | 0/17 |
+| Bots Mantenimiento | 18 | 5/5 ✅ (100%) | 0/5 |
+| **TOTAL** | **1-18** | **88/89 (99%)** | **1/89** |

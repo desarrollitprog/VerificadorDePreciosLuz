@@ -63,6 +63,7 @@ class DeviceStateStore:
                     "online": "1",
                 },
             )
+            pipe.expire(key, 172800)  # 48h TTL
             await pipe.execute()
         
         return await self._retry_operation(_do_upsert, operation_name=f"upsert_heartbeat({device_id})")

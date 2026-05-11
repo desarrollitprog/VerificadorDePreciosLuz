@@ -2002,26 +2002,37 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                     sendSyncConfirmation(webSocket, command, "SUCCESS", commandId = commandId)
                                 }
                             }
-                            "BANNER_FINALIZADO" -> {
+                            "BANNER_EXPIRED" -> {
                                 val bannerId = message.optInt("banner_id", 0)
                                 val titulo = message.optString("titulo", "")
-                                val bannerUrl = message.optString("url", "")
-                                Log.i(TAG, "[WebSocket] BANNER_FINALIZADO recibido: id=$bannerId, titulo=$titulo")
+                                Log.i(TAG, "[WebSocket] BANNER_EXPIRED recibido: id=$bannerId, titulo=$titulo")
 
-                                // Marcar como notificado para evitar duplicados con polling
-                                notifiedBannersEnd.add(bannerId)
-
-                                // Eliminar archivo local del banner que terminó
-                                if (bannerId > 0 && bannerUrl.isNotEmpty()) {
-                                    deleteBannerFile(bannerId, bannerUrl)
+                                uiHandler.post {
+                                    val index = standbyItems.indexOfFirst { it.id == bannerId }
+                                    if (index >= 0) {
+                                        val item = standbyItems.removeAt(index)
+                                        val file = File(item.localPath)
+                                        if (file.exists()) file.delete()
+                                        Log.i(TAG, "[WebSocket] Banner $bannerId eliminado del carrusel por expiración")
+                                        if (standbyItems.isEmpty()) {
+                                            stopStandbyCarousel()
+                                        } else if (standbyIndex >= standbyItems.size) {
+                                            standbyIndex = 0
+                                        }
+                                    }
+                                    sendSyncConfirmation(webSocket, command, "SUCCESS", commandId = commandId)
                                 }
 
-                                // Recargar banners inmediatamente cuando un banner termina
-                                uiHandler.post {
-                                    syncBannersOnStart()
-                                    Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_FINALIZADO")
-                                    // Confirmar al backend que el banner fue recibido
-                                    sendSyncConfirmation(webSocket, command, "SUCCESS", commandId = commandId)
+                                scope.launch {
+                                    val service = api ?: return@launch
+                                    val baseUrl = backendBaseUrl ?: return@launch
+                                    val repo = BannerRepository(this@ScanActivity, service, baseUrl)
+                                    val cache = repo.loadCache() ?: return@launch
+                                    val removed = cache.items.removeAll { it.id == bannerId }
+                                    if (removed) {
+                                        repo.saveMeta(cache)
+                                        Log.i(TAG, "[WebSocket] Banner $bannerId eliminado del cache metadata por expiración")
+                                    }
                                 }
                             }
                             "REINICIAR" -> {
@@ -2266,6 +2277,39 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                     syncBannersOnStart()
                                     Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_FINALIZADO (binario)")
                                     sendSyncConfirmation(webSocket, command, "SUCCESS", commandId = commandId)
+                                }
+                            }
+                            "BANNER_EXPIRED" -> {
+                                val bannerId = message.optInt("banner_id", 0)
+                                val titulo = message.optString("titulo", "")
+                                Log.i(TAG, "[WebSocket] BANNER_EXPIRED recibido (binario): id=$bannerId, titulo=$titulo")
+
+                                uiHandler.post {
+                                    val index = standbyItems.indexOfFirst { it.id == bannerId }
+                                    if (index >= 0) {
+                                        val item = standbyItems.removeAt(index)
+                                        val file = File(item.localPath)
+                                        if (file.exists()) file.delete()
+                                        Log.i(TAG, "[WebSocket] Banner $bannerId eliminado del carrusel por expiración (binario)")
+                                        if (standbyItems.isEmpty()) {
+                                            stopStandbyCarousel()
+                                        } else if (standbyIndex >= standbyItems.size) {
+                                            standbyIndex = 0
+                                        }
+                                    }
+                                    sendSyncConfirmation(webSocket, command, "SUCCESS", commandId = commandId)
+                                }
+
+                                scope.launch {
+                                    val service = api ?: return@launch
+                                    val baseUrl = backendBaseUrl ?: return@launch
+                                    val repo = BannerRepository(this@ScanActivity, service, baseUrl)
+                                    val cache = repo.loadCache() ?: return@launch
+                                    val removed = cache.items.removeAll { it.id == bannerId }
+                                    if (removed) {
+                                        repo.saveMeta(cache)
+                                        Log.i(TAG, "[WebSocket] Banner $bannerId eliminado del cache metadata por expiración (binario)")
+                                    }
                                 }
                             }
                             "REINICIAR" -> {

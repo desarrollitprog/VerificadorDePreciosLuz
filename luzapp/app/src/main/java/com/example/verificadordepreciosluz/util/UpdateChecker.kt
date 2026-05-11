@@ -273,20 +273,6 @@ object UpdateChecker {
         Log.d(TAG, "downloadFile() complete, saved: ${target.length()} bytes")
     }
 
-    private fun forceStopOldVersion(context: Context) {
-        try {
-            // Cerrar app vieja sin permisos especiales
-            if (context is Activity) {
-                context.finishAffinity()
-            }
-            // Matar proceso propiamente
-            android.os.Process.killProcess(android.os.Process.myPid())
-            Log.i("UpdateChecker", "App cerrada para actualización")
-        } catch (e: Exception) {
-            Log.e("UpdateChecker", "Error al cerrar versión vieja: ${e.message}")
-        }
-    }
-
     private fun installSilentlyMethod(context: Context, apkFile: File) {
         Log.d(TAG, "installSilently() called")
         try {
@@ -313,10 +299,6 @@ object UpdateChecker {
                 )
                 session.commit(pendingIntent.intentSender)
 
-                if (context is Activity) {
-                    context.finishAffinity()
-                }
-                
                 Handler(Looper.getMainLooper()).post {
                     showNotification(context, "Actualización", "Instalación programada", 100)
                     Toast.makeText(context, "Actualización programada", Toast.LENGTH_SHORT).show()
@@ -377,11 +359,6 @@ object UpdateChecker {
             } catch (e: Exception) {
                 Log.e(TAG, "Error restarting: ${e.message}")
                 hideNotification(context)
-            }
-            try {
-                android.os.Process.killProcess(android.os.Process.myPid())
-            } catch (e: Exception) {
-                Log.e("UpdateChecker", "Error al cerrar para reiniciar: ${e.message}")
             }
         }, 3000)
     }

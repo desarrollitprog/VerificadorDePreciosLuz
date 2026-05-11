@@ -1,22 +1,37 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutGrid, LogOut, X, Users, Server, User, Calendar, History } from 'lucide-react';
-import { Screen } from '../types';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { LogOut, X, Users, Server, Calendar, History, LayoutGrid } from 'lucide-react';
 import { getUserRole, getUserName } from '../services/tokenUtils';
 
 interface SidebarProps {
-  currentScreen: Screen;
-  onNavigate: (screen: Screen) => void;
   isOpen: boolean;
   onClose: () => void;
   onLogout: () => void;
 }
-const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, onClose, onLogout }) => {
+
+const navItems = [
+  { path: '/', label: 'Mis Videos', icon: LayoutGrid, adminOnly: false },
+  { path: '/calendario', label: 'Calendario', icon: Calendar, adminOnly: false },
+  { path: '/servidores', label: 'Servidores', icon: Server, adminOnly: true },
+  { path: '/auditoria', label: 'Auditoría', icon: History, adminOnly: true },
+  { path: '/usuarios', label: 'Gestión de Usuarios', icon: Users, adminOnly: true },
+];
+
+const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onLogout }) => {
   const [role, setRole] = useState<'ADMIN' | 'CLIENTE' | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
+
   useEffect(() => {
     setRole(getUserRole());
     setUserName(getUserName());
   }, []);
+
+  const isActive = (path: string) => {
+    if (path === '/') return location.pathname === '/';
+    return location.pathname.startsWith(path);
+  };
 
   return (
     <aside
@@ -47,110 +62,35 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, on
       </div>
 
       <nav className="flex-1 px-4 flex flex-col gap-2 overflow-y-auto mt-2">
-
-        <button 
-          onClick={() => { onNavigate('dashboard'); onClose(); }}
-          title="Mis Videos"
-          className={`group relative flex items-center gap-3 px-3 justify-start py-3 rounded-lg transition-colors w-full text-left
-            ${currentScreen === 'dashboard' 
-              ? 'text-primary font-semibold' 
-              : 'text-slate-400 hover:bg-slate-800 hover:text-white font-medium'
-            }`}
-        >
-          {currentScreen === 'dashboard' && (
-            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full"></span>
-          )}
-          <LayoutGrid size={20} className={currentScreen === 'dashboard' ? 'text-primary' : 'text-slate-500 group-hover:text-white'} />
-          <span className="text-sm">Mis Videos</span>
-        </button>
-
-        <button 
-          onClick={() => { onNavigate('calendar'); onClose(); }}
-          title="Calendario de Publicidad"
-          className={`group relative flex items-center gap-3 px-3 justify-start py-3 rounded-lg transition-colors w-full text-left
-            ${currentScreen === 'calendar' 
-              ? 'text-primary font-semibold' 
-              : 'text-slate-400 hover:bg-slate-800 hover:text-white font-medium'
-            }`}
-        >
-          {currentScreen === 'calendar' && (
-            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full"></span>
-          )}
-          <Calendar size={20} className={currentScreen === 'calendar' ? 'text-primary' : 'text-slate-500 group-hover:text-white'} />
-          <span className="text-sm">Calendario</span>
-        </button>
-
-        {/* Solo ADMIN puede ver la opción de Servidores */}
-        {role === 'ADMIN' && (
-          <button 
-            onClick={() => { onNavigate('servers'); onClose(); }}
-            title="Servidores"
-            className={`group relative flex items-center gap-3 px-3 justify-start py-3 rounded-lg transition-colors w-full text-left
-              ${currentScreen === 'servers' 
-                ? 'text-primary font-semibold' 
-                : 'text-slate-400 hover:bg-slate-800 hover:text-white font-medium'
-              }`}
-          >
-            {currentScreen === 'servers' && (
-              <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full"></span>
-            )}
-            <Server size={20} className={currentScreen === 'servers' ? 'text-primary' : 'text-slate-500 group-hover:text-white'} />
-            <span className="text-sm">Servidores</span>
-          </button>
-        )}
-
-        {/* Auditoría - solo ADMIN puede ver */}
-        {role === 'ADMIN' && (
-          <button 
-            onClick={() => { onNavigate('auditoria'); onClose(); }}
-            title="Historial de Auditoría"
-            className={`group relative flex items-center gap-3 px-3 justify-start py-3 rounded-lg transition-colors w-full text-left
-              ${currentScreen === 'auditoria' 
-                ? 'text-primary font-semibold' 
-                : 'text-slate-400 hover:bg-slate-800 hover:text-white font-medium'
-              }`}
-          >
-            {currentScreen === 'auditoria' && (
-              <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full"></span>
-            )}
-            <History size={20} className={currentScreen === 'auditoria' ? 'text-primary' : 'text-slate-500 group-hover:text-white'} />
-            <span className="text-sm">Auditoría</span>
-          </button>
-        )}
-
-        <div className="my-2 border-t border-slate-800/30"></div>
-
-        {/* Gestión de Usuarios solo para ADMIN */}
-        {role === 'ADMIN' && (
-          <button 
-            title="Gestión de Usuarios"
-            className={`group relative flex items-center gap-3 px-3 justify-start py-3 rounded-lg transition-colors w-full text-left
-              ${currentScreen === 'users' 
-                ? 'text-primary font-semibold' 
-                : 'text-slate-400 hover:bg-slate-800 hover:text-white font-medium'
-              }`}
-            onClick={() => { onNavigate('users'); onClose(); }}
-          >
-            {currentScreen === 'users' && (
-              <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full"></span>
-            )}
-            <Users size={20} className={currentScreen === 'users' ? 'text-primary' : 'text-slate-500 group-hover:text-white'} />
-            <span className="text-sm font-medium">Gestión de Usuarios</span>
-          </button>
-        )}
-
-        {/*<button 
-          className="flex items-center gap-3 px-3 py-3 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors w-full text-left group"
-        >
-          <Settings size={20} className="group-hover:rotate-90 transition-transform duration-500" />
-          <span className="text-sm font-medium">Configuración</span>
-        </button>*/}
+        {navItems.map((item) => {
+          if (item.adminOnly && role !== 'ADMIN') return null;
+          const active = isActive(item.path);
+          const Icon = item.icon;
+          return (
+            <button
+              key={item.path}
+              onClick={() => { navigate(item.path); onClose(); }}
+              title={item.label}
+              className={`group relative flex items-center gap-3 px-3 justify-start py-3 rounded-lg transition-colors w-full text-left
+                ${active
+                  ? 'text-primary font-semibold'
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-white font-medium'
+                }`}
+            >
+              {active && (
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full"></span>
+              )}
+              <Icon size={20} className={active ? 'text-primary' : 'text-slate-500 group-hover:text-white'} />
+              <span className="text-sm">{item.label}</span>
+            </button>
+          );
+        })}
       </nav>
 
       <div className="p-4 border-t border-slate-800/30 mt-auto">
         <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800/50 transition-colors cursor-pointer group">
           <div className="h-10 w-10 flex items-center justify-center rounded-full bg-slate-800 border border-slate-700 shadow-sm">
-            <User size={28} className="text-blue-400" />
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
           </div>
           <div className="flex flex-col flex-1 min-w-0">
             <p className="text-white text-sm font-medium truncate group-hover:text-primary transition-colors">{'Usuario'}</p>
@@ -163,5 +103,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScreen, onNavigate, isOpen, on
       </div>
     </aside>
   );
-}
+};
+
 export default Sidebar;

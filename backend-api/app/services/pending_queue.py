@@ -27,6 +27,7 @@ class PendingCommandQueue:
     PENDING_SYNC_PREFIX = "device:pending:sync"
     PENDING_REBOOT_PREFIX = "device:pending:reboot"
     PENDING_BANNER_PREFIX = "device:pending:banner"
+    DELIVERY_PENDING_PREFIX = "device:delivery_pending"
     MAX_QUEUE_PER_DEVICE = 100
     MAX_MESSAGE_AGE = 86400  # 24h
     MAX_RETRIES = 5
@@ -244,6 +245,20 @@ class PendingCommandQueue:
                 pass
         return None
 
+    async def set_delivery_pending(self, device_id: str) -> None:
+        """Marca que se espera confirmación de entrega para un sync."""
+        key = f"{self.DELIVERY_PENDING_PREFIX}:{device_id}"
+        await self.redis.set(key, "true", ex=300)
+
+    async def check_delivery_pending(self, device_id: str) -> bool:
+        """Verifica si hay delivery pendiente y limpia el flag."""
+        key = f"{self.DELIVERY_PENDING_PREFIX}:{device_id}"
+        val = await self.redis.get(key)
+        if val == "true":
+            await self.redis.delete(key)
+            return True
+        return False
+
     async def flush_all_to_device(self, device_id: str, send_fn) -> int:
         """Envía todos los mensajes pendientes al dispositivo via send_fn.
         send_fn es un callable async que recibe (message: dict) y retorna True/False.
@@ -264,6 +279,8 @@ class PendingCommandQueue:
                 success = await send_fn(msg)
                 if success:
                     await self.confirm(device_id, raw)
+                    if msg.get("command") == "WIPE_AND_RESYNC":
+                        await self.set_delivery_pending(device_id)
                     delivered += 1
                 else:
                     if retry_count >= self.MAX_RETRIES - 1:

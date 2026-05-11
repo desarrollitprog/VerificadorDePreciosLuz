@@ -232,3 +232,16 @@ export async function scheduleRestart(params: ScheduleRestartParams): Promise<Sc
   const response = await api.post('/dispositivos/programar-reinicio', params);
   return response.data as ScheduleRestartResult;
 }
+
+export interface QueueStatus {
+  device_id: string;
+  pending: number;
+  inflight: number;
+  total: number;
+  dlq: number;
+}
+
+export async function getQueueStatus(deviceId: string): Promise<QueueStatus> {
+  const response = await api.get(`/monitoreo/cola/${encodeURIComponent(deviceId)}`);
+  return response.data as QueueStatus;
+}

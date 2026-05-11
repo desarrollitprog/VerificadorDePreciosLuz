@@ -1,16 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Bell, AlertTriangle, ChevronRight, Check, Circle } from 'lucide-react';
 import { useNotification } from './useNotification';
 import { deleteReadNotificaciones, fetchNotificaciones, markNotificacionesRead, markNotificacionRead, Notificacion } from '../services/notificacionesService';
 import { toNotificationViewModel } from '../services/notificacionesPresentation';
-import { Screen } from '../types';
 import type { NotificationType } from './NotificationContext';
 
-interface GeneralNotificationsProps {
-  onNavigate?: (screen: Screen) => void;
-}
-
-// Formatea una fecha a la hora de Caracas (UTC-4)
 function formatCaracasTime(dateString: string | Date): Date {
   const date = typeof dateString === 'string' ? new Date(dateString) : new Date(dateString.getTime());
   return date;
@@ -53,9 +48,10 @@ function getBadgeByAction(actionBadge?: 'carga' | 'eliminacion') {
   return undefined;
 }
 
-export const GeneralNotifications: React.FC<GeneralNotificationsProps> = ({ onNavigate }) => {
+export const GeneralNotifications: React.FC = () => {
   const [open, setOpen] = useState(false);
   const showNotification = useNotification();
+  const navigate = useNavigate();
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -63,13 +59,8 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = ({ onNa
   const shownErrorNotificationIdsRef = useRef<Set<number>>(new Set());
   const [search, setSearch] = useState("");
 
-  const handleNavigate = (screen: Screen) => {
-    if (onNavigate) {
-      onNavigate(screen);
-    } else {
-      const event = new CustomEvent('navigate', { detail: screen });
-      window.dispatchEvent(event);
-    }
+  const handleNavigate = (path: string) => {
+    navigate(path);
   };
 
   const loadNotifications = async (markAsRead: boolean) => {
@@ -79,7 +70,7 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = ({ onNa
       const seenErrorKeys = new Set<string>();
       const normalized = (res.notificaciones || []).filter((n) => {
         const tipo = String(n.tipo || '').toUpperCase();
-        if (tipo !== 'SYNC_FAILED' && tipo !== 'PLAYBACK_FAILED') return true;
+        if (tipo !== 'SYNC_FAILED' && tipo !== 'PLAYBACK_FAILED' && tipo !== 'SINCRONIZACION_SELECTIVA') return true;
         const key = `${n.tipo}::${(n.descripcion || '').trim()}`;
         if (seenErrorKeys.has(key)) return false;
         seenErrorKeys.add(key);
@@ -92,7 +83,7 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = ({ onNa
       normalized
         .filter((n) => {
           const tipo = String(n.tipo || '').toUpperCase();
-          return tipo === 'SYNC_FAILED' || tipo === 'PLAYBACK_FAILED' || tipo === 'PUBLICIDAD_VENCIDA';
+          return tipo === 'SYNC_FAILED' || tipo === 'PLAYBACK_FAILED' || tipo === 'PUBLICIDAD_VENCIDA' || tipo === 'SINCRONIZACION_COMPLETADA';
         })
         .filter((n) => !shownErrorNotificationIdsRef.current.has(n.id))
         .forEach((n) => {
@@ -106,6 +97,9 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = ({ onNa
           } else if (tipo === 'PUBLICIDAD_VENCIDA') {
             prefix = 'Publicidad vencida';
             tipo_notif = 'warning';
+          } else if (tipo === 'SINCRONIZACION_COMPLETADA') {
+            prefix = 'Sincronización completada';
+            tipo_notif = 'success';
           } else {
             prefix = 'Fallo de sincronización';
             tipo_notif = 'error';
@@ -119,9 +113,7 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = ({ onNa
             setNotificaciones((prev) => prev.map((n) => ({ ...n, leida: true })));
             setUnreadCount(0);
           })
-          .catch(() => {
-            // no-op: mantener estado local actual si falla marcado
-          });
+          .catch(() => {});
       }
 
     } finally {
@@ -157,7 +149,6 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = ({ onNa
     }
   }, [open, showNotification]);
 
-  // Cerrar dropdown al hacer click fuera
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -219,7 +210,6 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = ({ onNa
                   const isError = view.severity === 'error';
                   const badge = getBadgeBySeverity(view.severity);
                   const actionBadge = getBadgeByAction(view.actionBadge);
-                  // Interpretar fecha UTC correctamente y mostrar en horario de Caracas
                   const utcDate = new Date(n.fecha_creacion.endsWith('Z') ? n.fecha_creacion : n.fecha_creacion + 'Z');
                   const exactTime = utcDate.toLocaleString('es-VE', { timeZone: 'America/Caracas' });
                   const relativeTime = getRelativeTimeLabel(n.fecha_creacion);
@@ -236,7 +226,6 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = ({ onNa
                         ));
                         setUnreadCount(prev => Math.max(0, prev - 1));
                       } catch (err) {
-                        // Silent fail
                       }
                     }
                   };
@@ -282,7 +271,7 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = ({ onNa
             <button
               onClick={() => {
                 setOpen(false);
-                handleNavigate('auditoria');
+                handleNavigate('/auditoria');
               }}
               className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium text-primary hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
             >

@@ -4,6 +4,7 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import { getVideos } from '../services/videoService';
 import { Video } from '../types';
+import { Spinner } from '../components/Spinner';
 
 const calendarStyles = `
   /* Base */
@@ -386,9 +387,11 @@ export const CalendarScreen: React.FC = () => {
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-lg shadow-slate-200/50 dark:shadow-none border border-slate-200 dark:border-slate-800 p-4 relative overflow-hidden">
         <div className="absolute top-0 left-0 right-0 h-1 bg-primary dark:bg-slate-700"></div>
         {loading && (
-          <div className="absolute top-6 right-6 z-10 flex items-center gap-2 bg-white dark:bg-slate-800 px-4 py-2 rounded-full shadow-lg border border-slate-200 dark:border-slate-700">
-            <div className="w-4 h-4 rounded-full border-2 border-indigo-500/30 border-t-indigo-500 animate-spin"></div>
-            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Cargando...</span>
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/60 dark:bg-slate-900/60 rounded-2xl">
+            <div className="flex items-center gap-2 bg-white dark:bg-slate-800 px-4 py-2 rounded-full shadow-lg border border-slate-200 dark:border-slate-700">
+              <Spinner size="sm" />
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Cargando...</span>
+            </div>
           </div>
         )}
         <FullCalendar {...calendarOptions} />

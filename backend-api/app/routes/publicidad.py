@@ -459,6 +459,20 @@ async def eliminar_banner_remoto(id_remoto: int, db: AsyncSession = Depends(get_
                 pass
     await db.delete(banner)
     await db.commit()
+
+    # Notificar a dispositivos que el banner ha expirado
+    try:
+        from ..main import tablet_ws_manager
+        await tablet_ws_manager.broadcast({
+            "type": "BANNER_EXPIRED",
+            "command": "BANNER_EXPIRED",
+            "banner_id": id_remoto,
+            "titulo": banner.titulo or "Banner",
+        })
+    except Exception as e:
+        import logging
+        logging.getLogger("publicidad").warning(f"Error notificando BANNER_EXPIRED: {e}")
+
     return {"success": True, "message": "Banner eliminado correctamente por IdPublicidadRemoto."}
 
 

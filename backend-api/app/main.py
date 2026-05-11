@@ -142,6 +142,7 @@ async def debug_bcv(
 
 
 banner_check_task: asyncio.Task | None = None
+banner_cleanup_task: asyncio.Task | None = None
 notified_banners_start: set[int] = set()
 notified_banners_end: set[int] = set()
 scheduler_notifications: Any = None
@@ -160,6 +161,19 @@ async def _check_banners_starting():
             break
         except Exception as e:
             logger.error("Error en task de verificación de banners: %s", e)
+
+
+async def _periodic_banner_cleanup():
+    while True:
+        try:
+            from app.cleanup_service import cleanup_orphan_banners
+            await cleanup_orphan_banners()
+            await asyncio.sleep(86400)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"Error en limpieza de banners: {e}")
+            await asyncio.sleep(86400)
 
 
 async def _notify_banners_started():
@@ -454,6 +468,9 @@ async def start_device_monitor():
     banner_check_task = asyncio.create_task(_check_banners_starting())
     logger.info("Banner check task iniciada")
 
+    banner_cleanup_task = asyncio.create_task(_periodic_banner_cleanup())
+    logger.info("Banner cleanup task iniciada")
+
     try:
         from app.services.scheduler_notifications import SchedulerNotifications, scheduler_notifications as sn
         global scheduler_notifications
@@ -511,6 +528,11 @@ async def shutdown_device_state_store():
     if banner_check_task is not None:
         banner_check_task.cancel()
         banner_check_task = None
+
+    global banner_cleanup_task
+    if banner_cleanup_task is not None:
+        banner_cleanup_task.cancel()
+        banner_cleanup_task = None
 
     if device_bus_listener_task is not None:
         device_bus_listener_task.cancel()
@@ -1115,6 +1137,7 @@ async def _run_force_sync_job(job_id: str, dispositivo_ids: List[str] = None) ->
                     sent=progress.get("sent", 0),
                     confirmed=progress.get("confirmed", 0),
                     failed=progress.get("failed", 0),
+                    queued=progress.get("queued", 0),
                     details=progress.get("details", []),
                 )
 
@@ -1131,6 +1154,7 @@ async def _run_force_sync_job(job_id: str, dispositivo_ids: List[str] = None) ->
             sent=result.get("sent", 0),
             confirmed=result.get("confirmed", 0),
             failed=result.get("failed", 0),
+            queued=result.get("queued", 0),
             details=result.get("details", []),
         )
     except Exception as e:
@@ -1365,6 +1389,7 @@ async def fuerza_sync_status(job_id: str):
         "total": int(job.get("total", 0)),
         "sent": int(job.get("sent", 0)),
         "confirmed": int(job.get("confirmed", 0)),
+        "queued": int(job.get("queued", 0)),
         "failed": int(job.get("failed", 0)),
         "details": job.get("details", []),
         "error": job.get("error"),
@@ -1743,6 +1768,7 @@ class TabletWebSocketManager:
                         )
                     else:
                         await self.send_to_device(device_id, {"command": "WIPE_AND_RESYNC"})
+                    await pending_queue.set_delivery_pending(device_id)
             except Exception as e:
                 logger.error(f"[QUEUE] Error verificando pending sync para {device_id}: {e}")
 
@@ -2136,12 +2162,14 @@ async def orchestrate_forced_sync_sequential(
             "total": 0,
             "sent": 0,
             "confirmed": 0,
+            "queued": 0,
             "failed": 0,
             "details": [],
         }
 
     sent = 0
     confirmed = 0
+    queued = 0
     details = []
 
     if progress_hook:
@@ -2150,7 +2178,8 @@ async def orchestrate_forced_sync_sequential(
                 "total": len(target_device_ids),
                 "sent": sent,
                 "confirmed": confirmed,
-                "failed": len(target_device_ids) - confirmed,
+                "queued": queued,
+                "failed": len(target_device_ids) - confirmed - queued,
                 "details": list(details),
             }
         )
@@ -2183,26 +2212,43 @@ async def orchestrate_forced_sync_sequential(
 
         if not send_ok:
             reason = "No se pudo enviar comando por WebSocket"
+            was_queued = False
             if pending_queue is not None:
                 await pending_queue.set_pending_sync(device_id)
-            asyncio.create_task(notify_dashboard_sync_failure(device_id, reason))
+                was_queued = True
             sync_ack_waiters.pop(ack_key, None)
-            details.append(
-                {
-                    "device_id": device_id,
-                    "ack_key": ack_key,
-                    "ok": False,
-                    "status": "SEND_FAILED",
-                    "reason": reason,
-                }
-            )
+            if was_queued:
+                asyncio.create_task(notify_dashboard_sync_queued(device_id, reason))
+                queued += 1
+                details.append(
+                    {
+                        "device_id": device_id,
+                        "ack_key": ack_key,
+                        "ok": True,
+                        "status": "QUEUED",
+                        "reason": "Dispositivo offline. Se ejecutará al reconectar.",
+                        "queued": True,
+                    }
+                )
+            else:
+                asyncio.create_task(notify_dashboard_sync_failure(device_id, reason))
+                details.append(
+                    {
+                        "device_id": device_id,
+                        "ack_key": ack_key,
+                        "ok": False,
+                        "status": "SEND_FAILED",
+                        "reason": reason,
+                    }
+                )
             if progress_hook:
                 await progress_hook(
                     {
                         "total": len(target_device_ids),
                         "sent": sent,
                         "confirmed": confirmed,
-                        "failed": len(target_device_ids) - confirmed,
+                        "queued": queued,
+                        "failed": len(target_device_ids) - confirmed - queued,
                         "details": list(details),
                     }
                 )
@@ -2247,38 +2293,56 @@ async def orchestrate_forced_sync_sequential(
                     logger.info(f"[SYNC] Confirmación via waiter para {device_id}: {ack.get('status')}")
                     break
             
-            status = str(ack.get("status", "")).upper()
-            ok = status in ("RECEIVED", "SUCCESS", "DONE")
-            if ok:
-                confirmed += 1
-            else:
-                fail_reason = ack.get("reason", "") or f"Estado no exitoso: {status or 'UNKNOWN'}"
+            # No se recibió ack en el timeout → comando encolado en Redis (dispositivo offline)
+            if not ack:
+                timeout_reason = f"Sin confirmación en {SYNC_ACK_TIMEOUT}s"
+                was_queued = False
                 if pending_queue is not None:
                     await pending_queue.set_pending_sync(device_id)
-                asyncio.create_task(notify_dashboard_sync_failure(device_id, fail_reason))
-            details.append(
-                {
-                    "device_id": ack.get("device_id") or device_id,
-                    "ack_key": ack_key,
-                    "ok": ok,
-                    "status": status or "UNKNOWN",
-                    "reason": ack.get("reason", ""),
-                }
-            )
-        except asyncio.TimeoutError:
-            timeout_reason = f"Sin confirmación en {SYNC_ACK_TIMEOUT}s"
-            if pending_queue is not None:
-                await pending_queue.set_pending_sync(device_id)
-            asyncio.create_task(notify_dashboard_sync_failure(device_id, timeout_reason))
-            details.append(
-                {
-                    "device_id": device_id,
-                    "ack_key": ack_key,
-                    "ok": False,
-                    "status": "TIMEOUT",
-                    "reason": timeout_reason,
-                }
-            )
+                    was_queued = True
+                if was_queued:
+                    asyncio.create_task(notify_dashboard_sync_queued(device_id, timeout_reason))
+                    queued += 1
+                    details.append(
+                        {
+                            "device_id": device_id,
+                            "ack_key": ack_key,
+                            "ok": True,
+                            "status": "QUEUED",
+                            "reason": f"Sin confirmación en {SYNC_ACK_TIMEOUT}s. Se ejecutará al reconectar.",
+                            "queued": True,
+                        }
+                    )
+                else:
+                    asyncio.create_task(notify_dashboard_sync_failure(device_id, timeout_reason))
+                    details.append(
+                        {
+                            "device_id": device_id,
+                            "ack_key": ack_key,
+                            "ok": False,
+                            "status": "TIMEOUT",
+                            "reason": timeout_reason,
+                        }
+                    )
+            else:
+                status = str(ack.get("status", "")).upper()
+                ok = status in ("RECEIVED", "SUCCESS", "DONE")
+                if ok:
+                    confirmed += 1
+                else:
+                    fail_reason = ack.get("reason", "") or f"Estado no exitoso: {status or 'UNKNOWN'}"
+                    if pending_queue is not None:
+                        await pending_queue.set_pending_sync(device_id)
+                    asyncio.create_task(notify_dashboard_sync_failure(device_id, fail_reason))
+                details.append(
+                    {
+                        "device_id": ack.get("device_id") or device_id,
+                        "ack_key": ack_key,
+                        "ok": ok,
+                        "status": status or "UNKNOWN",
+                        "reason": ack.get("reason", ""),
+                    }
+                )
         finally:
             sync_ack_waiters.pop(ack_key, None)
 
@@ -2288,7 +2352,8 @@ async def orchestrate_forced_sync_sequential(
                     "total": len(target_device_ids),
                     "sent": sent,
                     "confirmed": confirmed,
-                    "failed": len(target_device_ids) - confirmed,
+                    "queued": queued,
+                    "failed": len(target_device_ids) - confirmed - queued,
                     "details": list(details),
                 }
             )
@@ -2297,11 +2362,12 @@ async def orchestrate_forced_sync_sequential(
         if len(target_device_ids) > 1:
             await asyncio.sleep(2)
 
-    failed = len(target_device_ids) - confirmed
+    failed = len(target_device_ids) - confirmed - queued
     return {
         "total": len(target_device_ids),
         "sent": sent,
         "confirmed": confirmed,
+        "queued": queued,
         "failed": failed,
         "details": details,
     }
@@ -2386,6 +2452,15 @@ async def process_sync_confirmation(websocket: WebSocket, msg: dict):
     # Actualizar dict local (para backward compatibility)
     await _apply_sync_confirmation(device_id=device_id, status=status, reason=reason)
 
+    # Notificar entrega exitosa al dashboard (FASE 17.3)
+    if status in ("SUCCESS", "RECEIVED", "DONE"):
+        if pending_queue is not None:
+            try:
+                if await pending_queue.check_delivery_pending(device_id):
+                    asyncio.create_task(notify_dashboard_sync_delivered(device_id))
+            except Exception as e:
+                logger.error(f"[DELIVERY] Error en check_delivery_pending: {e}")
+
 # Endpoint WebSocket para tabletas
 async def notify_dashboard_sync_failure(device_id: str, reason: str = ""):
     dashboard_url = os.getenv("DASHBOARD_URL")
@@ -2399,6 +2474,32 @@ async def notify_dashboard_sync_failure(device_id: str, reason: str = ""):
             await client.post(notify_endpoint, json=payload, timeout=10)
     except Exception as e:
         logging.error(f"Error notificando a backend-dashboard: {e}")
+
+
+async def notify_dashboard_sync_queued(device_id: str, reason: str = ""):
+    dashboard_url = os.getenv("DASHBOARD_URL")
+    if not dashboard_url:
+        return
+    notify_endpoint = f"{dashboard_url.rstrip('/')}/api/sync-queued"
+    try:
+        async with httpx.AsyncClient() as client:
+            payload = {"device_id": device_id, "status": "QUEUED", "reason": reason}
+            await client.post(notify_endpoint, json=payload, timeout=10)
+    except Exception as e:
+        logging.error(f"Error notificando sync queued al dashboard: {e}")
+
+
+async def notify_dashboard_sync_delivered(device_id: str):
+    dashboard_url = os.getenv("DASHBOARD_URL")
+    if not dashboard_url:
+        return
+    notify_endpoint = f"{dashboard_url.rstrip('/')}/api/sync-delivered"
+    try:
+        async with httpx.AsyncClient() as client:
+            payload = {"device_id": device_id, "status": "SUCCESS"}
+            await client.post(notify_endpoint, json=payload, timeout=10)
+    except Exception as e:
+        logging.error(f"Error notificando sync delivered al dashboard: {e}")
 
 
 async def notify_dashboard_banner_iniciado(device_id: str, banner_id: int | None = None):
@@ -2586,6 +2687,36 @@ async def websocket_tablet(websocket: WebSocket):
     except Exception as e:
         logger.error(f"[WebSocket] Error inesperado en endpoint: {e}")
         await tablet_ws_manager.disconnect(websocket)
+
+@app.get("/api/queue-status/{device_id}")
+async def queue_status(device_id: str):
+    if pending_queue is None:
+        raise HTTPException(status_code=503, detail="Redis queue not available")
+    try:
+        queue_stats = await pending_queue.get_queue_size(device_id)
+        dlq_size = await pending_queue.get_dlq_size(device_id)
+        return {
+            "device_id": device_id,
+            "pending": queue_stats["pending"],
+            "inflight": queue_stats["inflight"],
+            "total": queue_stats["total"],
+            "dlq": dlq_size,
+        }
+    except Exception as e:
+        logger.error(f"Error obteniendo queue status para {device_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error: {e}")
+
+@app.post("/ws/broadcast")
+async def ws_broadcast(message: dict):
+    if tablet_ws_manager is None:
+        raise HTTPException(status_code=503, detail="WebSocket manager not available")
+    msg_type = message.get("type", "")
+    if msg_type == "BANNER_EXPIRED":
+        logger.info(f"[ws/broadcast] BANNER_EXPIRED: banner_id={message.get('banner_id')} titulo={message.get('titulo')}")
+        await tablet_ws_manager.broadcast(message)
+        return {"success": True, "forwarded": len(tablet_ws_manager.active_connections)}
+    logger.warning(f"[ws/broadcast] Unknown message type: {msg_type}")
+    raise HTTPException(status_code=400, detail=f"Unknown message type: {msg_type}")
 
 app.include_router(consultas)
 app.include_router(publicidad)

@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNotification } from '../components/useNotification';
+import { Spinner } from '../components/Spinner';
+import { CardSkeleton } from '../components/CardSkeleton';
 import { Search, UploadCloud, MoreVertical, Eye, Trash, Film, Plus, Server, Smartphone, ChevronDown, ChevronRight, Clock, Check, Pencil, RefreshCw, List, Grid, Download } from 'lucide-react';
 import { getVideos, uploadMedia, deleteVideo, sincronizarServidores, updateBannerMetadata, updateBannerAsignations, FileMetadata } from '../services/videoService';
 import { Video, Servidor } from '../types';
@@ -23,6 +25,7 @@ type SyncServerProgress = {
   ip: string;
   total: number;
   confirmed: number;
+  queued: number;
   failed: number;
   progress: number;
   ok?: boolean;
@@ -40,14 +43,16 @@ const normalizeServerProgress = (details: any[] = []): SyncServerProgress[] => {
   return details.map((detail) => {
     const total = Number(detail.sync_total ?? 0);
     const confirmed = Number(detail.sync_confirmed ?? 0);
+    const queued = Number(detail.sync_queued ?? 0);
     const failed = Number(detail.sync_failed ?? 0);
-    const progress = total > 0 ? Math.min(100, Math.round((confirmed / total) * 100)) : 0;
+    const progress = total > 0 ? Math.min(100, Math.round(((confirmed + queued) / total) * 100)) : 0;
 
     return {
       nombre: String(detail.nombre ?? detail.ip ?? 'Servidor'),
       ip: String(detail.ip ?? ''),
       total,
       confirmed,
+      queued,
       failed,
       progress,
       ok: detail.ok,
@@ -472,11 +477,20 @@ export const DashboardScreen: React.FC = () => {
       const maxPolls = 90;
       const pollDelayMs = 2000;
       let finalStatus: any = null;
+      let queuedToastShown = false;
 
       for (let i = 0; i < maxPolls; i++) {
         await new Promise((resolve) => setTimeout(resolve, pollDelayMs));
         const status = await getForceSyncJobStatus(start.job_id);
         setSyncServerProgress(normalizeServerProgress(status.details || []));
+
+        if (!queuedToastShown) {
+          const anyQueued = (status.details || []).some((d: any) => Number(d.sync_queued ?? 0) > 0);
+          if (anyQueued) {
+            queuedToastShown = true;
+            showNotification('Uno o más dispositivos están en cola — se ejecutarán al reconectar.', 'warning');
+          }
+        }
 
         if (status.status === 'COMPLETED' || status.status === 'FAILED') {
           finalStatus = status;
@@ -492,13 +506,19 @@ export const DashboardScreen: React.FC = () => {
       setLastSyncAt(formatCaracasTime(new Date()));
 
       if (finalStatus.status === 'COMPLETED') {
-        const successCount = finalStatus.success_count ?? 0;
         const failedCount = finalStatus.failed_count ?? 0;
-        const totalOnline = finalStatus.total_online ?? 0;
+        const totalQueued = (finalStatus.details || []).reduce(
+          (acc: number, d: any) => acc + Number(d.sync_queued ?? 0), 0
+        );
         if (failedCount > 0) {
           showNotification(
-            `Sincronización completada con fallos (${failedCount}/${totalOnline || successCount + failedCount}).`,
+            `Sincronización completada con fallos (${failedCount} servidores, ${totalQueued} en cola).`,
             'error'
+          );
+        } else if (totalQueued > 0) {
+          showNotification(
+            `Sincronización completada. ${totalQueued} dispositivos en cola.`,
+            'info'
           );
         } else {
           showNotification('Sincronización completada', 'success');
@@ -538,11 +558,20 @@ export const DashboardScreen: React.FC = () => {
       const maxPolls = 90;
       const pollDelayMs = 2000;
       let finalStatus: any = null;
+      let queuedToastShown = false;
 
       for (let i = 0; i < maxPolls; i++) {
         await new Promise((resolve) => setTimeout(resolve, pollDelayMs));
         const status = await getForceSyncJobStatus(start.job_id);
         setSyncServerProgress(normalizeServerProgress(status.details || []));
+
+        if (!queuedToastShown) {
+          const anyQueued = (status.details || []).some((d: any) => Number(d.sync_queued ?? 0) > 0);
+          if (anyQueued) {
+            queuedToastShown = true;
+            showNotification('Uno o más dispositivos están en cola — se ejecutarán al reconectar.', 'warning');
+          }
+        }
 
         if (status.status === 'COMPLETED' || status.status === 'FAILED') {
           finalStatus = status;
@@ -558,13 +587,19 @@ export const DashboardScreen: React.FC = () => {
       setLastSyncAt(formatCaracasTime(new Date()));
 
       if (finalStatus.status === 'COMPLETED') {
-        const successCount = finalStatus.success_count ?? 0;
         const failedCount = finalStatus.failed_count ?? 0;
-        const totalOnline = finalStatus.total_online ?? 0;
+        const totalQueued = (finalStatus.details || []).reduce(
+          (acc: number, d: any) => acc + Number(d.sync_queued ?? 0), 0
+        );
         if (failedCount > 0) {
           showNotification(
-            `Sincronización completada con fallos (${failedCount}/${totalOnline || successCount + failedCount}).`,
+            `Sincronización completada con fallos (${failedCount} servidores, ${totalQueued} en cola).`,
             'error'
+          );
+        } else if (totalQueued > 0) {
+          showNotification(
+            `Sincronización completada. ${totalQueued} dispositivos en cola.`,
+            'info'
           );
         } else {
           showNotification('Sincronización completada', 'success');
@@ -713,12 +748,20 @@ export const DashboardScreen: React.FC = () => {
                   <div className="flex justify-between text-xs mb-1 gap-2">
                     <span className="truncate">{serverProgress.nombre} ({serverProgress.ip})</span>
                     <span>
-                      {serverProgress.confirmed}/{serverProgress.total} ({serverProgress.progress}%)
+                      {serverProgress.confirmed} confirmados
+                      {serverProgress.queued > 0 ? `, ${serverProgress.queued} en cola` : ''}
+                      / {serverProgress.total} ({serverProgress.progress}%)
                     </span>
                   </div>
                   <div className="w-full h-2.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                     <div
-                      className={`h-2.5 ${serverProgress.failed > 0 ? 'bg-amber-500' : 'bg-primary'}`}
+                      className={`h-2.5 ${
+                        serverProgress.failed > 0 && serverProgress.queued === 0
+                          ? 'bg-amber-500'
+                          : serverProgress.queued > 0
+                          ? 'bg-orange-400'
+                          : 'bg-primary'
+                      }`}
                       style={{ width: `${serverProgress.progress}%` }}
                     />
                   </div>
@@ -802,9 +845,15 @@ export const DashboardScreen: React.FC = () => {
                </button>
              </div>
           </div>
-          {viewMode === 'cards' ? (
-            /* VISTA DE TARJETAS - Diseño original restaurado + nuevos botones */
+          {loading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <CardSkeleton key={i} />
+              ))}
+            </div>
+          ) : viewMode === 'cards' ? (
+            /* VISTA DE TARJETAS - Diseño original restaurado + nuevos botones */
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 items-baseline">
               {paginatedCardVideos.length > 0 ? paginatedCardVideos.map((video) => (
                   <div key={video.id} className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-800 hover:shadow-md transition-shadow flex flex-col">
                     {/* Thumbnail */}

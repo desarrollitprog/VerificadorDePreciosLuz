@@ -14,5 +14,5 @@ data class BannerCacheItem(
 
 data class BannerCacheMeta(
     val lastSyncAt: Long,
-    val items: List<BannerCacheItem>,
+    val items: MutableList<BannerCacheItem>,
 )

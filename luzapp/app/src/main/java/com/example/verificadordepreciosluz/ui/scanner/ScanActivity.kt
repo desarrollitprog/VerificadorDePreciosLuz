@@ -763,6 +763,13 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private var lastBannerCheckMs: Long = 0L
     private val notifiedBannersStart = mutableSetOf<Int>()
     private val notifiedBannersEnd = mutableSetOf<Int>()
+    // L1.4: Dedup de comandos por command_id (últimos 20 IDs)
+    private val processedCommandIds = object : LinkedHashSet<String>() {
+        override fun add(element: String): Boolean {
+            if (size >= 20) remove(first())
+            return super.add(element)
+        }
+    }
     
     private fun startBannerPolling() {
         val runnable = object : Runnable {
@@ -1793,8 +1800,6 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         wsClient?.dispatcher?.executorService?.shutdown()
         wsClient = null
         
-        // Cerrar proceso propio sin permisos especiales
-        android.os.Process.killProcess(android.os.Process.myPid())
     }
 
     override fun onPause() {
@@ -1900,8 +1905,15 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                             return
                         }
                         
+                        // L1.4: Dedup por command_id - ignorar comandos ya procesados
+                        val commandId = message.optString("command_id", "")
+                        if (commandId.isNotEmpty() && !processedCommandIds.add(commandId)) {
+                            Log.w(TAG, "[WebSocket] Comando duplicado ignorado: command=$command command_id=$commandId")
+                            return
+                        }
+                        
                         try {
-                            sendSyncConfirmation(webSocket, command, "RECEIVED")
+                            sendSyncConfirmation(webSocket, command, "RECEIVED", commandId = commandId)
                             Log.i(TAG, "[WebSocket] Confirmación enviada para comando: $command")
                         } catch (e: Exception) {
                             Log.e(TAG, "[WebSocket] Error enviando confirmación", e)
@@ -1923,7 +1935,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                 scope.launch {
                                     val apiService = api
                                     if (apiService == null) {
-                                        sendSyncConfirmation(webSocket, command, "FAILED", "ApiService no inicializado")
+                                        sendSyncConfirmation(webSocket, command, "FAILED", "ApiService no inicializado", commandId = commandId)
                                         return@launch
                                     }
 
@@ -1943,19 +1955,21 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                                 webSocket,
                                                 command,
                                                 "FAILED",
-                                                purgeResult.reason ?: "Purga fallida"
+                                                purgeResult.reason ?: "Purga fallida",
+                                                commandId
                                             )
                                         }
                                     }
 
                                     if (purgeResult.success) {
-                                        sendSyncConfirmation(webSocket, command, "SUCCESS")
+                                        sendSyncConfirmation(webSocket, command, "SUCCESS", commandId = commandId)
                                     } else {
                                         sendSyncConfirmation(
                                             webSocket,
                                             command,
                                             "FAILED",
-                                            purgeResult.reason ?: "Purga fallida"
+                                            purgeResult.reason ?: "Purga fallida",
+                                            commandId
                                         )
                                     }
                                 }
@@ -1983,29 +1997,40 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                 uiHandler.post {
                                     Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_INICIADO")
                                     // Confirmar al backend que el banner fue recibido
-                                    sendSyncConfirmation(webSocket, command, "SUCCESS")
+                                    sendSyncConfirmation(webSocket, command, "SUCCESS", commandId = commandId)
                                 }
                             }
-                            "BANNER_FINALIZADO" -> {
+                            "BANNER_EXPIRED" -> {
                                 val bannerId = message.optInt("banner_id", 0)
                                 val titulo = message.optString("titulo", "")
-                                val bannerUrl = message.optString("url", "")
-                                Log.i(TAG, "[WebSocket] BANNER_FINALIZADO recibido: id=$bannerId, titulo=$titulo")
+                                Log.i(TAG, "[WebSocket] BANNER_EXPIRED recibido: id=$bannerId, titulo=$titulo")
 
-                                // Marcar como notificado para evitar duplicados con polling
-                                notifiedBannersEnd.add(bannerId)
-
-                                // Eliminar archivo local del banner que terminó
-                                if (bannerId > 0 && bannerUrl.isNotEmpty()) {
-                                    deleteBannerFile(bannerId, bannerUrl)
+                                uiHandler.post {
+                                    val index = standbyItems.indexOfFirst { it.id == bannerId }
+                                    if (index >= 0) {
+                                        val item = standbyItems.removeAt(index)
+                                        val file = File(item.localPath)
+                                        if (file.exists()) file.delete()
+                                        Log.i(TAG, "[WebSocket] Banner $bannerId eliminado del carrusel por expiración")
+                                        if (standbyItems.isEmpty()) {
+                                            stopStandbyCarousel()
+                                        } else if (standbyIndex >= standbyItems.size) {
+                                            standbyIndex = 0
+                                        }
+                                    }
+                                    sendSyncConfirmation(webSocket, command, "SUCCESS", commandId = commandId)
                                 }
 
-                                // Recargar banners inmediatamente cuando un banner termina
-                                uiHandler.post {
-                                    syncBannersOnStart()
-                                    Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_FINALIZADO")
-                                    // Confirmar al backend que el banner fue recibido
-                                    sendSyncConfirmation(webSocket, command, "SUCCESS")
+                                scope.launch {
+                                    val service = api ?: return@launch
+                                    val baseUrl = backendBaseUrl ?: return@launch
+                                    val repo = BannerRepository(this@ScanActivity, service, baseUrl)
+                                    val cache = repo.loadCache() ?: return@launch
+                                    val removed = cache.items.removeAll { it.id == bannerId }
+                                    if (removed) {
+                                        repo.saveMeta(cache)
+                                        Log.i(TAG, "[WebSocket] Banner $bannerId eliminado del cache metadata por expiración")
+                                    }
                                 }
                             }
                             "REINICIAR" -> {
@@ -2052,9 +2077,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                                 TAG,
                                                 "[WebSocket] Programando reinicio para dentro de ${delay / 1000 / 60} minutos"
                                             )
-                                            sendSyncConfirmation(webSocket, command, "RECEIVED")
+                                            sendSyncConfirmation(webSocket, command, "RECEIVED", commandId = commandId)
                                             uiHandler.postDelayed({
-                                                ejecutarReinicio(dpm, adminComponent, webSocket, command)
+                                                ejecutarReinicio(dpm, adminComponent, webSocket, command, commandId = commandId)
                                             }, delay)
                                             return
                                         } else {
@@ -2080,9 +2105,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                                         TAG,
                                                         "[WebSocket] Programando reinicio legacy para dentro de ${delayLegacy / 1000 / 60} minutos"
                                                     )
-                                                    sendSyncConfirmation(webSocket, command, "RECEIVED")
+                                                    sendSyncConfirmation(webSocket, command, "RECEIVED", commandId = commandId)
                                                     uiHandler.postDelayed({
-                                                        ejecutarReinicio(dpm, adminComponent, webSocket, command)
+                                                        ejecutarReinicio(dpm, adminComponent, webSocket, command, commandId = commandId)
                                                     }, delayLegacy)
                                                     return
                                                 }
@@ -2095,15 +2120,15 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                     // Reinicio inmediato o sin hour
                                     if (dpm.isDeviceOwnerApp(pkgName)) {
                                         Log.i(TAG, "[WebSocket] ES Device Owner - ejecutando reinicio automático")
-                                        sendSyncConfirmation(webSocket, command, "RECEIVED")
+                                        sendSyncConfirmation(webSocket, command, "RECEIVED", commandId = commandId)
                                         Log.i(TAG, "[WebSocket] Confirmación RECEIVED enviada, ejecutando reinicio...")
                                         uiHandler.postDelayed({
-                                            ejecutarReinicio(dpm, adminComponent, webSocket, command)
+                                            ejecutarReinicio(dpm, adminComponent, webSocket, command, commandId = commandId)
                                         }, 2000)
                                     } else {
                                         // No es Device Owner: mostrar diálogo
                                         Log.i(TAG, "[WebSocket] NO es Device Owner - mostrando diálogo...")
-                                        sendSyncConfirmation(webSocket, command, "RECEIVED")
+                                        sendSyncConfirmation(webSocket, command, "RECEIVED", commandId = commandId)
                                         runOnUiThread {
                                             try {
                                                 Log.i(TAG, "[WebSocket] Intentando mostrar diálogo...")
@@ -2112,7 +2137,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                                     .setMessage("El servidor ha solicitado el reinicio del dispositivo.\n\nPor favor, mantén presionado el botón de Encendido para reiniciar.")
                                                     .setPositiveButton("Aceptar") { _, _ ->
                                                         Log.i(TAG, "[WebSocket] Usuario presionó Aceptar")
-                                                        sendSyncConfirmation(webSocket, command, "COMPLETED")
+                                                        sendSyncConfirmation(webSocket, command, "COMPLETED", commandId = commandId)
                                                     }
                                                     .setCancelable(false)
                                                     .create()
@@ -2120,13 +2145,13 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                                 Log.i(TAG, "[WebSocket] Diálogo mostrado correctamente")
                                             } catch (e: Exception) {
                                                 Log.e(TAG, "[WebSocket] Error al mostrar diálogo: ${e.message}")
-                                                sendSyncConfirmation(webSocket, command, "FAILED", "Error: ${e.message}")
+                                                sendSyncConfirmation(webSocket, command, "FAILED", "Error: ${e.message}", commandId = commandId)
                                             }
                                         }
                                     }
                                 } catch (e: Exception) {
                                     Log.e(TAG, "[WebSocket] Error preparando reinicio: ${e.message}")
-                                    sendSyncConfirmation(webSocket, command, "FAILED", "Error: ${e.message}")
+                                    sendSyncConfirmation(webSocket, command, "FAILED", "Error: ${e.message}", commandId = commandId)
                                 }
                             }
                             else -> {
@@ -2160,8 +2185,15 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                             return
                         }
                         
+                        // L1.4: Dedup por command_id - ignorar comandos ya procesados
+                        val commandId = message.optString("command_id", "")
+                        if (commandId.isNotEmpty() && !processedCommandIds.add(commandId)) {
+                            Log.w(TAG, "[WebSocket] Comando duplicado ignorado (binario): command=$command command_id=$commandId")
+                            return
+                        }
+                        
                         try {
-                            sendSyncConfirmation(webSocket, command, "RECEIVED")
+                            sendSyncConfirmation(webSocket, command, "RECEIVED", commandId = commandId)
                             Log.i(TAG, "[WebSocket] Confirmación enviada para comando (binario): $command")
                         } catch (e: Exception) {
                             Log.e(TAG, "[WebSocket] Error enviando confirmación (binario)", e)
@@ -2175,7 +2207,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                 scope.launch {
                                     val apiService = api
                                     if (apiService == null) {
-                                        sendSyncConfirmation(webSocket, command, "FAILED", "ApiService no inicializado")
+                                        sendSyncConfirmation(webSocket, command, "FAILED", "ApiService no inicializado", commandId = commandId)
                                         return@launch
                                     }
 
@@ -2187,13 +2219,14 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                     }
 
                                     if (purgeResult.success) {
-                                        sendSyncConfirmation(webSocket, command, "SUCCESS")
+                                        sendSyncConfirmation(webSocket, command, "SUCCESS", commandId = commandId)
                                     } else {
                                         sendSyncConfirmation(
                                             webSocket,
                                             command,
                                             "FAILED",
-                                            purgeResult.reason ?: "Purga fallida"
+                                            purgeResult.reason ?: "Purga fallida",
+                                            commandId
                                         )
                                     }
                                 }
@@ -2221,7 +2254,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                 uiHandler.post {
                                     Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_INICIADO (binario)")
                                     // Confirmar al backend que el banner fue recibido
-                                    sendSyncConfirmation(webSocket, command, "SUCCESS")
+                                    sendSyncConfirmation(webSocket, command, "SUCCESS", commandId = commandId)
                                 }
                             }
                             "BANNER_FINALIZADO" -> {
@@ -2241,7 +2274,40 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                 uiHandler.post {
                                     syncBannersOnStart()
                                     Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_FINALIZADO (binario)")
-                                    sendSyncConfirmation(webSocket, command, "SUCCESS")
+                                    sendSyncConfirmation(webSocket, command, "SUCCESS", commandId = commandId)
+                                }
+                            }
+                            "BANNER_EXPIRED" -> {
+                                val bannerId = message.optInt("banner_id", 0)
+                                val titulo = message.optString("titulo", "")
+                                Log.i(TAG, "[WebSocket] BANNER_EXPIRED recibido (binario): id=$bannerId, titulo=$titulo")
+
+                                uiHandler.post {
+                                    val index = standbyItems.indexOfFirst { it.id == bannerId }
+                                    if (index >= 0) {
+                                        val item = standbyItems.removeAt(index)
+                                        val file = File(item.localPath)
+                                        if (file.exists()) file.delete()
+                                        Log.i(TAG, "[WebSocket] Banner $bannerId eliminado del carrusel por expiración (binario)")
+                                        if (standbyItems.isEmpty()) {
+                                            stopStandbyCarousel()
+                                        } else if (standbyIndex >= standbyItems.size) {
+                                            standbyIndex = 0
+                                        }
+                                    }
+                                    sendSyncConfirmation(webSocket, command, "SUCCESS", commandId = commandId)
+                                }
+
+                                scope.launch {
+                                    val service = api ?: return@launch
+                                    val baseUrl = backendBaseUrl ?: return@launch
+                                    val repo = BannerRepository(this@ScanActivity, service, baseUrl)
+                                    val cache = repo.loadCache() ?: return@launch
+                                    val removed = cache.items.removeAll { it.id == bannerId }
+                                    if (removed) {
+                                        repo.saveMeta(cache)
+                                        Log.i(TAG, "[WebSocket] Banner $bannerId eliminado del cache metadata por expiración (binario)")
+                                    }
                                 }
                             }
                             "REINICIAR" -> {
@@ -2253,7 +2319,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                     val pkgName = applicationContext.packageName
                                     if (dpm.isDeviceOwnerApp(pkgName)) {
                                         Log.i(TAG, "[WebSocket] ES Device Owner (binario) - ejecutando reinicio")
-                                        sendSyncConfirmation(webSocket, command, "RECEIVED")
+                                        sendSyncConfirmation(webSocket, command, "RECEIVED", commandId = commandId)
                                         Log.i(
                                             TAG,
                                             "[WebSocket] Confirmación RECEIVED enviada (binario), ejecutando reinicio..."
@@ -2267,13 +2333,14 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                                     webSocket,
                                                     command,
                                                     "FAILED",
-                                                    "Error al reiniciar: ${e.message}"
+                                                    "Error al reiniciar: ${e.message}",
+                                                    commandId
                                                 )
                                             }
                                         }, 2000)
                                     } else {
                                         Log.i(TAG, "[WebSocket] NO es Device Owner (binario) - mostrando diálogo...")
-                                        sendSyncConfirmation(webSocket, command, "RECEIVED")
+                                        sendSyncConfirmation(webSocket, command, "RECEIVED", commandId = commandId)
                                         runOnUiThread {
                                             try {
                                                 val alertDialog = android.app.AlertDialog.Builder(this@ScanActivity)
@@ -2281,20 +2348,20 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                                     .setMessage("El servidor ha solicitado el reinicio del dispositivo.\n\nPor favor, mantén presionado el botón de Encendido para reiniciar.")
                                                     .setPositiveButton("Aceptar") { _, _ ->
                                                         Log.i(TAG, "[WebSocket] Usuario presionó Aceptar (binario)")
-                                                        sendSyncConfirmation(webSocket, command, "COMPLETED")
+                                                        sendSyncConfirmation(webSocket, command, "COMPLETED", commandId = commandId)
                                                     }
                                                     .setCancelable(false)
                                                     .create()
                                                 alertDialog.show()
                                             } catch (e: Exception) {
                                                 Log.e(TAG, "[WebSocket] Error al mostrar diálogo (binario): ${e.message}")
-                                                sendSyncConfirmation(webSocket, command, "FAILED", "Error: ${e.message}")
+                                                sendSyncConfirmation(webSocket, command, "FAILED", "Error: ${e.message}", commandId = commandId)
                                             }
                                         }
                                     }
                                 } catch (e: Exception) {
                                     Log.e(TAG, "[WebSocket] Error preparando reinicio (binario): ${e.message}")
-                                    sendSyncConfirmation(webSocket, command, "FAILED", "Error: ${e.message}")
+                                    sendSyncConfirmation(webSocket, command, "FAILED", "Error: ${e.message}", commandId = commandId)
                                 }
                             }
                             else -> {
@@ -2327,6 +2394,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         if (now - wsLastReconnectTime > 5 * 60 * 1000) {
             wsReconnectAttempts = 0
             wsReconnectDelay = 5000L
+            isReconnecting = false
         }
         wsLastReconnectTime = now
         
@@ -2349,9 +2417,10 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         command: String,
         status: String,
         reason: String? = null,
+        commandId: String? = null,
     ) {
         scope.launch {
-            sendSyncConfirmationWithRetry(webSocket, command, status, reason)
+            sendSyncConfirmationWithRetry(webSocket, command, status, reason, commandId)
         }
     }
     
@@ -2360,6 +2429,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         command: String,
         status: String,
         reason: String? = null,
+        commandId: String? = null,
         maxRetries: Int = 3
     ): Boolean {
         repeat(maxRetries) { attempt ->
@@ -2371,6 +2441,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 confirmMsg.put("status", status)
                 if (!reason.isNullOrBlank()) {
                     confirmMsg.put("reason", reason)
+                }
+                if (!commandId.isNullOrBlank()) {
+                    confirmMsg.put("command_id", commandId)
                 }
                 webSocket.send(confirmMsg.toString())
                 Log.i(TAG, "[WebSocket] Confirmación enviada: status=$status command=$command")
@@ -2495,7 +2568,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         dpm: DevicePolicyManager,
         adminComponent: ComponentName,
         webSocket: WebSocket?,
-        command: String
+        command: String,
+        commandId: String? = null,
     ) {
         try {
             dpm.reboot(adminComponent)
@@ -2503,7 +2577,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         } catch (e: Exception) {
             Log.e(TAG, "Error al ejecutar reinicio: ${e.message}")
             if (webSocket != null) {
-                sendSyncConfirmation(webSocket, command, "FAILED", "Error al reiniciar: ${e.message}")
+                sendSyncConfirmation(webSocket, command, "FAILED", "Error al reiniciar: ${e.message}", commandId)
             }
         }
     }

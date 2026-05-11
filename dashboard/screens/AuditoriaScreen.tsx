@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Search, Filter, ChevronLeft, ChevronRight, Calendar, Server, Monitor, Clock, X, ChevronDown, ChevronUp, User, RotateCcw, Check, Circle } from 'lucide-react';
 import { getAuditoria, markNotificacionRead, AuditoriaItem, AuditoriaFiltros } from '../services/auditoriaService';
 import { useNotification } from '../components/useNotification';
+import { TableSkeleton } from '../components/TableSkeleton';
 
 const PAGE_SIZE = 20;
 
@@ -297,14 +298,7 @@ export const AuditoriaScreen: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
-                    <div className="flex items-center justify-center gap-2">
-                      <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
-                      Cargando...
-                    </div>
-                  </td>
-                </tr>
+                <TableSkeleton rows={8} cols={8} />
               ) : items.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-8 text-center text-slate-500">

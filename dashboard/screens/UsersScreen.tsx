@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Edit2, Eye, EyeOff, Filter, Plus, Search, Trash2, X, ChevronDown } from 'lucide-react';
 import { useNotification } from '../components/useNotification';
+import { TableSkeleton } from '../components/TableSkeleton';
 import {
   createUser,
   deleteUser,
@@ -264,9 +265,7 @@ export const UsersScreen: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-500 text-sm">Cargando usuarios...</td>
-                </tr>
+                <TableSkeleton rows={5} cols={5} />
               ) : users.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-8 text-center text-slate-500 text-sm">No hay usuarios para mostrar.</td>

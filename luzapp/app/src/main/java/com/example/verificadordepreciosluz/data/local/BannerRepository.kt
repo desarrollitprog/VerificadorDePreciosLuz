@@ -45,7 +45,7 @@ class BannerRepository(
         if (!shouldRefresh(maxAgeMs)) return loadCache()
         return runCatching {
             val remote = api.banners(deviceId).sortedBy { it.prioridad ?: 0 }
-            val items = remote.mapNotNull { downloadBanner(it) }
+            val items = remote.mapNotNull { downloadBanner(it) }.toMutableList()
             if (items.isEmpty()) {
                 Log.w(TAG, "No se pudo descargar ningún banner, se conserva el cache actual")
                 context.getString(com.example.verificadordepreciosluz.R.string.msg_no_banners).let { Log.w(TAG, it) }

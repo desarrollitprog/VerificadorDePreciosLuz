@@ -416,9 +416,12 @@ export const AuditoriaScreen: React.FC = () => {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <div className="text-sm text-slate-600 dark:text-slate-300">
-                          {item.servidor_nombre || '-'}
+                        <div className="text-sm font-medium text-slate-900 dark:text-white">
+                          {item.servidor_nombre || (item.servidor_id != null ? `ID: ${item.servidor_id}` : '-')}
                         </div>
+                        {item.servidor_nombre && item.servidor_id != null && (
+                          <div className="text-xs text-slate-400">ID: {item.servidor_id}</div>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300 max-w-xs">
                         {item.descripcion.length > 80 ? (

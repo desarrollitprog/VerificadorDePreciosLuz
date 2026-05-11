@@ -244,6 +244,8 @@ async def obtener_auditoria(
             Usuario.nombre_usuario.label("usuario_nombre"),
             literal_column("'notificacion'").label("origen"),
             NotificacionLeida.id.label("leida_id"),
+            Dispositivo.nombre_amigable.label("dispositivo_nombre"),
+            ServidorSecundario.nombre.label("servidor_nombre"),
         )
         .select_from(Notificacion)
         .outerjoin(Usuario, Usuario.id == Notificacion.usuario_id)
@@ -254,6 +256,8 @@ async def obtener_auditoria(
                 NotificacionLeida.usuario_id == user_id
             )
         )
+        .outerjoin(Dispositivo, Dispositivo.codigo_kiosko == Notificacion.dispositivo_id)
+        .outerjoin(ServidorSecundario, ServidorSecundario.id == Notificacion.servidor_id)
     )
     
     if notif_conditions:
@@ -300,9 +304,9 @@ async def obtener_auditoria(
             "tipo": row.tipo,
             "descripcion": row.descripcion,
             "dispositivo_id": row.dispositivo_id,
-            "dispositivo_nombre": None,
+            "dispositivo_nombre": row.dispositivo_nombre,
             "servidor_id": row.servidor_id,
-            "servidor_nombre": None,
+            "servidor_nombre": row.servidor_nombre,
             "sesion_inicio": None,
             "sesion_fin": None,
             "duracion_segundos": None,
@@ -562,6 +566,8 @@ async def _fetch_auditoria_page(db, busqueda, tipo, dispositivo_id, servidor_id,
             Usuario.nombre_usuario.label("usuario_nombre"),
             literal_column("'notificacion'").label("origen"),
             NotificacionLeida.id.label("leida_id"),
+            Dispositivo.nombre_amigable.label("dispositivo_nombre"),
+            ServidorSecundario.nombre.label("servidor_nombre"),
         )
         .select_from(Notificacion)
         .outerjoin(Usuario, Usuario.id == Notificacion.usuario_id)
@@ -572,6 +578,8 @@ async def _fetch_auditoria_page(db, busqueda, tipo, dispositivo_id, servidor_id,
                 NotificacionLeida.usuario_id == user_id
             )
         )
+        .outerjoin(Dispositivo, Dispositivo.codigo_kiosko == Notificacion.dispositivo_id)
+        .outerjoin(ServidorSecundario, ServidorSecundario.id == Notificacion.servidor_id)
     )
 
     if notif_conditions:
@@ -618,9 +626,9 @@ async def _fetch_auditoria_page(db, busqueda, tipo, dispositivo_id, servidor_id,
             "tipo": row.tipo,
             "descripcion": row.descripcion,
             "dispositivo_id": row.dispositivo_id,
-            "dispositivo_nombre": None,
+            "dispositivo_nombre": row.dispositivo_nombre,
             "servidor_id": row.servidor_id,
-            "servidor_nombre": None,
+            "servidor_nombre": row.servidor_nombre,
             "sesion_inicio": None,
             "sesion_fin": None,
             "duracion_segundos": None,

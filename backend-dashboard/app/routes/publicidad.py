@@ -624,9 +624,15 @@ async def eliminar_banner(
             stmt = select(Dispositivo.codigo_kiosko, Dispositivo.nombre_amigable).where(Dispositivo.codigo_kiosko.in_(dispositivo_ids))
             result = await db.execute(stmt)
             nombre_map = {row.codigo_kiosko: row.nombre_amigable or row.codigo_kiosko for row in result.all()}
-            disp_nombres = [nombre_map.get(d, d) for d in dispositivo_ids]
+            disp_nombres = [f"{nombre_map.get(d, d)} ({d})" for d in dispositivo_ids]
         disp_info = f", Dispositivos: {disp_nombres}" if disp_nombres else ""
-        srv_info = f", Servidores: {servidor_ids}" if servidor_ids else ", Asignado a: todos"
+        srv_nombres = []
+        if servidor_ids:
+            stmt_serv = select(ServidorSecundario.id, ServidorSecundario.nombre).where(ServidorSecundario.id.in_(servidor_ids))
+            result_serv = await db.execute(stmt_serv)
+            srv_nombre_map = {row.id: row.nombre for row in result_serv.all()}
+            srv_nombres = [f"{sid} - {srv_nombre_map.get(sid, str(sid))}" for sid in servidor_ids]
+        srv_info = f", Servidores: {srv_nombres}" if srv_nombres else ", Asignado a: todos"
         
         descripcion_audit = f"Banner eliminado: IdPublicidad={banner.IdPublicidad}, Titulo={banner.Titulo or ''}{disp_info}{srv_info}"
         # Eliminar archivo físico si existe
@@ -900,9 +906,15 @@ async def actualizar_banner_metadata(
             stmt = select(Dispositivo.codigo_kiosko, Dispositivo.nombre_amigable).where(Dispositivo.codigo_kiosko.in_(dispositivo_ids))
             result = await db.execute(stmt)
             nombre_map = {row.codigo_kiosko: row.nombre_amigable or row.codigo_kiosko for row in result.all()}
-            disp_nombres = [nombre_map.get(d, d) for d in dispositivo_ids]
+            disp_nombres = [f"{nombre_map.get(d, d)} ({d})" for d in dispositivo_ids]
         disp_info = f", Dispositivos: {disp_nombres}" if disp_nombres else ""
-        srv_info = f", Servidores: {servidor_ids}" if servidor_ids else ", Asignado a: todos"
+        srv_nombres = []
+        if servidor_ids:
+            stmt_serv = select(ServidorSecundario.id, ServidorSecundario.nombre).where(ServidorSecundario.id.in_(servidor_ids))
+            result_serv = await db.execute(stmt_serv)
+            srv_nombre_map = {row.id: row.nombre for row in result_serv.all()}
+            srv_nombres = [f"{sid} - {srv_nombre_map.get(sid, str(sid))}" for sid in servidor_ids]
+        srv_info = f", Servidores: {srv_nombres}" if srv_nombres else ", Asignado a: todos"
         
         await registrar_accion(
             db,

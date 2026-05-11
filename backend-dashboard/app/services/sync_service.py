@@ -496,18 +496,24 @@ async def _execute_selective_sync_job(
                 srv_id = servidor_ids_a_buscar[0] if servidor_ids_a_buscar else None
 
                 disp_nombre_map = await _resolve_device_names(db, dispositivo_ids)
-                disp_names = [disp_nombre_map.get(d, d) for d in dispositivo_ids] if dispositivo_ids else []
+                disp_names = [f"{disp_nombre_map.get(d, d)} ({d})" for d in dispositivo_ids] if dispositivo_ids else []
                 disp_info = f", Dispositivos: {disp_names}" if disp_names else ", Dispositivos: todos"
-                srv_info = f", Servidores: {servidor_ids_a_buscar}" if servidor_ids_a_buscar else ""
+                srv_nombres = []
+                if servidor_ids_a_buscar:
+                    stmt_serv = select(ServidorSecundario.id, ServidorSecundario.nombre).where(
+                        ServidorSecundario.id.in_(servidor_ids_a_buscar)
+                    )
+                    result_serv = await db.execute(stmt_serv)
+                    srv_nombre_map = {row.id: row.nombre for row in result_serv.all()}
+                    srv_nombres = [f"{sid} - {srv_nombre_map.get(sid, str(sid))}" for sid in servidor_ids_a_buscar]
+                srv_info = f", Servidores: {srv_nombres}" if srv_nombres else ""
 
                 await registrar_accion(
                     db,
                     user_id,
                     "SINCRONIZACION_SELECTIVA",
                     (
-                        f"Sincronización selectiva ejecutada por usuario {actor_name}. "
-                        f"Servidores online: {len(online_servers)}, éxito: {success_count}, fallo: {failed_count}"
-                        f"{disp_info}{srv_info}"
+                        f"Sincronización selectiva ejecutada por usuario {actor_name}.{disp_info}{srv_info}"
                     ),
                     dispositivo_id=disp_id,
                     servidor_id=srv_id,

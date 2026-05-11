@@ -793,6 +793,67 @@ luzapp: WebSocket connect → GET /api/comandos/pendientes → procesar
 
 ---
 
+## FASE 16: Mejoras de UI en DashboardScreen (Vistas y Acciones) ✅ COMPLETADO
+
+### Objetivo
+Implementar vista dual (tarjetas/tabla) en DashboardScreen con diseño original de tarjetas restaurado + nuevos botones de acción (descargar, previsualizar, borrar) + selector de archivos y acciones masivas.
+
+### 16.1: Agregar Estados para Vista y Acciones
+- **Archivo**: `dashboard/screens/DashboardScreen.tsx`
+- **Estados agregados** (línea 97+):
+  ```tsx
+  const [selectedVideoIds, setSelectedVideoIds] = useState<string[]>([]);
+  const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+  ```
+- **Valores computados**:
+  ```tsx
+  const filteredVideos = videos.filter(...); // Filtrado por búsqueda
+  const paginatedCardVideos = filteredVideos.slice(...); // 12 por página
+  const paginatedTableVideos = filteredVideos.slice(...); // 20 por página
+  ```
+
+### 16.2: Vista de Tarjetas (Mejoras Adicionales)
+- **Tipo de archivo**: Badge visual (IMG/VID) agregado junto a badges de estado
+- **Botón "Ver más"**: Reemplaza "+N más" en asignaciones. Despliega todos los dispositivos asignados
+- **Acciones**: Reproducir, Descargar, Borrar (todos con icono + texto)
+
+### 16.3: Vista de Tabla (Nuevas Columnas y Acciones Masivas)
+- **Nuevas columnas**:
+  - **Tipo** (IMG/VID): Badge de tipo de archivo
+  - **Asignaciones**: Muestra "Todos" o cantidad de dispositivos
+- **Checkboxes**:
+  - En header: "Seleccionar todos" para la página actual
+  - En cada fila: Checkbox individual
+- **Acciones masivas** (aparecen al seleccionar):
+  - "Descargar seleccionados": Descarga todos los archivos seleccionados
+  - "Eliminar seleccionados": Elimina todos los archivos seleccionados (con confirmación)
+  - "Limpiar selección": Deselecciona todos
+- **Tamaño de letra**: Aumentado a `text-sm` en toda la tabla
+
+### 16.4: Acciones en Ambas Vistas
+- **Tarjetas**: Reproducir, Descargar, Borrar + Ver más asignaciones
+- **Tabla**: Reproducir, Descargar, Borrar + Selección múltiple
+
+### 16.5: Paginación Dual
+- **Cards**: `videosPerPage = 12` (calculado en `paginatedCardVideos`)
+- **Tabla**: `tableVideosPerPage = 20` (calculado en `paginatedTableVideos`)
+- **Reset automático**: `setCurrentPage(1)` al cambiar vista
+
+### Notas Importantes
+- ✅ **Tipo de archivo visible**: Badge IMG/VID en ambas vistas
+- ✅ **Selector múltiple**: Checkboxes en tabla para acciones masivas
+- ✅ **Botón "Ver más"**: Expande lista completa de dispositivos en tarjetas
+- ✅ **Acciones masivas**: Descargar y eliminar múltiples archivos
+- ✅ **Texto ampliado**: `text-sm` en tabla para mejor legibilidad
+- ✅ **TypeScript**: Sin errores de compilación
+- ✅ **Build**: Exitoso (584.51 kB)
+
+### Archivos Modificados
+1. `dashboard/screens/DashboardScreen.tsx` - Vistas duales, tipo de archivo, selector múltiple, acciones masivas
+2. `PLAN_MEJORAS.md` - Documentación actualizada (esta sección)
+
+---
+
 ## Resumen de Progreso Total (Todas las Fases)
 
 | Grupo | Fases | Completado | Pendiente |
@@ -800,4 +861,5 @@ luzapp: WebSocket connect → GET /api/comandos/pendientes → procesar
 | Originales | 1-10 | 25/28 (89%) | 5/28 |
 | Nuevas | 11-14 | 0/11 (0%) | 11/11 |
 | Nueva | 15 | 0/1 (0%) | 1/1 |
-| **TOTAL** | **1-15** | **25/40 (63%)** | **15/40**
+| **Nueva** | **16** | **6/6 (100%)** | **0/6** |
+| **TOTAL** | **1-16** | **31/46 (67%)** | **15/46**

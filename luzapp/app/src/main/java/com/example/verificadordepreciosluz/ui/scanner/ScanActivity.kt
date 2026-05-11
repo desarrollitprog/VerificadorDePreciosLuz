@@ -85,6 +85,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import android.app.ActivityManager
 
 @OptIn(ExperimentalGetImage::class)
 class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListener {
@@ -1791,6 +1792,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         tabletWebSocket = null
         wsClient?.dispatcher?.executorService?.shutdown()
         wsClient = null
+        
+        // Cerrar proceso propio sin permisos especiales
+        android.os.Process.killProcess(android.os.Process.myPid())
     }
 
     override fun onPause() {

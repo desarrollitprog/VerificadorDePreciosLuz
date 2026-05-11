@@ -117,11 +117,6 @@ export async function getServidores(): Promise<Servidor[]> {
   }
 }
 
-export async function updateBannerEstado(videoId: string, activo: boolean) {
-  const response = await api.patch(`/banners/${videoId}/estado`, { activo });
-  return response.data;
-}
-
 export async function updateBannerMetadata(videoId: string, payload: UpdateBannerMetadataPayload) {
   const response = await api.patch(`/banners/${videoId}`, payload);
   return response.data;

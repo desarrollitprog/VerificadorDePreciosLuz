@@ -266,8 +266,11 @@ export const CalendarScreen: React.FC = () => {
             backgroundColor = '#94a3b8';
           } else if (estado === 'vencido') {
             backgroundColor = '#f43f5e';
-          } else if (estado === 'programado' || estado === 'borrador') {
-            backgroundColor = '#3b82f6';
+          } else {
+            const estadoLower = String(estado).toLowerCase();
+            if (estadoLower === 'programado' || estadoLower === 'borrador') {
+              backgroundColor = '#3b82f6';
+            }
           }
 
           const event: CalendarEvent = {

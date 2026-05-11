@@ -3,7 +3,6 @@ import { NotificationProvider } from './components/NotificationContext';
 import { NotificationContainer } from './components/NotificationContainer';
 import { LoginScreen } from './screens/LoginScreen';
 import { DashboardScreen } from './screens/DashboardScreen';
-import { VideoListScreen } from './screens/VideoListScreen';
 import { UsersScreen } from './screens/UsersScreen';
 import { CalendarScreen } from './screens/CalendarScreen';
 import { AuditoriaScreen } from './screens/AuditoriaScreen';
@@ -69,8 +68,6 @@ export default function App() {
         return <LoginScreen onLogin={() => setCurrentScreen('dashboard')} />;
       case 'dashboard':
         return <DashboardScreen />;
-      case 'list':
-        return <VideoListScreen />;
       case 'servers':
         return <ServerDashboard />;
       case 'users':

@@ -51,4 +51,4 @@ export interface Dispositivo {
   online: boolean;
 }
 
-export type Screen = 'login' | 'dashboard' | 'list' | 'servers' | 'users' | 'calendar' | 'auditoria';
+export type Screen = 'login' | 'dashboard' | 'servers' | 'users' | 'calendar' | 'auditoria';

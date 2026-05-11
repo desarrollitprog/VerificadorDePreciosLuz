@@ -4,6 +4,7 @@ import { useNotification } from './useNotification';
 import { deleteReadNotificaciones, fetchNotificaciones, markNotificacionesRead, markNotificacionRead, Notificacion } from '../services/notificacionesService';
 import { toNotificationViewModel } from '../services/notificacionesPresentation';
 import { Screen } from '../types';
+import type { NotificationType } from './NotificationContext';
 
 interface GeneralNotificationsProps {
   onNavigate?: (screen: Screen) => void;
@@ -96,9 +97,9 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = ({ onNa
         .filter((n) => !shownErrorNotificationIdsRef.current.has(n.id))
         .forEach((n) => {
           shownErrorNotificationIdsRef.current.add(n.id);
-          const tipo = String(n.tipo || '').toUpperCase();
+          const tipo = String(n.tipo || '');
           let prefix = '';
-          let tipo_notif = 'warning';
+          let tipo_notif: NotificationType = 'info';
           if (tipo === 'PLAYBACK_FAILED') {
             prefix = 'Error de reproducción';
             tipo_notif = 'error';
@@ -109,7 +110,7 @@ export const GeneralNotifications: React.FC<GeneralNotificationsProps> = ({ onNa
             prefix = 'Fallo de sincronización';
             tipo_notif = 'error';
           }
-          showNotification(`${prefix}: ${n.descripcion}`, tipo_notif, 7000);
+            showNotification(`${prefix}: ${n.descripcion}`, tipo_notif, 7000);
         });
 
       if (markAsRead && (res.unread_count || 0) > 0) {

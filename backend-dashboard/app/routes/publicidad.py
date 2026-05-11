@@ -151,13 +151,13 @@ async def listar_banners(
                 desde_date = datetime.fromisoformat(fecha_desde.replace('Z', '+00:00'))
                 count_query = count_query.where(Publicidad.FechaInicio >= desde_date)
             except ValueError:
-                pass
+                log.warning("invalid_date_filter", field="fecha_desde", value=fecha_desde)
         if fecha_hasta:
             try:
                 hasta_date = datetime.fromisoformat(fecha_hasta.replace('Z', '+00:00'))
                 count_query = count_query.where(Publicidad.FechaInicio <= hasta_date)
             except ValueError:
-                pass
+                log.warning("invalid_date_filter", field="fecha_hasta", value=fecha_hasta)
         
         total_count_result = await db.execute(count_query)
         total_count = total_count_result.scalar() or 0
@@ -171,14 +171,14 @@ async def listar_banners(
                 desde_date = datetime.fromisoformat(fecha_desde.replace('Z', '+00:00'))
                 query = query.where(Publicidad.FechaInicio >= desde_date)
             except ValueError:
-                pass
+                log.warning("invalid_date_filter", field="fecha_desde", value=fecha_desde)
         
         if fecha_hasta:
             try:
                 hasta_date = datetime.fromisoformat(fecha_hasta.replace('Z', '+00:00'))
                 query = query.where(Publicidad.FechaInicio <= hasta_date)
             except ValueError:
-                pass
+                log.warning("invalid_date_filter", field="fecha_hasta", value=fecha_hasta)
         
         # Por defecto mostrar todos los banners (sin filtro de fecha inicio)
         # if not incluir_todos:
@@ -398,13 +398,15 @@ async def upload_banner(
         if ServidorIds:
             try:
                 selected_servidor_ids = json.loads(ServidorIds)
-            except:
+            except Exception:
+                log.warning("json_parse_failed", field="ServidorIds", value=ServidorIds)
                 selected_servidor_ids = []
         
         if DispositivoIds:
             try:
                 selected_dispositivo_ids = json.loads(DispositivoIds)
-            except:
+            except Exception:
+                log.warning("json_parse_failed", field="DispositivoIds", value=DispositivoIds)
                 selected_dispositivo_ids = []
 
         # Guardar asignaciones en la tabla publicidad_asignacion
@@ -454,13 +456,15 @@ async def upload_banner(
         if ServidorIds:
             try:
                 selected_servidor_ids = json.loads(ServidorIds)
-            except:
+            except Exception:
+                log.warning("json_parse_failed", field="ServidorIds", value=ServidorIds)
                 selected_servidor_ids = []
         
         if DispositivoIds:
             try:
                 selected_dispositivo_ids = json.loads(DispositivoIds)
-            except:
+            except Exception:
+                log.warning("json_parse_failed", field="DispositivoIds", value=DispositivoIds)
                 selected_dispositivo_ids = []
         
         if AsignacionTodos and not selected_dispositivo_ids:

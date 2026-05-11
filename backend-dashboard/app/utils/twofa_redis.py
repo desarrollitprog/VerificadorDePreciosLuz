@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import random
 import secrets
@@ -6,6 +7,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, TypedDict
 
 import redis.asyncio as redis
+
+logger = logging.getLogger("uvicorn.error")
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://dashboard-redis:6380")
 OTP_EXPIRES_SECONDS = 300
@@ -39,6 +42,7 @@ async def get_redis_client() -> redis.Redis | None:
             _redis_client = redis.from_url(REDIS_URL, decode_responses=True)
             await _redis_client.ping()
         except Exception:
+            logger.warning("redis_connection_failed")
             _redis_client = None
     return _redis_client
 

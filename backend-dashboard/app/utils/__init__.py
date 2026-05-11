@@ -1,6 +1,9 @@
 import html
+import logging
 import re
 import struct
+
+logger = logging.getLogger("uvicorn.error")
 
 def clean_log(text: str) -> str:
     return text.strip() if text else text
@@ -78,6 +81,7 @@ class FileTypeValidator:
             
             return None
         except Exception:
+            logger.warning("mime_detection_failed")
             return None
     
     @classmethod

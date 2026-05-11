@@ -58,6 +58,7 @@ async def _execute_force_sync_job(job_id: str, user_id: int | None, username: st
                         try:
                             payload = resp.json()
                         except Exception:
+                            logger.warning("json_parse_failed", extra={"url": str(resp.url)})
                             payload = {}
 
                         if resp.status_code != 200 or not bool(payload.get("success", True)):
@@ -101,6 +102,7 @@ async def _execute_force_sync_job(job_id: str, user_id: int | None, username: st
                             try:
                                 poll_payload = poll_resp.json()
                             except Exception:
+                                logger.warning("json_parse_failed", extra={"url": str(poll_resp.url)})
                                 poll_payload = {}
 
                             if on_progress is not None and isinstance(poll_payload, dict):
@@ -120,10 +122,13 @@ async def _execute_force_sync_job(job_id: str, user_id: int | None, username: st
                 except Exception as e:
                     return {
                         "ok": False,
-                        "status_code": None,
-                        "backend_result": {},
-                        "reason": str(e),
+                        "status_code": 500,
+                        "error": str(e),
                     }
+
+            servidores_ejecutados = await asyncio.gather(
+                *[send_force_sync(s.ip) for s in online_servidores]
+            )
 
             success_count = 0
             failed_count = 0
@@ -355,6 +360,7 @@ async def _execute_selective_sync_job(
                             try:
                                 poll_payload = poll_resp.json()
                             except Exception:
+                                logger.warning("json_parse_failed", extra={"url": str(poll_resp.url)})
                                 poll_payload = {}
 
                             if on_progress is not None and isinstance(poll_payload, dict):
@@ -374,9 +380,8 @@ async def _execute_selective_sync_job(
                 except Exception as e:
                     return {
                         "ok": False,
-                        "status_code": None,
-                        "backend_result": {},
-                        "reason": str(e),
+                        "status_code": 500,
+                        "error": str(e),
                     }
 
             success_count = 0

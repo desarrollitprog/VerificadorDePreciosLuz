@@ -156,9 +156,13 @@ Mejorar seguridad, performance, observabilidad y code quality del sistema de ges
 | FASE 8 (Background Monitoring Sesiones) | 4/4 ✅ | 0/4 |
 | FASE 9 (Thumbnails Videos) | 6/6 ✅ | 0/6 |
 | FASE 10 (Limpieza Columnas) | 5/5 ✅ | 0/5 |
+| FASE 11 (Refactor Backend) | 3/3 ✅ | 0/3 |
+| FASE 12 (Frontend Base) | 2/2 ✅ | 0/2 |
+| FASE 13 (UX/UI) | 2/2 ✅ | 0/2 |
+| FASE 14 (Pulido Visual) | 2/2 ✅ | 0/2 |
 | FASE 15 (Blindaje WebSocket) | 10/17 | 7/17 |
 
-**Total: 41/44 completados (93%)**
+**Total: 64/68 completados (94%)**
 
 ---
 
@@ -601,15 +605,19 @@ nuevo_banner = Publicidad(..., ThumbnailUrl=thumbnail_url)
 
 ## Estado Actual: Progreso Total (FASES ORIGINALES)
 
-**Total: 25/28 completados (89%)**
+**Total: 37/40 completados (93%)**
 
 - FASE 1-4: ✅ Completas
 - FASE 5: ⏳ Pendiente (2 tareas manual en servidor)
 - FASE 6: ✅ Completada
-- FASE 7: 🔄 Parcial (40% - 2/5, tareas luzapp pendientes)
+- FASE 7: 🔄 Parcial (2/5, tareas luzapp pendientes)
 - FASE 8: ✅ Completada
 - FASE 9: ✅ Completada
 - FASE 10: ✅ Completada
+- FASE 11: ✅ Completada
+- FASE 12: ✅ Completada
+- FASE 13: ✅ Completada
+- FASE 14: ✅ Completada
 
 ---
 
@@ -617,7 +625,7 @@ nuevo_banner = Publicidad(..., ThumbnailUrl=thumbnail_url)
 
 *Prioridad: Crítica | Objetivo: Eliminar deuda técnica y mejorar mantenibilidad.*
 
-### 11.1 Refactorización de `monitoreo.py` ⏳ PENDIENTE
+### 11.1 Refactorización de `monitoreo.py` ✅ COMPLETADO
 - **Descripción**: Dividir `monitoreo.py` en módulos independientes:
   - `servers.py` - Gestión de servidores secundarios
   - `devices.py` - Gestión de dispositivos
@@ -625,14 +633,14 @@ nuevo_banner = Publicidad(..., ThumbnailUrl=thumbnail_url)
 - **Impacto**: Estructura modular y mantenible
 - **Complejidad**: Media
 
-### 11.2 Implementación de `sync_service.py` ⏳ PENDIENTE
+### 11.2 Implementación de `sync_service.py` y servicios ✅ COMPLETADO
 - **Descripción**: Mover lógica de negocio de rutas a servicios
 - **Impacto**: Permite pruebas unitarias y desacopla la API
 - **Complejidad**: Media
 
-### 11.3 Manejador Global de Excepciones ⏳ PENDIENTE
-- **Descripción**: Reemplazar `try-except: pass` por respuestas estandarizadas
-- **Impacto**: Frontend recibe errores claros
+### 11.3 Manejador Global de Excepciones ✅ COMPLETADO
+- **Descripción**: Reemplazar `try-except: pass` por respuestas estandarizadas y logging en 20 sitios silenciosos (9 archivos): `publicidad.py` (4x `ValueError: pass` + 4x bare `except`), `auth.py` (3 silent catches), `main.py` (1 `except: pass`), `sync_service.py` (4 silent fallbacks), `twofa_redis.py` (1), `health.py` (1), `utils/__init__.py` (1), `replicacion_service.py` (1), `notificaciones.py` (1)
+- **Impacto**: Frontend recibe errores claros + visibilidad en logs
 - **Complejidad**: Baja
 
 ---
@@ -658,21 +666,30 @@ nuevo_banner = Publicidad(..., ThumbnailUrl=thumbnail_url)
 
 *Prioridad: Media | Objetivo: Profesionalizar la interacción con el usuario.*
 
-### 13.1 Sistema de Feedback (Toasts y Modales) ⏳ PENDIENTE
-- **Descripción**: Implementar avisos descriptivos y confirmaciones
+### 13.1 Sistema de Feedback (Toasts y Modales) ✅ COMPLETADO
+- **Descripción**: Implementar avisos descriptivos y confirmaciones. Añadido: botón X por toast, barra progreso auto-dismiss, removeAll, límite 5, modo persistent, animación slide-fade-out. Backwards-compatible (no rompe consumidores existentes).
 - **Impacto**: Reduce errores accidentales del usuario
 - **Complejidad**: Baja
 
-### 13.2 Vista de Auditoría Detallada ⏳ PENDIENTE
-- **Descripción**: Crear pantalla de logs con filtros avanzados
+### 13.2 Vista de Auditoría Detallada + PDF ✅ COMPLETADO
+- **Descripción**: Crear pantalla de logs con filtros avanzados. Backend: `GET /auditoria/exportar` genera PDF landscape con fpdf2, tabla word-wrap, header repetido. Frontend: botón "Exportar PDF", filtro servidor `<select>`, `<TableSkeleton>`.
 - **Impacto**: Aprovecha robustez del backend (FASE 11)
 - **Complejidad**: Media
 
-### 13.3 Visualización de Datos (`Recharts`) ⏳ PENDIENTE
+### 13.3 Visualización de Datos (`Recharts`) ❌ POSPUESTO
 - **Descripción**: Implementar gráficas de almacenamiento y uptime
 - **Impacto**: Transforma datos crudos en información visual
 - **Complejidad**: Media
 - **Dependencias**: recharts
+- **Nota**: Pos puesto para un módulo Dashboard aparte
+
+---
+
+### Mejora Adicional: Nombres Amigables en Notificaciones ✅ COMPLETADO
+- **Descripción**: Las notificaciones ahora muestran `"NombreAmigable (device_id)"` en lugar de solo `device_id`. Aplicado en webhooks entrantes (`SYNC_FAILED`, `PLAYBACK_FAILED`, `BANNER_INICIADO/FINALIZADO`) y operaciones internas (`RENOMBRAR_DISPOSITIVO`, `REINICIAR_DISPOSITIVO`, `FALLO`).
+- **Archivos**: `backend-dashboard/app/routes/notificaciones.py`, `backend-dashboard/app/services/device_service.py`
+- **Helper**: `_get_device_name()` consulta `Dispositivo.nombre_amigable`
+- **Complejidad**: Baja
 
 ---
 
@@ -680,14 +697,14 @@ nuevo_banner = Publicidad(..., ThumbnailUrl=thumbnail_url)
 
 *Prioridad: Baja | Objetivo: Lograr un acabado de producto final.*
 
-### 14.1 Sistemas de Carga (Skeleton Screens) ⏳ PENDIENTE
-- **Descripción**: Añadir estados de carga visuales
+### 14.1 Sistemas de Carga (Skeleton Screens) ✅ COMPLETADO
+- **Descripción**: Añadir estados de carga visuales. Creados: `Spinner.tsx`, `Skeleton.tsx`, `TableSkeleton.tsx`, `CardSkeleton.tsx`. Aplicados en `DashboardScreen.tsx`, `UsersScreen.tsx`, `AuditoriaScreen.tsx`, `CalendarScreen.tsx`.
 - **Impacto**: Mejora la percepción de velocidad
 - **Complejidad**: Baja
 
-### 14.2 Selector de Tema (Dark/Light Mode) ⏳ PENDIENTE
-- **Descripción**: Implementar persistencia con `localStorage`
-- **Impacto**: Mejora el confort visual del operador
+### 14.2 Selector de Tema (Dark/Light Mode) ✅ COMPLETADO
+- **Descripción**: Implementar persistencia con `localStorage`. Creado `stores/themeStore.ts` (Zustand), script anti-flash en `index.html`, quitado `class="dark"` hardcodeado, `DashboardHeader.tsx` migrado de `useState` a `useThemeStore`.
+- **Impacto**: Mejora el confort visual del operador (tema persiste entre recargas)
 - **Complejidad**: Baja
 
 ---

@@ -166,6 +166,7 @@ async def marcar_notificaciones_leidas(
         updated = result.rowcount or 0
     except IntegrityError:
         await db.rollback()
+        logger.warning("integrity_error_on_insert_ignore")
         return {"success": True, "updated": 0}
 
     return {"success": True, "updated": updated}

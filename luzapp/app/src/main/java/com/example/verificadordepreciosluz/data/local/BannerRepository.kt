@@ -45,7 +45,7 @@ class BannerRepository(
         if (!shouldRefresh(maxAgeMs)) return loadCache()
         return runCatching {
             val remote = api.banners(deviceId).sortedBy { it.prioridad ?: 0 }
-            val items = remote.mapNotNull { downloadBanner(it) }
+            val items = remote.mapNotNull { downloadBanner(it) }.toMutableList()
             if (items.isEmpty()) {
                 Log.w(TAG, "No se pudo descargar ningún banner, se conserva el cache actual")
                 context.getString(com.example.verificadordepreciosluz.R.string.msg_no_banners).let { Log.w(TAG, it) }
@@ -55,11 +55,24 @@ class BannerRepository(
                 lastSyncAt = System.currentTimeMillis(),
                 items = items
             )
+            cleanupExpiredBanners(meta)
             saveMeta(meta)
             meta
         }.onFailure {
             Log.e(TAG, "Error actualizando banners", it)
         }.getOrNull()
+    }
+
+    fun cleanupExpiredBanners(meta: BannerCacheMeta? = null) {
+        val target = meta ?: loadCache() ?: return
+        val before = target.items.size
+        target.items.removeAll {
+            it.fechaFinMs != null && System.currentTimeMillis() > it.fechaFinMs
+        }
+        if (target.items.size < before) {
+            Log.i(TAG, "cleanupExpiredBanners: eliminados ${before - target.items.size} banners vencidos")
+            if (meta == null) saveMeta(target)
+        }
     }
 
     // Descarga un banner (imagen/video) y lo guarda en files/banners

@@ -76,6 +76,13 @@ export function toNotificationViewModel(notificacion: Notificacion): Notificatio
         severity: 'info',
       };
     }
+    case 'SINCRONIZACION_SELECTIVA':
+      return {
+        title: 'Sincronización iniciada',
+        message: 'Se ejecutó una sincronización selectiva.',
+        detail: descripcion || undefined,
+        severity: 'info',
+      };
     case 'RENOMBRAR_DISPOSITIVO':
       return {
         title: 'Dispositivo actualizado',
@@ -117,6 +124,18 @@ export function toNotificationViewModel(notificacion: Notificacion): Notificatio
           actionBadge: 'eliminacion',
         };
       }
+    case 'COMANDO_ENCOLADO':
+      return {
+        title: 'Comando encolado',
+        message: descripcion || 'Comando de sincronización encolado para entrega pendiente.',
+        severity: 'info',
+      };
+    case 'SINCRONIZACION_COMPLETADA':
+      return {
+        title: 'Sincronización completada',
+        message: descripcion || 'El dispositivo completó la sincronización exitosamente.',
+        severity: 'success',
+      };
     case 'CAMBIO_ESTADO_SERVIDOR':
       return {
         title: 'Cambio de estado del servidor',

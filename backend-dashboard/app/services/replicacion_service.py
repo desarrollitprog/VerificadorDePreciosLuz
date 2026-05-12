@@ -147,6 +147,7 @@ async def Borrado_api(api_url: str, id_remoto: int, timeout: int = 30) -> dict:
         try:
             return response.json()
         except Exception:
+            log.warning("json_parse_failed", url=str(response.url))
             return {"success": True, "message": "Eliminado"}
     response.raise_for_status()
     return response.json()

@@ -23,6 +23,7 @@ def iniciar_scheduler() -> AsyncIOScheduler:
 
     from app.services.monitoreo_service import actualizar_sesiones_dispositivos
     from app.services.publicidad_service import expirar_banners_vencidos
+    from app.cleanup_service import cleanup_old_sessions, cleanup_old_notifications, cleanup_orphan_files
 
     _scheduler = AsyncIOScheduler()
 
@@ -41,6 +42,33 @@ def iniciar_scheduler() -> AsyncIOScheduler:
         'interval',
         minutes=3.5,
         id='expirar_banners',
+        replace_existing=True
+    )
+
+    # Job 3: Limpiar sesiones antiguas (>90 días) cada 15 días
+    _scheduler.add_job(
+        cleanup_old_sessions,
+        'interval',
+        days=15,
+        id='limpiar_sesiones',
+        replace_existing=True
+    )
+
+    # Job 4: Limpiar notificaciones viejas (>15 días) cada 15 días
+    _scheduler.add_job(
+        cleanup_old_notifications,
+        'interval',
+        days=15,
+        id='limpiar_notificaciones',
+        replace_existing=True
+    )
+
+    # Job 5: Limpiar archivos huérfanos cada 24 horas
+    _scheduler.add_job(
+        cleanup_orphan_files,
+        'interval',
+        hours=24,
+        id='limpiar_archivos_huérfanos',
         replace_existing=True
     )
 

@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNotification } from '../components/useNotification';
+import { Spinner } from '../components/Spinner';
+import { CardSkeleton } from '../components/CardSkeleton';
 import { Search, UploadCloud, MoreVertical, Eye, Trash, Film, Plus, Server, Smartphone, ChevronDown, ChevronRight, Clock, Check, Pencil, RefreshCw, List, Grid, Download } from 'lucide-react';
 import { getVideos, uploadMedia, deleteVideo, sincronizarServidores, updateBannerMetadata, updateBannerAsignations, FileMetadata } from '../services/videoService';
 import { Video, Servidor } from '../types';
@@ -23,6 +25,7 @@ type SyncServerProgress = {
   ip: string;
   total: number;
   confirmed: number;
+  queued: number;
   failed: number;
   progress: number;
   ok?: boolean;
@@ -40,14 +43,16 @@ const normalizeServerProgress = (details: any[] = []): SyncServerProgress[] => {
   return details.map((detail) => {
     const total = Number(detail.sync_total ?? 0);
     const confirmed = Number(detail.sync_confirmed ?? 0);
+    const queued = Number(detail.sync_queued ?? 0);
     const failed = Number(detail.sync_failed ?? 0);
-    const progress = total > 0 ? Math.min(100, Math.round((confirmed / total) * 100)) : 0;
+    const progress = total > 0 ? Math.min(100, Math.round(((confirmed + queued) / total) * 100)) : 0;
 
     return {
       nombre: String(detail.nombre ?? detail.ip ?? 'Servidor'),
       ip: String(detail.ip ?? ''),
       total,
       confirmed,
+      queued,
       failed,
       progress,
       ok: detail.ok,
@@ -92,21 +97,32 @@ export const DashboardScreen: React.FC = () => {
   }, [preview]);
   const [videos, setVideos] = useState<Video[]>([]);
   const [search, setSearch] = useState('');
+  const [filterType, setFilterType] = useState<'all' | 'image' | 'video'>('all');
+  const [filterDateFrom, setFilterDateFrom] = useState<string>('');
+  const [filterDateTo, setFilterDateTo] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
   const videosPerPage = 12;
   const tableVideosPerPage = 20;
   const [selectedVideoIds, setSelectedVideoIds] = useState<string[]>([]);
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   
-  // Computed values for views
+  // Computed values for views - filters apply to BOTH views
   const filteredVideos = videos.filter(v => {
     const searchLower = search.toLowerCase();
-    return (
+    const matchesSearch = (
       v.titulo?.toLowerCase().includes(searchLower) ||
       v.filename?.toLowerCase().includes(searchLower) ||
       v.id?.toString().includes(searchLower)
     );
+    
+    const matchesType = filterType === 'all' || v.tipo === filterType;
+    
+    const matchesDateFrom = !filterDateFrom || (v.date && new Date(v.date) >= new Date(filterDateFrom + 'T00:00:00'));
+    const matchesDateTo = !filterDateTo || (v.date && new Date(v.date) <= new Date(filterDateTo + 'T23:59:59'));
+    
+    return matchesSearch && matchesType && matchesDateFrom && matchesDateTo;
   });
+  
   const paginatedCardVideos = filteredVideos.slice(
     (currentPage - 1) * videosPerPage, 
     (currentPage - 1) * videosPerPage + videosPerPage
@@ -461,11 +477,20 @@ export const DashboardScreen: React.FC = () => {
       const maxPolls = 90;
       const pollDelayMs = 2000;
       let finalStatus: any = null;
+      let queuedToastShown = false;
 
       for (let i = 0; i < maxPolls; i++) {
         await new Promise((resolve) => setTimeout(resolve, pollDelayMs));
         const status = await getForceSyncJobStatus(start.job_id);
         setSyncServerProgress(normalizeServerProgress(status.details || []));
+
+        if (!queuedToastShown) {
+          const anyQueued = (status.details || []).some((d: any) => Number(d.sync_queued ?? 0) > 0);
+          if (anyQueued) {
+            queuedToastShown = true;
+            showNotification('Uno o más dispositivos están en cola — se ejecutarán al reconectar.', 'warning');
+          }
+        }
 
         if (status.status === 'COMPLETED' || status.status === 'FAILED') {
           finalStatus = status;
@@ -481,13 +506,19 @@ export const DashboardScreen: React.FC = () => {
       setLastSyncAt(formatCaracasTime(new Date()));
 
       if (finalStatus.status === 'COMPLETED') {
-        const successCount = finalStatus.success_count ?? 0;
         const failedCount = finalStatus.failed_count ?? 0;
-        const totalOnline = finalStatus.total_online ?? 0;
+        const totalQueued = (finalStatus.details || []).reduce(
+          (acc: number, d: any) => acc + Number(d.sync_queued ?? 0), 0
+        );
         if (failedCount > 0) {
           showNotification(
-            `Sincronización completada con fallos (${failedCount}/${totalOnline || successCount + failedCount}).`,
+            `Sincronización completada con fallos (${failedCount} servidores, ${totalQueued} en cola).`,
             'error'
+          );
+        } else if (totalQueued > 0) {
+          showNotification(
+            `Sincronización completada. ${totalQueued} dispositivos en cola.`,
+            'info'
           );
         } else {
           showNotification('Sincronización completada', 'success');
@@ -527,11 +558,20 @@ export const DashboardScreen: React.FC = () => {
       const maxPolls = 90;
       const pollDelayMs = 2000;
       let finalStatus: any = null;
+      let queuedToastShown = false;
 
       for (let i = 0; i < maxPolls; i++) {
         await new Promise((resolve) => setTimeout(resolve, pollDelayMs));
         const status = await getForceSyncJobStatus(start.job_id);
         setSyncServerProgress(normalizeServerProgress(status.details || []));
+
+        if (!queuedToastShown) {
+          const anyQueued = (status.details || []).some((d: any) => Number(d.sync_queued ?? 0) > 0);
+          if (anyQueued) {
+            queuedToastShown = true;
+            showNotification('Uno o más dispositivos están en cola — se ejecutarán al reconectar.', 'warning');
+          }
+        }
 
         if (status.status === 'COMPLETED' || status.status === 'FAILED') {
           finalStatus = status;
@@ -547,13 +587,19 @@ export const DashboardScreen: React.FC = () => {
       setLastSyncAt(formatCaracasTime(new Date()));
 
       if (finalStatus.status === 'COMPLETED') {
-        const successCount = finalStatus.success_count ?? 0;
         const failedCount = finalStatus.failed_count ?? 0;
-        const totalOnline = finalStatus.total_online ?? 0;
+        const totalQueued = (finalStatus.details || []).reduce(
+          (acc: number, d: any) => acc + Number(d.sync_queued ?? 0), 0
+        );
         if (failedCount > 0) {
           showNotification(
-            `Sincronización completada con fallos (${failedCount}/${totalOnline || successCount + failedCount}).`,
+            `Sincronización completada con fallos (${failedCount} servidores, ${totalQueued} en cola).`,
             'error'
+          );
+        } else if (totalQueued > 0) {
+          showNotification(
+            `Sincronización completada. ${totalQueued} dispositivos en cola.`,
+            'info'
           );
         } else {
           showNotification('Sincronización completada', 'success');
@@ -570,46 +616,27 @@ export const DashboardScreen: React.FC = () => {
 
   return (
     <div className="max-w-screen-xl mx-auto flex flex-col gap-8">
-      {/* Title & Search */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">Mis Videos</h2>
-          <p className="text-slate-500 mt-1">ADMINISTRA TUS VIDEOS YA SEA SUBIR, ELIMINAR Y SINCRONIZAR.</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input
-              type="text"
-              className="pl-10 pr-8 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-500 focus:ring-2 focus:ring-primary w-full sm:w-64 transition-all"
-              placeholder="Buscar Videos..."
-              value={search}
-              onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-              >
-                ×
-              </button>
-            )}
-          </div>
-          <button
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition disabled:opacity-50"
-            onClick={() => {
-              setIsSyncModalOpen(true);
-              setTimeout(() => {
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }, 50);
-            }}
-            disabled={syncLoading}
-          >
-            {syncLoading ? 'Sincronizando...' : 'Sincronizar'}
-          </button>
-        </div>
-      </div>
+       {/* Title & Sync Button */}
+       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+         <div>
+           <h2 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">Mis Videos</h2>
+           <p className="text-slate-500 mt-1">ADMINISTRA TUS VIDEOS YA SEA SUBIR, ELIMINAR Y SINCRONIZAR.</p>
+         </div>
+         <div className="flex items-center gap-3">
+           <button
+             className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition disabled:opacity-50"
+             onClick={() => {
+               setIsSyncModalOpen(true);
+               setTimeout(() => {
+                 window.scrollTo({ top: 0, behavior: 'smooth' });
+               }, 50);
+             }}
+             disabled={syncLoading}
+           >
+             {syncLoading ? 'Sincronizando...' : 'Sincronizar'}
+           </button>
+         </div>
+       </div>
 
       {/* Upload Area */}
       <div
@@ -721,12 +748,20 @@ export const DashboardScreen: React.FC = () => {
                   <div className="flex justify-between text-xs mb-1 gap-2">
                     <span className="truncate">{serverProgress.nombre} ({serverProgress.ip})</span>
                     <span>
-                      {serverProgress.confirmed}/{serverProgress.total} ({serverProgress.progress}%)
+                      {serverProgress.confirmed} confirmados
+                      {serverProgress.queued > 0 ? `, ${serverProgress.queued} en cola` : ''}
+                      / {serverProgress.total} ({serverProgress.progress}%)
                     </span>
                   </div>
                   <div className="w-full h-2.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                     <div
-                      className={`h-2.5 ${serverProgress.failed > 0 ? 'bg-amber-500' : 'bg-primary'}`}
+                      className={`h-2.5 ${
+                        serverProgress.failed > 0 && serverProgress.queued === 0
+                          ? 'bg-amber-500'
+                          : serverProgress.queued > 0
+                          ? 'bg-orange-400'
+                          : 'bg-primary'
+                      }`}
                       style={{ width: `${serverProgress.progress}%` }}
                     />
                   </div>
@@ -739,29 +774,86 @@ export const DashboardScreen: React.FC = () => {
       </div>
 
        {/* Grid */}
-       <div>
-         <div className="flex items-center justify-between mb-4">
-           <h3 className="text-lg font-bold text-slate-900 dark:text-white">Contenido Subido Recientemente</h3>
-          <div className="flex items-center gap-2">
-              <button 
-                onClick={() => { setViewMode('cards'); setCurrentPage(1); }} 
-                className={`p-2 rounded-lg transition-colors ${viewMode === 'cards' ? 'bg-slate-200 dark:bg-slate-700 text-primary' : 'text-slate-500 hover:text-slate-700 dark:hover:text-white'}`}
-                title="Vista de tarjetas"
+        <div>
+          <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Contenido Subido Recientemente</h3>
+           <div className="flex items-center gap-2 flex-wrap">
+              {/* Search bar (moved from top) */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input
+                  type="text"
+                  className="pl-10 pr-8 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-500 focus:ring-2 focus:ring-primary w-48 transition-all"
+                  placeholder="Buscar..."
+                  value={search}
+                  onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+              
+              {/* Type filter */}
+              <select
+                value={filterType}
+                onChange={e => { setFilterType(e.target.value as any); setCurrentPage(1); }}
+                className="px-3 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary"
               >
-                <Grid size={18} />
-              </button>
-              <button 
-                onClick={() => { setViewMode('table'); setCurrentPage(1); }} 
-                className={`p-2 rounded-lg transition-colors ${viewMode === 'table' ? 'bg-slate-200 dark:bg-slate-700 text-primary' : 'text-slate-500 hover:text-slate-700 dark:hover:text-white'}`}
-                title="Vista de tabla"
-              >
-                <List size={18} />
-              </button>
-            </div>
-         </div>
-          {viewMode === 'cards' ? (
-            /* VISTA DE TARJETAS - Diseño original restaurado + nuevos botones */
+                <option value="all">Todos</option>
+                <option value="image">Imágenes</option>
+                <option value="video">Videos</option>
+              </select>
+              
+              {/* Date range filters */}
+              <input
+                type="date"
+                value={filterDateFrom}
+                onChange={e => { setFilterDateFrom(e.target.value); setCurrentPage(1); }}
+                className="px-3 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary"
+                placeholder="Desde"
+                title="Fecha desde"
+              />
+              <input
+                type="date"
+                value={filterDateTo}
+                onChange={e => { setFilterDateTo(e.target.value); setCurrentPage(1); }}
+                className="px-3 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary"
+                placeholder="Hasta"
+                title="Fecha hasta"
+              />
+              
+              {/* View Toggle Buttons */}
+               <button 
+                 onClick={() => { setViewMode('cards'); setCurrentPage(1); }} 
+                 className={`p-2 rounded-lg transition-colors ${viewMode === 'cards' ? 'bg-slate-200 dark:bg-slate-700 text-primary' : 'text-slate-500 hover:text-slate-700 dark:hover:text-white'}`}
+                 title="Vista de tarjetas"
+               >
+                 <Grid size={18} />
+               </button>
+               <button 
+                 onClick={() => { setViewMode('table'); setCurrentPage(1); }} 
+                 className={`p-2 rounded-lg transition-colors ${viewMode === 'table' ? 'bg-slate-200 dark:bg-slate-700 text-primary' : 'text-slate-500 hover:text-slate-700 dark:hover:text-white'}`}
+                 title="Vista de tabla"
+               >
+                 <List size={18} />
+               </button>
+             </div>
+          </div>
+          {loading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <CardSkeleton key={i} />
+              ))}
+            </div>
+          ) : viewMode === 'cards' ? (
+            /* VISTA DE TARJETAS - Diseño original restaurado + nuevos botones */
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 items-baseline">
               {paginatedCardVideos.length > 0 ? paginatedCardVideos.map((video) => (
                   <div key={video.id} className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-800 hover:shadow-md transition-shadow flex flex-col">
                     {/* Thumbnail */}
@@ -1069,6 +1161,36 @@ export const DashboardScreen: React.FC = () => {
                         </button>
                         <button onClick={() => downloadVideoFile(video)} className="p-2 rounded hover:bg-blue-500/10 transition-transform hover:scale-110" title="Descargar">
                           <Download size={16} />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingVideo(video);
+                            setEditFormData({
+                              titulo: video.titulo || video.filename || '',
+                              activo: video.activo ?? true,
+                              fechaInicio: video.fechaInicio || '',
+                              fechaFin: video.fechaFin || '',
+                            });
+                            const asignacionTodos = video.asignacion_todos ?? true;
+                            setEditAsignacionTodos(asignacionTodos);
+                            if (!asignacionTodos && video.asignaciones) {
+                              const srvIds = [...new Set(video.asignaciones.map((a: any) => a.servidor_id).filter(Boolean))];
+                              const dispIds = video.asignaciones.map((a: any) => a.dispositivo_id).filter(Boolean);
+                              setEditServidorIds(srvIds);
+                              setEditDispositivoIds(dispIds);
+                            } else {
+                              setEditServidorIds([]);
+                              setEditDispositivoIds([]);
+                            }
+                            setIsEditModalOpen(true);
+                            setTimeout(() => {
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }, 50);
+                          }}
+                          className="p-2 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-transform hover:scale-110"
+                          title="Editar"
+                        >
+                          <MoreVertical size={16} />
                         </button>
                         <button onClick={() => handleDeleteClick(video.id, video.titulo || video.filename)} className="p-2 rounded hover:bg-red-500/10 transition-transform hover:scale-110" title="Borrar" disabled={deletingVideoId === video.id}>
                           {deletingVideoId === video.id ? '...' : <Trash size={16} />}
@@ -1682,7 +1804,7 @@ export const DashboardScreen: React.FC = () => {
                  disabled={isSavingEdit}
                  className="px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform duration-150"
                >
-                 CANCEL
+                 CANCELAR
                </button>
                <button
                  type="button"
@@ -1736,7 +1858,7 @@ export const DashboardScreen: React.FC = () => {
                 disabled={isSavingEdit}
                  className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-white text-base font-semibold disabled:opacity-60 active:scale-95 transition-all duration-150"
                >
-                 {isSavingEdit ? 'GUARDANDO...' : 'CAMBIOS GUARDADOS'}
+                 {isSavingEdit ? 'GUARDANDO...' : 'GUARDADO'}
               </button>
             </div>
           </div>
@@ -1773,33 +1895,33 @@ export const DashboardScreen: React.FC = () => {
         </div>
       )}
 
-       {/* Confirm Bulk Delete Modal */}
-       {confirmBulkDelete.open && (
-         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-           <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-md w-full mx-4 shadow-xl">
-             <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">
-               Confirmar eliminación masiva
-             </h3>
-             <p className="text-slate-600 dark:text-slate-300 mb-6">
-               ¿Eliminar {confirmBulkDelete.videoIds.length} archivo{confirmBulkDelete.videoIds.length > 1 ? 's' : ''} seleccionado{confirmBulkDelete.videoIds.length > 1 ? 's' : ''}?
-             </p>
-             <div className="flex justify-end gap-3">
-               <button
-                 onClick={() => setConfirmBulkDelete({ open: false, videoIds: [] })}
-                 className="px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700"
-               >
-                 CANCELAR
-               </button>
-               <button
-                 onClick={handleBulkDeleteConfirm}
-                 className="px-5 py-2.5 rounded-lg bg-red-500 text-white text-base font-medium hover:bg-red-600 active:scale-95 transition-transform duration-150"
-               >
-                 ELIMINAR
-               </button>
-             </div>
-           </div>
-         </div>
-       )}
+      {/* Confirm Bulk Delete Modal */}
+      {confirmBulkDelete.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-md w-full mx-4 shadow-xl">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">
+              Confirmar eliminación masiva
+            </h3>
+            <p className="text-slate-600 dark:text-slate-300 mb-6">
+              ¿Eliminar {confirmBulkDelete.videoIds.length} archivo{confirmBulkDelete.videoIds.length > 1 ? 's' : ''} seleccionado{confirmBulkDelete.videoIds.length > 1 ? 's' : ''}?
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setConfirmBulkDelete({ open: false, videoIds: [] })}
+                className="px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700"
+              >
+                CANCELAR
+              </button>
+              <button
+                onClick={handleBulkDeleteConfirm}
+                className="px-5 py-2.5 rounded-lg bg-red-500 text-white text-base font-medium hover:bg-red-600 active:scale-95 transition-transform duration-150"
+              >
+                ELIMINAR
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
        {/* Preview Modal - Fuera del map para evitar re-renders innecesarios */}
       {preview && (

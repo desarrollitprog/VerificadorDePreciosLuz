@@ -1,9 +1,12 @@
+import logging
 import os
 import time
 from typing import TypedDict
 import redis.asyncio as redis
 from sqlalchemy import text
 from app.database import engine_usuarios
+
+logger = logging.getLogger("uvicorn.error")
 
 
 _redis_client: redis.Redis | None = None
@@ -17,6 +20,7 @@ async def get_health_redis() -> redis.Redis | None:
             _redis_client = redis.from_url(redis_url, decode_responses=True)
             await _redis_client.ping()
         except Exception:
+            logger.warning("redis_connection_failed")
             _redis_client = None
     return _redis_client
 

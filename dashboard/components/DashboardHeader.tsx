@@ -1,33 +1,25 @@
 import React from 'react';
+import { useLocation } from 'react-router-dom';
 import { Sun, Moon } from 'lucide-react';
 import { GeneralNotifications } from './GeneralNotifications';
-import { Screen } from '../types';
+import { useThemeStore } from '../stores/themeStore';
 
-interface HeaderProps {
-  currentScreen: Screen;
-}
+const breadcrumbMap: Record<string, string> = {
+  '/': 'Mis Videos',
+  '/servidores': 'Servidores',
+  '/usuarios': 'Gestión de Usuarios',
+  '/auditoria': 'Auditoría',
+  '/calendario': 'Calendario',
+};
 
-export const Header: React.FC<HeaderProps> = ({ currentScreen }) => { 
+export const Header: React.FC = () => {
+  const location = useLocation();
+
   const getBreadcrumb = () => {
-    switch (currentScreen) {
-      case 'dashboard': return 'Mis Videos';
-      case 'servers': return 'Servidores';
-      case 'users': return 'Gestión de Usuarios';
-      case 'auditoria': return 'Auditoría';
-      default: return 'Panel Principal';
-    }
+    return breadcrumbMap[location.pathname] || 'Panel Principal';
   };
 
-  const [isDark, setIsDark] = React.useState(() => document.documentElement.classList.contains('dark'));
-  const toggleDark = () => {
-    document.documentElement.classList.toggle('dark');
-    setIsDark(document.documentElement.classList.contains('dark'));
-  };
-
-  const navigateTo = (screen: Screen) => {
-    const event = new CustomEvent('navigate', { detail: screen });
-    window.dispatchEvent(event);
-  };
+  const { isDark, toggle } = useThemeStore();
 
   return (
     <header className="h-14 flex items-center justify-between pl-16 md:pl-20 pr-4 md:pr-6 border-b border-slate-200/50 dark:border-slate-800/50 bg-white/80 dark:bg-[#111a22]/80 backdrop-blur-sm z-20">
@@ -37,7 +29,7 @@ export const Header: React.FC<HeaderProps> = ({ currentScreen }) => {
 
       <div className="flex items-center gap-2">
         <button
-          onClick={toggleDark}
+          onClick={toggle}
           className="p-2 rounded-lg transition-colors text-slate-500 hover:text-primary hover:bg-slate-100 dark:hover:bg-slate-800"
           aria-label="Toggle dark mode"
         >
@@ -45,7 +37,7 @@ export const Header: React.FC<HeaderProps> = ({ currentScreen }) => {
             {isDark ? <Sun size={18} /> : <Moon size={18} />}
           </div>
         </button>
-        <GeneralNotifications onNavigate={navigateTo} />
+        <GeneralNotifications />
       </div>
     </header>
   );

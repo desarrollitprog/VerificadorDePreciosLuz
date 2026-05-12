@@ -520,9 +520,9 @@ export function ServerDashboard() {
                                       Cola: {queueStatusMap[d.device_id]!.total}
                                     </span>
                                   )}
-                                  {queueStatusMap[d.device_id] && (queueStatusMap[d.device_id]!.pending_sync || queueStatusMap[d.device_id]!.pending_reboot) && (
-                                    <span className="ml-1 text-xs font-medium px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" title="Comando pendiente de reconexión del dispositivo">
-                                      En espera
+                                  {queueStatusMap[d.device_id] && (
+                                    <span className={`ml-1 text-xs font-medium px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 ${(queueStatusMap[d.device_id]!.pending_sync || queueStatusMap[d.device_id]!.pending_reboot) ? '' : 'opacity-50'}`} title="Comando pendiente de reconexión del dispositivo">
+                                      En espera: {(queueStatusMap[d.device_id]!.pending_sync ? 1 : 0) + (queueStatusMap[d.device_id]!.pending_reboot ? 1 : 0)}
                                     </span>
                                   )}
                                   {loadingQueues && !queueStatusMap[d.device_id] && (

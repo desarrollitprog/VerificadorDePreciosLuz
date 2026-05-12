@@ -1711,16 +1711,20 @@ class TabletWebSocketManager:
                     await self.disconnect(ws)
         
         # Dispositivo no está en este worker
-        # Verificar si está vivo en otro worker antes de enqueuear
+        # Verificar si está vivo en otro worker (registry compartido)
         from app.services import device_registry as dr
         if dr.device_registry is not None:
             try:
                 if await dr.device_registry.is_device_registered(device_id):
+                    # Vivo en otro worker → no enqueueamos (no infla badge)
+                    # Seteamos pending_sync 24h como respaldo
+                    if pending_queue is not None:
+                        await pending_queue.set_pending_sync(device_id)
                     return True
             except Exception:
                 pass
         
-        # Dispositivo offline o desconectado — encolar para cuando reconecte
+        # Dispositivo offline real — encolar para cuando reconecte
         await self._enqueue_message(device_id, message)
         return False
 
@@ -2713,12 +2717,16 @@ async def queue_status(device_id: str):
     try:
         queue_stats = await pending_queue.get_queue_size(device_id)
         dlq_size = await pending_queue.get_dlq_size(device_id)
+        pending_sync = await pending_queue.has_pending_sync(device_id)
+        pending_reboot = await pending_queue.has_pending_reboot(device_id)
         return {
             "device_id": device_id,
             "pending": queue_stats["pending"],
             "inflight": queue_stats["inflight"],
             "total": queue_stats["total"],
             "dlq": dlq_size,
+            "pending_sync": pending_sync,
+            "pending_reboot": pending_reboot,
         }
     except Exception as e:
         logger.error(f"Error obteniendo queue status para {device_id}: {e}")

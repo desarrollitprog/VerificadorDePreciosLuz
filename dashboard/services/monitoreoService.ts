@@ -239,6 +239,8 @@ export interface QueueStatus {
   inflight: number;
   total: number;
   dlq: number;
+  pending_sync: boolean;
+  pending_reboot: boolean;
 }
 
 export async function getQueueStatus(deviceId: string): Promise<QueueStatus> {

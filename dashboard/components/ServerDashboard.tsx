@@ -517,7 +517,12 @@ export function ServerDashboard() {
                                   )}
                                   {queueStatusMap[d.device_id] && queueStatusMap[d.device_id]!.total > 0 && (
                                     <span className="ml-1 text-xs font-medium px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300" title={`${queueStatusMap[d.device_id]!.pending} pendientes, ${queueStatusMap[d.device_id]!.inflight} en vuelo`}>
-                                      {queueStatusMap[d.device_id]!.total} pendientes
+                                      Cola: {queueStatusMap[d.device_id]!.total}
+                                    </span>
+                                  )}
+                                  {queueStatusMap[d.device_id] && (queueStatusMap[d.device_id]!.pending_sync || queueStatusMap[d.device_id]!.pending_reboot) && (
+                                    <span className="ml-1 text-xs font-medium px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" title="Comando pendiente de reconexión del dispositivo">
+                                      En espera
                                     </span>
                                   )}
                                   {loadingQueues && !queueStatusMap[d.device_id] && (

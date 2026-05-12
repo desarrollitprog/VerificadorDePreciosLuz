@@ -206,7 +206,7 @@ class PendingCommandQueue:
     async def set_pending_sync(self, device_id: str) -> None:
         """Marca que un dispositivo tiene sync pendiente."""
         key = f"{self.PENDING_SYNC_PREFIX}:{device_id}"
-        await self.redis.set(key, "true", ex=3600)  # 1 hora TTL
+        await self.redis.set(key, "true", ex=86400)  # 24h TTL
 
     async def check_pending_sync(self, device_id: str) -> bool:
         """Verifica si hay sync pendiente y limpia el flag."""
@@ -216,6 +216,18 @@ class PendingCommandQueue:
             await self.redis.delete(key)
             return True
         return False
+
+    async def has_pending_sync(self, device_id: str) -> bool:
+        """Solo lectura: verifica si hay sync pendiente sin borrar el flag."""
+        key = f"{self.PENDING_SYNC_PREFIX}:{device_id}"
+        val = await self.redis.get(key)
+        return val == "true"
+
+    async def has_pending_reboot(self, device_id: str) -> bool:
+        """Solo lectura: verifica si hay reboot pendiente sin borrar el flag."""
+        key = f"{self.PENDING_REBOOT_PREFIX}:{device_id}"
+        val = await self.redis.get(key)
+        return val is not None
 
     async def set_pending_reboot(self, device_id: str, payload: dict) -> None:
         """Guarda un comando REINICIAR pendiente."""

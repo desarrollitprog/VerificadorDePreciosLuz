@@ -335,8 +335,6 @@ object UpdateChecker {
             hideNotification(context)
             context.startActivity(Intent.createChooser(intent, "Instalar actualización"))
             
-            scheduleRestart(context)
-            
         } catch (e: Exception) {
             Log.e(TAG, "Error: ${e.message}")
             hideNotification(context)

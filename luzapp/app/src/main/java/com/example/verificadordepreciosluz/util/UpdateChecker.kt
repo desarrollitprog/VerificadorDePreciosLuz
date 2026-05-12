@@ -300,9 +300,8 @@ object UpdateChecker {
                 session.commit(pendingIntent.intentSender)
 
                 Handler(Looper.getMainLooper()).post {
-                    showNotification(context, "Actualización", "Instalación programada", 100)
-                    Toast.makeText(context, "Actualización programada", Toast.LENGTH_SHORT).show()
-                    scheduleRestart(context)
+                    showNotification(context, "Actualización", "Instalación programada, esperando confirmación...", 0)
+                    Toast.makeText(context, "Instalación programada, esperando confirmación...", Toast.LENGTH_SHORT).show()
                 }
             } else {
                 Log.d(TAG, "Device Owner NOT active, using fallback")

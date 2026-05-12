@@ -1,7 +1,6 @@
 package com.example.verificadordepreciosluz.util
 
 import android.Manifest
-import android.app.Activity
 import android.app.ActivityManager
 import android.app.NotificationChannel
 import android.app.NotificationManager

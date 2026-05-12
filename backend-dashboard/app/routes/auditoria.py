@@ -3,6 +3,9 @@ from typing import Optional
 import logging
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import Response
+from fpdf import FPDF
+from fpdf.fonts import FontFace
 from pydantic import BaseModel
 from sqlalchemy import select, func, case, or_, literal, and_
 from sqlalchemy.sql import literal_column
@@ -241,6 +244,8 @@ async def obtener_auditoria(
             Usuario.nombre_usuario.label("usuario_nombre"),
             literal_column("'notificacion'").label("origen"),
             NotificacionLeida.id.label("leida_id"),
+            Dispositivo.nombre_amigable.label("dispositivo_nombre"),
+            ServidorSecundario.nombre.label("servidor_nombre"),
         )
         .select_from(Notificacion)
         .outerjoin(Usuario, Usuario.id == Notificacion.usuario_id)
@@ -251,6 +256,8 @@ async def obtener_auditoria(
                 NotificacionLeida.usuario_id == user_id
             )
         )
+        .outerjoin(Dispositivo, Dispositivo.codigo_kiosko == Notificacion.dispositivo_id)
+        .outerjoin(ServidorSecundario, ServidorSecundario.id == Notificacion.servidor_id)
     )
     
     if notif_conditions:
@@ -297,9 +304,9 @@ async def obtener_auditoria(
             "tipo": row.tipo,
             "descripcion": row.descripcion,
             "dispositivo_id": row.dispositivo_id,
-            "dispositivo_nombre": None,
+            "dispositivo_nombre": row.dispositivo_nombre,
             "servidor_id": row.servidor_id,
-            "servidor_nombre": None,
+            "servidor_nombre": row.servidor_nombre,
             "sesion_inicio": None,
             "sesion_fin": None,
             "duracion_segundos": None,
@@ -318,3 +325,317 @@ async def obtener_auditoria(
         "limit": limit,
         "pages": (total + limit - 1) // limit if limit > 0 else 0,
     }
+
+
+class AuditPDF(FPDF):
+    def header(self):
+        self.set_font("Helvetica", "B", 10)
+        self.cell(0, 7, "Reporte de Auditoria - VerificadorDePreciosLuz", align="C")
+        self.ln(9)
+
+    def footer(self):
+        self.set_y(-15)
+        self.set_font("Helvetica", "I", 7)
+        self.cell(0, 10, f"Pagina {self.page_no()}/{{nb}}", align="C")
+
+
+@router.get("/auditoria/exportar")
+async def exportar_auditoria_pdf(
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_admin),
+    busqueda: str = Query(None, description="Texto a buscar"),
+    tipo: str = Query(None, description="Tipo de evento"),
+    dispositivo_id: str = Query(None, description="ID del dispositivo"),
+    servidor_id: int = Query(None, description="ID del servidor"),
+    fecha_desde: datetime = Query(None, description="Fecha desde"),
+    fecha_hasta: datetime = Query(None, description="Fecha hasta"),
+):
+    pdf = AuditPDF(orientation="L")
+    pdf.alias_nb_pages()
+    pdf.set_auto_page_break(auto=True, margin=20)
+    pdf.add_page()
+    pdf.set_font("Helvetica", "", 7.5)
+
+    col_widths = (35, 28, 105, 35, 30, 22, 14)
+
+    with pdf.table(
+        col_widths=col_widths,
+        repeat_headings=True,
+        first_row_as_headings=True,
+        headings_style=FontFace(emphasis="BOLD", color=(255, 255, 255), fill_color=(50, 50, 50)),
+    ) as tbl:
+        tbl.row(["Fecha", "Tipo", "Descripcion", "Dispositivo", "Servidor", "Usuario", "Duracion"])
+
+        offset = 0
+        page_limit = 500
+
+        while True:
+            page = (offset // page_limit) + 1
+            result = await _fetch_auditoria_page(
+                db, busqueda, tipo, dispositivo_id, servidor_id,
+                fecha_desde, fecha_hasta, page, page_limit, current_user
+            )
+            if not result["items"]:
+                break
+
+            for item in result["items"]:
+                fecha = (item.get("fecha") or "")[:19].replace("T", " ")
+                tipo_val = item.get("tipo") or ""
+                desc = item.get("descripcion") or ""
+                disp = item.get("dispositivo_nombre") or item.get("dispositivo_id") or "-"
+                srv = item.get("servidor_nombre") or "-"
+                usr = item.get("usuario") or "-"
+                dur = str(item.get("duracion_segundos") or "-")
+                tbl.row([fecha, tipo_val, desc, disp, srv, usr, dur])
+
+            if len(result["items"]) < page_limit:
+                break
+            offset += page_limit
+
+    pdf_bytes = bytes(pdf.output())
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=auditoria_export.pdf"},
+    )
+
+
+async def _fetch_auditoria_page(db, busqueda, tipo, dispositivo_id, servidor_id, fecha_desde, fecha_hasta, page, limit, current_user):
+    offset = (page - 1) * limit
+    user_id = current_user.get("user_id") if current_user else None
+
+    sesion_conditions = []
+    if busqueda:
+        busqueda_lower = busqueda.lower()
+        sesion_conditions.append(
+            or_(
+                func.lower(func.coalesce(Dispositivo.codigo_kiosko, "")).like(f"%{busqueda_lower}%"),
+                func.lower(func.coalesce(Dispositivo.nombre_amigable, "")).like(f"%{busqueda_lower}%"),
+                func.lower(func.coalesce(ServidorSecundario.nombre, "")).like(f"%{busqueda_lower}%"),
+                case(
+                    (DispositivoSesion.fin == None, "CONEXION_DISPOSITIVO"),
+                    else_="DESCONEXION_DISPOSITIVO"
+                ).like(f"%{busqueda_lower}%")
+            )
+        )
+    if tipo:
+        sesion_conditions.append(
+            case(
+                (DispositivoSesion.fin == None, "CONEXION_DISPOSITIVO"),
+                else_="DESCONEXION_DISPOSITIVO"
+            ) == tipo
+        )
+    if dispositivo_id:
+        sesion_conditions.append(Dispositivo.codigo_kiosko == dispositivo_id)
+    if servidor_id:
+        sesion_conditions.append(ServidorSecundario.id == servidor_id)
+    if fecha_desde:
+        sesion_conditions.append(
+            case(
+                (DispositivoSesion.fin == None, DispositivoSesion.inicio),
+                else_=DispositivoSesion.fin
+            ) >= fecha_desde
+        )
+    if fecha_hasta:
+        sesion_conditions.append(
+            case(
+                (DispositivoSesion.fin == None, DispositivoSesion.inicio),
+                else_=DispositivoSesion.fin
+            ) <= fecha_hasta
+        )
+
+    sesion_count_query = (
+        select(func.count(DispositivoSesion.id))
+        .select_from(DispositivoSesion)
+        .outerjoin(Dispositivo, Dispositivo.codigo_kiosko == DispositivoSesion.dispositivo_id)
+        .outerjoin(ServidorSecundario, ServidorSecundario.id == Dispositivo.servidor_id)
+    )
+    if sesion_conditions:
+        sesion_count_query = sesion_count_query.where(*sesion_conditions)
+    sesion_count_result = await db.execute(sesion_count_query)
+    sesion_total = sesion_count_result.scalar() or 0
+
+    notif_conditions = []
+    if busqueda:
+        busqueda_lower = busqueda.lower()
+        notif_conditions.append(
+            or_(
+                func.lower(func.coalesce(Notificacion.descripcion, "")).like(f"%{busqueda_lower}%"),
+                func.lower(func.coalesce(Notificacion.tipo, "")).like(f"%{busqueda_lower}%"),
+                func.lower(func.coalesce(Notificacion.dispositivo_id, "")).like(f"%{busqueda_lower}%")
+            )
+        )
+    if tipo:
+        notif_conditions.append(Notificacion.tipo == tipo)
+    if dispositivo_id:
+        notif_conditions.append(Notificacion.dispositivo_id == dispositivo_id)
+    if servidor_id:
+        notif_conditions.append(Notificacion.servidor_id == servidor_id)
+    if fecha_desde:
+        notif_conditions.append(Notificacion.fecha_creacion >= fecha_desde)
+    if fecha_hasta:
+        notif_conditions.append(Notificacion.fecha_creacion <= fecha_hasta)
+
+    notif_count_query = (
+        select(func.count(Notificacion.id))
+        .select_from(Notificacion)
+    )
+    if notif_conditions:
+        notif_count_query = notif_count_query.where(*notif_conditions)
+    notif_count_result = await db.execute(notif_count_query)
+    notif_total = notif_count_result.scalar() or 0
+
+    sesion_query = (
+        select(
+            DispositivoSesion.id,
+            case(
+                (DispositivoSesion.fin == None, DispositivoSesion.inicio),
+                else_=DispositivoSesion.fin
+            ).label("fecha"),
+            case(
+                (func.coalesce(DispositivoSesion.fin, "2099-01-01") == "2099-01-01", "CONEXION_DISPOSITIVO"),
+                else_="DESCONEXION_DISPOSITIVO"
+            ).label("tipo"),
+            case(
+                (DispositivoSesion.fin == None,
+                  func.concat(
+                      "Dispositivo '",
+                      func.coalesce(Dispositivo.nombre_amigable, Dispositivo.codigo_kiosko),
+                      "' (",
+                      Dispositivo.codigo_kiosko,
+                      ") conectado al servidor '",
+                      func.coalesce(ServidorSecundario.nombre, "Desconocido"),
+                      "'"
+                  )),
+                else_=func.concat(
+                    "Dispositivo '",
+                    func.coalesce(Dispositivo.nombre_amigable, Dispositivo.codigo_kiosko),
+                    "' (",
+                    Dispositivo.codigo_kiosko,
+                    ") desconectado del servidor '",
+                    func.coalesce(ServidorSecundario.nombre, "Desconocido"),
+                    "'. Se conectó el ",
+                    DispositivoSesion.inicio
+                )
+            ).label("descripcion"),
+            Dispositivo.codigo_kiosko.label("dispositivo_id"),
+            Dispositivo.nombre_amigable.label("dispositivo_nombre"),
+            ServidorSecundario.id.label("servidor_id"),
+            ServidorSecundario.nombre.label("servidor_nombre"),
+            DispositivoSesion.inicio.label("sesion_inicio"),
+            DispositivoSesion.fin.label("sesion_fin"),
+            DispositivoSesion.duracion_segundos,
+            literal_column("NULL").label("usuario"),
+            literal_column("'sesion'").label("origen"),
+        )
+        .select_from(DispositivoSesion)
+        .outerjoin(Dispositivo, Dispositivo.codigo_kiosko == DispositivoSesion.dispositivo_id)
+        .outerjoin(ServidorSecundario, ServidorSecundario.id == Dispositivo.servidor_id)
+    )
+
+    if sesion_conditions:
+        sesion_query = sesion_query.where(*sesion_conditions)
+
+    sesion_offset = offset
+    sesion_limit = limit
+
+    if offset >= sesion_total:
+        sesion_offset = 0
+        sesion_limit = 0
+    elif offset + limit > sesion_total:
+        sesion_limit = sesion_total - offset
+
+    if sesion_limit > 0:
+        sesion_query = sesion_query.order_by(DispositivoSesion.inicio.desc()).offset(sesion_offset).limit(sesion_limit)
+
+    sesion_result = await db.execute(sesion_query)
+    sesion_rows = sesion_result.all()
+
+    remaining_offset = max(0, offset - sesion_total)
+    remaining_limit = limit - len(sesion_rows)
+
+    notif_query = (
+        select(
+            Notificacion.id,
+            Notificacion.fecha_creacion.label("fecha"),
+            Notificacion.tipo,
+            func.coalesce(Notificacion.descripcion, "").label("descripcion"),
+            Notificacion.dispositivo_id,
+            Notificacion.servidor_id,
+            Notificacion.usuario_id,
+            Usuario.nombre_usuario.label("usuario_nombre"),
+            literal_column("'notificacion'").label("origen"),
+            NotificacionLeida.id.label("leida_id"),
+            Dispositivo.nombre_amigable.label("dispositivo_nombre"),
+            ServidorSecundario.nombre.label("servidor_nombre"),
+        )
+        .select_from(Notificacion)
+        .outerjoin(Usuario, Usuario.id == Notificacion.usuario_id)
+        .outerjoin(
+            NotificacionLeida,
+            and_(
+                NotificacionLeida.notificacion_id == Notificacion.id,
+                NotificacionLeida.usuario_id == user_id
+            )
+        )
+        .outerjoin(Dispositivo, Dispositivo.codigo_kiosko == Notificacion.dispositivo_id)
+        .outerjoin(ServidorSecundario, ServidorSecundario.id == Notificacion.servidor_id)
+    )
+
+    if notif_conditions:
+        notif_query = notif_query.where(*notif_conditions)
+
+    if remaining_limit > 0:
+        notif_query = notif_query.order_by(Notificacion.fecha_creacion.desc()).offset(remaining_offset).limit(remaining_limit)
+
+    notif_result = await db.execute(notif_query)
+    notif_rows = notif_result.all()
+
+    items = []
+
+    for row in sesion_rows:
+        sesion_fin_val = row.sesion_fin
+        sesion_tipo = "DESCONEXION_DISPOSITIVO" if sesion_fin_val is not None else "CONEXION_DISPOSITIVO"
+        descripcion = row.descripcion
+        if sesion_fin_val is not None and row.sesion_inicio:
+            inicio_venezuela = _to_venezuela_time(row.sesion_inicio)
+            inicio_str = inicio_venezuela.strftime("%Y-%m-%d %H:%M:%S")
+            descripcion = f"Dispositivo '{row.dispositivo_nombre or row.dispositivo_id}' ({row.dispositivo_id}) desconectado del servidor '{row.servidor_nombre or 'Desconocido'}'. Se conectó el {inicio_str}"
+        items.append({
+            "id": row.id,
+            "fecha": _to_venezuela_time(row.fecha).isoformat() if row.fecha else None,
+            "tipo": sesion_tipo,
+            "descripcion": descripcion,
+            "dispositivo_id": row.dispositivo_id,
+            "dispositivo_nombre": row.dispositivo_nombre,
+            "servidor_id": row.servidor_id,
+            "servidor_nombre": row.servidor_nombre,
+            "sesion_inicio": _to_venezuela_time(row.sesion_inicio).isoformat() if row.sesion_inicio else None,
+            "sesion_fin": _to_venezuela_time(sesion_fin_val).isoformat() if sesion_fin_val else None,
+            "duracion_segundos": row.duracion_segundos,
+            "usuario": row.usuario,
+            "origen": row.origen,
+            "leida": None,
+        })
+
+    for row in notif_rows:
+        usuario_str = row.usuario_nombre if row.usuario_nombre else (str(row.usuario_id) if row.usuario_id else None)
+        items.append({
+            "id": row.id,
+            "fecha": _to_venezuela_time(row.fecha).isoformat() if row.fecha else None,
+            "tipo": row.tipo,
+            "descripcion": row.descripcion,
+            "dispositivo_id": row.dispositivo_id,
+            "dispositivo_nombre": row.dispositivo_nombre,
+            "servidor_id": row.servidor_id,
+            "servidor_nombre": row.servidor_nombre,
+            "sesion_inicio": None,
+            "sesion_fin": None,
+            "duracion_segundos": None,
+            "usuario": usuario_str,
+            "origen": row.origen,
+            "leida": row.leida_id is not None,
+        })
+
+    items.sort(key=lambda x: x.get("fecha") or "", reverse=True)
+    return {"items": items, "total": len(items)}

@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query, status
@@ -7,12 +8,28 @@ from sqlalchemy import and_, delete, func, literal
 from sqlalchemy.exc import IntegrityError
 from app.models import Notificacion, NotificacionLeida
 from app.models.usuario import Usuario
+from app.models.dispositivo import Dispositivo
 from app.database import get_db_usuarios
 from app.dependencies import get_current_cliente
 from app.services.notificacion_service import registrar_accion
 from pydantic import BaseModel
 
+logger = logging.getLogger("uvicorn.error")
+
 router = APIRouter()
+
+
+async def _get_device_name(db: AsyncSession, device_id: str) -> str:
+    try:
+        result = await db.execute(
+            select(Dispositivo.nombre_amigable).where(Dispositivo.codigo_kiosko == device_id)
+        )
+        nombre = result.scalar_one_or_none()
+        if nombre:
+            return f"{nombre} ({device_id})"
+    except Exception as e:
+        logger.warning("Error al obtener nombre_amigable para %s: %s", device_id, e)
+    return device_id
 
 @router.get("/notificaciones")
 async def listar_notificaciones(
@@ -149,6 +166,7 @@ async def marcar_notificaciones_leidas(
         updated = result.rowcount or 0
     except IntegrityError:
         await db.rollback()
+        logger.warning("integrity_error_on_insert_ignore")
         return {"success": True, "updated": 0}
 
     return {"success": True, "updated": updated}
@@ -238,9 +256,9 @@ async def sync_status(
     body: SyncStatusBody,
     db: AsyncSession = Depends(get_db_usuarios),
 ):
-    # Registrar la notificación en la base de datos (con deduplicación temporal)
+    nombre = await _get_device_name(db, body.device_id)
     reason = (body.reason or "").strip() or "sin detalle"
-    descripcion = f"Dispositivo {body.device_id} falló sincronización: {reason}"
+    descripcion = f"Dispositivo {nombre} falló sincronización: {reason}"
 
     dedupe_since = datetime.utcnow() - timedelta(seconds=120)
     recent_stmt = (
@@ -279,9 +297,10 @@ async def playback_status(
     body: PlaybackStatusBody,
     db: AsyncSession = Depends(get_db_usuarios),
 ):
+    nombre = await _get_device_name(db, body.device_id)
     reason = (body.reason or "").strip() or "sin detalle"
     video_name = (body.video_name or "").strip() or "(sin nombre)"
-    descripcion = f"Dispositivo {body.device_id} no pudo reproducir '{video_name}': {reason}"
+    descripcion = f"Dispositivo {nombre} no pudo reproducir '{video_name}': {reason}"
 
     dedupe_since = datetime.utcnow() - timedelta(seconds=120)
     recent_stmt = (
@@ -319,6 +338,53 @@ async def playback_status(
     }
 
 
+@router.post("/sync-queued", status_code=status.HTTP_201_CREATED)
+async def sync_queued_webhook(
+    body: SyncStatusBody,
+    db: AsyncSession = Depends(get_db_usuarios),
+):
+    nombre = await _get_device_name(db, body.device_id)
+    reason = (body.reason or "").strip() or "sin detalle"
+    tipo = "COMANDO_ENCOLADO"
+    descripcion = f"Dispositivo {nombre}: comando de sincronización encolado ({reason})"
+
+    dedupe_since = datetime.utcnow() - timedelta(seconds=120)
+    recent_stmt = (
+        select(Notificacion)
+        .where(
+            Notificacion.tipo == tipo,
+            Notificacion.descripcion == descripcion,
+            Notificacion.fecha_creacion >= dedupe_since,
+        )
+        .order_by(Notificacion.fecha_creacion.desc()).limit(1)
+    )
+    existing = (await db.execute(recent_stmt)).scalars().first()
+    if existing:
+        return {"success": True, "duplicated": True, "id": existing.id}
+
+    await registrar_accion(
+        db=db, usuario_id=None, tipo=tipo,
+        descripcion=descripcion, dispositivo_id=body.device_id,
+    )
+    return {"success": True, "message": "Notificación de comando encolado registrada", "duplicated": False}
+
+
+@router.post("/sync-delivered", status_code=status.HTTP_201_CREATED)
+async def sync_delivered_webhook(
+    body: SyncStatusBody,
+    db: AsyncSession = Depends(get_db_usuarios),
+):
+    nombre = await _get_device_name(db, body.device_id)
+    tipo = "SINCRONIZACION_COMPLETADA"
+    descripcion = f"Dispositivo {nombre}: sincronización completada exitosamente"
+
+    await registrar_accion(
+        db=db, usuario_id=None, tipo=tipo,
+        descripcion=descripcion, dispositivo_id=body.device_id,
+    )
+    return {"success": True, "message": "Notificación de sincronización completada registrada"}
+
+
 class BannerStatusBody(BaseModel):
     device_id: str
     banner_id: int | None = None
@@ -330,9 +396,10 @@ async def banner_status(
     body: BannerStatusBody,
     db: AsyncSession = Depends(get_db_usuarios),
 ):
+    nombre = await _get_device_name(db, body.device_id)
     tipo = "BANNER_INICIADO" if body.status == "INICIADO" else "BANNER_FINALIZADO"
     
-    descripcion = f"Dispositivo {body.device_id}"
+    descripcion = f"Dispositivo {nombre}"
     if body.banner_id:
         descripcion += f" - Banner ID {body.banner_id}"
     descripcion += f" - {body.status}"

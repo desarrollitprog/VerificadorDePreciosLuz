@@ -16,14 +16,16 @@ class CommandAcker:
     
     Permite que cualquier worker procese confirmaciones de comandos,
     eliminando el problema de múltiples workers con dictionaries locales.
+    TTL de 120s: suficientemente largo para polling (60s), lo suficientemente
+    corto para que acks de comandos anteriores no interfieran.
     """
 
-    def __init__(self, redis: Redis, ttl: int = 90):
+    def __init__(self, redis: Redis, ttl: int = 120):
         self.redis = redis
         self.ttl = ttl
 
     @classmethod
-    async def create(cls, ttl: int = 90) -> "CommandAcker":
+    async def create(cls, ttl: int = 120) -> "CommandAcker":
         redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
         redis = Redis.from_url(redis_url, decode_responses=True)
         await redis.ping()
@@ -37,7 +39,8 @@ class CommandAcker:
         device_id: str, 
         command: str, 
         status: str, 
-        reason: str = ""
+        reason: str = "",
+        command_id: str | None = None,
     ) -> None:
         """Guarda una confirmación en Redis con TTL."""
         key = f"command:ack:{device_id}:{command}"
@@ -46,6 +49,7 @@ class CommandAcker:
             "command": command,
             "status": status,
             "reason": reason,
+            "command_id": command_id,
             "timestamp": time.time()
         })
         await self.redis.set(key, data, ex=self.ttl)

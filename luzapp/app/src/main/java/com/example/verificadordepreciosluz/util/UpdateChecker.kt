@@ -348,14 +348,21 @@ object UpdateChecker {
                 showNotification(context, "Actualización", "Reiniciando app...", 0)
                 Toast.makeText(context, "Reiniciando app...", Toast.LENGTH_SHORT).show()
 
+
                 val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
                 intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
+
 
                 hideNotification(context)
             } catch (e: Exception) {
                 Log.e(TAG, "Error restarting: ${e.message}")
                 hideNotification(context)
+            }
+            try {
+                android.os.Process.killProcess(android.os.Process.myPid())
+            } catch (e: Exception) {
+                Log.e("UpdateChecker", "Error al cerrar para reiniciar: ${e.message}")
             }
         }, 3000)
     }

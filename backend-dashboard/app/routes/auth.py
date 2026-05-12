@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import smtplib
 from datetime import datetime, timedelta, timezone
@@ -26,6 +27,7 @@ from app.utils.twofa_redis import (
 import redis.asyncio as redis
 
 router = APIRouter()
+logger = logging.getLogger("uvicorn.error")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
@@ -43,6 +45,7 @@ async def get_redis() -> redis.Redis | None:
             _redis_client = redis.from_url(redis_url, decode_responses=True)
             await _redis_client.ping()
         except Exception:
+            logger.warning("redis_connection_failed")
             _redis_client = None
     return _redis_client
 
@@ -66,6 +69,7 @@ async def check_rate_limit(client_ip: str) -> tuple[bool, int]:
         await redis_client.incr(key)
         return True, RATE_LIMIT_LOGIN_MAX - current_int - 1
     except Exception:
+        logger.warning("rate_limit_check_failed")
         return True, RATE_LIMIT_LOGIN_MAX
 
 
@@ -76,7 +80,7 @@ async def clear_rate_limit(client_ip: str):
             key = f"rate_limit:login:{client_ip}"
             await redis_client.delete(key)
         except Exception:
-            pass
+            logger.warning("rate_limit_clear_failed")
 
 
 async def get_client_ip(request: Request) -> str:

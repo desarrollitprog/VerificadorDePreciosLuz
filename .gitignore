@@ -43,6 +43,7 @@ backend-api/.env
 
 # Archivos y carpetas generados por Python
 __pycache__/
+.pytest_cache/
 *.pyc
 *.pyo
 *.pyd

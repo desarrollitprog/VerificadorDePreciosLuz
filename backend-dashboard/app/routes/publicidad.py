@@ -151,13 +151,13 @@ async def listar_banners(
                 desde_date = datetime.fromisoformat(fecha_desde.replace('Z', '+00:00'))
                 count_query = count_query.where(Publicidad.FechaInicio >= desde_date)
             except ValueError:
-                pass
+                log.warning("invalid_date_filter", field="fecha_desde", value=fecha_desde)
         if fecha_hasta:
             try:
                 hasta_date = datetime.fromisoformat(fecha_hasta.replace('Z', '+00:00'))
                 count_query = count_query.where(Publicidad.FechaInicio <= hasta_date)
             except ValueError:
-                pass
+                log.warning("invalid_date_filter", field="fecha_hasta", value=fecha_hasta)
         
         total_count_result = await db.execute(count_query)
         total_count = total_count_result.scalar() or 0
@@ -171,14 +171,14 @@ async def listar_banners(
                 desde_date = datetime.fromisoformat(fecha_desde.replace('Z', '+00:00'))
                 query = query.where(Publicidad.FechaInicio >= desde_date)
             except ValueError:
-                pass
+                log.warning("invalid_date_filter", field="fecha_desde", value=fecha_desde)
         
         if fecha_hasta:
             try:
                 hasta_date = datetime.fromisoformat(fecha_hasta.replace('Z', '+00:00'))
                 query = query.where(Publicidad.FechaInicio <= hasta_date)
             except ValueError:
-                pass
+                log.warning("invalid_date_filter", field="fecha_hasta", value=fecha_hasta)
         
         # Por defecto mostrar todos los banners (sin filtro de fecha inicio)
         # if not incluir_todos:
@@ -398,13 +398,15 @@ async def upload_banner(
         if ServidorIds:
             try:
                 selected_servidor_ids = json.loads(ServidorIds)
-            except:
+            except Exception:
+                log.warning("json_parse_failed", field="ServidorIds", value=ServidorIds)
                 selected_servidor_ids = []
         
         if DispositivoIds:
             try:
                 selected_dispositivo_ids = json.loads(DispositivoIds)
-            except:
+            except Exception:
+                log.warning("json_parse_failed", field="DispositivoIds", value=DispositivoIds)
                 selected_dispositivo_ids = []
 
         # Guardar asignaciones en la tabla publicidad_asignacion
@@ -454,13 +456,15 @@ async def upload_banner(
         if ServidorIds:
             try:
                 selected_servidor_ids = json.loads(ServidorIds)
-            except:
+            except Exception:
+                log.warning("json_parse_failed", field="ServidorIds", value=ServidorIds)
                 selected_servidor_ids = []
         
         if DispositivoIds:
             try:
                 selected_dispositivo_ids = json.loads(DispositivoIds)
-            except:
+            except Exception:
+                log.warning("json_parse_failed", field="DispositivoIds", value=DispositivoIds)
                 selected_dispositivo_ids = []
         
         if AsignacionTodos and not selected_dispositivo_ids:
@@ -615,8 +619,20 @@ async def eliminar_banner(
         dispositivo_ids = [a.dispositivo_id for a in asignaciones if a.dispositivo_id]
         servidor_ids = list(set([a.servidor_id for a in asignaciones if a.servidor_id]))
         
-        disp_info = f", Dispositivos: {dispositivo_ids}" if dispositivo_ids else ""
-        srv_info = f", Servidores: {servidor_ids}" if servidor_ids else ", Asignado a: todos"
+        disp_nombres = []
+        if dispositivo_ids:
+            stmt = select(Dispositivo.codigo_kiosko, Dispositivo.nombre_amigable).where(Dispositivo.codigo_kiosko.in_(dispositivo_ids))
+            result = await db.execute(stmt)
+            nombre_map = {row.codigo_kiosko: row.nombre_amigable or row.codigo_kiosko for row in result.all()}
+            disp_nombres = [f"{nombre_map.get(d, d)} ({d})" for d in dispositivo_ids]
+        disp_info = f", Dispositivos: {disp_nombres}" if disp_nombres else ""
+        srv_nombres = []
+        if servidor_ids:
+            stmt_serv = select(ServidorSecundario.id, ServidorSecundario.nombre).where(ServidorSecundario.id.in_(servidor_ids))
+            result_serv = await db.execute(stmt_serv)
+            srv_nombre_map = {row.id: row.nombre for row in result_serv.all()}
+            srv_nombres = [f"{sid} - {srv_nombre_map.get(sid, str(sid))}" for sid in servidor_ids]
+        srv_info = f", Servidores: {srv_nombres}" if srv_nombres else ", Asignado a: todos"
         
         descripcion_audit = f"Banner eliminado: IdPublicidad={banner.IdPublicidad}, Titulo={banner.Titulo or ''}{disp_info}{srv_info}"
         # Eliminar archivo físico si existe
@@ -885,8 +901,20 @@ async def actualizar_banner_metadata(
         dispositivo_ids = [a.dispositivo_id for a in asignaciones if a.dispositivo_id]
         servidor_ids = list(set([a.servidor_id for a in asignaciones if a.servidor_id]))
         
-        disp_info = f", Dispositivos: {dispositivo_ids}" if dispositivo_ids else ""
-        srv_info = f", Servidores: {servidor_ids}" if servidor_ids else ", Asignado a: todos"
+        disp_nombres = []
+        if dispositivo_ids:
+            stmt = select(Dispositivo.codigo_kiosko, Dispositivo.nombre_amigable).where(Dispositivo.codigo_kiosko.in_(dispositivo_ids))
+            result = await db.execute(stmt)
+            nombre_map = {row.codigo_kiosko: row.nombre_amigable or row.codigo_kiosko for row in result.all()}
+            disp_nombres = [f"{nombre_map.get(d, d)} ({d})" for d in dispositivo_ids]
+        disp_info = f", Dispositivos: {disp_nombres}" if disp_nombres else ""
+        srv_nombres = []
+        if servidor_ids:
+            stmt_serv = select(ServidorSecundario.id, ServidorSecundario.nombre).where(ServidorSecundario.id.in_(servidor_ids))
+            result_serv = await db.execute(stmt_serv)
+            srv_nombre_map = {row.id: row.nombre for row in result_serv.all()}
+            srv_nombres = [f"{sid} - {srv_nombre_map.get(sid, str(sid))}" for sid in servidor_ids]
+        srv_info = f", Servidores: {srv_nombres}" if srv_nombres else ", Asignado a: todos"
         
         await registrar_accion(
             db,

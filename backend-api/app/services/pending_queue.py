@@ -53,22 +53,23 @@ class PendingCommandQueue:
     async def enqueue(self, device_id: str, message: dict) -> bool:
         """Encola un comando en Redis. Retorna True si se encoló, False si cola llena.
         
-        Si el comando está en DEDUP_COMMANDS, verifica si ya existe uno igual en la cola.
+        Si el comando está en DEDUP_COMMANDS, usa SADD atómico en un SET con TTL 60s
+        para evitar duplicados entre múltiples workers (race condition del bus pub/sub).
         Si ya existe, omite el encolado (retorna True como faux-success).
         """
         command = message.get("command")
         
-        # Server-side dedup para comandos críticos
+        # Server-side dedup atómico para comandos críticos
         if command in self.DEDUP_COMMANDS:
-            key = self._queue_key(device_id)
-            existing = await self.redis.lrange(key, 0, -1)
-            for raw in existing:
-                if command in raw:
-                    logger.info(
-                        f"[QUEUE] {command} ya está en cola para {device_id}, "
-                        f"omitiendo duplicado"
-                    )
-                    return True
+            dedup_key = f"device:dedup:{device_id}:{command}"
+            added = await self.redis.sadd(dedup_key, command)
+            await self.redis.expire(dedup_key, 60)
+            if not added:
+                logger.info(
+                    f"[QUEUE] {command} ya existe para {device_id} "
+                    f"(SADD dedup), omitiendo duplicado"
+                )
+                return True
         
         key = self._queue_key(device_id)
         inflight_key = self._inflight_key(device_id)

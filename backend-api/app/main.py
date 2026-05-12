@@ -1698,9 +1698,10 @@ class TabletWebSocketManager:
             if ws_state is not None and ws_state.name != "CONNECTED":
                 logger.warning(
                     f"[WS] Dispositivo {device_id} tiene conexión fantasma "
-                    f"(estado={ws_state.name}), limpiando"
+                    f"(estado={ws_state.name}), limpiando — NO se encola"
                 )
                 await self.disconnect(ws)
+                return True
             else:
                 try:
                     await ws.send_json(message)
@@ -1718,6 +1719,13 @@ class TabletWebSocketManager:
         if pending_queue is not None:
             logger.info(f"[WS] Encolando en Redis para {device_id}: command={message.get('command')} command_id={message.get('command_id')}")
             await pending_queue.enqueue(device_id, message)
+            # Si el dispositivo reconectó entre tanto, flush inmediato
+            ws = self.device_map.get(device_id)
+            if ws:
+                asyncio.create_task(pending_queue.flush_all_to_device(
+                    device_id,
+                    lambda msg, _w=ws: _w.send_json(msg) or True
+                ))
             return
         
         # Fallback: cola local en memoria

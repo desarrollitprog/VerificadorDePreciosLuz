@@ -18,6 +18,7 @@ class FakeRedis:
     def __init__(self):
         self._lists: dict[str, list] = {}
         self._strings: dict[str, str] = {}
+        self._sets: dict[str, set] = {}
         self._closed = False
 
     async def llen(self, key: str) -> int:
@@ -72,6 +73,9 @@ class FakeRedis:
         if key in self._strings:
             del self._strings[key]
             found += 1
+        if key in self._sets:
+            del self._sets[key]
+            found += 1
         return found
 
     async def set(self, key: str, value: str, ex: int | None = None) -> bool:
@@ -80,6 +84,17 @@ class FakeRedis:
 
     async def get(self, key: str) -> str | None:
         return self._strings.get(key)
+    
+    async def sadd(self, key: str, value: str) -> int:
+        if key not in self._sets:
+            self._sets[key] = set()
+        if value in self._sets[key]:
+            return 0
+        self._sets[key].add(value)
+        return 1
+    
+    async def expire(self, key: str, seconds: int) -> bool:
+        return True
 
     async def ping(self) -> bool:
         return True
@@ -88,9 +103,9 @@ class FakeRedis:
         self._closed = True
 
     def scan_iter(self, match: str | None = None):
-        """Devuelve un async generator que itera sobre keys de lists y strings."""
+        """Devuelve un async generator que itera sobre keys de lists, strings y sets."""
         async def _scan():
-            all_keys = set(self._lists.keys()) | set(self._strings.keys())
+            all_keys = set(self._lists.keys()) | set(self._strings.keys()) | set(self._sets.keys())
             if match:
                 import fnmatch
                 for k in sorted(all_keys):
@@ -469,24 +484,28 @@ class TestPendingCommandQueue:
     # ─────────────────────────────
 
     async def test_enqueue_dedup_wipe_duplicates(self):
-        """L4: WIPE_AND_RESYNC duplicado se omite en la cola."""
-        q, _ = self._make_queue()
+        """L4: WIPE_AND_RESYNC duplicado se omite en la cola (SADD atómico)."""
+        q, fake = self._make_queue()
         msg = {"command": "WIPE_AND_RESYNC"}
         ok1 = await q.enqueue(self.device_id, msg)
         assert ok1 is True
+        dedup_key = f"device:dedup:{self.device_id}:WIPE_AND_RESYNC"
+        assert dedup_key in fake._sets  # SADD key creada
         ok2 = await q.enqueue(self.device_id, msg)
-        assert ok2 is True  # faux-success (dedup)
+        assert ok2 is True  # faux-success (dedup por SADD)
         queue_key = f"{q.QUEUE_PREFIX}:{self.device_id}"
         assert await q.redis.llen(queue_key) == 1  # solo 1, no 2
 
     async def test_enqueue_dedup_reboot_duplicates(self):
-        """L4: REINICIAR duplicado se omite en la cola."""
-        q, _ = self._make_queue()
+        """L4: REINICIAR duplicado se omite en la cola (SADD atómico)."""
+        q, fake = self._make_queue()
         msg = {"command": "REINICIAR", "reason": "update"}
         ok1 = await q.enqueue(self.device_id, msg)
         assert ok1 is True
+        dedup_key = f"device:dedup:{self.device_id}:REINICIAR"
+        assert dedup_key in fake._sets  # SADD key creada
         ok2 = await q.enqueue(self.device_id, msg)
-        assert ok2 is True  # faux-success (dedup)
+        assert ok2 is True  # faux-success (dedup por SADD)
         queue_key = f"{q.QUEUE_PREFIX}:{self.device_id}"
         assert await q.redis.llen(queue_key) == 1
 

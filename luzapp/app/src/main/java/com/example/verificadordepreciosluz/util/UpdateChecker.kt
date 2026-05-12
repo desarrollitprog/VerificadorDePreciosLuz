@@ -23,7 +23,6 @@ import androidx.core.content.FileProvider
 import com.example.verificadordepreciosluz.data.model.UpdateInfo
 import com.example.verificadordepreciosluz.data.network.UpdateService
 import com.example.verificadordepreciosluz.ui.scanner.MyDeviceAdminReceiver
-import com.example.verificadordepreciosluz.ui.scanner.ScanActivity
 import com.example.verificadordepreciosluz.ui.update.UpdateDialog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -340,31 +339,6 @@ object UpdateChecker {
             hideNotification(context)
             Toast.makeText(context, "Error al instalar. Instale manualmente.", Toast.LENGTH_LONG).show()
         }
-    }
-
-    private fun scheduleRestart(context: Context) {
-        Handler(Looper.getMainLooper()).postDelayed({
-            try {
-                showNotification(context, "Actualización", "Reiniciando app...", 0)
-                Toast.makeText(context, "Reiniciando app...", Toast.LENGTH_SHORT).show()
-
-
-                val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-                intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-
-
-                hideNotification(context)
-            } catch (e: Exception) {
-                Log.e(TAG, "Error restarting: ${e.message}")
-                hideNotification(context)
-            }
-            try {
-                android.os.Process.killProcess(android.os.Process.myPid())
-            } catch (e: Exception) {
-                Log.e("UpdateChecker", "Error al cerrar para reiniciar: ${e.message}")
-            }
-        }, 3000)
     }
 
     private fun showUpdateDialog(context: Context, updateInfo: UpdateInfo) {

@@ -1710,6 +1710,16 @@ class TabletWebSocketManager:
                     logger.warning(f"[WS] Error enviando a {device_id}: {e}")
                     await self.disconnect(ws)
         
+        # Dispositivo no está en este worker
+        # Verificar si está vivo en otro worker antes de enqueuear
+        from app.services import device_registry as dr
+        if dr.device_registry is not None:
+            try:
+                if await dr.device_registry.is_device_registered(device_id):
+                    return True
+            except Exception:
+                pass
+        
         # Dispositivo offline o desconectado — encolar para cuando reconecte
         await self._enqueue_message(device_id, message)
         return False

@@ -1738,9 +1738,9 @@ class TabletWebSocketManager:
         if pending_queue is not None:
             await pending_queue.flush_all_to_device(
                 device_id,
-                lambda msg: websocket.send_json(msg)
+                lambda msg: websocket.send_json(msg) or True
             )
-        
+
         # 2. Cola local en memoria (fallback)
         if device_id in self._message_queues:
             await self.flush_message_queue(device_id, websocket)
@@ -1800,7 +1800,7 @@ class TabletWebSocketManager:
         if pending_queue is not None:
             delivered = await pending_queue.flush_all_to_device(
                 device_id,
-                lambda msg: websocket.send_json(msg)
+                lambda msg: websocket.send_json(msg) or True
             )
             return delivered
         
@@ -1977,7 +1977,7 @@ class TabletWebSocketManager:
                     _ws = ws  # captura por valor para el closure
                     await pending_queue.flush_all_to_device(
                         device_id,
-                        lambda msg, _w=_ws: _w.send_json(msg)
+                        lambda msg, _w=_ws: _w.send_json(msg) or True
                     )
             # Cleanup DLQ vieja
             if pending_queue is not None:

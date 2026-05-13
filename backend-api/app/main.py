@@ -2101,6 +2101,12 @@ async def _on_bus_confirmation(device_id: str, command: str, status: str, reason
     # Manejar confirmación de WIPE_AND_RESYNC
     if command == "WIPE_AND_RESYNC":
         await _apply_sync_confirmation(device_id=device_id, status=status, reason=reason)
+        # Limpiar pending_sync por si este worker no coincide con el que recibió la confirmación directa
+        if pending_queue is not None and status in ("SUCCESS", "RECEIVED", "DONE"):
+            try:
+                await pending_queue.clear_pending_sync(device_id)
+            except Exception:
+                pass
         return
     
     # Manejar confirmación de REINICIAR
@@ -2448,6 +2454,13 @@ async def process_sync_confirmation(websocket: WebSocket, msg: dict):
         if waiter:
             waiter.set()
         
+        # Limpiar pending_reboot si el reinicio se confirmó exitosamente
+        if status == "SUCCESS" and pending_queue is not None:
+            try:
+                await pending_queue.clear_pending_reboot(device_id)
+            except Exception as e:
+                logger.error(f"[REBOOT] Error limpiando pending_reboot: {e}")
+
         # NO publicamos al bus aquí - ya guardamos en Redis directamente
         # El bus es solo para el caso fallback (cuando no hay WebSocket directo)
         return
@@ -2473,6 +2486,14 @@ async def process_sync_confirmation(websocket: WebSocket, msg: dict):
 
     # Actualizar dict local (para backward compatibility)
     await _apply_sync_confirmation(device_id=device_id, status=status, reason=reason)
+
+    # Limpiar pending_sync cuando el sync se completa exitosamente
+    if status in ("SUCCESS", "RECEIVED", "DONE"):
+        if pending_queue is not None:
+            try:
+                await pending_queue.clear_pending_sync(device_id)
+            except Exception as e:
+                logger.error(f"[SYNC] Error limpiando pending_sync: {e}")
 
     # Notificar entrega exitosa al dashboard (FASE 17.3)
     if status in ("SUCCESS", "RECEIVED", "DONE"):

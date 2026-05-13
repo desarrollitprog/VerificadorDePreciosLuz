@@ -105,6 +105,11 @@ export const GeneralNotifications: React.FC = () => {
             tipo_notif = 'error';
           }
             showNotification(`${prefix}: ${n.descripcion}`, tipo_notif, 7000);
+            if (tipo === 'SINCRONIZACION_COMPLETADA' && n.dispositivo_id) {
+              window.dispatchEvent(new CustomEvent('sync-completed', {
+                detail: { deviceId: n.dispositivo_id },
+              }));
+            }
         });
 
       if (markAsRead && (res.unread_count || 0) > 0) {

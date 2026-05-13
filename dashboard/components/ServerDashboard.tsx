@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { ChevronDown, ChevronUp, RefreshCw, X, Monitor, Edit2, Play, RotateCcw, Eye, AlertCircle, Clock, Trash, Search, ArrowUpDown } from 'lucide-react';
 import ServerCard from './monitoreo/ServerCard';
 import { useNotification } from './useNotification';
@@ -136,14 +136,29 @@ export function ServerDashboard() {
     }
   };
 
-  useEffect(() => {
+  const pollQueues = useCallback(async () => {
     if (!expandedServerId) return;
     const server = servidores.find(s => s.id === expandedServerId);
     if (!server) return;
     setLoadingQueues(true);
-    Promise.all(server.dispositivos.map(d => fetchQueueStatus(d.device_id)))
-      .finally(() => setLoadingQueues(false));
+    await Promise.all(server.dispositivos.map(d => fetchQueueStatus(d.device_id)));
+    setLoadingQueues(false);
   }, [expandedServerId, servidores]);
+
+  useEffect(() => {
+    if (!expandedServerId) return;
+    pollQueues();
+    const interval = setInterval(pollQueues, 30000);
+    return () => clearInterval(interval);
+  }, [expandedServerId, pollQueues]);
+
+  useEffect(() => {
+    const handleSyncCompleted = (e: CustomEvent<{ deviceId: string }>) => {
+      fetchQueueStatus(e.detail.deviceId);
+    };
+    window.addEventListener('sync-completed', handleSyncCompleted as EventListener);
+    return () => window.removeEventListener('sync-completed', handleSyncCompleted as EventListener);
+  }, []);
 
   const submitRename = async () => {
     if (!renameModal) return;

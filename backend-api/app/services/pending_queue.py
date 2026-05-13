@@ -223,6 +223,16 @@ class PendingCommandQueue:
         val = await self.redis.get(key)
         return val == "true"
 
+    async def clear_pending_sync(self, device_id: str) -> None:
+        """Limpia el flag de sync pendiente (sync completado exitosamente)."""
+        key = f"{self.PENDING_SYNC_PREFIX}:{device_id}"
+        await self.redis.delete(key)
+
+    async def clear_pending_reboot(self, device_id: str) -> None:
+        """Limpia el flag de reboot pendiente (reinicio confirmado)."""
+        key = f"{self.PENDING_REBOOT_PREFIX}:{device_id}"
+        await self.redis.delete(key)
+
     async def has_pending_reboot(self, device_id: str) -> bool:
         """Solo lectura: verifica si hay reboot pendiente sin borrar el flag."""
         key = f"{self.PENDING_REBOOT_PREFIX}:{device_id}"

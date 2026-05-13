@@ -127,10 +127,13 @@ export function ServerDashboard() {
     setRenameValue('');
   };
 
-  const fetchQueueStatus = async (deviceId: string) => {
+  const fetchQueueStatus = async (deviceId: string, serverIp: string) => {
     try {
-      const status = await getQueueStatus(deviceId);
-      setQueueStatusMap(prev => ({ ...prev, [deviceId]: status }));
+      const serversStatus = await getQueueStatus(deviceId);
+      const match = serversStatus.find(s => s.server.includes(serverIp));
+      if (match) {
+        setQueueStatusMap(prev => ({ ...prev, [deviceId]: match.status }));
+      }
     } catch {
       // Silently fail — endpoint might not be available
     }
@@ -139,7 +142,11 @@ export function ServerDashboard() {
   const pollQueues = useCallback(async () => {
     if (servidores.length === 0) return;
     setLoadingQueues(true);
-    await Promise.all(servidores.flatMap(s => s.dispositivos).map(d => fetchQueueStatus(d.device_id)));
+    await Promise.all(
+      servidores.flatMap(s =>
+        s.dispositivos.map(d => fetchQueueStatus(d.device_id, s.ip))
+      )
+    );
     setLoadingQueues(false);
   }, [servidores]);
 
@@ -152,11 +159,17 @@ export function ServerDashboard() {
 
   useEffect(() => {
     const handleSyncCompleted = (e: CustomEvent<{ deviceId: string }>) => {
-      fetchQueueStatus(e.detail.deviceId);
+      const deviceId = e.detail.deviceId;
+      const server = servidores.find(s =>
+        s.dispositivos.some(d => d.device_id === deviceId)
+      );
+      if (server) {
+        fetchQueueStatus(deviceId, server.ip);
+      }
     };
     window.addEventListener('sync-completed', handleSyncCompleted as EventListener);
     return () => window.removeEventListener('sync-completed', handleSyncCompleted as EventListener);
-  }, []);
+  }, [servidores]);
 
   const submitRename = async () => {
     if (!renameModal) return;

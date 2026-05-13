@@ -243,7 +243,12 @@ export interface QueueStatus {
   pending_reboot: boolean;
 }
 
-export async function getQueueStatus(deviceId: string): Promise<QueueStatus> {
+export interface QueueStatusPerServer {
+  server: string;
+  status: QueueStatus;
+}
+
+export async function getQueueStatus(deviceId: string): Promise<QueueStatusPerServer[]> {
   const response = await api.get(`/monitoreo/cola/${encodeURIComponent(deviceId)}`);
-  return response.data as QueueStatus;
+  return response.data as QueueStatusPerServer[];
 }

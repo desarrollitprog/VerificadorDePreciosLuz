@@ -93,16 +93,15 @@ async def obtener_cola_dispositivo(
     if not urls:
         raise HTTPException(status_code=502, detail="No hay URLs de backend-api configuradas")
 
-    last_error = None
-    for base_url in urls:
+    async def _query(base_url: str) -> dict | None:
         try:
             async with httpx.AsyncClient(timeout=5) as client:
                 resp = await client.get(f"{base_url.rstrip('/')}/api/queue-status/{device_id}")
                 if resp.status_code == 200:
-                    return resp.json()
-                last_error = f"HTTP {resp.status_code}"
-        except Exception as e:
-            last_error = str(e)
-            continue
+                    return {"server": base_url, "status": resp.json()}
+        except Exception:
+            pass
+        return None
 
-    raise HTTPException(status_code=502, detail=f"No se pudo obtener estado de cola: {last_error}")
+    results = await asyncio.gather(*[_query(u) for u in urls], return_exceptions=True)
+    return [r for r in results if isinstance(r, dict)]

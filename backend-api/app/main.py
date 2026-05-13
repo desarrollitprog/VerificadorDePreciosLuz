@@ -2321,12 +2321,13 @@ async def orchestrate_forced_sync_sequential(
                     logger.info(f"[SYNC] Confirmación via waiter para {device_id}: {ack.get('status')}")
                     break
             
-            # No se recibió ack en el timeout → comando encolado en Redis (dispositivo offline)
+            # No se recibió ack en el timeout → comando ya está en Redis queue (encolado por bus listener)
             if not ack:
                 timeout_reason = f"Sin confirmación en {SYNC_ACK_TIMEOUT}s"
                 was_queued = False
                 if pending_queue is not None:
-                    await pending_queue.set_pending_sync(device_id)
+                    # El command ya fue encolado en Redis por send_to_device/bus listener
+                    # set_pending_sync es redundante y causaría badge "En espera" duplicado
                     was_queued = True
                 if was_queued:
                     asyncio.create_task(notify_dashboard_sync_queued(device_id, timeout_reason))

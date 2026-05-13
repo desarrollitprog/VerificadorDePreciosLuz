@@ -69,6 +69,7 @@ device_command_bus: DeviceCommandBus | None = None
 device_bus_listener_task: asyncio.Task | None = None
 command_acker: Any = None
 pending_queue: Any = None
+banner_batch_manager: Any = None
 
 # Endpoint para consultar el estado de los dispositivos
 @app.get("/devices/status")
@@ -380,9 +381,26 @@ async def schedule_banner_notification(
                         target_device_ids = None
                         if banner.device_ids:
                             target_device_ids = [d.strip() for d in banner.device_ids.split(",") if d.strip()]
-                        await send_banner_notification_robust(banner, target_device_ids, "BANNER_INICIADO")
+                        
+                        # Acumular en lote en vez de enviar inmediato
+                        if banner_batch_manager is not None:
+                            banner_info = {
+                                "banner_id": banner.id,
+                                "titulo": banner.titulo,
+                                "url": banner.url,
+                                "tipo": banner.tipo,
+                                "device_ids": target_device_ids,
+                                "fecha_inicio": banner.fecha_inicio.isoformat() if banner.fecha_inicio else None,
+                                "fecha_fin": banner.fecha_fin.isoformat() if banner.fecha_fin else None,
+                            }
+                            is_coordinator = await banner_batch_manager.accumulate(banner_info)
+                            if is_coordinator:
+                                asyncio.create_task(_delayed_batch_flush())
+                            logger.info(f"Notificación de inicio acumulada para banner {banner_id}")
+                        else:
+                            await send_banner_notification_robust(banner, target_device_ids, "BANNER_INICIADO")
+                        
                         notified_banners_start.add(banner_id)
-                        logger.info(f"Notificación de inicio enviada para banner {banner_id}")
                     await remove_pending_notification(banner_id, "BANNER_INICIADO")
                     break
     
@@ -429,9 +447,39 @@ async def schedule_banner_notification(
                     break
 
 
+async def _delayed_batch_flush():
+    """Espera la ventana de coalescencia y luego flushea el lote de banners."""
+    global banner_batch_manager
+    try:
+        await asyncio.sleep(5)
+
+        if banner_batch_manager is None:
+            return
+
+        async def _send(msg: dict):
+            await tablet_ws_manager.broadcast(msg)
+            if device_command_bus is not None:
+                try:
+                    await device_command_bus.publish_command(
+                        device_id="*",
+                        command="BANNER_LIST",
+                        payload=msg,
+                    )
+                except Exception as e:
+                    logger.warning("[BANNER_BATCH] Redis bus falló: %s", e)
+
+        banners = await banner_batch_manager.flush(_send)
+        if banners:
+            logger.info("[BANNER_BATCH] Lote enviado con %d banners", len(banners))
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        logger.error("[BANNER_BATCH] Error en flush: %s", e)
+
+
 @app.on_event("startup")
 async def start_device_monitor():
-    global device_state_store, device_command_bus, device_bus_listener_task, banner_check_task, pending_queue
+    global device_state_store, device_command_bus, device_bus_listener_task, banner_check_task, pending_queue, banner_batch_manager
     try:
         device_state_store = await DeviceStateStore.create()
         logger.info("DeviceStateStore inicializado con Redis")
@@ -487,6 +535,15 @@ async def start_device_monitor():
         logger.info("PendingCommandQueue inicializado con Redis")
     except Exception as e:
         logger.error("No se pudo inicializar PendingCommandQueue: %s", e)
+
+    # Inicializar BannerBatchManager (coalescencia de BANNER_INICIADO)
+    try:
+        from app.services.banner_batch import BannerBatchManager
+        global banner_batch_manager
+        banner_batch_manager = await BannerBatchManager.create()
+        logger.info("BannerBatchManager inicializado con Redis (batch_window=5s)")
+    except Exception as e:
+        logger.warning(f"BannerBatchManager no disponible: {e}")
 
 
 @app.on_event("shutdown")
@@ -2090,6 +2147,8 @@ async def _on_bus_command(device_id: str, command: str, payload: dict):
             await tablet_ws_manager.send_to_device(device_id, message)
         elif command in ("BANNER_INICIADO", "BANNER_FINALIZADO"):
             await tablet_ws_manager.send_to_device(device_id, payload)
+        elif command == "BANNER_LIST":
+            await tablet_ws_manager.broadcast(payload)
     except Exception as e:
         logger.error(f"[BUS] Error procesando comando '{command}' para {device_id}: {e}")
 

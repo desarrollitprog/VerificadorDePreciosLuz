@@ -2000,6 +2000,29 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                     sendSyncConfirmation(webSocket, command, "SUCCESS", commandId = commandId)
                                 }
                             }
+                            "BANNER_LIST" -> {
+                                val bannersArray = message.optJSONArray("banners")
+                                val count = bannersArray?.length() ?: 0
+                                Log.i(TAG, "[WebSocket] BANNER_LIST recibido: $count banners")
+
+                                if (bannersArray != null) {
+                                    for (i in 0 until bannersArray.length()) {
+                                        val b = bannersArray.getJSONObject(i)
+                                        notifiedBannersStart.add(b.optInt("banner_id", 0))
+                                    }
+                                }
+
+                                forcePlayNowTimer?.let { uiHandler.removeCallbacks(it) }
+                                forcePlayNowTimer = Runnable { forcePlayNow = false }
+                                uiHandler.postDelayed(forcePlayNowTimer!!, forcePlayNowTimeoutMs)
+                                forcePlayNow = true
+
+                                syncBannersOnStart()
+                                uiHandler.post {
+                                    Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_LIST")
+                                    sendSyncConfirmation(webSocket, "BANNER_LIST", "SUCCESS")
+                                }
+                            }
                             "BANNER_EXPIRED" -> {
                                 val bannerId = message.optInt("banner_id", 0)
                                 val titulo = message.optString("titulo", "")
@@ -2255,6 +2278,29 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                     Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_INICIADO (binario)")
                                     // Confirmar al backend que el banner fue recibido
                                     sendSyncConfirmation(webSocket, command, "SUCCESS", commandId = commandId)
+                                }
+                            }
+                            "BANNER_LIST" -> {
+                                val bannersArray = message.optJSONArray("banners")
+                                val count = bannersArray?.length() ?: 0
+                                Log.i(TAG, "[WebSocket] BANNER_LIST recibido (binario): $count banners")
+
+                                if (bannersArray != null) {
+                                    for (i in 0 until bannersArray.length()) {
+                                        val b = bannersArray.getJSONObject(i)
+                                        notifiedBannersStart.add(b.optInt("banner_id", 0))
+                                    }
+                                }
+
+                                forcePlayNowTimer?.let { uiHandler.removeCallbacks(it) }
+                                forcePlayNowTimer = Runnable { forcePlayNow = false }
+                                uiHandler.postDelayed(forcePlayNowTimer!!, forcePlayNowTimeoutMs)
+                                forcePlayNow = true
+
+                                syncBannersOnStart()
+                                uiHandler.post {
+                                    Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_LIST (binario)")
+                                    sendSyncConfirmation(webSocket, "BANNER_LIST", "SUCCESS")
                                 }
                             }
                             "BANNER_FINALIZADO" -> {

@@ -137,20 +137,18 @@ export function ServerDashboard() {
   };
 
   const pollQueues = useCallback(async () => {
-    if (!expandedServerId) return;
-    const server = servidores.find(s => s.id === expandedServerId);
-    if (!server) return;
+    if (servidores.length === 0) return;
     setLoadingQueues(true);
-    await Promise.all(server.dispositivos.map(d => fetchQueueStatus(d.device_id)));
+    await Promise.all(servidores.flatMap(s => s.dispositivos).map(d => fetchQueueStatus(d.device_id)));
     setLoadingQueues(false);
-  }, [expandedServerId, servidores]);
+  }, [servidores]);
 
   useEffect(() => {
-    if (!expandedServerId) return;
+    if (servidores.length === 0) return;
     pollQueues();
     const interval = setInterval(pollQueues, 30000);
     return () => clearInterval(interval);
-  }, [expandedServerId, pollQueues]);
+  }, [servidores, pollQueues]);
 
   useEffect(() => {
     const handleSyncCompleted = (e: CustomEvent<{ deviceId: string }>) => {

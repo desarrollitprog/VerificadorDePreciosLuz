@@ -1758,10 +1758,10 @@ class TabletWebSocketManager:
         """L2: Flush de cola Redis + cola local + pending banners."""
         # 1. Cola persistente Redis
         if pending_queue is not None:
-            await pending_queue.flush_all_to_device(
-                device_id,
-                lambda msg: websocket.send_json(msg) or True
-            )
+            async def _deliver(msg):
+                await websocket.send_json(msg)
+                return True
+            await pending_queue.flush_all_to_device(device_id, _deliver)
 
         # 2. Cola local en memoria (fallback)
         if device_id in self._message_queues:
@@ -1820,10 +1820,10 @@ class TabletWebSocketManager:
         L2: Usa cola Redis si está disponible, fallback a cola local."""
         # Priorizar cola Redis
         if pending_queue is not None:
-            delivered = await pending_queue.flush_all_to_device(
-                device_id,
-                lambda msg: websocket.send_json(msg) or True
-            )
+            async def _deliver(msg):
+                await websocket.send_json(msg)
+                return True
+            delivered = await pending_queue.flush_all_to_device(device_id, _deliver)
             return delivered
         
         # Fallback: cola local en memoria

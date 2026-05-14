@@ -1451,11 +1451,26 @@ async def enviar_comando_a_dispositivo(
             all_status = await device_state_store.get_all_status()
             is_online = all_status.get(device_id, {}).get("online", False)
             if not is_online:
-                logger.warning(f"[COMMAND] Dispositivo {device_id} no registrado o desconectado")
-                raise HTTPException(
-                    status_code=409, 
-                    detail=f"Dispositivo {device_id} no está conectado. Espere a que se reconecte."
+                logger.warning(f"[COMMAND] Dispositivo {device_id} no registrado o desconectado, encolando {comando}...")
+                # Publicar vía Redis bus (por si conecta durante la llamada)
+                await device_command_bus.publish_command(
+                    device_id=device_id,
+                    command=comando,
+                    payload=command_payload,
                 )
+                # Setear flag persistente + retry
+                if pending_queue is not None:
+                    if comando == "REINICIAR":
+                        await pending_queue.set_pending_reboot(device_id, command_payload)
+                        asyncio.create_task(retry_reboot_with_device(device_id, command_payload))
+                    elif comando == "WIPE_AND_RESYNC":
+                        await pending_queue.set_pending_sync(device_id)
+                        asyncio.create_task(retry_sync_with_device(device_id))
+                return {
+                    "success": True,
+                    "status": "QUEUED",
+                    "message": f"Dispositivo {device_id} offline, comando {comando} encolado para cuando se reconecte",
+                }
             logger.info(f"[COMMAND] Dispositivo {device_id} encontrado en Redis (otro servidor)")
         else:
             # Si no hay device_state_store, permitir el intento (comando se perderá pero no se rechaza prematuramente)

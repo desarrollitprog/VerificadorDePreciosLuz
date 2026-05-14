@@ -285,14 +285,21 @@ export function ServerDashboard() {
     setPurging(true);
     try {
       const result = await purgeDevice(purgeModal.deviceId);
-      if (result.success) {
+      if (result.success && result.status === 'QUEUED') {
+        showNotification('Comando de limpieza encolado — se ejecutará cuando el dispositivo reconecte', 'warning');
+      } else if (result.success) {
         showNotification('Cache del dispositivo limpiado y sincronizado correctamente', 'success');
       } else {
         showNotification(result.message || 'Error al limpiar cache del dispositivo', 'error');
       }
       closePurgeModal();
-    } catch {
-      showNotification('Error al limpiar cache del dispositivo', 'error');
+    } catch (error: any) {
+      if (error?.response?.data?.status === 'QUEUED') {
+        showNotification('Comando de limpieza encolado — se ejecutará cuando el dispositivo reconecte', 'warning');
+        closePurgeModal();
+      } else {
+        showNotification('Error al limpiar cache del dispositivo', 'error');
+      }
     } finally {
       setPurging(false);
     }

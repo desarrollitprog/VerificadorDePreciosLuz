@@ -1496,6 +1496,22 @@ async def enviar_comando_a_dispositivo(
         for _ in range(COMMAND_TIMEOUT):
             await asyncio.sleep(1)
             
+            # 0. Detectar zombie: si el WS fue removido del device_map (desconexión), encolar inmediato
+            if tablet_ws_manager.device_map.get(device_id) is None:
+                logger.warning(f"[COMMAND] WebSocket de {device_id} se desconectó durante la espera, encolando {comando}...")
+                if pending_queue is not None:
+                    if comando == "REINICIAR":
+                        await pending_queue.set_pending_reboot(device_id, command_payload)
+                        asyncio.create_task(retry_reboot_with_device(device_id, command_payload))
+                    elif comando == "WIPE_AND_RESYNC":
+                        await pending_queue.set_pending_sync(device_id)
+                        asyncio.create_task(retry_sync_with_device(device_id))
+                return {
+                    "success": True,
+                    "status": "QUEUED",
+                    "message": f"Dispositivo {device_id} se desconectó, comando {comando} encolado para cuando reconecte",
+                }
+            
             # 1. Intentar obtener de Redis
             if command_acker:
                 redis_ack = await command_acker.get_confirmation(device_id, comando)
@@ -1537,9 +1553,9 @@ async def enviar_comando_a_dispositivo(
                     await pending_queue.set_pending_sync(device_id)
                     asyncio.create_task(retry_sync_with_device(device_id))
             return {
-                "success": False,
-                "status": "TIMEOUT",
-                "message": f"El dispositivo no confirmó el comando en {COMMAND_TIMEOUT} segundos",
+                "success": True,
+                "status": "QUEUED",
+                "message": f"Dispositivo no confirmó el comando en {COMMAND_TIMEOUT}s, {comando} encolado para cuando reconecte",
             }
         
         if status in ("RECEIVED", "COMPLETED", "SUCCESS", "DONE"):

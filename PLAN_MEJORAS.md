@@ -1348,6 +1348,152 @@ Resumen:  1 clic → 3 HTTP → 1 Redis pub/sub → WebSocket → purge en el ki
 
 ---
 
+## FASE 20: Panel Resumen — Dashboard Principal con KPIs y Gráficas
+
+*Prioridad: Alta | Objetivo: Reemplazar la pantalla de inicio del dashboard con un panel resumen unificado que muestre KPIs del sistema (servidores, dispositivos, archivos, usuarios) con gráficas en tiempo real.*
+
+### Problema Raíz
+
+El dashboard no tiene una vista unificada del estado del sistema:
+
+- Las métricas están dispersas en 5+ endpoints diferentes (`/status`, `/status-detalle`, `/banners`, `/usuarios`, `/alertas`)
+- No hay KPIs visibles sin navegar a páginas específicas
+- La landing page actual (`/`) es la lista de videos, no un resumen del sistema
+- Los usuarios ADMIN deben visitar 3-4 páginas distintas para entender el estado general
+- No existe ninguna visualización gráfica (charts) en toda la aplicación
+
+### Item 1: Endpoint agregador `GET /api/resumen`
+
+**Descripción**: Endpoint único en backend-dashboard que consolida todas las métricas del sistema en una sola respuesta JSON. Evita 5+ llamadas desde el frontend.
+
+**Datos que retorna**:
+
+| Campo | Fuente (BD) | Cálculo |
+|-------|-------------|---------|
+| `servidores.total` | `ServidorSecundario` | `COUNT(*)` |
+| `servidores.online` | `ServidorSecundario` | `ultimo_heartbeat > NOW() - 5min` |
+| `dispositivos.total` | `Dispositivo` | `COUNT(*)` |
+| `dispositivos.online` | `Dispositivo` | `online = True` |
+| `banners.total` | `Publicidad` | `COUNT(*)` |
+| `banners.activos` | `Publicidad` | `Activo = True AND FechaFin > NOW()` |
+| `banners.vencidos` | `Publicidad` | `FechaFin < NOW()` |
+| `usuarios.total` | `Usuario` | `COUNT(*)` |
+| `usuarios.activos` | `Usuario` | `activo = True` |
+| `servidores_detalle[]` | Join servidores + dispositivos | Por servidor: nombre, ip, online, almacenamiento usado/total, dispositivos total/online |
+| `banners_por_servidor[]` | `PublicidadAsignacion` | `GROUP BY servidor_id` con nombre |
+| `historial_subidas[]` | `Publicidad` | `GROUP BY DATE(UpdatedAt)` últimos 30 días |
+
+| # | Archivo | Cambio | Estado |
+|---|---------|--------|:------:|
+| 20.1.1 | `backend-dashboard/app/routes/resumen.py` | Crear nuevo archivo con GET /api/resumen → SQL queries agregadas + response model | ⏳ |
+| 20.1.2 | `backend-dashboard/app/main.py` | `include_router(resumen_router, prefix="/api")` | ⏳ |
+
+### Item 2: Instalación de Recharts
+
+**Descripción**: Agregar librería de gráficas al frontend. Se elige `recharts` por su API declarativa React y buena integración con Tailwind.
+
+| # | Archivo | Cambio | Estado |
+|---|---------|--------|:------:|
+| 20.2.1 | `dashboard/package.json` | `npm install recharts` → dependencia agregada | ⏳ |
+
+### Item 3: Servicio frontend `resumenService.ts`
+
+**Descripción**: Tipado TypeScript completo para la respuesta del endpoint + función `fetchResumen()` con tipado estricto.
+
+| # | Archivo | Cambio | Estado |
+|---|---------|--------|:------:|
+| 20.3.1 | `dashboard/services/resumenService.ts` | Crear: interfaces `ResumenData`, `ServidorResumen`, `BannersPorServidor`, `HistorialSubida` + `fetchResumen()` → `GET /api/resumen` | ⏳ |
+
+### Item 4: Componentes visuales del resumen
+
+**Descripción**: 5 componentes React que conforman las visualizaciones del panel.
+
+| # | Componente | Descripción | Tecnología |
+|---|-----------|-------------|-----------|
+| 20.4.1 | `KpiCard.tsx` | Tarjeta KPI con icono Lucide, contador animado (0→valor con requestAnimationFrame), label, subtítulo con desglose (ej. "8 online · 2 offline") | Tailwind + CSS animación |
+| 20.4.2 | `ServerStorageChart.tsx` | Barras horizontales de almacenamiento por servidor con umbral de color (verde <70%, amarillo <90%, rojo ≥90%) | Recharts `BarChart` layout="vertical" |
+| 20.4.3 | `DeviceStatusChart.tsx` | Donut online/offline con total en el centro | Recharts `PieChart` + `Label` |
+| 20.4.4 | `BannersTimeline.tsx` | Timeline de área con subidas de banners últimos 30 días | Recharts `AreaChart` con gradiente |
+| 20.4.5 | `ServerMiniTable.tsx` | Tabla compacta: servidor, estado online/offline, barra almacenamiento, dispositivos, videos | Tailwind puro (sin recharts) |
+
+| # | Archivos | Estado |
+|---|----------|:------:|
+| 20.4.1 | `dashboard/components/resumen/KpiCard.tsx` | ⏳ |
+| 20.4.2 | `dashboard/components/resumen/ServerStorageChart.tsx` | ⏳ |
+| 20.4.3 | `dashboard/components/resumen/DeviceStatusChart.tsx` | ⏳ |
+| 20.4.4 | `dashboard/components/resumen/BannersTimeline.tsx` | ⏳ |
+| 20.4.5 | `dashboard/components/resumen/ServerMiniTable.tsx` | ⏳ |
+
+### Item 5: Pantalla `ResumenScreen.tsx`
+
+**Descripción**: Orquestador del panel resumen. Layout en grid responsivo.
+
+**Layout**:
+```
+┌─────────────── KPIs (4 columnas → 2 → 1) ───────────────┐
+│  Servidores    │  Dispositivos  │  Archivos     │  Usuarios │
+├─────────────────────────┬────────────────────────────────┤
+│  DeviceStatusChart      │  ServerStorageChart            │
+│  (donut online/offline) │  (barras almacenamiento)       │
+├─────────────────────────┴────────────────────────────────┤
+│  BannersTimeline (área 30 días)                          │
+├─────────────────────────────────────────────────────────┤
+│  ServerMiniTable                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Comportamiento**:
+- Polling automático cada 60 segundos
+- Skeleton loading en carga inicial
+- Error state con botón "Reintentar"
+- Indicador "Última actualización: HH:mm:ss"
+- Animación stagger de entrada
+
+| # | Archivo | Cambio | Estado |
+|---|---------|--------|:------:|
+| 20.5.1 | `dashboard/screens/ResumenScreen.tsx` | Crear: orquestador con useEffect + setInterval 60s, grid layout, loading/error states | ⏳ |
+
+### Item 6: Migración de rutas
+
+**Descripción**: El panel resumen reemplaza la landing page `/`. La lista de videos se mueve a `/videos`.
+
+| # | Archivo | Cambio | Estado |
+|---|---------|--------|:------:|
+| 20.6.1 | `dashboard/App.tsx` | `/` → `<ResumenScreen />`, `/videos` → `<DashboardScreen />` | ⏳ |
+| 20.6.2 | `dashboard/components/Sidebar.tsx` | Agregar "Resumen" (LayoutDashboard) primero, cambiar "Mis Videos" a `/videos`, role: all | ⏳ |
+
+### Orden de implementación sugerido
+
+```
+Paso 1 (Backend endpoint)  → sin frontend, verificable con curl
+Paso 2 (Router main.py)    → 1 línea, depende de Paso 1
+Paso 3 (npm install)       → independiente
+Paso 4 (resumenService)    → depende de Paso 1+2
+Paso 5-9 (componentes)     → independientes entre sí, dependen de Paso 4
+Paso 10 (ResumenScreen)    → depende de Paso 5-9
+Paso 11 (rutas + sidebar)  → depende de Paso 10
+Paso 12 (documentación)    → último
+```
+
+### Archivos a modificar (resumen)
+
+| Archivo | Acción |
+|---------|--------|
+| `backend-dashboard/app/routes/resumen.py` | ✚ Nuevo — endpoint `GET /api/resumen` |
+| `backend-dashboard/app/main.py` | ✎ 2 líneas — import + include_router |
+| `dashboard/package.json` | ✎ Agregar `recharts` |
+| `dashboard/services/resumenService.ts` | ✚ Nuevo — tipado + fetchResumen() |
+| `dashboard/components/resumen/KpiCard.tsx` | ✚ Nuevo — KPI animado |
+| `dashboard/components/resumen/ServerStorageChart.tsx` | ✚ Nuevo — barras recharts |
+| `dashboard/components/resumen/DeviceStatusChart.tsx` | ✚ Nuevo — donut recharts |
+| `dashboard/components/resumen/BannersTimeline.tsx` | ✚ Nuevo — área recharts |
+| `dashboard/components/resumen/ServerMiniTable.tsx` | ✚ Nuevo — tabla compacta |
+| `dashboard/screens/ResumenScreen.tsx` | ✚ Nuevo — pantalla principal |
+| `dashboard/App.tsx` | ✎ Reemplazar ruta `/` + agregar `/videos` |
+| `dashboard/components/Sidebar.tsx` | ✎ Agregar "Resumen" + cambiar path "Mis Videos" |
+
+---
+
 ## Prioridades de Implementación (Pendientes)
 
 | Prioridad | Item | Fase | Dónde | Dependencias |
@@ -1364,6 +1510,7 @@ Resumen:  1 clic → 3 HTTP → 1 Redis pub/sub → WebSocket → purge en el ki
 | ⚪ **10** | Versión Objetivo (FASE 15.5) | FASE 15 Lote 5 | backend-api + luzapp | largo plazo |
 | 🟢 **11** | Dashboard trigger purge (19.2-19.4) | FASE 19 | backend-api + dashboard + luzapp | ✅ |
 | 🟢 **12** | Timer periódico Handler ScanActivity (19.1, 19.5) | FASE 19 | luzapp | ✅ |
+| 🟢 **13** | Panel Resumen Dashboard | FASE 20 | backend-dashboard + dashboard | recharts |
 
 ---
 
@@ -1379,4 +1526,5 @@ Resumen:  1 clic → 3 HTTP → 1 Redis pub/sub → WebSocket → purge en el ki
 | Cola Dashboard | 17 | 17/17 ✅ (100%) | 0/17 |
 | Bots Mantenimiento | 18 | 5/5 ✅ (100%) | 0/5 |
 | Limpieza Caché Luzapp | 19 | 0/5 (0%) | 5/5 |
-| **TOTAL** | **1-19** | **88/94 (94%)** | **6/94** |
+| Panel Resumen | 20 | 0/5 (0%) | 5/5 |
+| **TOTAL** | **1-20** | **88/99 (89%)** | **11/99** |

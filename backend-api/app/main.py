@@ -603,9 +603,11 @@ async def start_device_monitor():
     logger.info("Banner cleanup task iniciada")
 
     try:
-        from app.services.scheduler_notifications import SchedulerNotifications, scheduler_notifications as sn
+        from app.services.scheduler_notifications import SchedulerNotifications
+        import app.services.scheduler_notifications as sn_mod
         global scheduler_notifications
         scheduler_notifications = await SchedulerNotifications.create(ttl_seconds=7200)
+        sn_mod.scheduler_notifications = scheduler_notifications
         logger.info("SchedulerNotifications inicializado con Redis (TTL=2h)")
     except Exception as e:
         logger.warning(f"SchedulerNotifications no disponible: {e}")
@@ -1395,12 +1397,12 @@ async def enviar_comando_a_dispositivo(
 ):
     """
     Envía un comando a un dispositivo específico vía WebSocket.
-    Soporta: REINICIAR
+    Soporta: REINICIAR, WIPE_AND_RESYNC
     Espera confirmación del dispositivo (timeout 60s).
     """
     comando = body.comando.upper()
     
-    if comando not in ("REINICIAR",):
+    if comando not in ("REINICIAR", "WIPE_AND_RESYNC"):
         raise HTTPException(status_code=400, detail=f"Comando no soportado: {comando}")
     
     # Preparar payload para comandos programados
@@ -1512,9 +1514,13 @@ async def enviar_comando_a_dispositivo(
         
         if not status:
             logger.warning(f"[COMMAND] Timeout esperando confirmación para {device_id}")
-            if comando == "REINICIAR" and pending_queue is not None:
-                await pending_queue.set_pending_reboot(device_id, command_payload)
-                asyncio.create_task(retry_reboot_with_device(device_id, command_payload))
+            if pending_queue is not None:
+                if comando == "REINICIAR":
+                    await pending_queue.set_pending_reboot(device_id, command_payload)
+                    asyncio.create_task(retry_reboot_with_device(device_id, command_payload))
+                elif comando == "WIPE_AND_RESYNC":
+                    await pending_queue.set_pending_sync(device_id)
+                    asyncio.create_task(retry_sync_with_device(device_id))
             return {
                 "success": False,
                 "status": "TIMEOUT",
@@ -1528,9 +1534,13 @@ async def enviar_comando_a_dispositivo(
                 "message": f"Comando {comando} ejecutado correctamente",
             }
         else:
-            if comando == "REINICIAR" and pending_queue is not None:
-                await pending_queue.set_pending_reboot(device_id, command_payload)
-                asyncio.create_task(retry_reboot_with_device(device_id, command_payload))
+            if pending_queue is not None:
+                if comando == "REINICIAR":
+                    await pending_queue.set_pending_reboot(device_id, command_payload)
+                    asyncio.create_task(retry_reboot_with_device(device_id, command_payload))
+                elif comando == "WIPE_AND_RESYNC":
+                    await pending_queue.set_pending_sync(device_id)
+                    asyncio.create_task(retry_sync_with_device(device_id))
             return {
                 "success": False,
                 "status": status,

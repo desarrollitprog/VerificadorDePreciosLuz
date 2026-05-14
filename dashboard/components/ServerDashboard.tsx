@@ -8,6 +8,7 @@ import {
   renameServer,
   getDeviceContent,
   restartDevice,
+  purgeDevice,
   deleteDevice,
   deleteServer,
   scheduleRestart,
@@ -45,6 +46,10 @@ export function ServerDashboard() {
   // Modal de reinicio
   const [restartModal, setRestartModal] = useState<{ deviceId: string; deviceName: string } | null>(null);
   const [restarting, setRestarting] = useState(false);
+
+  // Modal de limpiar cache
+  const [purgeModal, setPurgeModal] = useState<{ deviceId: string; deviceName: string } | null>(null);
+  const [purging, setPurging] = useState(false);
 
   // Modal de eliminar dispositivo
   const [deleteDeviceModal, setDeleteDeviceModal] = useState<{ deviceId: string; deviceName: string } | null>(null);
@@ -263,6 +268,33 @@ export function ServerDashboard() {
       showNotification('Error al reiniciar dispositivo', 'error');
     } finally {
       setRestarting(false);
+    }
+  };
+
+  const openPurgeModal = (deviceId: string, deviceName: string) => {
+    setPurgeModal({ deviceId, deviceName });
+  };
+
+  const closePurgeModal = () => {
+    if (purging) return;
+    setPurgeModal(null);
+  };
+
+  const handlePurge = async () => {
+    if (!purgeModal) return;
+    setPurging(true);
+    try {
+      const result = await purgeDevice(purgeModal.deviceId);
+      if (result.success) {
+        showNotification('Cache del dispositivo limpiado y sincronizado correctamente', 'success');
+      } else {
+        showNotification(result.message || 'Error al limpiar cache del dispositivo', 'error');
+      }
+      closePurgeModal();
+    } catch {
+      showNotification('Error al limpiar cache del dispositivo', 'error');
+    } finally {
+      setPurging(false);
     }
   };
 
@@ -589,6 +621,13 @@ export function ServerDashboard() {
                                     Ver contenido
                                   </button>
                                   <button
+                                    onClick={() => openPurgeModal(d.device_id, d.nombre_mostrado || d.device_id)}
+                                    className="text-xs flex items-center gap-1 text-blue-600 hover:underline"
+                                  >
+                                    <RefreshCw size={12} />
+                                    Limpiar y Sincronizar
+                                  </button>
+                                  <button
                                     onClick={() => openRestartModal(d.device_id, d.nombre_mostrado || d.device_id)}
                                     className="text-xs flex items-center gap-1 text-amber-600 hover:underline"
                                   >
@@ -750,6 +789,39 @@ export function ServerDashboard() {
                   disabled={restarting}
                 >
                   {restarting ? 'Reiniciando...' : 'Reiniciar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de limpiar cache */}
+      {purgeModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={closePurgeModal}>
+          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800" onClick={e => e.stopPropagation()}>
+            <div className="p-6 text-center">
+              <div className="w-12 h-12 mx-auto bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mb-4">
+                <RefreshCw size={24} className="text-blue-600" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Limpiar y Sincronizar</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+                ¿Estás seguro de limpiar el cache de <span className="font-medium text-slate-900 dark:text-white">{purgeModal.deviceName}</span>? Se eliminarán todos los banners descargados y se volverán a descargar.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={closePurgeModal}
+                  className="flex-1 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  disabled={purging}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handlePurge}
+                  className="flex-1 px-4 py-2 rounded-lg bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 disabled:opacity-50"
+                  disabled={purging}
+                >
+                  {purging ? 'Limpiando...' : 'Limpiar'}
                 </button>
               </div>
             </div>

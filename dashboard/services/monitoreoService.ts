@@ -200,6 +200,11 @@ export async function restartDevice(deviceId: string): Promise<{ success: boolea
   return response.data as { success: boolean; message: string };
 }
 
+export async function purgeDevice(deviceId: string): Promise<{ success: boolean; message: string }> {
+  const response = await api.post(`/dispositivos/${encodeURIComponent(deviceId)}/purge`);
+  return response.data as { success: boolean; message: string };
+}
+
 export async function deleteDevice(deviceId: string): Promise<{ success: boolean; message: string }> {
   const response = await api.delete(`/dispositivos/${encodeURIComponent(deviceId)}`);
   return response.data as { success: boolean; message: string };

@@ -333,6 +333,34 @@ async def send_banner_notification_robust(banner: Publicidad, target_device_ids:
             await _send_to_device_robust(device_id, banner_info)
 
 
+async def _execute_banner_notification(banner, target_device_ids, command: str):
+    """Entrega un banner usando batch (BANNER_INICIADO) o directo (BANNER_FINALIZADO).
+    
+    Mantiene la lógica de envío centralizada para que schedule_banner_notification
+    y la recuperación post-reinicio compartan el mismo código.
+    """
+    if command == "BANNER_INICIADO" and banner_batch_manager is not None:
+        try:
+            banner_info = {
+                "banner_id": banner.id,
+                "titulo": banner.titulo,
+                "url": banner.url,
+                "tipo": banner.tipo,
+                "device_ids": target_device_ids,
+                "fecha_inicio": banner.fecha_inicio.isoformat() if banner.fecha_inicio else None,
+                "fecha_fin": banner.fecha_fin.isoformat() if banner.fecha_fin else None,
+            }
+            is_coordinator = await banner_batch_manager.accumulate(banner_info)
+            if is_coordinator:
+                asyncio.create_task(_delayed_batch_flush())
+            logger.info(f"Notificación de inicio acumulada para banner {banner.id}")
+        except Exception as e:
+            logger.error(f"Error acumulando banner {banner.id} en lote, enviando directo: {e}")
+            await send_banner_notification_robust(banner, target_device_ids, command)
+    else:
+        await send_banner_notification_robust(banner, target_device_ids, command)
+
+
 async def schedule_banner_notification(
     banner_id: int,
     device_ids: str | None,
@@ -381,29 +409,7 @@ async def schedule_banner_notification(
                         target_device_ids = None
                         if banner.device_ids:
                             target_device_ids = [d.strip() for d in banner.device_ids.split(",") if d.strip()]
-                        
-                        # Acumular en lote en vez de enviar inmediato
-                        if banner_batch_manager is not None:
-                            try:
-                                banner_info = {
-                                    "banner_id": banner.id,
-                                    "titulo": banner.titulo,
-                                    "url": banner.url,
-                                    "tipo": banner.tipo,
-                                    "device_ids": target_device_ids,
-                                    "fecha_inicio": banner.fecha_inicio.isoformat() if banner.fecha_inicio else None,
-                                    "fecha_fin": banner.fecha_fin.isoformat() if banner.fecha_fin else None,
-                                }
-                                is_coordinator = await banner_batch_manager.accumulate(banner_info)
-                                if is_coordinator:
-                                    asyncio.create_task(_delayed_batch_flush())
-                                logger.info(f"Notificación de inicio acumulada para banner {banner_id}")
-                            except Exception as e:
-                                logger.error(f"Error acumulando banner {banner_id} en lote, enviando directo: {e}")
-                                await send_banner_notification_robust(banner, target_device_ids, "BANNER_INICIADO")
-                        else:
-                            await send_banner_notification_robust(banner, target_device_ids, "BANNER_INICIADO")
-                        
+                        await _execute_banner_notification(banner, target_device_ids, "BANNER_INICIADO")
                         notified_banners_start.add(banner_id)
                     await remove_pending_notification(banner_id, "BANNER_INICIADO")
                     break
@@ -444,7 +450,7 @@ async def schedule_banner_notification(
                         target_device_ids = None
                         if banner.device_ids:
                             target_device_ids = [d.strip() for d in banner.device_ids.split(",") if d.strip()]
-                        await send_banner_notification_robust(banner, target_device_ids, "BANNER_FINALIZADO")
+                        await _execute_banner_notification(banner, target_device_ids, "BANNER_FINALIZADO")
                         notified_banners_end.add(banner_id)
                         logger.info(f"Notificación de fin enviada para banner {banner_id}")
                     await remove_pending_notification(banner_id, "BANNER_FINALIZADO")
@@ -479,6 +485,79 @@ async def _delayed_batch_flush():
         pass
     except Exception as e:
         logger.error("[BANNER_BATCH] Error en flush: %s", e)
+
+
+async def _recover_pending_scheduler_notifications():
+    """Re-programa notificaciones pendientes que no sobrevivieron al reinicio."""
+    try:
+        from app.services.scheduler_notifications import get_all_pending_notifications
+        pending = await get_all_pending_notifications()
+    except Exception as e:
+        logger.error("[RECOVERY] Error obteniendo notificaciones: %s", e)
+        return
+
+    if not pending:
+        logger.info("[RECOVERY] No hay notificaciones pendientes por recuperar")
+        return
+
+    now = get_venezuela_now()
+    recovered = 0
+    expired = 0
+
+    for notif in pending:
+        banner_id = notif["banner_id"]
+        command = notif["command"]
+        scheduled_at_str = notif.get("scheduled_at")
+        if not scheduled_at_str:
+            continue
+
+        try:
+            scheduled_at = datetime.fromisoformat(scheduled_at_str)
+            if scheduled_at.tzinfo is None:
+                scheduled_at = scheduled_at.replace(tzinfo=timezone(timedelta(hours=-4)))
+        except Exception:
+            continue
+
+        delay = (scheduled_at - now).total_seconds()
+
+        if delay > 0:
+            logger.info(f"[RECOVERY] Reprogramando {command} banner {banner_id} en {delay:.1f}s")
+            asyncio.create_task(schedule_banner_notification(
+                banner_id=banner_id,
+                device_ids=notif.get("device_ids"),
+                titulo=notif.get("titulo"),
+                url=notif.get("url"),
+                tipo=notif.get("tipo"),
+                fecha_inicio=datetime.fromisoformat(notif["fecha_inicio"]) if notif.get("fecha_inicio") else None,
+                fecha_fin=datetime.fromisoformat(notif["fecha_fin"]) if notif.get("fecha_fin") else None,
+            ))
+            recovered += 1
+
+        elif delay > -300:
+            logger.info(f"[RECOVERY] Ejecutando {command} banner {banner_id} inmediato (retraso {-delay:.1f}s)")
+            async for db in get_db_publicidad():
+                result = await db.execute(select(Publicidad).where(Publicidad.id == banner_id))
+                banner = result.scalars().first()
+                if banner and banner.activo:
+                    target_device_ids = None
+                    raw_ids = notif.get("device_ids")
+                    if raw_ids:
+                        target_device_ids = [d.strip() for d in raw_ids.split(",") if d.strip()]
+                    await _execute_banner_notification(banner, target_device_ids, command)
+                    if command == "BANNER_INICIADO":
+                        notified_banners_start.add(banner_id)
+                    elif command == "BANNER_FINALIZADO":
+                        notified_banners_end.add(banner_id)
+                await remove_pending_notification(banner_id, command)
+                break
+            recovered += 1
+
+        else:
+            logger.info(f"[RECOVERY] {command} banner {banner_id} vencido ({-delay:.1f}s), limpiando")
+            await remove_pending_notification(banner_id, command)
+            expired += 1
+
+    logger.info(f"[RECOVERY] Recuperadas: {recovered}, expiradas: {expired}")
 
 
 @app.on_event("startup")
@@ -548,6 +627,29 @@ async def start_device_monitor():
         logger.info("BannerBatchManager inicializado con Redis (batch_window=5s)")
     except Exception as e:
         logger.warning(f"BannerBatchManager no disponible: {e}")
+
+    # Recuperar notificaciones programadas que no sobrevivieron al reinicio
+    try:
+        await _recover_pending_scheduler_notifications()
+    except Exception as e:
+        logger.error(f"[RECOVERY] Error en _recover_pending_scheduler_notifications: {e}")
+
+    # Recuperar banners acumulados en batch cuyo coordinator murió
+    if banner_batch_manager is not None:
+        try:
+            stale_banners = await banner_batch_manager.recover_pending_batch()
+            if stale_banners:
+                msg = {"command": "BANNER_LIST", "banners": stale_banners}
+                await tablet_ws_manager.broadcast(msg)
+                if device_command_bus is not None:
+                    await device_command_bus.publish_command(
+                        device_id="*",
+                        command="BANNER_LIST",
+                        payload=msg,
+                    )
+                logger.info(f"[RECOVERY] Batch pendiente recuperado: {len(stale_banners)} banners")
+        except Exception as e:
+            logger.error(f"[RECOVERY] Error recuperando batch pendiente: {e}")
 
 
 @app.on_event("shutdown")

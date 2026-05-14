@@ -87,5 +87,41 @@ class BannerBatchManager:
 
         return banners
 
+    async def recover_pending_batch(self) -> list[dict]:
+        """Recupera banners acumulados cuyo coordinator murió por reinicio.
+
+        Si el coordinator key no existe (TTL expiró) y hay banners en la lista,
+        los lee y limpia para que el caller pueda flushearlos inmediato.
+        Si existe coordinator, otro worker está a cargo — retorna vacío.
+        """
+        coord_exists = await self.redis.exists(self.COORD_KEY)
+        if coord_exists:
+            return []
+
+        list_len = await self.redis.llen(self.PENDING_KEY)
+        if list_len == 0:
+            return []
+
+        pipe = self.redis.pipeline()
+        pipe.lrange(self.PENDING_KEY, 0, -1)
+        pipe.delete(self.PENDING_KEY)
+        pipe.delete(self.COORD_KEY)
+        results = await pipe.execute()
+
+        raw_list: list[str] = results[0]
+        banners = []
+        for raw in raw_list:
+            try:
+                banners.append(json.loads(raw))
+            except json.JSONDecodeError:
+                pass
+
+        if banners:
+            logger.info(
+                "[BANNER_BATCH] Batch huérfano recuperado: %d banners",
+                len(banners),
+            )
+        return banners
+
 
 banner_batch_manager: BannerBatchManager | None = None

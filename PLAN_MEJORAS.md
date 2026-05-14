@@ -1198,6 +1198,156 @@ El sistema no tiene **ningún** job de limpieza automática. Datos que crecen si
 
 ---
 
+## FASE 19: Limpieza de Caché en Luzapp (PurgeWorker + Dashboard Trigger)
+
+*Prioridad: Media | Objetivo: Evitar acumulación de archivos basura en kioskos 3nstar (K10-A7 8GB, K10-A11 16GB).*
+
+### Especificaciones del hardware objetivo
+
+| Modelo | Almacenamiento | Disponible real | Android | WorkManager |
+|--------|---------------|-----------------|---------|-------------|
+| **K10-A7** | 8GB eMMC | ~3-4GB libres | **7.0** | **No confiable** — ROM 3nstar suele matar Google Play Services / JobScheduler |
+| **K10-A11** | 16GB eMMC | ~8-10GB libres | 10.0 | Confiable |
+
+### Análisis de Rentabilidad
+
+**Escenario:** Borrar periódicamente archivos acumulados (`banners/`, `videos/`, `banners_meta.json`, backups JSON + SQLite) para que la app empiece de 0 sin caché.
+
+**Estimación de basura acumulada en un K10-A7 tras 6 meses sin limpieza:**
+
+| Item | Tamaño | Cantidad típica | Total |
+|------|--------|----------------|-------|
+| Banners imagen | ~500KB | 20-40 | 10-20MB |
+| Banners video | ~10MB | 5-10 | 50-100MB |
+| Backups JSON (productos, precios, ofertas) | ~5-15MB c/u | 9 archivos | 45-135MB |
+| SQLite backup index | ~10-50MB | 1 DB | 10-50MB |
+| **Total** | | | **115-305MB** |
+
+En un K10-A7 con 3-4GB libres: **115-305MB = 3-10% del espacio disponible**. Esto sí es relevante.
+
+**Factores en contra:**
+
+| Factor | Detalle |
+|--------|---------|
+| **App ya limpia metadata** | `cleanupExpiredBanners()` elimina banners vencidos del JSON al sincronizar |
+| **Backend ya limpia archivos huérfanos** | Bots 3 y 5 (FASE 18) limpian archivos no referenciados cada 24h en servidores, **no en el dispositivo** |
+| **Banners expiran naturalmente** | El archivo físico en disco del dispositivo **NO se borra** aunque el banner esté vencido — solo se elimina del metadata |
+| **Costo de redescarga** | Purga + redescarga consume datos móviles y batería. En kioskos 3nstar con plan limitado, hay que considerar frecuencia |
+| **Riesgo race condition** | Si el purge corre mientras el carrusel reproduce, puede causar flicker |
+
+**Factores a favor:**
+
+| Factor | Detalle |
+|--------|---------|
+| **K10-A7 solo 3-4GB libres** | 300MB de basura = 10% del espacio. En un kiosko que nunca se limpia, en 1 año podría llenar el disco |
+| **No hay usuario que limpie** | Kiosko autónomo y sin mantenimiento — nadie borra archivos manualmente |
+| **WorkManager no confiable en Android 7** | En ROM 3nstar K10-A7, `PeriodicWorkRequest` puede no ejecutarse. Alternativa: `Handler.postDelayed()` inline (mismo patrón que `scheduleDolarBCVRefresh()` en `ScanActivity.kt:967`) |
+| **Backups también acumulan** | Productos/precios/ofertas de meses pasados siguen en disco ocupando espacio aunque ya no apliquen |
+| **Archivos físicos de banners vencidos no se borran** | `cleanupExpiredBanners()` solo limpia el JSON metadata. El archivo `.mp4` o `.jpg` en `filesDir/banners/` **sigue ahí para siempre** |
+| **Dashboard no tiene control** | Hoy el admin no puede forzar un `WIPE_AND_RESYNC` desde el panel |
+| **Soporte técnico** | Forzar purge remoto evita enviar un técnico al kiosko cuando un banner no se actualiza |
+
+**Veredicto:**
+
+Con el hardware real (K10-A7 8GB + Android 7 + kioskos sin mantenimiento humano), **todos los items de FASE 19 son de rentabilidad Alta**. El almacenamiento es ajustado, los archivos físicos de banners vencidos nunca se limpian solos, y WorkManager no es confiable en Android 7.
+
+### Tareas Propuestas
+
+| # | Tarea | Rentabilidad | Enfoque | Nota |
+|---|-------|:------------:|---------|------|
+| 19.1 | Timer periódico en `ScanActivity` vía `Handler.postDelayed()` (cada 15-30 días) | 🟢 Alta | Borra banners + videos + backups JSON + SQLite. Sin WorkManager para compatibilidad K10-A7 | Mismo patrón que `scheduleDolarBCVRefresh()` |
+| 19.2 | Agregar `"WIPE_AND_RESYNC"` a comandos permitidos en backend-api | 🟢 Alta | `main.py:1297` — 1 línea | Habilita el comando desde el dashboard |
+| 19.3 | Endpoint `POST /dispositivos/{id}/purge` en backend-dashboard | 🟢 Alta | Mismo patrón que `reiniciar_dispositivo` | Proxy a backend-api |
+| 19.4 | Botón "Forzar purga" en dashboard React | 🟢 Alta | Modal confirmación + notificación toast | Misma UX que el botón Reiniciar |
+| 19.5 | Vincular timer de 19.1 en `ScanActivity.onCreate()` | 🟢 Alta | 1-2 líneas | Inicia el contador de 15-30 días |
+
+### Flujo completo del dashboard trigger
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│ DASHBOARD (React)                                                        │
+│                                                                          │
+│  Admin hace clic en "Forzar Purga"                                      │
+│  Modal: "¿Estás seguro de purgar Dispositivo X?"                       │
+│       │                                                                  │
+│       ▼                                                                  │
+│  POST /api/dispositivos/{device_id}/purge                                │
+│  (axios → monitoreoService.purgeDevice)                                  │
+└──────────────────────┬───────────────────────────────────────────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│ BACKEND-DASHBOARD (FastAPI)                                              │
+│                                                                          │
+│  routes/monitoreo/devices.py:                                            │
+│    @router.post("/dispositivos/{id}/purge")                              │
+│    → busca el dispositivo en BD                                          │
+│    → obtiene ip del servidor asociado                                    │
+│    → llama a device_service.purge_device()                               │
+│                                                                          │
+│  services/device_service.py:                                             │
+│    async def purge_device():                                             │
+│      POST http://{servidor_ip}:8000/api/comandos/{device_id}            │
+│      json = {"comando": "WIPE_AND_RESYNC", "command_id": uuid}          │
+└──────────────────────┬───────────────────────────────────────────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│ BACKEND-API (FastAPI - corre en el servidor secundario)                 │
+│                                                                          │
+│  main.py: POST /api/comandos/{device_id}                                 │
+│    → valida comando en ("REINICIAR", "WIPE_AND_RESYNC")                  │
+│    → genera command_id                                                   │
+│    → publica en Redis pub/sub:                                           │
+│        device_command_bus.publish_command(                               │
+│          device_id, "WIPE_AND_RESYNC", payload                           │
+│        )                                                                 │
+│    → espera confirmación del dispositivo (polling 60s)                   │
+│      ● Si el dispositivo está online: lo recibe y ejecuta               │
+│      ● Si está offline: PendingQueue lo encola en Redis                  │
+│        (device:queue:{id}) y se reenvía al reconectar                   │
+│    → retorna {"success": true/false, "status": "SUCCESS"/"TIMEOUT"...}  │
+└──────────────────────┬───────────────────────────────────────────────────┘
+                       │
+                       ▼ (Redis pub/sub)
+┌──────────────────────────────────────────────────────────────────────────┐
+│ LUZAPP (Android - en el kiosko)                                         │
+│                                                                          │
+│  ScanActivity - WebSocket onMessage:                                     │
+│    {"command": "WIPE_AND_RESYNC", "command_id": "uuid"}                  │
+│       │                                                                  │
+│       ▼                                                                  │
+│  Procesa el comando:                                                     │
+│    1. Pausa el carrusel de banners (stopStandbyCarousel)                 │
+│    2. Llama a ejecutarPurgaTotal():                                      │
+│       a. Borra banners/ Directorio físico completo                       │
+│       b. Borra videos/ Directorio físico completo                       │
+│       c. Solicita manifiesto actualizado al backend (GET /banners)      │
+│       d. Descarga todos los banners del manifiesto                      │
+│          (imágenes: delay 1.5s, videos: delay 8s entre cada uno)        │
+│       e. Guarda banners_meta.json con los nuevos items                   │
+│    3. Si la purga fue exitosa → reinicia el carrusel                     │
+│    4. Envía confirmación al backend (WebSocket CONFIRMATION)            │
+│       {"type": "CONFIRMATION", "command": "WIPE_AND_RESYNC",            │
+│        "device_id": "...", "status": "SUCCESS", "command_id": "..."}    │
+└──────────────────────────────────────────────────────────────────────────┘
+
+Resumen:  1 clic → 3 HTTP → 1 Redis pub/sub → WebSocket → purge en el kiosko ~3-5 min
+```
+
+### Archivos a modificar
+
+| Archivo | Acción |
+|---------|--------|
+| `luzapp/.../ui/scanner/ScanActivity.kt` | ✎ Agregar `Handler.postDelayed()` timer + inline cleanup cada 15-30 días |
+| `backend-api/app/main.py:1297` | ✎ 1 línea: agregar `"WIPE_AND_RESYNC"` a tupla de comandos |
+| `backend-dashboard/app/services/device_service.py` | ✎ Nueva función `purge_device()` (igual que `reboot_device()` pero con comando `WIPE_AND_RESYNC`) |
+| `backend-dashboard/app/routes/monitoreo/devices.py` | ✎ Nuevo endpoint `POST /dispositivos/{id}/purge` |
+| `dashboard/services/monitoreoService.ts` | ✎ Nueva función `purgeDevice(deviceId)` |
+| `dashboard/components/ServerDashboard.tsx` | ✎ Botón "Forzar purga" + modal confirmación |
+
+---
+
 ## Prioridades de Implementación (Pendientes)
 
 | Prioridad | Item | Fase | Dónde | Dependencias |
@@ -1212,6 +1362,8 @@ El sistema no tiene **ningún** job de limpieza automática. Datos que crecen si
 | 🟢 **8** | Backups SQL Server (manual) | FASE 5.1 | servidor | — |
 | 🟢 **9** | Docker multi-stage build | FASE 5.3 | Dockerfile | ✅ |
 | ⚪ **10** | Versión Objetivo (FASE 15.5) | FASE 15 Lote 5 | backend-api + luzapp | largo plazo |
+| 🟢 **11** | Dashboard trigger purge (19.2-19.4) | FASE 19 | backend-api + dashboard + luzapp | ✅ |
+| 🟢 **12** | Timer periódico Handler ScanActivity (19.1, 19.5) | FASE 19 | luzapp | ✅ |
 
 ---
 
@@ -1226,4 +1378,5 @@ El sistema no tiene **ningún** job de limpieza automática. Datos que crecen si
 | Blindaje WebSocket | 15 | 17/17 ✅ (100%) | 0/17 |
 | Cola Dashboard | 17 | 17/17 ✅ (100%) | 0/17 |
 | Bots Mantenimiento | 18 | 5/5 ✅ (100%) | 0/5 |
-| **TOTAL** | **1-18** | **88/89 (99%)** | **1/89** |
+| Limpieza Caché Luzapp | 19 | 0/5 (0%) | 5/5 |
+| **TOTAL** | **1-19** | **88/94 (94%)** | **6/94** |

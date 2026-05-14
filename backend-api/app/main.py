@@ -384,19 +384,23 @@ async def schedule_banner_notification(
                         
                         # Acumular en lote en vez de enviar inmediato
                         if banner_batch_manager is not None:
-                            banner_info = {
-                                "banner_id": banner.id,
-                                "titulo": banner.titulo,
-                                "url": banner.url,
-                                "tipo": banner.tipo,
-                                "device_ids": target_device_ids,
-                                "fecha_inicio": banner.fecha_inicio.isoformat() if banner.fecha_inicio else None,
-                                "fecha_fin": banner.fecha_fin.isoformat() if banner.fecha_fin else None,
-                            }
-                            is_coordinator = await banner_batch_manager.accumulate(banner_info)
-                            if is_coordinator:
-                                asyncio.create_task(_delayed_batch_flush())
-                            logger.info(f"Notificación de inicio acumulada para banner {banner_id}")
+                            try:
+                                banner_info = {
+                                    "banner_id": banner.id,
+                                    "titulo": banner.titulo,
+                                    "url": banner.url,
+                                    "tipo": banner.tipo,
+                                    "device_ids": target_device_ids,
+                                    "fecha_inicio": banner.fecha_inicio.isoformat() if banner.fecha_inicio else None,
+                                    "fecha_fin": banner.fecha_fin.isoformat() if banner.fecha_fin else None,
+                                }
+                                is_coordinator = await banner_batch_manager.accumulate(banner_info)
+                                if is_coordinator:
+                                    asyncio.create_task(_delayed_batch_flush())
+                                logger.info(f"Notificación de inicio acumulada para banner {banner_id}")
+                            except Exception as e:
+                                logger.error(f"Error acumulando banner {banner_id} en lote, enviando directo: {e}")
+                                await send_banner_notification_robust(banner, target_device_ids, "BANNER_INICIADO")
                         else:
                             await send_banner_notification_robust(banner, target_device_ids, "BANNER_INICIADO")
                         

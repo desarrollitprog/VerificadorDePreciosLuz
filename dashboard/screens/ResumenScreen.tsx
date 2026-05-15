@@ -76,7 +76,7 @@ export const ResumenScreen: React.FC = () => {
       </div>
 
       {loading && !data && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-4 gap-4">
           <KpiCard icon={Server} label="Sedes" value={0} subtitle="" color="cyan" loading />
           <KpiCard icon={Smartphone} label="Dispositivos" value={0} subtitle="" color="emerald" loading />
           <KpiCard icon={Film} label="Archivos" value={0} subtitle="" color="violet" loading />
@@ -86,7 +86,7 @@ export const ResumenScreen: React.FC = () => {
 
       {data && (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 stagger-1">
+          <div className="grid grid-cols-4 gap-4 stagger-1">
             <KpiCard
               icon={Server}
               label="Sedes"

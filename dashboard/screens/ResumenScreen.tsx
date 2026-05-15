@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { RefreshCw, Server, Smartphone, Film, Users, AlertCircle, AlertTriangle, Radio } from 'lucide-react';
+import { RefreshCw, Server, Smartphone, Film, Users, AlertCircle } from 'lucide-react';
 import { fetchResumen, ResumenData } from '../services/resumenService';
 import { getUserRole } from '../services/tokenUtils';
 import KpiCard from '../components/resumen/KpiCard';
@@ -80,8 +80,6 @@ export const ResumenScreen: React.FC = () => {
           <KpiCard icon={Server} label="Sedes" value={0} subtitle="" color="cyan" loading />
           <KpiCard icon={Smartphone} label="Dispositivos" value={0} subtitle="" color="emerald" loading />
           <KpiCard icon={Film} label="Archivos" value={0} subtitle="" color="violet" loading />
-          <KpiCard icon={AlertTriangle} label="Alertas" value={0} subtitle="" color="amber" loading />
-          <KpiCard icon={Radio} label="En reproducción" value={0} subtitle="" color="cyan" loading />
           {role === 'ADMIN' && <KpiCard icon={Users} label="Usuarios" value={0} subtitle="" color="amber" loading />}
         </div>
       )}
@@ -121,31 +119,6 @@ export const ResumenScreen: React.FC = () => {
               value={data.banners.total}
               subtitle={`${data.banners.programados} programados · ${data.banners.vencidos} vencidos`}
               color="violet"
-            />
-            <KpiCard
-              icon={AlertTriangle}
-              label="Alertas"
-              value={(() => { const c = data.servidores_detalle.filter(s => s.porcentaje_uso > 90).length; return c; })()}
-              subtitle={
-                (() => {
-                  const c = data.servidores_detalle.filter(s => s.porcentaje_uso > 90).length;
-                  return c > 0
-                    ? <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-500" />{c} sede{c !== 1 ? 's' : ''} al límite</span>
-                    : <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-green-500" />Sin alertas</span>;
-                })()
-              }
-              color={data.servidores_detalle.filter(s => s.porcentaje_uso > 90).length > 0 ? 'amber' : 'emerald'}
-            />
-            <KpiCard
-              icon={Radio}
-              label="En reproducción"
-              value={data.banners.reproduciendose}
-              subtitle={
-                <span className="inline-flex items-center gap-1">
-                  {data.banners.reproduciendose} banners activos ahora
-                </span>
-              }
-              color="cyan"
             />
             {role === 'ADMIN' && (
               <KpiCard

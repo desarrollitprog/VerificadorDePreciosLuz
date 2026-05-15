@@ -161,38 +161,6 @@
         -webkit-text-fill-color: transparent;
         background-clip: text;
       }
-
-      /* Shimmer skeleton loading */
-      @keyframes shimmer {
-        0% { background-position: -200% 0; }
-        100% { background-position: 200% 0; }
-      }
-      .skeleton-shimmer {
-        background: linear-gradient(
-          90deg,
-          transparent 0%,
-          rgba(255, 255, 255, 0.06) 50%,
-          transparent 100%
-        );
-        background-size: 200% 100%;
-        animation: shimmer 1.5s ease-in-out infinite;
-      }
-      .dark .skeleton-shimmer {
-        background: linear-gradient(
-          90deg,
-          transparent 0%,
-          rgba(255, 255, 255, 0.08) 50%,
-          transparent 100%
-        );
-        background-size: 200% 100%;
-        animation: shimmer 1.5s ease-in-out infinite;
-      }
-
-      /* Card hover glow accent */
-      .card-glow-cyan:hover { box-shadow: 0 0 20px rgba(34, 211, 238, 0.15), 0 20px 25px -5px rgba(0, 0, 0, 0.4); }
-      .card-glow-emerald:hover { box-shadow: 0 0 20px rgba(16, 185, 129, 0.15), 0 20px 25px -5px rgba(0, 0, 0, 0.4); }
-      .card-glow-violet:hover { box-shadow: 0 0 20px rgba(139, 92, 246, 0.15), 0 20px 25px -5px rgba(0, 0, 0, 0.4); }
-      .card-glow-amber:hover { box-shadow: 0 0 20px rgba(245, 158, 11, 0.15), 0 20px 25px -5px rgba(0, 0, 0, 0.4); }
     </style>
   <link rel="stylesheet" href="/index.css">
 </head>

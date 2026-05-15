@@ -1451,25 +1451,16 @@ async def enviar_comando_a_dispositivo(
             all_status = await device_state_store.get_all_status()
             is_online = all_status.get(device_id, {}).get("online", False)
             if not is_online:
-                logger.warning(f"[COMMAND] Dispositivo {device_id} no registrado o desconectado, encolando {comando}...")
-                # Publicar vía Redis bus (por si conecta durante la llamada)
+                logger.warning(f"[COMMAND] Dispositivo {device_id} no registrado o desconectado, publicando {comando}...")
                 await device_command_bus.publish_command(
                     device_id=device_id,
                     command=comando,
                     payload=command_payload,
                 )
-                # Setear flag persistente + retry
-                if pending_queue is not None:
-                    if comando == "REINICIAR":
-                        await pending_queue.set_pending_reboot(device_id, command_payload)
-                        asyncio.create_task(retry_reboot_with_device(device_id, command_payload))
-                    elif comando == "WIPE_AND_RESYNC":
-                        await pending_queue.set_pending_sync(device_id)
-                        asyncio.create_task(retry_sync_with_device(device_id))
                 return {
                     "success": True,
                     "status": "QUEUED",
-                    "message": f"Dispositivo {device_id} offline, comando {comando} encolado para cuando se reconecte",
+                    "message": f"Dispositivo {device_id} offline, comando {comando} publicado para cuando reconecte",
                 }
             logger.info(f"[COMMAND] Dispositivo {device_id} encontrado en Redis (otro servidor)")
         else:
@@ -1496,20 +1487,13 @@ async def enviar_comando_a_dispositivo(
         for _ in range(COMMAND_TIMEOUT):
             await asyncio.sleep(1)
             
-            # 0. Detectar zombie: si el WS fue removido del device_map (desconexión), encolar inmediato
+            # 0. Detectar zombie: bus listener ya gestionó el comando vía send_to_device
             if tablet_ws_manager.device_map.get(device_id) is None:
-                logger.warning(f"[COMMAND] WebSocket de {device_id} se desconectó durante la espera, encolando {comando}...")
-                if pending_queue is not None:
-                    if comando == "REINICIAR":
-                        await pending_queue.set_pending_reboot(device_id, command_payload)
-                        asyncio.create_task(retry_reboot_with_device(device_id, command_payload))
-                    elif comando == "WIPE_AND_RESYNC":
-                        await pending_queue.set_pending_sync(device_id)
-                        asyncio.create_task(retry_sync_with_device(device_id))
+                logger.warning(f"[COMMAND] WebSocket de {device_id} se desconectó durante la espera")
                 return {
                     "success": True,
                     "status": "QUEUED",
-                    "message": f"Dispositivo {device_id} se desconectó, comando {comando} encolado para cuando reconecte",
+                    "message": f"Dispositivo {device_id} se desconectó, comando {comando} será entregado cuando reconecte",
                 }
             
             # 1. Intentar obtener de Redis
@@ -1545,17 +1529,10 @@ async def enviar_comando_a_dispositivo(
         
         if not status:
             logger.warning(f"[COMMAND] Timeout esperando confirmación para {device_id}")
-            if pending_queue is not None:
-                if comando == "REINICIAR":
-                    await pending_queue.set_pending_reboot(device_id, command_payload)
-                    asyncio.create_task(retry_reboot_with_device(device_id, command_payload))
-                elif comando == "WIPE_AND_RESYNC":
-                    await pending_queue.set_pending_sync(device_id)
-                    asyncio.create_task(retry_sync_with_device(device_id))
             return {
                 "success": True,
                 "status": "QUEUED",
-                "message": f"Dispositivo no confirmó el comando en {COMMAND_TIMEOUT}s, {comando} encolado para cuando reconecte",
+                "message": f"Dispositivo no confirmó el comando en {COMMAND_TIMEOUT}s, {comando} se entregará cuando reconecte",
             }
         
         if status in ("RECEIVED", "COMPLETED", "SUCCESS", "DONE"):
@@ -1565,13 +1542,6 @@ async def enviar_comando_a_dispositivo(
                 "message": f"Comando {comando} ejecutado correctamente",
             }
         else:
-            if pending_queue is not None:
-                if comando == "REINICIAR":
-                    await pending_queue.set_pending_reboot(device_id, command_payload)
-                    asyncio.create_task(retry_reboot_with_device(device_id, command_payload))
-                elif comando == "WIPE_AND_RESYNC":
-                    await pending_queue.set_pending_sync(device_id)
-                    asyncio.create_task(retry_sync_with_device(device_id))
             return {
                 "success": False,
                 "status": status,

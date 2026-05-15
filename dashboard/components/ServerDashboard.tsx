@@ -258,14 +258,21 @@ export function ServerDashboard() {
     setRestarting(true);
     try {
       const result = await restartDevice(restartModal.deviceId);
-      if (result.success) {
+      if (result.success && result.status === 'QUEUED') {
+        showNotification('Comando de reinicio encolado — se ejecutará cuando el dispositivo reconecte', 'warning');
+      } else if (result.success) {
         showNotification('Dispositivo reiniciado correctamente', 'success');
       } else {
         showNotification(result.message || 'Error al reiniciar dispositivo', 'error');
       }
       closeRestartModal();
-    } catch {
-      showNotification('Error al reiniciar dispositivo', 'error');
+    } catch (error: any) {
+      if (error?.response?.data?.status === 'QUEUED') {
+        showNotification('Comando de reinicio encolado — se ejecutará cuando el dispositivo reconecte', 'warning');
+        closeRestartModal();
+      } else {
+        showNotification('Error al reiniciar dispositivo', 'error');
+      }
     } finally {
       setRestarting(false);
     }

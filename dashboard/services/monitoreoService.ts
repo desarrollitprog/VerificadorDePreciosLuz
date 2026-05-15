@@ -195,9 +195,9 @@ export async function getDeviceContent(deviceId: string): Promise<DeviceContent>
   return response.data as DeviceContent;
 }
 
-export async function restartDevice(deviceId: string): Promise<{ success: boolean; message: string }> {
+export async function restartDevice(deviceId: string): Promise<{ success: boolean; status: string; message: string }> {
   const response = await api.post(`/dispositivos/${encodeURIComponent(deviceId)}/reiniciar`);
-  return response.data as { success: boolean; message: string };
+  return response.data as { success: boolean; status: string; message: string };
 }
 
 export async function purgeDevice(deviceId: string): Promise<{ success: boolean; status: string; message: string }> {

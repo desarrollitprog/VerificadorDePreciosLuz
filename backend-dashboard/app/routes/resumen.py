@@ -48,9 +48,13 @@ async def obtener_resumen(
         stmt_banners_vencidos = select(func.count(Publicidad.IdPublicidad)).where(
             Publicidad.FechaFin < now
         )
+        stmt_banners_reproduciendose = select(func.count(Publicidad.IdPublicidad)).where(
+            Publicidad.Activo == True, Publicidad.FechaInicio <= now, Publicidad.FechaFin >= now
+        )
         banners_total = (await db.execute(stmt_banners_total)).scalar() or 0
         banners_activos = (await db.execute(stmt_banners_activos)).scalar() or 0
         banners_vencidos = (await db.execute(stmt_banners_vencidos)).scalar() or 0
+        banners_reproduciendose = (await db.execute(stmt_banners_reproduciendose)).scalar() or 0
 
         # Usuarios
         stmt_usu_total = select(func.count(Usuario.id))
@@ -130,6 +134,7 @@ async def obtener_resumen(
                 "programados": banners_activos,
                 "inactivos": banners_total - banners_activos - banners_vencidos,
                 "vencidos": banners_vencidos,
+                "reproduciendose": banners_reproduciendose,
             },
             "usuarios": {
                 "total": usuarios_total,

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { RefreshCw, Server, Smartphone, Film, Users, AlertCircle } from 'lucide-react';
+import { RefreshCw, Server, Smartphone, Film, Users, AlertCircle, AlertTriangle, Radio } from 'lucide-react';
 import { fetchResumen, ResumenData } from '../services/resumenService';
 import { getUserRole } from '../services/tokenUtils';
 import KpiCard from '../components/resumen/KpiCard';
@@ -17,6 +17,7 @@ export const ResumenScreen: React.FC = () => {
 
   const load = useCallback(async () => {
     try {
+      setLoading(true);
       setError(null);
       const result = await fetchResumen();
       setData(result);
@@ -75,17 +76,19 @@ export const ResumenScreen: React.FC = () => {
       </div>
 
       {loading && !data && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           <KpiCard icon={Server} label="Sedes" value={0} subtitle="" color="cyan" loading />
           <KpiCard icon={Smartphone} label="Dispositivos" value={0} subtitle="" color="emerald" loading />
           <KpiCard icon={Film} label="Archivos" value={0} subtitle="" color="violet" loading />
+          <KpiCard icon={AlertTriangle} label="Alertas" value={0} subtitle="" color="amber" loading />
+          <KpiCard icon={Radio} label="En reproducción" value={0} subtitle="" color="cyan" loading />
           {role === 'ADMIN' && <KpiCard icon={Users} label="Usuarios" value={0} subtitle="" color="amber" loading />}
         </div>
       )}
 
       {data && (
         <>
-          <div className={`grid gap-4 stagger-1 ${role === 'ADMIN' ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'}`}>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 stagger-1">
             <KpiCard
               icon={Server}
               label="Sedes"
@@ -119,6 +122,31 @@ export const ResumenScreen: React.FC = () => {
               subtitle={`${data.banners.programados} programados · ${data.banners.vencidos} vencidos`}
               color="violet"
             />
+            <KpiCard
+              icon={AlertTriangle}
+              label="Alertas"
+              value={(() => { const c = data.servidores_detalle.filter(s => s.porcentaje_uso > 90).length; return c; })()}
+              subtitle={
+                (() => {
+                  const c = data.servidores_detalle.filter(s => s.porcentaje_uso > 90).length;
+                  return c > 0
+                    ? <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-500" />{c} sede{c !== 1 ? 's' : ''} al límite</span>
+                    : <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-green-500" />Sin alertas</span>;
+                })()
+              }
+              color={data.servidores_detalle.filter(s => s.porcentaje_uso > 90).length > 0 ? 'amber' : 'emerald'}
+            />
+            <KpiCard
+              icon={Radio}
+              label="En reproducción"
+              value={data.banners.reproduciendose}
+              subtitle={
+                <span className="inline-flex items-center gap-1">
+                  {data.banners.reproduciendose} banners activos ahora
+                </span>
+              }
+              color="cyan"
+            />
             {role === 'ADMIN' && (
               <KpiCard
                 icon={Users}
@@ -130,9 +158,9 @@ export const ResumenScreen: React.FC = () => {
             )}
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 stagger-2">
+          <div className={`grid grid-cols-1 gap-6 stagger-2 ${role === 'ADMIN' ? 'lg:grid-cols-2' : ''}`}>
             <DeviceStatusChart data={data.dispositivos} />
-            <ServerStorageChart data={data.servidores_detalle} />
+            {role === 'ADMIN' && <ServerStorageChart data={data.servidores_detalle} />}
           </div>
 
           <div className="stagger-3">

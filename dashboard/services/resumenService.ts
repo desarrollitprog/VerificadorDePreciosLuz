@@ -26,7 +26,7 @@ export interface HistorialSubida {
 export interface ResumenData {
   servidores: { total: number; online: number; offline: number };
   dispositivos: { total: number; online: number; offline: number };
-  banners: { total: number; programados: number; inactivos: number; vencidos: number };
+  banners: { total: number; programados: number; inactivos: number; vencidos: number; reproduciendose: number };
   usuarios: { total: number; activos: number };
   servidores_detalle: ServidorResumen[];
   banners_por_servidor: BannersPorServidor[];

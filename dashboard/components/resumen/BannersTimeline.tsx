@@ -1,6 +1,7 @@
 import React from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { HistorialSubida } from '../../services/resumenService';
+import { useThemeStore } from '../../stores/themeStore';
 
 interface Props {
   data: HistorialSubida[];
@@ -24,6 +25,11 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 const BannersTimeline: React.FC<Props> = ({ data, loading }) => {
+  const isDark = useThemeStore((s) => s.isDark);
+  const gridColor = isDark ? '#334155' : '#e2e8f0';
+  const cursorColor = isDark ? '#334155' : '#f1f5f9';
+  const tickColor = isDark ? '#71717a' : '#94a3b8';
+
   if (loading) {
     return (
       <div className="bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 p-5 animate-pulse">
@@ -62,10 +68,10 @@ const BannersTimeline: React.FC<Props> = ({ data, loading }) => {
               <stop offset="95%" stopColor="#22d3ee" stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-          <XAxis dataKey="fecha" tick={{ fill: '#71717a', fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-          <YAxis tick={{ fill: '#71717a', fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} />
-          <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#27272a' }} />
+          <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
+          <XAxis dataKey="fecha" tick={{ fill: tickColor, fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+          <YAxis tick={{ fill: tickColor, fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} />
+          <Tooltip content={<CustomTooltip />} cursor={{ stroke: cursorColor }} />
           <Area type="monotone" dataKey="cantidad" stroke="#22d3ee" strokeWidth={2} fill="url(#bannerGradient)" dot={false} activeDot={{ r: 4, fill: '#22d3ee' }} />
         </AreaChart>
       </ResponsiveContainer>

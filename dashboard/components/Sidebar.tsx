@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { LogOut, X, Users, Server, Calendar, History, LayoutGrid } from 'lucide-react';
+import { LogOut, X, Users, Server, Calendar, History, LayoutGrid, LayoutDashboard } from 'lucide-react';
 import { getUserRole, getUserName } from '../services/tokenUtils';
 
 interface SidebarProps {
@@ -10,7 +10,8 @@ interface SidebarProps {
 }
 
 const navItems = [
-  { path: '/', label: 'Mis Videos', icon: LayoutGrid, adminOnly: false },
+  { path: '/', label: 'Resumen', icon: LayoutDashboard, adminOnly: false },
+  { path: '/videos', label: 'Mis Videos', icon: LayoutGrid, adminOnly: false },
   { path: '/calendario', label: 'Calendario', icon: Calendar, adminOnly: false },
   { path: '/servidores', label: 'Servidores', icon: Server, adminOnly: true },
   { path: '/auditoria', label: 'Auditoría', icon: History, adminOnly: true },

@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
-from app.routes import publicidad, auth, monitoreo, usuarios, notificaciones, auditoria
+from app.routes import publicidad, auth, monitoreo, usuarios, notificaciones, auditoria, resumen
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from app.utils.health import get_health_status
@@ -111,4 +111,5 @@ app.include_router(usuarios.router, prefix="/api")
 app.include_router(monitoreo.router, prefix="/api")
 app.include_router(notificaciones.router, prefix="/api")
 app.include_router(auditoria.router, prefix="/api")
+app.include_router(resumen.router, prefix="/api")
 app.mount("/static", StaticFiles(directory="static"), name="static")

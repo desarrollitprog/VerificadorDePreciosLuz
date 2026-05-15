@@ -17,9 +17,9 @@ const CustomTooltip = ({ active, payload }: any) => {
   if (!active || !payload?.length) return null;
   const row = payload[0].payload;
   return (
-    <div className="bg-[#27272a] border border-zinc-700 rounded-lg px-3 py-2 text-xs shadow-xl">
-      <p className="text-white font-semibold">{row.name}</p>
-      <p className="text-zinc-300">{row.used} GB / {row.total} GB ({row.pct}%)</p>
+    <div className="bg-white dark:bg-[#1c2936] border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs shadow-xl">
+      <p className="text-slate-900 dark:text-white font-semibold">{row.name}</p>
+      <p className="text-slate-500 dark:text-slate-400">{row.used} GB / {row.total} GB ({row.pct}%)</p>
     </div>
   );
 };
@@ -27,11 +27,11 @@ const CustomTooltip = ({ active, payload }: any) => {
 const ServerStorageChart: React.FC<Props> = ({ data, loading }) => {
   if (loading) {
     return (
-      <div className="bg-[#18181b] rounded-xl border border-zinc-800 p-5 animate-pulse">
-        <div className="h-4 w-48 bg-zinc-800 rounded mb-6" />
+      <div className="bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 p-5 animate-pulse">
+        <div className="h-4 w-48 bg-slate-200 dark:bg-[#253247] rounded mb-6" />
         <div className="space-y-3">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-6 bg-zinc-800 rounded" />
+            <div key={i} className="h-6 bg-slate-200 dark:bg-[#253247] rounded" />
           ))}
         </div>
       </div>
@@ -47,15 +47,15 @@ const ServerStorageChart: React.FC<Props> = ({ data, loading }) => {
 
   if (chartData.length === 0) {
     return (
-      <div className="bg-[#18181b] rounded-xl border border-zinc-800 p-5">
-        <p className="text-zinc-500 text-sm">Sin datos de servidores</p>
+      <div className="bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+        <p className="text-slate-500 dark:text-slate-400 text-sm">Sin datos de sedes</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-[#18181b] rounded-xl border border-zinc-800 p-5">
-      <h3 className="text-white font-semibold text-sm mb-4">Almacenamiento por Servidor</h3>
+    <div className="bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+      <h3 className="text-slate-900 dark:text-white font-semibold text-sm mb-4">Almacenamiento por Sede</h3>
       <ResponsiveContainer width="100%" height={Math.max(200, chartData.length * 48)}>
         <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 20, top: 0, bottom: 0 }}>
           <XAxis type="number" domain={[0, 100]} tick={{ fill: '#71717a', fontSize: 11 }} tickLine={false} axisLine={false} />

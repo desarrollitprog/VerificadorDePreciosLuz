@@ -20,11 +20,11 @@ function getBarColor(pct: number): string {
 const ServerMiniTable: React.FC<Props> = ({ data, loading }) => {
   if (loading) {
     return (
-      <div className="bg-[#18181b] rounded-xl border border-zinc-800 p-5 animate-pulse">
-        <div className="h-4 w-36 bg-zinc-800 rounded mb-4" />
+      <div className="bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 p-5 animate-pulse">
+        <div className="h-4 w-36 bg-slate-200 dark:bg-[#253247] rounded mb-4" />
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-10 bg-zinc-800 rounded" />
+            <div key={i} className="h-10 bg-slate-200 dark:bg-[#253247] rounded" />
           ))}
         </div>
       </div>
@@ -33,52 +33,52 @@ const ServerMiniTable: React.FC<Props> = ({ data, loading }) => {
 
   if (data.length === 0) {
     return (
-      <div className="bg-[#18181b] rounded-xl border border-zinc-800 p-5">
-        <h3 className="text-white font-semibold text-sm mb-2">Servidores</h3>
-        <p className="text-zinc-500 text-sm">Sin servidores registrados</p>
+      <div className="bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+        <h3 className="text-slate-900 dark:text-white font-semibold text-sm mb-2">Servidores</h3>
+        <p className="text-slate-500 dark:text-slate-400 text-sm">Sin servidores registrados</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-[#18181b] rounded-xl border border-zinc-800 p-5">
-      <h3 className="text-white font-semibold text-sm mb-4">Servidores</h3>
+    <div className="bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+      <h3 className="text-slate-900 dark:text-white font-semibold text-sm mb-4">Servidores</h3>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-zinc-500 text-xs uppercase tracking-wider border-b border-zinc-800">
-              <th className="text-left py-2 pr-2">Servidor</th>
+            <tr className="text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">
+              <th className="text-left py-2 pr-2">Sede</th>
               <th className="text-left py-2 px-2 hidden sm:table-cell">IP</th>
               <th className="text-left py-2 px-2">Estado</th>
               <th className="text-left py-2 px-2">Almacenamiento</th>
               <th className="text-center py-2 px-2">Dispositivos</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-800/50">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
             {data.map((s) => (
-              <tr key={s.id} className="hover:bg-zinc-800/30 transition-colors">
+              <tr key={s.id} className="hover:bg-slate-100 dark:hover:bg-[#253247] transition-colors">
                 <td className="py-3 pr-2">
-                  <span className="text-white font-medium">{s.nombre}</span>
+                  <span className="text-slate-900 dark:text-white font-medium">{s.nombre}</span>
                 </td>
-                <td className="py-3 px-2 hidden sm:table-cell text-zinc-400">{s.ip}</td>
+                <td className="py-3 px-2 hidden sm:table-cell text-slate-500 dark:text-slate-400">{s.ip}</td>
                 <td className="py-3 px-2">
                   <div className="flex items-center gap-1.5">
                     <span className={`h-2 w-2 rounded-full ${s.online ? 'bg-green-500' : 'bg-red-500'}`} />
-                    <span className={s.online ? 'text-green-400' : 'text-red-400'}>
+                    <span className={s.online ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
                       {s.online ? 'Online' : 'Offline'}
                     </span>
                   </div>
                 </td>
                 <td className="py-3 px-2">
                   <div className="flex items-center gap-2 min-w-[100px]">
-                    <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="flex-1 h-1.5 bg-slate-200 dark:bg-zinc-800 rounded-full overflow-hidden">
                       <div className={`h-full rounded-full ${getBarColor(s.porcentaje_uso)}`} style={{ width: `${Math.min(s.porcentaje_uso, 100)}%` }} />
                     </div>
-                    <span className="text-zinc-400 text-xs w-12 text-right">{s.porcentaje_uso}%</span>
+                    <span className="text-slate-500 dark:text-slate-400 text-xs w-12 text-right">{s.porcentaje_uso}%</span>
                   </div>
                 </td>
                 <td className="py-3 px-2 text-center">
-                  <span className="text-zinc-300">
+                  <span className="text-slate-600 dark:text-slate-300">
                     {s.dispositivos_online}/{s.dispositivos_total}
                   </span>
                 </td>

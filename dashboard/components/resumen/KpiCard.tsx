@@ -5,16 +5,16 @@ interface KpiCardProps {
   icon: LucideIcon;
   label: string;
   value: number;
-  subtitle: string;
+  subtitle: React.ReactNode;
   color: 'cyan' | 'emerald' | 'violet' | 'amber';
   loading?: boolean;
 }
 
-const colorMap: Record<string, { text: string; bg: string; glow: string; border: string }> = {
-  cyan: { text: 'text-cyan-400', bg: 'bg-cyan-500/10', glow: 'shadow-cyan-500/20', border: 'border-cyan-500/20' },
-  emerald: { text: 'text-emerald-400', bg: 'bg-emerald-500/10', glow: 'shadow-emerald-500/20', border: 'border-emerald-500/20' },
-  violet: { text: 'text-violet-400', bg: 'bg-violet-500/10', glow: 'shadow-violet-500/20', border: 'border-violet-500/20' },
-  amber: { text: 'text-amber-400', bg: 'bg-amber-500/10', glow: 'shadow-amber-500/20', border: 'border-amber-500/20' },
+const colorMap: Record<string, { text: string; bg: string; border: string }> = {
+  cyan: { text: 'text-cyan-500 dark:text-cyan-400', bg: 'bg-cyan-50 dark:bg-cyan-500/10', border: 'border-cyan-200 dark:border-cyan-500/20' },
+  emerald: { text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10', border: 'border-emerald-200 dark:border-emerald-500/20' },
+  violet: { text: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-50 dark:bg-violet-500/10', border: 'border-violet-200 dark:border-violet-500/20' },
+  amber: { text: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-500/10', border: 'border-amber-200 dark:border-amber-500/20' },
 };
 
 function useCounter(end: number, duration: number): number {
@@ -44,13 +44,13 @@ const KpiCard: React.FC<KpiCardProps> = ({ icon: Icon, label, value, subtitle, c
 
   if (loading) {
     return (
-      <div className="bg-[#18181b] rounded-xl border border-zinc-800 p-5 animate-pulse">
+      <div className="bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 p-5 animate-pulse">
         <div className="flex items-start gap-4">
-          <div className="h-12 w-12 rounded-lg bg-zinc-800" />
+          <div className="h-12 w-12 rounded-lg bg-slate-200 dark:bg-[#253247]" />
           <div className="flex-1 space-y-3">
-            <div className="h-8 w-24 bg-zinc-800 rounded" />
-            <div className="h-4 w-20 bg-zinc-800 rounded" />
-            <div className="h-3 w-32 bg-zinc-800 rounded" />
+            <div className="h-8 w-24 bg-slate-200 dark:bg-[#253247] rounded" />
+            <div className="h-4 w-20 bg-slate-200 dark:bg-[#253247] rounded" />
+            <div className="h-3 w-32 bg-slate-200 dark:bg-[#253247] rounded" />
           </div>
         </div>
       </div>
@@ -58,7 +58,7 @@ const KpiCard: React.FC<KpiCardProps> = ({ icon: Icon, label, value, subtitle, c
   }
 
   return (
-    <div className={`bg-[#18181b] rounded-xl border ${c.border} ${c.glow} p-5 hover:shadow-lg hover:shadow-${color}-500/10 transition-all duration-300`}>
+    <div className={`bg-white dark:bg-[#1c2936] rounded-xl border ${c.border} p-5 shadow-sm transition-all duration-300`}>
       <div className="flex items-start gap-4">
         <div className={`h-12 w-12 rounded-lg ${c.bg} flex items-center justify-center shrink-0`}>
           <Icon size={24} className={c.text} />
@@ -67,8 +67,8 @@ const KpiCard: React.FC<KpiCardProps> = ({ icon: Icon, label, value, subtitle, c
           <span className={`text-3xl font-bold font-sans tracking-tight ${c.text}`}>
             {animated.toLocaleString()}
           </span>
-          <p className="text-zinc-400 text-sm font-medium mt-0.5">{label}</p>
-          <p className="text-zinc-500 text-xs mt-1 truncate">{subtitle}</p>
+          <p className="text-slate-600 dark:text-slate-300 text-sm font-medium mt-0.5">{label}</p>
+          <div className="text-slate-500 dark:text-slate-400 text-xs mt-1 truncate flex items-center gap-1 flex-wrap">{subtitle}</div>
         </div>
       </div>
     </div>

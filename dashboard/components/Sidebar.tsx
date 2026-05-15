@@ -10,7 +10,7 @@ interface SidebarProps {
 }
 
 const navItems = [
-  { path: '/', label: 'Resumen', icon: LayoutDashboard, adminOnly: false },
+  { path: '/', label: 'Dashboard', icon: LayoutDashboard, adminOnly: false },
   { path: '/videos', label: 'Mis Videos', icon: LayoutGrid, adminOnly: false },
   { path: '/calendario', label: 'Calendario', icon: Calendar, adminOnly: false },
   { path: '/servidores', label: 'Servidores', icon: Server, adminOnly: true },

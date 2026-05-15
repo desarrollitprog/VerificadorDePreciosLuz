@@ -127,7 +127,7 @@ async def obtener_resumen(
             },
             "banners": {
                 "total": banners_total,
-                "activos": banners_activos,
+                "programados": banners_activos,
                 "inactivos": banners_total - banners_activos - banners_vencidos,
                 "vencidos": banners_vencidos,
             },

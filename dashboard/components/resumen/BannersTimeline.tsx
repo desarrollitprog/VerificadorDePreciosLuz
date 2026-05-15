@@ -16,9 +16,9 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
   const row = payload[0].payload;
   return (
-    <div className="bg-[#27272a] border border-zinc-700 rounded-lg px-3 py-2 text-xs shadow-xl">
-      <p className="text-zinc-400">{row.fechaCompleta}</p>
-      <p className="text-cyan-400 font-semibold">{row.cantidad} subidas</p>
+    <div className="bg-white dark:bg-[#1c2936] border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs shadow-xl">
+      <p className="text-slate-500 dark:text-slate-400">{row.fechaCompleta}</p>
+      <p className="text-cyan-600 dark:text-cyan-400 font-semibold">{row.cantidad} subidas</p>
     </div>
   );
 };
@@ -26,9 +26,9 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 const BannersTimeline: React.FC<Props> = ({ data, loading }) => {
   if (loading) {
     return (
-      <div className="bg-[#18181b] rounded-xl border border-zinc-800 p-5 animate-pulse">
-        <div className="h-4 w-40 bg-zinc-800 rounded mb-6" />
-        <div className="h-48 bg-zinc-800 rounded" />
+      <div className="bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 p-5 animate-pulse">
+        <div className="h-4 w-40 bg-slate-200 dark:bg-[#253247] rounded mb-6" />
+        <div className="h-48 bg-slate-200 dark:bg-[#253247] rounded" />
       </div>
     );
   }
@@ -44,16 +44,16 @@ const BannersTimeline: React.FC<Props> = ({ data, loading }) => {
 
   if (chartData.length === 0) {
     return (
-      <div className="bg-[#18181b] rounded-xl border border-zinc-800 p-5">
-        <h3 className="text-white font-semibold text-sm mb-4">Subidas de Banners (30 días)</h3>
-        <p className="text-zinc-500 text-sm">Sin datos de subidas</p>
+      <div className="bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+        <h3 className="text-slate-900 dark:text-white font-semibold text-sm mb-4">Subidas de Banners (30 días)</h3>
+        <p className="text-slate-500 dark:text-slate-400 text-sm">Sin datos de subidas</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-[#18181b] rounded-xl border border-zinc-800 p-5">
-      <h3 className="text-white font-semibold text-sm mb-4">Subidas de Banners (30 días)</h3>
+    <div className="bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+      <h3 className="text-slate-900 dark:text-white font-semibold text-sm mb-4">Subidas de Banners (30 días)</h3>
       <ResponsiveContainer width="100%" height={220}>
         <AreaChart data={chartData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
           <defs>

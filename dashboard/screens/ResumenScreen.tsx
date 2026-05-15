@@ -131,10 +131,16 @@ export const ResumenScreen: React.FC = () => {
             )}
           </div>
 
-          <div className={`grid grid-cols-1 gap-6 stagger-2 ${role === 'ADMIN' ? 'lg:grid-cols-2' : ''}`}>
-            <DeviceStatusChart data={data.dispositivos} />
-            {role === 'ADMIN' && <ServerStorageChart data={data.servidores_detalle} />}
-          </div>
+          {role === 'ADMIN' ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 stagger-2">
+              <DeviceStatusChart data={data.dispositivos} />
+              <ServerStorageChart data={data.servidores_detalle} />
+            </div>
+          ) : (
+            <div className="max-w-md mx-auto stagger-2">
+              <DeviceStatusChart data={data.dispositivos} />
+            </div>
+          )}
 
           <div className="stagger-3">
             <BannersTimeline data={data.historial_subidas} />

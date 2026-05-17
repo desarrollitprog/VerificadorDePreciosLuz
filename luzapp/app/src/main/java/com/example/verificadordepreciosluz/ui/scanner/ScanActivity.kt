@@ -268,6 +268,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         // Programar verificación de actualizaciones diarias a las 7:00 AM
         UpdateWorker.schedule(this)
         
+        // Programar descarga de backup diaria a las 8:30 AM Caracas
+        BackupWorker.schedule(this)
+        
         // Verificar actualización inmediatamente al abrir ScanActivity
         UpdateChecker.setUpdateMode(UpdateChecker.UpdateMode.AUTO)
         UpdateChecker.check(this)

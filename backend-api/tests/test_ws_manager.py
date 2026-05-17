@@ -109,10 +109,10 @@ class FakeTabletWSManager:
 
     async def flush_message_queue(self, device_id: str, websocket: FakeWebSocket) -> int:
         if self._pending_queue is not None:
-            delivered = await self._pending_queue.flush_all_to_device(
-                device_id,
-                lambda msg: websocket.send_json(msg)
-            )
+            async def _deliver(msg):
+                await websocket.send_json(msg)
+                return True
+            delivered = await self._pending_queue.flush_all_to_device(device_id, _deliver)
             return delivered
 
         if device_id not in self._message_queues:
@@ -140,10 +140,10 @@ class FakeTabletWSManager:
     async def _flush_all_queues(self, device_id: str, websocket: FakeWebSocket):
         """L2 + L3.3: Flush cola Redis + local + pending banners + flags."""
         if self._pending_queue is not None:
-            await self._pending_queue.flush_all_to_device(
-                device_id,
-                lambda msg: websocket.send_json(msg)
-            )
+            async def _deliver(msg):
+                await websocket.send_json(msg)
+                return True
+            await self._pending_queue.flush_all_to_device(device_id, _deliver)
 
         if device_id in self._message_queues:
             await self.flush_message_queue(device_id, websocket)

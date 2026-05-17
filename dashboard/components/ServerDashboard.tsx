@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { ChevronDown, ChevronUp, RefreshCw, X, Monitor, Edit2, Play, RotateCcw, Eye, AlertCircle, Clock, Trash, Search, ArrowUpDown } from 'lucide-react';
 import ServerCard from './monitoreo/ServerCard';
 import { useNotification } from './useNotification';
@@ -8,6 +8,7 @@ import {
   renameServer,
   getDeviceContent,
   restartDevice,
+  purgeDevice,
   deleteDevice,
   deleteServer,
   scheduleRestart,
@@ -45,6 +46,10 @@ export function ServerDashboard() {
   // Modal de reinicio
   const [restartModal, setRestartModal] = useState<{ deviceId: string; deviceName: string } | null>(null);
   const [restarting, setRestarting] = useState(false);
+
+  // Modal de limpiar cache
+  const [purgeModal, setPurgeModal] = useState<{ deviceId: string; deviceName: string } | null>(null);
+  const [purging, setPurging] = useState(false);
 
   // Modal de eliminar dispositivo
   const [deleteDeviceModal, setDeleteDeviceModal] = useState<{ deviceId: string; deviceName: string } | null>(null);
@@ -127,23 +132,49 @@ export function ServerDashboard() {
     setRenameValue('');
   };
 
-  const fetchQueueStatus = async (deviceId: string) => {
+  const fetchQueueStatus = async (deviceId: string, serverIp: string) => {
     try {
-      const status = await getQueueStatus(deviceId);
-      setQueueStatusMap(prev => ({ ...prev, [deviceId]: status }));
+      const serversStatus = await getQueueStatus(deviceId);
+      const match = serversStatus.find(s => s.server.includes(serverIp));
+      if (match) {
+        setQueueStatusMap(prev => ({ ...prev, [deviceId]: match.status }));
+      }
     } catch {
       // Silently fail — endpoint might not be available
     }
   };
 
-  useEffect(() => {
-    if (!expandedServerId) return;
-    const server = servidores.find(s => s.id === expandedServerId);
-    if (!server) return;
+  const pollQueues = useCallback(async () => {
+    if (servidores.length === 0) return;
     setLoadingQueues(true);
-    Promise.all(server.dispositivos.map(d => fetchQueueStatus(d.device_id)))
-      .finally(() => setLoadingQueues(false));
-  }, [expandedServerId, servidores]);
+    await Promise.all(
+      servidores.flatMap(s =>
+        s.dispositivos.map(d => fetchQueueStatus(d.device_id, s.ip))
+      )
+    );
+    setLoadingQueues(false);
+  }, [servidores]);
+
+  useEffect(() => {
+    if (servidores.length === 0) return;
+    pollQueues();
+    const interval = setInterval(pollQueues, 30000);
+    return () => clearInterval(interval);
+  }, [servidores, pollQueues]);
+
+  useEffect(() => {
+    const handleSyncCompleted = (e: CustomEvent<{ deviceId: string }>) => {
+      const deviceId = e.detail.deviceId;
+      const server = servidores.find(s =>
+        s.dispositivos.some(d => d.device_id === deviceId)
+      );
+      if (server) {
+        fetchQueueStatus(deviceId, server.ip);
+      }
+    };
+    window.addEventListener('sync-completed', handleSyncCompleted as EventListener);
+    return () => window.removeEventListener('sync-completed', handleSyncCompleted as EventListener);
+  }, [servidores]);
 
   const submitRename = async () => {
     if (!renameModal) return;
@@ -227,16 +258,57 @@ export function ServerDashboard() {
     setRestarting(true);
     try {
       const result = await restartDevice(restartModal.deviceId);
-      if (result.success) {
+      if (result.success && result.status === 'QUEUED') {
+        showNotification('Comando de reinicio encolado — se ejecutará cuando el dispositivo reconecte', 'warning');
+      } else if (result.success) {
         showNotification('Dispositivo reiniciado correctamente', 'success');
       } else {
         showNotification(result.message || 'Error al reiniciar dispositivo', 'error');
       }
       closeRestartModal();
-    } catch {
-      showNotification('Error al reiniciar dispositivo', 'error');
+    } catch (error: any) {
+      if (error?.response?.data?.status === 'QUEUED') {
+        showNotification('Comando de reinicio encolado — se ejecutará cuando el dispositivo reconecte', 'warning');
+        closeRestartModal();
+      } else {
+        showNotification('Error al reiniciar dispositivo', 'error');
+      }
     } finally {
       setRestarting(false);
+    }
+  };
+
+  const openPurgeModal = (deviceId: string, deviceName: string) => {
+    setPurgeModal({ deviceId, deviceName });
+  };
+
+  const closePurgeModal = () => {
+    if (purging) return;
+    setPurgeModal(null);
+  };
+
+  const handlePurge = async () => {
+    if (!purgeModal) return;
+    setPurging(true);
+    try {
+      const result = await purgeDevice(purgeModal.deviceId);
+      if (result.success && result.status === 'QUEUED') {
+        showNotification('Comando de limpieza encolado — se ejecutará cuando el dispositivo reconecte', 'warning');
+      } else if (result.success) {
+        showNotification('Cache del dispositivo limpiado y sincronizado correctamente', 'success');
+      } else {
+        showNotification(result.message || 'Error al limpiar cache del dispositivo', 'error');
+      }
+      closePurgeModal();
+    } catch (error: any) {
+      if (error?.response?.data?.status === 'QUEUED') {
+        showNotification('Comando de limpieza encolado — se ejecutará cuando el dispositivo reconecte', 'warning');
+        closePurgeModal();
+      } else {
+        showNotification('Error al limpiar cache del dispositivo', 'error');
+      }
+    } finally {
+      setPurging(false);
     }
   };
 
@@ -517,7 +589,12 @@ export function ServerDashboard() {
                                   )}
                                   {queueStatusMap[d.device_id] && queueStatusMap[d.device_id]!.total > 0 && (
                                     <span className="ml-1 text-xs font-medium px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300" title={`${queueStatusMap[d.device_id]!.pending} pendientes, ${queueStatusMap[d.device_id]!.inflight} en vuelo`}>
-                                      {queueStatusMap[d.device_id]!.total} pendientes
+                                      Cola: {queueStatusMap[d.device_id]!.total}
+                                    </span>
+                                  )}
+                                  {queueStatusMap[d.device_id] && (
+                                    <span className={`ml-1 text-xs font-medium px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 ${(queueStatusMap[d.device_id]!.pending_sync || queueStatusMap[d.device_id]!.pending_reboot) ? '' : 'opacity-50'}`} title="Comando pendiente de reconexión del dispositivo">
+                                      En espera: {(queueStatusMap[d.device_id]!.pending_sync ? 1 : 0) + (queueStatusMap[d.device_id]!.pending_reboot ? 1 : 0)}
                                     </span>
                                   )}
                                   {loadingQueues && !queueStatusMap[d.device_id] && (
@@ -556,6 +633,13 @@ export function ServerDashboard() {
                                   >
                                     <Eye size={12} />
                                     Ver contenido
+                                  </button>
+                                  <button
+                                    onClick={() => openPurgeModal(d.device_id, d.nombre_mostrado || d.device_id)}
+                                    className="text-xs flex items-center gap-1 text-blue-600 hover:underline"
+                                  >
+                                    <RefreshCw size={12} />
+                                    Limpiar y Sincronizar
                                   </button>
                                   <button
                                     onClick={() => openRestartModal(d.device_id, d.nombre_mostrado || d.device_id)}
@@ -719,6 +803,39 @@ export function ServerDashboard() {
                   disabled={restarting}
                 >
                   {restarting ? 'Reiniciando...' : 'Reiniciar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de limpiar cache */}
+      {purgeModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={closePurgeModal}>
+          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800" onClick={e => e.stopPropagation()}>
+            <div className="p-6 text-center">
+              <div className="w-12 h-12 mx-auto bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mb-4">
+                <RefreshCw size={24} className="text-blue-600" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Limpiar y Sincronizar</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+                ¿Estás seguro de limpiar el cache de <span className="font-medium text-slate-900 dark:text-white">{purgeModal.deviceName}</span>? Se eliminarán todos los banners descargados y se volverán a descargar.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={closePurgeModal}
+                  className="flex-1 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  disabled={purging}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handlePurge}
+                  className="flex-1 px-4 py-2 rounded-lg bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 disabled:opacity-50"
+                  disabled={purging}
+                >
+                  {purging ? 'Limpiando...' : 'Limpiar'}
                 </button>
               </div>
             </div>

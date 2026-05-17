@@ -5,6 +5,7 @@ import { NotificationContainer } from './components/NotificationContainer';
 import { ProtectedLayout } from './components/ProtectedLayout';
 import { LoginScreen } from './screens/LoginScreen';
 import { DashboardScreen } from './screens/DashboardScreen';
+import { ResumenScreen } from './screens/ResumenScreen';
 import { UsersScreen } from './screens/UsersScreen';
 import { CalendarScreen } from './screens/CalendarScreen';
 import { AuditoriaScreen } from './screens/AuditoriaScreen';
@@ -18,7 +19,8 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<LoginRoute />} />
           <Route element={<ProtectedLayout />}>
-            <Route path="/" element={<DashboardScreen />} />
+            <Route path="/" element={<ResumenScreen />} />
+            <Route path="/videos" element={<DashboardScreen />} />
             <Route path="/servidores" element={<ServerDashboard />} />
             <Route path="/usuarios" element={<UsersScreen />} />
             <Route path="/calendario" element={<CalendarScreen />} />

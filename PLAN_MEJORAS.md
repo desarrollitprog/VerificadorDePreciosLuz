@@ -1198,6 +1198,302 @@ El sistema no tiene **ningún** job de limpieza automática. Datos que crecen si
 
 ---
 
+## FASE 19: Limpieza de Caché en Luzapp (PurgeWorker + Dashboard Trigger)
+
+*Prioridad: Media | Objetivo: Evitar acumulación de archivos basura en kioskos 3nstar (K10-A7 8GB, K10-A11 16GB).*
+
+### Especificaciones del hardware objetivo
+
+| Modelo | Almacenamiento | Disponible real | Android | WorkManager |
+|--------|---------------|-----------------|---------|-------------|
+| **K10-A7** | 8GB eMMC | ~3-4GB libres | **7.0** | **No confiable** — ROM 3nstar suele matar Google Play Services / JobScheduler |
+| **K10-A11** | 16GB eMMC | ~8-10GB libres | 10.0 | Confiable |
+
+### Análisis de Rentabilidad
+
+**Escenario:** Borrar periódicamente archivos acumulados (`banners/`, `videos/`, `banners_meta.json`, backups JSON + SQLite) para que la app empiece de 0 sin caché.
+
+**Estimación de basura acumulada en un K10-A7 tras 6 meses sin limpieza:**
+
+| Item | Tamaño | Cantidad típica | Total |
+|------|--------|----------------|-------|
+| Banners imagen | ~500KB | 20-40 | 10-20MB |
+| Banners video | ~10MB | 5-10 | 50-100MB |
+| Backups JSON (productos, precios, ofertas) | ~5-15MB c/u | 9 archivos | 45-135MB |
+| SQLite backup index | ~10-50MB | 1 DB | 10-50MB |
+| **Total** | | | **115-305MB** |
+
+En un K10-A7 con 3-4GB libres: **115-305MB = 3-10% del espacio disponible**. Esto sí es relevante.
+
+**Factores en contra:**
+
+| Factor | Detalle |
+|--------|---------|
+| **App ya limpia metadata** | `cleanupExpiredBanners()` elimina banners vencidos del JSON al sincronizar |
+| **Backend ya limpia archivos huérfanos** | Bots 3 y 5 (FASE 18) limpian archivos no referenciados cada 24h en servidores, **no en el dispositivo** |
+| **Banners expiran naturalmente** | El archivo físico en disco del dispositivo **NO se borra** aunque el banner esté vencido — solo se elimina del metadata |
+| **Costo de redescarga** | Purga + redescarga consume datos móviles y batería. En kioskos 3nstar con plan limitado, hay que considerar frecuencia |
+| **Riesgo race condition** | Si el purge corre mientras el carrusel reproduce, puede causar flicker |
+
+**Factores a favor:**
+
+| Factor | Detalle |
+|--------|---------|
+| **K10-A7 solo 3-4GB libres** | 300MB de basura = 10% del espacio. En un kiosko que nunca se limpia, en 1 año podría llenar el disco |
+| **No hay usuario que limpie** | Kiosko autónomo y sin mantenimiento — nadie borra archivos manualmente |
+| **WorkManager no confiable en Android 7** | En ROM 3nstar K10-A7, `PeriodicWorkRequest` puede no ejecutarse. Alternativa: `Handler.postDelayed()` inline (mismo patrón que `scheduleDolarBCVRefresh()` en `ScanActivity.kt:967`) |
+| **Backups también acumulan** | Productos/precios/ofertas de meses pasados siguen en disco ocupando espacio aunque ya no apliquen |
+| **Archivos físicos de banners vencidos no se borran** | `cleanupExpiredBanners()` solo limpia el JSON metadata. El archivo `.mp4` o `.jpg` en `filesDir/banners/` **sigue ahí para siempre** |
+| **Dashboard no tiene control** | Hoy el admin no puede forzar un `WIPE_AND_RESYNC` desde el panel |
+| **Soporte técnico** | Forzar purge remoto evita enviar un técnico al kiosko cuando un banner no se actualiza |
+
+**Veredicto:**
+
+Con el hardware real (K10-A7 8GB + Android 7 + kioskos sin mantenimiento humano), **todos los items de FASE 19 son de rentabilidad Alta**. El almacenamiento es ajustado, los archivos físicos de banners vencidos nunca se limpian solos, y WorkManager no es confiable en Android 7.
+
+### Tareas Propuestas
+
+| # | Tarea | Rentabilidad | Enfoque | Nota |
+|---|-------|:------------:|---------|------|
+| 19.1 | Timer periódico en `ScanActivity` vía `Handler.postDelayed()` (cada 15-30 días) | 🟢 Alta | Borra banners + videos + backups JSON + SQLite. Sin WorkManager para compatibilidad K10-A7 | Mismo patrón que `scheduleDolarBCVRefresh()` |
+| 19.2 | Agregar `"WIPE_AND_RESYNC"` a comandos permitidos en backend-api | 🟢 Alta | `main.py:1297` — 1 línea | Habilita el comando desde el dashboard |
+| 19.3 | Endpoint `POST /dispositivos/{id}/purge` en backend-dashboard | 🟢 Alta | Mismo patrón que `reiniciar_dispositivo` | Proxy a backend-api |
+| 19.4 | Botón "Forzar purga" en dashboard React | 🟢 Alta | Modal confirmación + notificación toast | Misma UX que el botón Reiniciar |
+| 19.5 | Vincular timer de 19.1 en `ScanActivity.onCreate()` | 🟢 Alta | 1-2 líneas | Inicia el contador de 15-30 días |
+
+### Flujo completo del dashboard trigger
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│ DASHBOARD (React)                                                        │
+│                                                                          │
+│  Admin hace clic en "Forzar Purga"                                      │
+│  Modal: "¿Estás seguro de purgar Dispositivo X?"                       │
+│       │                                                                  │
+│       ▼                                                                  │
+│  POST /api/dispositivos/{device_id}/purge                                │
+│  (axios → monitoreoService.purgeDevice)                                  │
+└──────────────────────┬───────────────────────────────────────────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│ BACKEND-DASHBOARD (FastAPI)                                              │
+│                                                                          │
+│  routes/monitoreo/devices.py:                                            │
+│    @router.post("/dispositivos/{id}/purge")                              │
+│    → busca el dispositivo en BD                                          │
+│    → obtiene ip del servidor asociado                                    │
+│    → llama a device_service.purge_device()                               │
+│                                                                          │
+│  services/device_service.py:                                             │
+│    async def purge_device():                                             │
+│      POST http://{servidor_ip}:8000/api/comandos/{device_id}            │
+│      json = {"comando": "WIPE_AND_RESYNC", "command_id": uuid}          │
+└──────────────────────┬───────────────────────────────────────────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│ BACKEND-API (FastAPI - corre en el servidor secundario)                 │
+│                                                                          │
+│  main.py: POST /api/comandos/{device_id}                                 │
+│    → valida comando en ("REINICIAR", "WIPE_AND_RESYNC")                  │
+│    → genera command_id                                                   │
+│    → publica en Redis pub/sub:                                           │
+│        device_command_bus.publish_command(                               │
+│          device_id, "WIPE_AND_RESYNC", payload                           │
+│        )                                                                 │
+│    → espera confirmación del dispositivo (polling 60s)                   │
+│      ● Si el dispositivo está online: lo recibe y ejecuta               │
+│      ● Si está offline: PendingQueue lo encola en Redis                  │
+│        (device:queue:{id}) y se reenvía al reconectar                   │
+│    → retorna {"success": true/false, "status": "SUCCESS"/"TIMEOUT"...}  │
+└──────────────────────┬───────────────────────────────────────────────────┘
+                       │
+                       ▼ (Redis pub/sub)
+┌──────────────────────────────────────────────────────────────────────────┐
+│ LUZAPP (Android - en el kiosko)                                         │
+│                                                                          │
+│  ScanActivity - WebSocket onMessage:                                     │
+│    {"command": "WIPE_AND_RESYNC", "command_id": "uuid"}                  │
+│       │                                                                  │
+│       ▼                                                                  │
+│  Procesa el comando:                                                     │
+│    1. Pausa el carrusel de banners (stopStandbyCarousel)                 │
+│    2. Llama a ejecutarPurgaTotal():                                      │
+│       a. Borra banners/ Directorio físico completo                       │
+│       b. Borra videos/ Directorio físico completo                       │
+│       c. Solicita manifiesto actualizado al backend (GET /banners)      │
+│       d. Descarga todos los banners del manifiesto                      │
+│          (imágenes: delay 1.5s, videos: delay 8s entre cada uno)        │
+│       e. Guarda banners_meta.json con los nuevos items                   │
+│    3. Si la purga fue exitosa → reinicia el carrusel                     │
+│    4. Envía confirmación al backend (WebSocket CONFIRMATION)            │
+│       {"type": "CONFIRMATION", "command": "WIPE_AND_RESYNC",            │
+│        "device_id": "...", "status": "SUCCESS", "command_id": "..."}    │
+└──────────────────────────────────────────────────────────────────────────┘
+
+Resumen:  1 clic → 3 HTTP → 1 Redis pub/sub → WebSocket → purge en el kiosko ~3-5 min
+```
+
+### Archivos a modificar
+
+| Archivo | Acción |
+|---------|--------|
+| `luzapp/.../ui/scanner/ScanActivity.kt` | ✎ Agregar `Handler.postDelayed()` timer + inline cleanup cada 15-30 días |
+| `backend-api/app/main.py:1297` | ✎ 1 línea: agregar `"WIPE_AND_RESYNC"` a tupla de comandos |
+| `backend-dashboard/app/services/device_service.py` | ✎ Nueva función `purge_device()` (igual que `reboot_device()` pero con comando `WIPE_AND_RESYNC`) |
+| `backend-dashboard/app/routes/monitoreo/devices.py` | ✎ Nuevo endpoint `POST /dispositivos/{id}/purge` |
+| `dashboard/services/monitoreoService.ts` | ✎ Nueva función `purgeDevice(deviceId)` |
+| `dashboard/components/ServerDashboard.tsx` | ✎ Botón "Forzar purga" + modal confirmación |
+
+---
+
+## FASE 20: Panel Resumen — Dashboard Principal con KPIs y Gráficas
+
+*Prioridad: Alta | Objetivo: Reemplazar la pantalla de inicio del dashboard con un panel resumen unificado que muestre KPIs del sistema (servidores, dispositivos, archivos, usuarios) con gráficas en tiempo real.*
+
+### Problema Raíz
+
+El dashboard no tiene una vista unificada del estado del sistema:
+
+- Las métricas están dispersas en 5+ endpoints diferentes (`/status`, `/status-detalle`, `/banners`, `/usuarios`, `/alertas`)
+- No hay KPIs visibles sin navegar a páginas específicas
+- La landing page actual (`/`) es la lista de videos, no un resumen del sistema
+- Los usuarios ADMIN deben visitar 3-4 páginas distintas para entender el estado general
+- No existe ninguna visualización gráfica (charts) en toda la aplicación
+
+### Item 1: Endpoint agregador `GET /api/resumen`
+
+**Descripción**: Endpoint único en backend-dashboard que consolida todas las métricas del sistema en una sola respuesta JSON. Evita 5+ llamadas desde el frontend.
+
+**Datos que retorna**:
+
+| Campo | Fuente (BD) | Cálculo |
+|-------|-------------|---------|
+| `servidores.total` | `ServidorSecundario` | `COUNT(*)` |
+| `servidores.online` | `ServidorSecundario` | `ultimo_heartbeat > NOW() - 5min` |
+| `dispositivos.total` | `Dispositivo` | `COUNT(*)` |
+| `dispositivos.online` | `Dispositivo` | `online = True` |
+| `banners.total` | `Publicidad` | `COUNT(*)` |
+| `banners.activos` | `Publicidad` | `Activo = True AND FechaFin > NOW()` |
+| `banners.vencidos` | `Publicidad` | `FechaFin < NOW()` |
+| `usuarios.total` | `Usuario` | `COUNT(*)` |
+| `usuarios.activos` | `Usuario` | `activo = True` |
+| `servidores_detalle[]` | Join servidores + dispositivos | Por servidor: nombre, ip, online, almacenamiento usado/total, dispositivos total/online |
+| `banners_por_servidor[]` | `PublicidadAsignacion` | `GROUP BY servidor_id` con nombre |
+| `historial_subidas[]` | `Publicidad` | `GROUP BY DATE(UpdatedAt)` últimos 30 días |
+
+| # | Archivo | Cambio | Estado |
+|---|---------|--------|:------:|
+| 20.1.1 | `backend-dashboard/app/routes/resumen.py` | Crear nuevo archivo con GET /api/resumen → SQL queries agregadas + response model | ⏳ |
+| 20.1.2 | `backend-dashboard/app/main.py` | `include_router(resumen_router, prefix="/api")` | ⏳ |
+
+### Item 2: Instalación de Recharts
+
+**Descripción**: Agregar librería de gráficas al frontend. Se elige `recharts` por su API declarativa React y buena integración con Tailwind.
+
+| # | Archivo | Cambio | Estado |
+|---|---------|--------|:------:|
+| 20.2.1 | `dashboard/package.json` | `npm install recharts` → dependencia agregada | ⏳ |
+
+### Item 3: Servicio frontend `resumenService.ts`
+
+**Descripción**: Tipado TypeScript completo para la respuesta del endpoint + función `fetchResumen()` con tipado estricto.
+
+| # | Archivo | Cambio | Estado |
+|---|---------|--------|:------:|
+| 20.3.1 | `dashboard/services/resumenService.ts` | Crear: interfaces `ResumenData`, `ServidorResumen`, `BannersPorServidor`, `HistorialSubida` + `fetchResumen()` → `GET /api/resumen` | ⏳ |
+
+### Item 4: Componentes visuales del resumen
+
+**Descripción**: 5 componentes React que conforman las visualizaciones del panel.
+
+| # | Componente | Descripción | Tecnología |
+|---|-----------|-------------|-----------|
+| 20.4.1 | `KpiCard.tsx` | Tarjeta KPI con icono Lucide, contador animado (0→valor con requestAnimationFrame), label, subtítulo con desglose (ej. "8 online · 2 offline") | Tailwind + CSS animación |
+| 20.4.2 | `ServerStorageChart.tsx` | Barras horizontales de almacenamiento por servidor con umbral de color (verde <70%, amarillo <90%, rojo ≥90%) | Recharts `BarChart` layout="vertical" |
+| 20.4.3 | `DeviceStatusChart.tsx` | Donut online/offline con total en el centro | Recharts `PieChart` + `Label` |
+| 20.4.4 | `BannersTimeline.tsx` | Timeline de área con subidas de banners últimos 30 días | Recharts `AreaChart` con gradiente |
+| 20.4.5 | `ServerMiniTable.tsx` | Tabla compacta: servidor, estado online/offline, barra almacenamiento, dispositivos, videos | Tailwind puro (sin recharts) |
+
+| # | Archivos | Estado |
+|---|----------|:------:|
+| 20.4.1 | `dashboard/components/resumen/KpiCard.tsx` | ⏳ |
+| 20.4.2 | `dashboard/components/resumen/ServerStorageChart.tsx` | ⏳ |
+| 20.4.3 | `dashboard/components/resumen/DeviceStatusChart.tsx` | ⏳ |
+| 20.4.4 | `dashboard/components/resumen/BannersTimeline.tsx` | ⏳ |
+| 20.4.5 | `dashboard/components/resumen/ServerMiniTable.tsx` | ⏳ |
+
+### Item 5: Pantalla `ResumenScreen.tsx`
+
+**Descripción**: Orquestador del panel resumen. Layout en grid responsivo.
+
+**Layout**:
+```
+┌─────────────── KPIs (4 columnas → 2 → 1) ───────────────┐
+│  Servidores    │  Dispositivos  │  Archivos     │  Usuarios │
+├─────────────────────────┬────────────────────────────────┤
+│  DeviceStatusChart      │  ServerStorageChart            │
+│  (donut online/offline) │  (barras almacenamiento)       │
+├─────────────────────────┴────────────────────────────────┤
+│  BannersTimeline (área 30 días)                          │
+├─────────────────────────────────────────────────────────┤
+│  ServerMiniTable                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Comportamiento**:
+- Polling automático cada 60 segundos
+- Skeleton loading en carga inicial
+- Error state con botón "Reintentar"
+- Indicador "Última actualización: HH:mm:ss"
+- Animación stagger de entrada
+
+| # | Archivo | Cambio | Estado |
+|---|---------|--------|:------:|
+| 20.5.1 | `dashboard/screens/ResumenScreen.tsx` | Crear: orquestador con useEffect + setInterval 60s, grid layout, loading/error states | ⏳ |
+
+### Item 6: Migración de rutas
+
+**Descripción**: El panel resumen reemplaza la landing page `/`. La lista de videos se mueve a `/videos`.
+
+| # | Archivo | Cambio | Estado |
+|---|---------|--------|:------:|
+| 20.6.1 | `dashboard/App.tsx` | `/` → `<ResumenScreen />`, `/videos` → `<DashboardScreen />` | ⏳ |
+| 20.6.2 | `dashboard/components/Sidebar.tsx` | Agregar "Resumen" (LayoutDashboard) primero, cambiar "Mis Videos" a `/videos`, role: all | ⏳ |
+
+### Orden de implementación sugerido
+
+```
+Paso 1 (Backend endpoint)  → sin frontend, verificable con curl
+Paso 2 (Router main.py)    → 1 línea, depende de Paso 1
+Paso 3 (npm install)       → independiente
+Paso 4 (resumenService)    → depende de Paso 1+2
+Paso 5-9 (componentes)     → independientes entre sí, dependen de Paso 4
+Paso 10 (ResumenScreen)    → depende de Paso 5-9
+Paso 11 (rutas + sidebar)  → depende de Paso 10
+Paso 12 (documentación)    → último
+```
+
+### Archivos a modificar (resumen)
+
+| Archivo | Acción |
+|---------|--------|
+| `backend-dashboard/app/routes/resumen.py` | ✚ Nuevo — endpoint `GET /api/resumen` |
+| `backend-dashboard/app/main.py` | ✎ 2 líneas — import + include_router |
+| `dashboard/package.json` | ✎ Agregar `recharts` |
+| `dashboard/services/resumenService.ts` | ✚ Nuevo — tipado + fetchResumen() |
+| `dashboard/components/resumen/KpiCard.tsx` | ✚ Nuevo — KPI animado |
+| `dashboard/components/resumen/ServerStorageChart.tsx` | ✚ Nuevo — barras recharts |
+| `dashboard/components/resumen/DeviceStatusChart.tsx` | ✚ Nuevo — donut recharts |
+| `dashboard/components/resumen/BannersTimeline.tsx` | ✚ Nuevo — área recharts |
+| `dashboard/components/resumen/ServerMiniTable.tsx` | ✚ Nuevo — tabla compacta |
+| `dashboard/screens/ResumenScreen.tsx` | ✚ Nuevo — pantalla principal |
+| `dashboard/App.tsx` | ✎ Reemplazar ruta `/` + agregar `/videos` |
+| `dashboard/components/Sidebar.tsx` | ✎ Agregar "Resumen" + cambiar path "Mis Videos" |
+
+---
+
 ## Prioridades de Implementación (Pendientes)
 
 | Prioridad | Item | Fase | Dónde | Dependencias |
@@ -1212,6 +1508,9 @@ El sistema no tiene **ningún** job de limpieza automática. Datos que crecen si
 | 🟢 **8** | Backups SQL Server (manual) | FASE 5.1 | servidor | — |
 | 🟢 **9** | Docker multi-stage build | FASE 5.3 | Dockerfile | ✅ |
 | ⚪ **10** | Versión Objetivo (FASE 15.5) | FASE 15 Lote 5 | backend-api + luzapp | largo plazo |
+| 🟢 **11** | Dashboard trigger purge (19.2-19.4) | FASE 19 | backend-api + dashboard + luzapp | ✅ |
+| 🟢 **12** | Timer periódico Handler ScanActivity (19.1, 19.5) | FASE 19 | luzapp | ✅ |
+| 🟢 **13** | Panel Resumen Dashboard | FASE 20 | backend-dashboard + dashboard | recharts |
 
 ---
 
@@ -1226,4 +1525,6 @@ El sistema no tiene **ningún** job de limpieza automática. Datos que crecen si
 | Blindaje WebSocket | 15 | 17/17 ✅ (100%) | 0/17 |
 | Cola Dashboard | 17 | 17/17 ✅ (100%) | 0/17 |
 | Bots Mantenimiento | 18 | 5/5 ✅ (100%) | 0/5 |
-| **TOTAL** | **1-18** | **88/89 (99%)** | **1/89** |
+| Limpieza Caché Luzapp | 19 | 0/5 (0%) | 5/5 |
+| Panel Resumen | 20 | 0/5 (0%) | 5/5 |
+| **TOTAL** | **1-20** | **88/99 (89%)** | **11/99** |

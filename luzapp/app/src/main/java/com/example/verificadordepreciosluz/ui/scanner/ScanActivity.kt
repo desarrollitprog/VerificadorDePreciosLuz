@@ -145,6 +145,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private var standbySlideRunnable: Runnable? = null
     private var resultHideRunnable: Runnable? = null
     private var currentStandbyBitmap: Bitmap? = null
+    private var isPurging = false
+    private val PURGE_INTERVAL_MS = 30L * 24 * 60 * 60 * 1000  // 30 días
+    private var purgeTimerRunnable: Runnable? = null
     private val deviceId: String by lazy {
         Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
     }
@@ -311,8 +314,12 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             Log.d(TAG, "BCV: onCreate - tiene red, invocando syncDolarBCV()")
             syncDolarBCV()
             scheduleDolarBCVRefresh()
+            schedulePeriodicPurge()
         } else {
             Log.d(TAG, "BCV: onCreate - sin red, no se obtiene tasa BCV")
+        }
+        if (!hasNetwork) {
+            schedulePeriodicPurge()
         }
     }
 
@@ -626,6 +633,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         Log.d(TAG, "BCV: handleNetworkChange - red disponible, invocando syncDolarBCV()")
         syncDolarBCV()
         scheduleDolarBCVRefresh()
+        schedulePeriodicPurge()
     }
 
     // 2) Cargar respaldo local desde almacenamiento interno
@@ -980,6 +988,53 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             }
             scheduleDolarBCVRefresh()
         }, msUntilMidnight)
+    }
+
+    // Programa limpieza periódica del cache de banners cada 30 días
+    private fun schedulePeriodicPurge() {
+        val prefs = getSharedPreferences("PurgePrefs", MODE_PRIVATE)
+        val lastPurgeAt = prefs.getLong("lastPurgeAt", 0L)
+        val delay: Long
+        if (lastPurgeAt == 0L) {
+            delay = PURGE_INTERVAL_MS  // Primera vez: programar para 30 días
+        } else {
+            val nextPurgeAt = lastPurgeAt + PURGE_INTERVAL_MS
+            delay = maxOf(0L, nextPurgeAt - System.currentTimeMillis())
+        }
+        purgeTimerRunnable?.let { uiHandler.removeCallbacks(it) }
+        purgeTimerRunnable = Runnable {
+            if (!isFinishing && !isPurging && api != null && backendBaseUrl != null) {
+                isPurging = true
+                Log.i(TAG, "[Purge] Iniciando purge periódico programado")
+                uiHandler.post {
+                    stopStandbyCarousel()
+                    binding.standbyOverlay.visibility = View.GONE
+                }
+                scope.launch {
+                    try {
+                        ejecutarPurgaTotal(this@ScanActivity, api!!, backendBaseUrl!!, deviceId) {
+                            getSharedPreferences("PurgePrefs", MODE_PRIVATE).edit()
+                                .putLong("lastPurgeAt", System.currentTimeMillis()).apply()
+                            uiHandler.post {
+                                Log.i(TAG, "[Purge] Purge periódico completado exitosamente")
+                                startStandbyCarousel()
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "[Purge] Error en purge periódico", e)
+                    } finally {
+                        isPurging = false
+                        uiHandler.post { schedulePeriodicPurge() }
+                    }
+                }
+            } else {
+                schedulePeriodicPurge()
+            }
+        }
+        if (delay > 0) {
+            Log.i(TAG, "[Purge] Próxima limpieza programada en ${delay / (24 * 60 * 60 * 1000)} días")
+        }
+        uiHandler.postDelayed(purgeTimerRunnable!!, delay)
     }
 
     // Reinicia el temporizador de inactividad
@@ -1795,6 +1850,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         dolarBcJob?.cancel()
         // Cleanup de reconnect handler para evitar memory leak
         uiHandler.removeCallbacks(reconnectRunnable)
+        purgeTimerRunnable?.let { uiHandler.removeCallbacks(it) }
         tabletWebSocket?.close(1000, "Activity destroyed")
         tabletWebSocket = null
         wsClient?.dispatcher?.executorService?.shutdown()
@@ -1998,6 +2054,29 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                     Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_INICIADO")
                                     // Confirmar al backend que el banner fue recibido
                                     sendSyncConfirmation(webSocket, command, "SUCCESS", commandId = commandId)
+                                }
+                            }
+                            "BANNER_LIST" -> {
+                                val bannersArray = message.optJSONArray("banners")
+                                val count = bannersArray?.length() ?: 0
+                                Log.i(TAG, "[WebSocket] BANNER_LIST recibido: $count banners")
+
+                                if (bannersArray != null) {
+                                    for (i in 0 until bannersArray.length()) {
+                                        val b = bannersArray.getJSONObject(i)
+                                        notifiedBannersStart.add(b.optInt("banner_id", 0))
+                                    }
+                                }
+
+                                forcePlayNowTimer?.let { uiHandler.removeCallbacks(it) }
+                                forcePlayNowTimer = Runnable { forcePlayNow = false }
+                                uiHandler.postDelayed(forcePlayNowTimer!!, forcePlayNowTimeoutMs)
+                                forcePlayNow = true
+
+                                syncBannersOnStart()
+                                uiHandler.post {
+                                    Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_LIST")
+                                    sendSyncConfirmation(webSocket, "BANNER_LIST", "SUCCESS")
                                 }
                             }
                             "BANNER_EXPIRED" -> {
@@ -2255,6 +2334,29 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                     Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_INICIADO (binario)")
                                     // Confirmar al backend que el banner fue recibido
                                     sendSyncConfirmation(webSocket, command, "SUCCESS", commandId = commandId)
+                                }
+                            }
+                            "BANNER_LIST" -> {
+                                val bannersArray = message.optJSONArray("banners")
+                                val count = bannersArray?.length() ?: 0
+                                Log.i(TAG, "[WebSocket] BANNER_LIST recibido (binario): $count banners")
+
+                                if (bannersArray != null) {
+                                    for (i in 0 until bannersArray.length()) {
+                                        val b = bannersArray.getJSONObject(i)
+                                        notifiedBannersStart.add(b.optInt("banner_id", 0))
+                                    }
+                                }
+
+                                forcePlayNowTimer?.let { uiHandler.removeCallbacks(it) }
+                                forcePlayNowTimer = Runnable { forcePlayNow = false }
+                                uiHandler.postDelayed(forcePlayNowTimer!!, forcePlayNowTimeoutMs)
+                                forcePlayNow = true
+
+                                syncBannersOnStart()
+                                uiHandler.post {
+                                    Log.i(TAG, "[WebSocket] Banners recargados tras BANNER_LIST (binario)")
+                                    sendSyncConfirmation(webSocket, "BANNER_LIST", "SUCCESS")
                                 }
                             }
                             "BANNER_FINALIZADO" -> {

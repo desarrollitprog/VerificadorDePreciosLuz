@@ -1,7 +1,6 @@
 package com.example.verificadordepreciosluz.util
 
 import android.Manifest
-import android.app.Activity
 import android.app.ActivityManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -330,7 +329,7 @@ object UpdateChecker {
             }
             
             hideNotification(context)
-            context.startActivity(intent)
+            context.startActivity(Intent.createChooser(intent, "Instalar actualización"))
             
         } catch (e: Exception) {
             Log.e(TAG, "Error: ${e.message}")

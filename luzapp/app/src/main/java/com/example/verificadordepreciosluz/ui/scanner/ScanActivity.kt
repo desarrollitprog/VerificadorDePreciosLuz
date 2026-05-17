@@ -57,6 +57,7 @@ import com.example.verificadordepreciosluz.databinding.ActivityScanBinding
 import com.example.verificadordepreciosluz.R
 import com.example.verificadordepreciosluz.util.NetworkUtils
 import com.example.verificadordepreciosluz.util.UpdateChecker
+import com.example.verificadordepreciosluz.util.BackupWorker
 import com.example.verificadordepreciosluz.util.UpdateWorker
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode

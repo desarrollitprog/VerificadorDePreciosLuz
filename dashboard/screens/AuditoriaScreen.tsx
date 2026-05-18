@@ -6,7 +6,7 @@ import { useNotification } from '../components/useNotification';
 import { TableSkeleton } from '../components/TableSkeleton';
 import { Spinner } from '../components/Spinner';
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 25;
 
 function ExpandableDescription({ text, maxLength = 80 }: { text: string; maxLength?: number }) {
   const [expanded, setExpanded] = useState(false);

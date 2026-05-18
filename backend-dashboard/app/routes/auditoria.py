@@ -223,11 +223,11 @@ async def obtener_auditoria(
     elif offset + limit > sesion_total:
         sesion_limit = sesion_total - offset
     
+    sesion_rows = []
     if sesion_limit > 0:
         sesion_query = sesion_query.order_by(DispositivoSesion.inicio.desc()).offset(sesion_offset).limit(sesion_limit)
-    
-    sesion_result = await db.execute(sesion_query)
-    sesion_rows = sesion_result.all()
+        sesion_result = await db.execute(sesion_query)
+        sesion_rows = sesion_result.all()
     
     remaining_offset = max(0, offset - sesion_total)
     remaining_limit = limit - len(sesion_rows)
@@ -263,11 +263,11 @@ async def obtener_auditoria(
     if notif_conditions:
         notif_query = notif_query.where(*notif_conditions)
     
+    notif_rows = []
     if remaining_limit > 0:
         notif_query = notif_query.order_by(Notificacion.fecha_creacion.desc()).offset(remaining_offset).limit(remaining_limit)
-    
-    notif_result = await db.execute(notif_query)
-    notif_rows = notif_result.all()
+        notif_result = await db.execute(notif_query)
+        notif_rows = notif_result.all()
     
     items = []
     

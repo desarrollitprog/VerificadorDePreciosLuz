@@ -86,7 +86,7 @@ export const ResumenScreen: React.FC = () => {
 
       {data && (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 stagger-1">
+          <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 stagger-1 ${role === 'ADMIN' ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
             <KpiCard
               icon={Server}
               label="Sedes"
@@ -137,7 +137,7 @@ export const ResumenScreen: React.FC = () => {
               <ServerStorageChart data={data.servidores_detalle} />
             </div>
           ) : (
-            <div className="max-w-md mx-auto stagger-2">
+            <div className="stagger-2">
               <DeviceStatusChart data={data.dispositivos} />
             </div>
           )}

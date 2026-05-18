@@ -31,6 +31,9 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
     return <p className="text-sm text-slate-500">No hay servidores disponibles</p>;
   }
 
+  const totalOnline = servidores.reduce((acc, s) => acc + (s.dispositivos?.filter(d => d.online).length ?? 0), 0);
+  const totalOffline = servidores.reduce((acc, s) => acc + (s.dispositivos?.filter(d => !d.online).length ?? 0), 0);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between pb-3 border-b border-slate-200/70 dark:border-slate-700/50">
@@ -38,9 +41,26 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
           <Server size={18} style={{ color: accentColor }} />
           {label}
         </p>
-        <span className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full font-medium text-slate-600 dark:text-slate-400">
-          {selectedServidorIds.length} seleccionados
-        </span>
+        <div className="flex items-center gap-2">
+          {totalOnline > 0 && (
+            <span className="flex items-center gap-1 text-xs text-slate-500">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              {totalOnline} en línea
+            </span>
+          )}
+          {totalOffline > 0 && (
+            <span className="flex items-center gap-1 text-xs text-slate-500">
+              <span className="w-2 h-2 rounded-full bg-red-500" />
+              {totalOffline} desconectados
+            </span>
+          )}
+          {(totalOnline > 0 || totalOffline > 0) && (
+            <span className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
+          )}
+          <span className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full font-medium text-slate-600 dark:text-slate-400">
+            {selectedServidorIds.length} seleccionados
+          </span>
+        </div>
       </div>
 
       <div className={`${maxHeight} overflow-y-auto space-y-3 pr-2 custom-scrollbar`}>

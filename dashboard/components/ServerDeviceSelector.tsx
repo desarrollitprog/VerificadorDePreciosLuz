@@ -31,9 +31,6 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
     return <p className="text-sm text-slate-500">No hay servidores disponibles</p>;
   }
 
-  const totalOnline = servidores.reduce((acc, s) => acc + (s.dispositivos?.filter(d => d.online).length ?? 0), 0);
-  const totalOffline = servidores.reduce((acc, s) => acc + (s.dispositivos?.filter(d => !d.online).length ?? 0), 0);
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between pb-3 border-b border-slate-200/70 dark:border-slate-700/50">
@@ -41,30 +38,17 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
           <Server size={18} style={{ color: accentColor }} />
           {label}
         </p>
-        <div className="flex items-center gap-2">
-          {totalOnline > 0 && (
-            <span className="flex items-center gap-1 text-xs text-slate-500">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              {totalOnline} en línea
-            </span>
-          )}
-          {totalOffline > 0 && (
-            <span className="flex items-center gap-1 text-xs text-slate-500">
-              <span className="w-2 h-2 rounded-full bg-red-500" />
-              {totalOffline} desconectados
-            </span>
-          )}
-          {(totalOnline > 0 || totalOffline > 0) && (
-            <span className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
-          )}
-          <span className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full font-medium text-slate-600 dark:text-slate-400">
-            {selectedServidorIds.length} seleccionados
-          </span>
-        </div>
+        <span className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full font-medium text-slate-600 dark:text-slate-400">
+          {selectedServidorIds.length} seleccionados
+        </span>
       </div>
 
       <div className={`${maxHeight} overflow-y-auto space-y-3 pr-2 custom-scrollbar`}>
-        {servidores.map(srv => (
+        {servidores.map(srv => {
+          const onlineCount = srv.dispositivos?.filter(d => d.online).length ?? 0;
+          const offlineCount = srv.dispositivos?.filter(d => !d.online).length ?? 0;
+          const totalDispositivos = onlineCount + offlineCount;
+          return (
           <div key={srv.id} className="border border-slate-200/70 dark:border-slate-700/50 rounded-xl overflow-hidden hover:border-primary/30 transition-all duration-300 server-card-glow">
             <div className="flex items-center gap-3 p-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
                  onClick={() => onServidorChange(Number(srv.id), !selectedServidorIds.includes(Number(srv.id)))}>
@@ -83,10 +67,21 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
                   {srv.nombre}
                 </span>
                 <span className="text-xs text-slate-500 flex items-center gap-1">
-                  <span className={`w-1.5 h-1.5 rounded-full ${
-                    srv.online ? 'bg-emerald-500' : 'bg-slate-400'
-                  }`} />
-                  {srv.dispositivos?.length ?? 0} dispositivos
+                  <span className={`w-1.5 h-1.5 rounded-full ${srv.online ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                  {onlineCount > 0 && (
+                    <span className="flex items-center gap-0.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      {onlineCount}
+                    </span>
+                  )}
+                  {offlineCount > 0 && (
+                    <span className="flex items-center gap-0.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                      {offlineCount}
+                    </span>
+                  )}
+                  <span className="text-slate-400 mx-0.5">|</span>
+                  {totalDispositivos} dispositivos
                 </span>
               </div>
 
@@ -147,7 +142,8 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="pt-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">

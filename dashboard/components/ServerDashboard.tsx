@@ -35,7 +35,8 @@ export function ServerDashboard() {
   const showNotification = useNotification();
   const [servidores, setServidores] = useState<ServerStatusDetail[]>([]);
   const [expandedServerId, setExpandedServerId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [renameModal, setRenameModal] = useState<RenameModalState | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -92,17 +93,21 @@ export function ServerDashboard() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
   const fetchStatus = async () => {
-    setLoading(true);
+    const isFirstLoad = servidores.length === 0;
+    if (isFirstLoad) setInitialLoading(true);
+    else setIsRefreshing(true);
     setError(null);
     try {
       const data = await getServersStatusWithDevices();
-      const servidoresData = Array.isArray(data) ? data : [];
-      setServidores(servidoresData);
+      setServidores(Array.isArray(data) ? data : []);
     } catch {
-      setServidores([]);
-      setError('Error al conectar con el servicio de monitoreo');
+      if (isFirstLoad) {
+        setServidores([]);
+        setError('Error al conectar con el servicio de monitoreo');
+      }
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -574,10 +579,11 @@ export function ServerDashboard() {
           </select>
           <button
             onClick={fetchStatus}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition w-full sm:w-auto justify-center"
+            disabled={isRefreshing}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition w-full sm:w-auto justify-center disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            <RefreshCw size={16} />
-            Refrescar
+            <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
+            {isRefreshing ? 'Actualizando...' : 'Refrescar'}
           </button>
           <button
             onClick={() => setScheduleRestartModal(prev => ({ ...prev, isOpen: true }))}
@@ -589,9 +595,9 @@ export function ServerDashboard() {
         </div>
       </div>
 
-      {loading ? (
+      {initialLoading ? (
         <div className="text-slate-500">Cargando monitoreo...</div>
-      ) : error ? (
+      ) : error && servidores.length === 0 ? (
         <div className="text-red-500">{error}</div>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-baseline">

@@ -1066,8 +1066,8 @@ export const DashboardScreen: React.FC = () => {
                    </button>
                  </div>
                )}
-                <div className="grid grid-cols-12 gap-4 border-b border-slate-200 dark:border-slate-700 px-3 py-2 bg-slate-50 dark:bg-slate-800/50 text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase">
-                   <div className="col-span-1 flex items-center">
+                 <div className="grid grid-cols-12 gap-4 min-w-[800px] border-b border-slate-200 dark:border-slate-700 px-3 py-2 bg-slate-50 dark:bg-slate-800/50 text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase">
+                    <div className="col-span-1 flex items-center">
                      <input 
                        type="checkbox" 
                        checked={selectedVideoIds.length === paginatedTableVideos.length && paginatedTableVideos.length > 0}
@@ -1090,7 +1090,7 @@ export const DashboardScreen: React.FC = () => {
                 </div>
                 {(() => {
                   return paginatedTableVideos.length > 0 ? paginatedTableVideos.map((video) => (
-                    <div key={video.id} className="grid grid-cols-12 gap-4 border-b border-slate-100 dark:border-slate-700/30 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors items-center">
+                    <div key={video.id} className="grid grid-cols-12 gap-4 min-w-[800px] border-b border-slate-100 dark:border-slate-700/30 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors items-center">
                       <div className="col-span-1 flex items-center">
                         <input 
                           type="checkbox" 

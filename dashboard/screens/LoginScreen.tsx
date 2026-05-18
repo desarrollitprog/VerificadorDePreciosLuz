@@ -230,7 +230,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                 </p>
               </div>
 
-              <div className="flex items-center justify-between gap-2">
+              <div className="grid grid-cols-6 gap-2">
                 {otpDigits.map((digit, index) => (
                   <input
                     key={index}
@@ -244,7 +244,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                     onChange={e => handleOtpChange(index, e.target.value)}
                     onKeyDown={e => handleOtpKeyDown(index, e)}
                     onPaste={handleOtpPaste}
-                    className="h-12 w-12 rounded-lg border border-slate-200/50 bg-slate-50/50 text-center text-lg font-semibold text-slate-800 focus:border-primary/50 focus:ring-1 focus:ring-primary/20 dark:border-slate-700/50 dark:bg-[#111a22]/50 dark:text-white transition-all duration-200"
+                    className="w-full aspect-square rounded-lg border border-slate-200/50 bg-slate-50/50 text-center text-lg font-semibold text-slate-800 focus:border-primary/50 focus:ring-1 focus:ring-primary/20 dark:border-slate-700/50 dark:bg-[#111a22]/50 dark:text-white transition-all duration-200"
                   />
                 ))}
               </div>

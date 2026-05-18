@@ -47,7 +47,7 @@ const DeviceStatusChart: React.FC<Props> = ({ data, loading }) => {
       <div className="relative z-10 p-5">
         <h3 className="text-slate-900 dark:text-white font-semibold text-sm mb-4">Estado de Dispositivos</h3>
         <div className="flex items-center justify-center">
-          <div className="relative">
+          <div className="relative min-w-[220px]">
             <ResponsiveContainer width="100%" height={220}>
               <PieChart>
                 <Pie

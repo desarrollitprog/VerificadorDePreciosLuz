@@ -420,9 +420,9 @@ export const CalendarScreen: React.FC = () => {
               </div>
               
               <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">
-                <span className="font-semibold">Inicio:</span> {new Date(selectedEvent.start).toLocaleDateString('es-VE', { day: '2-digit', month: 'long', year: 'numeric' })}
+                <span className="font-semibold">Inicio:</span> {new Date(selectedEvent.start).toLocaleString('es-VE', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 {selectedEvent.end && (
-                  <span> • <span className="font-semibold">Fin:</span> {new Date(selectedEvent.end).toLocaleDateString('es-VE', { day: '2-digit', month: 'long', year: 'numeric' })}</span>
+                  <span> • <span className="font-semibold">Fin:</span> {new Date(selectedEvent.end).toLocaleString('es-VE', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                 )}
               </p>
 

@@ -1876,12 +1876,12 @@ export const DashboardScreen: React.FC = () => {
                     setIsSavingEdit(true);
                    try {
                      // Actualizar metadata
-                     await updateBannerMetadata(editingVideo.id, {
-                       activo: editFormData.activo,
-                       titulo: editFormData.titulo || '',
-                       fechaInicio: editFormData.fechaInicio || null,
-                       fechaFin: editFormData.fechaFin || null,
-                     });
+                      await updateBannerMetadata(editingVideo.id, {
+                        activo: editFormData.activo,
+                        titulo: editFormData.titulo || '',
+                        fecha_inicio: editFormData.fechaInicio || null,
+                        fecha_fin: editFormData.fechaFin || null,
+                      });
                     
                     // Actualizar asignaciones
                     await updateBannerAsignations(

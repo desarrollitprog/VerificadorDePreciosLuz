@@ -1287,7 +1287,7 @@ export const DashboardScreen: React.FC = () => {
       </div>
 
       {isUploadModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-gradient-to-br from-black/70 via-black/60 to-black/80 px-4 pt-4 md:pt-20">
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-gradient-to-br from-black/70 via-black/60 to-black/80 px-4 pt-4 md:pt-20 animate-fade-in">
            <div className="w-full max-w-6xl bg-white dark:bg-[#1c2936] rounded-2xl border border-slate-300/50 dark:border-slate-600/50 shadow-[0_20px_60px_rgba(0,0,0,0.3)] p-6">
              <div className="flex items-start justify-between mb-6 pb-4 border-b border-gradient-to-r from-transparent via-slate-300 to-transparent">
                <div>
@@ -1378,30 +1378,36 @@ export const DashboardScreen: React.FC = () => {
                          {/* Fecha Inicio */}
                          <div>
                            <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2 ">FECHA INICIO</label>
-                           <input
-                             type="datetime-local"
-                             className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-900 dark:text-white focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all duration-200"
-                             value={fileMetadatas[idx]?.fechaInicio || ''}
-                             onChange={e => {
-                               const newMetas = [...fileMetadatas];
-                               newMetas[idx].fechaInicio = e.target.value;
-                               setFileMetadatas(newMetas);
-                             }}
-                           />
+                            <input
+                              type="datetime-local"
+                              className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border-2 bg-white dark:bg-slate-800/50 text-slate-900 dark:text-white text-base sm:text-lg font-mono tracking-[0.15em] sm:tracking-[0.2em] outline-none transition-all"
+                              style={{ borderColor: 'rgba(148,163,184,0.3)' }}
+                              onFocus={e => e.currentTarget.style.borderColor = '#10b981'}
+                              onBlur={e => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.3)'}
+                              value={fileMetadatas[idx]?.fechaInicio || ''}
+                              onChange={e => {
+                                const newMetas = [...fileMetadatas];
+                                newMetas[idx].fechaInicio = e.target.value;
+                                setFileMetadatas(newMetas);
+                              }}
+                            />
                         </div>
                          {/* Fecha Fin */}
                          <div>
                            <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2">FECHA FIN</label>
-                           <input
-                             type="datetime-local"
-                             className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-900 dark:text-white focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all duration-200"
-                             value={fileMetadatas[idx]?.fechaFin || ''}
-                             onChange={e => {
-                               const newMetas = [...fileMetadatas];
-                               newMetas[idx].fechaFin = e.target.value;
-                               setFileMetadatas(newMetas);
-                             }}
-                           />
+                            <input
+                              type="datetime-local"
+                              className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border-2 bg-white dark:bg-slate-800/50 text-slate-900 dark:text-white text-base sm:text-lg font-mono tracking-[0.15em] sm:tracking-[0.2em] outline-none transition-all"
+                              style={{ borderColor: 'rgba(148,163,184,0.3)' }}
+                              onFocus={e => e.currentTarget.style.borderColor = '#10b981'}
+                              onBlur={e => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.3)'}
+                              value={fileMetadatas[idx]?.fechaFin || ''}
+                              onChange={e => {
+                                const newMetas = [...fileMetadatas];
+                                newMetas[idx].fechaFin = e.target.value;
+                                setFileMetadatas(newMetas);
+                              }}
+                            />
                          </div>
                       </div>
                       {/* Asignación */}
@@ -1676,7 +1682,7 @@ export const DashboardScreen: React.FC = () => {
       )}
       {/* Edit Modal */}
       {isEditModalOpen && editingVideo && (
-        <div className="fixed inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/80 flex items-start justify-center z-50 p-4 pt-20">
+        <div className="fixed inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/80 flex items-start justify-center z-50 p-4 pt-20 animate-fade-in">
           <div className="bg-white dark:bg-[#1c2936] rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.3)] w-full max-w-2xl max-h-[90vh] flex flex-col">
             <div className="p-6 border-b border-gradient-to-r from-transparent via-slate-300 to-transparent shrink-0">
               <div className="flex items-center gap-3">
@@ -1711,7 +1717,10 @@ export const DashboardScreen: React.FC = () => {
                   type="datetime-local"
                   value={editFormData.fechaInicio}
                   onChange={e => setEditFormData({ ...editFormData, fechaInicio: e.target.value })}
-                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-300/70 dark:border-slate-600/70 rounded-lg text-base text-slate-900 dark:text-white focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all duration-200"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border-2 bg-white dark:bg-slate-800/50 text-slate-900 dark:text-white text-base sm:text-lg font-mono tracking-[0.15em] sm:tracking-[0.2em] outline-none transition-all"
+                  style={{ borderColor: 'rgba(148,163,184,0.3)' }}
+                  onFocus={e => e.currentTarget.style.borderColor = '#10b981'}
+                  onBlur={e => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.3)'}
                 />
               </div>
               
@@ -1723,7 +1732,10 @@ export const DashboardScreen: React.FC = () => {
                   type="datetime-local"
                   value={editFormData.fechaFin}
                   onChange={e => setEditFormData({ ...editFormData, fechaFin: e.target.value })}
-                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-300/70 dark:border-slate-600/70 rounded-lg text-base text-slate-900 dark:text-white focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all duration-200"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border-2 bg-white dark:bg-slate-800/50 text-slate-900 dark:text-white text-base sm:text-lg font-mono tracking-[0.15em] sm:tracking-[0.2em] outline-none transition-all"
+                  style={{ borderColor: 'rgba(148,163,184,0.3)' }}
+                  onFocus={e => e.currentTarget.style.borderColor = '#10b981'}
+                  onBlur={e => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.3)'}
                 />
               </div>
               

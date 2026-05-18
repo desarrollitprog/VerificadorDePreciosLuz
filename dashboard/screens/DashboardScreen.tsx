@@ -337,6 +337,14 @@ export const DashboardScreen: React.FC = () => {
       }
       let fechaInicioIso = meta.fechaInicio || null;
       let fechaFinIso = meta.fechaFin || null;
+      if (fechaFinIso && !fechaInicioIso) {
+        showNotification(`Debes establecer fecha de inicio si pones fecha de fin para el archivo #${i + 1}`, 'warning');
+        return;
+      }
+      if (fechaInicioIso && !fechaFinIso) {
+        showNotification(`Debes establecer fecha de fin si pones fecha de inicio para el archivo #${i + 1}`, 'warning');
+        return;
+      }
       if (fechaInicioIso && fechaFinIso && new Date(fechaInicioIso) > new Date(fechaFinIso)) {
         showNotification(`La fecha de inicio no puede ser mayor a la fecha fin para el archivo #${i + 1}`, 'warning');
         return;
@@ -1840,14 +1848,32 @@ export const DashboardScreen: React.FC = () => {
                </button>
                <button
                  type="button"
-                 onClick={async () => {
-                   const fechaInicio = editFormData.fechaInicio;
-                   const fechaFin = editFormData.fechaFin;
-                   if (fechaInicio && fechaFin && new Date(fechaInicio) > new Date(fechaFin)) {
-                     showNotification('La fecha de inicio no puede ser mayor a la fecha fin', 'warning');
-                     return;
-                   }
-                   setIsSavingEdit(true);
+                  onClick={async () => {
+                    const fechaInicio = editFormData.fechaInicio;
+                    const fechaFin = editFormData.fechaFin;
+
+                    if (fechaFin && !fechaInicio) {
+                      showNotification('Debes establecer fecha de inicio si pones fecha de fin', 'warning');
+                      return;
+                    }
+                    if (fechaInicio && !fechaFin) {
+                      showNotification('Debes establecer fecha de fin si pones fecha de inicio', 'warning');
+                      return;
+                    }
+                    if (fechaInicio && fechaFin && new Date(fechaInicio) > new Date(fechaFin)) {
+                      showNotification('La fecha de inicio no puede ser mayor a la fecha fin', 'warning');
+                      return;
+                    }
+
+                    const hadSchedule = editingVideo?.fechaInicio || editingVideo?.fechaFin;
+                    const nowHasSchedule = !!(fechaInicio && fechaFin);
+                    const willUnschedule = hadSchedule && !nowHasSchedule;
+                    if (willUnschedule) {
+                      const ok = window.confirm('¿Estás seguro de desprogramar esta publicidad?\n\nSe eliminarán las fechas de inicio y fin.');
+                      if (!ok) return;
+                    }
+
+                    setIsSavingEdit(true);
                    try {
                      // Actualizar metadata
                      await updateBannerMetadata(editingVideo.id, {
@@ -1865,7 +1891,14 @@ export const DashboardScreen: React.FC = () => {
                       editDispositivoIds
                     );
                     
-                    showNotification('Publicidad actualizada correctamente', 'success');
+                    const msg = hadSchedule && nowHasSchedule
+                      ? 'Publicidad reprogramada correctamente'
+                      : hadSchedule && !nowHasSchedule
+                      ? 'Publicidad desprogramada correctamente'
+                      : !hadSchedule && nowHasSchedule
+                      ? 'Publicidad programada correctamente'
+                      : 'Publicidad actualizada correctamente';
+                    showNotification(msg, 'success');
                     setIsEditModalOpen(false);
                     setEditingVideo(null);
                     setEditAsignacionTodos(true);

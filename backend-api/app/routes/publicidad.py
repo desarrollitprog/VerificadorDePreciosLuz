@@ -1,3 +1,4 @@
+import logging
 from fastapi import UploadFile, File, Form, APIRouter, HTTPException, status, Depends, Query, Path
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, and_, func, cast, Date
@@ -10,6 +11,8 @@ from typing import List, Optional
 from pydantic import BaseModel
 from ..schemas import PublicidadResponse
 from ..models.publicidad import Publicidad
+
+logger = logging.getLogger("publicidad")
 
 router = APIRouter()
 
@@ -56,6 +59,7 @@ async def cancelar_notificaciones_banner(banner_id: int) -> None:
     await remove_pending_notification(banner_id, "BANNER_FINALIZADO")
     notified_banners_start.add(banner_id)
     notified_banners_end.add(banner_id)
+    logger.info(f"[EDIT] Notificaciones canceladas para banner {banner_id}")
 
 
 async def _schedule_banner_notification_update(
@@ -82,7 +86,9 @@ async def _schedule_banner_notification_update(
     now = get_venezuela_now_naive()
     delay = (fecha_inicio - now).total_seconds()
     if delay > 0:
+        logger.info(f"[EDIT] Banner {banner.id}: notificación programada en {delay:.1f}s para {fecha_inicio}")
         await asyncio.sleep(delay)
+        logger.info(f"[EDIT] Banner {banner.id}: ejecutando notificación programada a las {get_venezuela_now_naive()}")
         async for db in get_db_publicidad():
             result = await db.execute(select(Publicidad).where(Publicidad.id == banner.id))
             current = result.scalars().first()
@@ -91,6 +97,9 @@ async def _schedule_banner_notification_update(
                 if current.device_ids:
                     target = [d.strip() for d in current.device_ids.split(",") if d.strip()]
                 await _send_banner_notification(current, target, "BANNER_INICIADO")
+                logger.info(f"[EDIT] Banner {banner.id}: BANNER_INICIADO enviado a dispositivos")
+            else:
+                logger.info(f"[EDIT] Banner {banner.id}: saltado (inactivo o no encontrado)")
             break
 
     await remove_pending_notification(banner.id, "BANNER_INICIADO")
@@ -585,14 +594,17 @@ async def actualizar_banner_remoto(
     await db.refresh(banner)
 
     # Cancelar notificaciones programadas previas (Redis + memoria)
+    logger.info(f"[EDIT] Banner {banner.id} (IdPublicidadRemoto={id_remoto}): cancelando notificaciones previas")
     await cancelar_notificaciones_banner(banner.id)
     
     # Notificar inmediatamente si fecha_inicio ya pasó, o reprogramar si es futura
     if body.fecha_inicio and banner.activo:
         now = get_venezuela_now_naive()
         if body.fecha_inicio <= now:
+            logger.info(f"[EDIT] Banner {banner.id}: fecha_inicio={body.fecha_inicio} <= now={now} → notificación INMEDIATA")
             await _notify_banner_iniciado_inmediato(banner, banner.device_ids)
         elif body.fecha_inicio > now:
+            logger.info(f"[EDIT] Banner {banner.id}: fecha_inicio={body.fecha_inicio} > now={now} → reprogramando")
             asyncio.create_task(
                 _schedule_banner_notification_update(
                     banner,
@@ -600,6 +612,8 @@ async def actualizar_banner_remoto(
                     fecha_fin=body.fecha_fin,
                 )
             )
+    else:
+        logger.info(f"[EDIT] Banner {banner.id}: sin reprogramación (fecha_inicio={body.fecha_inicio}, activo={banner.activo})")
 
     return {
         "success": True,

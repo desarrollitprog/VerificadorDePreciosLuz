@@ -4,6 +4,7 @@ import { Bell, AlertTriangle, ChevronRight, Check, Circle } from 'lucide-react';
 import { useNotification } from './useNotification';
 import { deleteReadNotificaciones, fetchNotificaciones, markNotificacionesRead, markNotificacionRead, Notificacion } from '../services/notificacionesService';
 import { toNotificationViewModel } from '../services/notificacionesPresentation';
+import { getUserRole } from '../services/tokenUtils';
 import type { NotificationType } from './NotificationContext';
 
 function formatCaracasTime(dateString: string | Date): Date {
@@ -58,6 +59,11 @@ export const GeneralNotifications: React.FC = () => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const shownErrorNotificationIdsRef = useRef<Set<number>>(new Set());
   const [search, setSearch] = useState("");
+  const [role, setRole] = useState<'ADMIN' | 'CLIENTE' | null>(null);
+
+  useEffect(() => {
+    setRole(getUserRole());
+  }, []);
 
   const handleNavigate = (path: string) => {
     navigate(path);
@@ -272,6 +278,7 @@ export const GeneralNotifications: React.FC = () => {
                 })
             )}
           </div>
+          {role === 'ADMIN' && (
           <div className="p-3 border-t border-slate-200 dark:border-slate-800">
             <button
               onClick={() => {
@@ -284,6 +291,7 @@ export const GeneralNotifications: React.FC = () => {
               <ChevronRight size={16} />
             </button>
           </div>
+          )}
         </div>
       )}
     </div>

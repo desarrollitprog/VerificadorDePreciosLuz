@@ -52,6 +52,7 @@ class BackupWorker(context: Context, workerParams: WorkerParameters) :
     }
 
     companion object {
+
         private const val TAG = "BackupWorker"
         private const val WORK_NAME = "daily_backup_sync"
 

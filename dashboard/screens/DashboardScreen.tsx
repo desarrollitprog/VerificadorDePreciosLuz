@@ -1100,7 +1100,7 @@ export const DashboardScreen: React.FC = () => {
                   <div className="col-span-2 text-right">Acciones</div>
                 </div>
                 {(() => {
-                  return paginatedTableVideos.length > 0 ? paginatedTableVideos.map((video) => (
+                  return paginatedTableVideos.length > 0 ? paginatedTableVideos.map((video, index) => (
                     <div key={video.id} className="grid grid-cols-12 gap-4 max-lg:min-w-[1100px] border-b border-slate-100 dark:border-slate-700/30 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors items-center">
                       <div className="col-span-1 flex items-center">
                         <input 
@@ -1140,7 +1140,7 @@ export const DashboardScreen: React.FC = () => {
                           {(video.estado || 'activo').toUpperCase()}
                         </span>
                         {/* Tooltip: Programación + Tipo de archivo */}
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 dark:bg-slate-800 text-white text-xs rounded-lg shadow-xl opacity-0 invisible group-hover/estado:opacity-100 group-hover/estado:visible transition-all duration-200 z-50 whitespace-nowrap">
+                        <div className={`absolute left-1/2 -translate-x-1/2 ${index === 0 ? 'top-full mt-2' : 'bottom-full mb-2'} px-3 py-2 bg-slate-900 dark:bg-slate-800 text-white text-xs rounded-lg shadow-xl opacity-0 invisible group-hover/estado:opacity-100 group-hover/estado:visible transition-all duration-200 z-50 whitespace-nowrap`}>
                             <div className="font-semibold mb-1">Programación</div>
                             <div className="text-slate-300">Tipo: <span className="text-white">{video.tipo === 'image' ? 'Imagen' : 'Video'}</span></div>
                             {video.fechaInicio && (
@@ -1149,7 +1149,7 @@ export const DashboardScreen: React.FC = () => {
                             {video.fechaFin && (
                               <div className="text-slate-300">Fin: <span className="text-white">{video.fechaFin}</span></div>
                             )}
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900 dark:border-t-slate-800"></div>
+                            <div className={`absolute left-1/2 -translate-x-1/2 border-4 border-transparent ${index === 0 ? 'bottom-full border-b-slate-900 dark:border-b-slate-800' : 'top-full border-t-slate-900 dark:border-t-slate-800'}`}></div>
                           </div>
                       </div>
                       <div className="col-span-1 text-sm text-slate-600 dark:text-slate-400">
@@ -1171,7 +1171,7 @@ export const DashboardScreen: React.FC = () => {
                                 grouped[key].push(a);
                               });
                               return (
-                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 dark:bg-slate-800 text-white text-xs rounded-lg shadow-xl opacity-0 invisible group-hover/assign:opacity-100 group-hover/assign:visible transition-all duration-200 z-50 min-w-[220px] max-h-[300px] overflow-y-auto">
+                                <div className={`absolute left-1/2 -translate-x-1/2 ${index === 0 ? 'top-full mt-2' : 'bottom-full mb-2'} px-3 py-2 bg-slate-900 dark:bg-slate-800 text-white text-xs rounded-lg shadow-xl opacity-0 invisible group-hover/assign:opacity-100 group-hover/assign:visible transition-all duration-200 z-50 min-w-[220px] max-h-[300px] overflow-y-auto`}>
                                   <div className="font-semibold mb-1.5 sticky top-0 bg-slate-900 dark:bg-slate-800 pb-1 border-b border-slate-700">
                                     Dispositivos asignados
                                   </div>
@@ -1188,7 +1188,7 @@ export const DashboardScreen: React.FC = () => {
                                       ))}
                                     </div>
                                   ))}
-                                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900 dark:border-t-slate-800"></div>
+                                  <div className={`absolute left-1/2 -translate-x-1/2 border-4 border-transparent ${index === 0 ? 'bottom-full border-b-slate-900 dark:border-b-slate-800' : 'top-full border-t-slate-900 dark:border-t-slate-800'}`}></div>
                                 </div>
                               );
                             })()}

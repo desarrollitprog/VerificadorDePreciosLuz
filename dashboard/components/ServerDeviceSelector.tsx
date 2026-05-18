@@ -12,6 +12,7 @@ interface ServerDeviceSelectorProps {
   onToggleExpand: (id: number) => void;
   label?: string;
   maxHeight?: string;
+  accentColor?: string;
 }
 
 export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
@@ -24,6 +25,7 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
   onToggleExpand,
   label = 'Seleccionar servidores:',
   maxHeight = 'max-h-32',
+  accentColor = '#3b82f6',
 }) => {
   if (servidores.length === 0) {
     return <p className="text-sm text-slate-500">No hay servidores disponibles</p>;
@@ -33,7 +35,7 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
     <div className="space-y-4">
       <div className="flex items-center justify-between pb-3 border-b border-slate-200/70 dark:border-slate-700/50">
         <p className="text-base font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
-          <Server size={18} className="text-primary" />
+          <Server size={18} style={{ color: accentColor }} />
           {label}
         </p>
         <span className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full font-medium text-slate-600 dark:text-slate-400">
@@ -46,11 +48,12 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
           <div key={srv.id} className="border border-slate-200/70 dark:border-slate-700/50 rounded-xl overflow-hidden hover:border-primary/30 transition-all duration-300 server-card-glow">
             <div className="flex items-center gap-3 p-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
                  onClick={() => onServidorChange(Number(srv.id), !selectedServidorIds.includes(Number(srv.id)))}>
-              <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all duration-200 ${
+              <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all duration-200 shrink-0 ${
                 selectedServidorIds.includes(Number(srv.id))
-                  ? 'bg-primary border-primary scale-110'
+                  ? 'scale-110'
                   : 'border-slate-300 dark:border-slate-600 hover:border-primary/50 scale-100'
-              }`}>
+              }`}
+              style={selectedServidorIds.includes(Number(srv.id)) ? { backgroundColor: accentColor, borderColor: accentColor } : undefined}>
                 {selectedServidorIds.includes(Number(srv.id)) && <Check size={14} className="text-white" />}
               </div>
 
@@ -100,11 +103,12 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
                       className="flex items-center gap-2 p-2 rounded-lg hover:bg-white dark:hover:bg-slate-700/50 cursor-pointer transition-colors group"
                       onClick={() => onDispositivoChange(String(disp.id), !selectedDispositivoIds.includes(String(disp.id)))}
                     >
-                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all duration-200 ${
+                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all duration-200 shrink-0 ${
                         selectedDispositivoIds.includes(String(disp.id))
-                          ? 'bg-primary border-primary scale-110'
+                          ? 'scale-110'
                           : 'border-slate-300 dark:border-slate-600 group-hover:border-primary/50'
-                      }`}>
+                      }`}
+                      style={selectedDispositivoIds.includes(String(disp.id)) ? { backgroundColor: accentColor, borderColor: accentColor } : undefined}>
                         {selectedDispositivoIds.includes(String(disp.id)) && <Check size={12} className="text-white" />}
                       </div>
                       <Smartphone size={12} className="text-slate-400 flex-shrink-0" />

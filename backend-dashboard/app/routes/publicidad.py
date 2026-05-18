@@ -12,7 +12,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy import func
 import cv2
-from ..models import Publicidad, PublicidadAsignacion, ServidorSecundario, Dispositivo
+from ..models import Publicidad, PublicidadAsignacion, ServidorSecundario, Dispositivo, SubidaLog
 from ..schemas import PublicidadResponse, PublicidadCreate
 from ..database import get_db_usuarios
 from ..dependencies import get_current_cliente
@@ -280,6 +280,11 @@ async def crear_banner(
         db.add(nuevo_banner)
         await db.commit()
         await db.refresh(nuevo_banner)
+
+        # Registrar en el histórico de subidas
+        db.add(SubidaLog(publicidad_id=nuevo_banner.IdPublicidad, titulo=nuevo_banner.Titulo))
+        await db.commit()
+
         return {
             "success": True,
             "message": "Banner creado correctamente.",
@@ -388,6 +393,11 @@ async def upload_banner(
         db.add(nuevo_banner)
         await db.commit()
         await db.refresh(nuevo_banner)
+
+        # Registrar en el histórico de subidas
+        db.add(SubidaLog(publicidad_id=nuevo_banner.IdPublicidad, titulo=nuevo_banner.Titulo))
+        await db.commit()
+
         log.info("banner_created", banner_id=nuevo_banner.IdPublicidad, titulo=nuevo_banner.Titulo)
 
         # Procesar servidores y dispositivos seleccionados
@@ -642,7 +652,7 @@ async def eliminar_banner(
             if os.path.exists(file_path):
                 os.remove(file_path)
         
-        # Eliminar asignaciones primero
+        # Eliminar asignaciones
         try:
             from sqlalchemy import delete
             await db.execute(delete(PublicidadAsignacion).where(PublicidadAsignacion.publicidad_id == id))
@@ -651,7 +661,7 @@ async def eliminar_banner(
             log.error("error_eliminar_asignaciones", banner_id=id, error=str(e))
             await db.rollback()
         
-        # Intentar borrar remotamente en backend-api usando el IdPublicidad como IdPublicidadRemoto
+        # Intentar borrar remotamente en backend-api
         try:
             remote_id = banner.IdPublicidad
             replicacion_resultados = await Borrado_a_todas_las_apis(remote_id)
@@ -661,7 +671,7 @@ async def eliminar_banner(
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error al borrar remotamente: {str(e)}")
 
-        # Si el borrado remoto fue exitoso o no hay ID remoto, borrar localmente
+        # Borrar físicamente
         await db.delete(banner)
         await db.commit()
         user_id = current_user.get("user_id")
@@ -670,6 +680,8 @@ async def eliminar_banner(
             srv_id = servidor_ids[0] if servidor_ids else None
             await registrar_accion(db, user_id, "BORRADO_MULTIMEDIA", descripcion_audit, dispositivo_id=disp_id, servidor_id=srv_id)
         return {"success": True, "message": "Banner eliminado correctamente."}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al eliminar banner: {str(e)}")
 
@@ -751,6 +763,11 @@ async def upload_banners_batch(
             db.add(nuevo_banner)
             await db.commit()
             await db.refresh(nuevo_banner)
+
+            # Registrar en el histórico de subidas
+            db.add(SubidaLog(publicidad_id=nuevo_banner.IdPublicidad, titulo=nuevo_banner.Titulo))
+            await db.commit()
+
             archivos_guardados.append(file_location)
             metadatos_guardados.append(nuevo_banner)
             resultados.append({

@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db_usuarios
 from app.dependencies import get_current_cliente, get_current_admin
-from app.services.device_service import rename_device, delete_device, get_device_content, reboot_device, program_reboot
+from app.services.device_service import rename_device, delete_device, get_device_content, reboot_device, purge_device, program_reboot
 
 router = APIRouter(tags=["monitoreo"])
 logger = logging.getLogger("uvicorn.error")
@@ -67,6 +67,20 @@ async def reiniciar_dispositivo(
     user_id = current_user.get("user_id") if current_user else None
     actor_name = current_user.get("nombre_usuario") or current_user.get("usuario") or "Sistema"
     result = await reboot_device(db, device_id, user_id, actor_name)
+    if not result.get("success"):
+        raise HTTPException(status_code=result.get("status_code", 500), detail=result.get("detail"))
+    return result.get("result")
+
+
+@router.post("/dispositivos/{device_id}/purge")
+async def limpiar_cache_dispositivo(
+    device_id: str,
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_cliente),
+):
+    user_id = current_user.get("user_id") if current_user else None
+    actor_name = current_user.get("nombre_usuario") or current_user.get("usuario") or "Sistema"
+    result = await purge_device(db, device_id, user_id, actor_name)
     if not result.get("success"):
         raise HTTPException(status_code=result.get("status_code", 500), detail=result.get("detail"))
     return result.get("result")

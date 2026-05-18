@@ -11,6 +11,7 @@ from .dispositivo_sesion import DispositivoSesion
 from .notificacion import Notificacion
 from .notificacion_leida import NotificacionLeida
 from .asignacion import PublicidadAsignacion
+from .subida_log import SubidaLog
 
 __all__ = [
     "Usuario",
@@ -22,4 +23,5 @@ __all__ = [
     "Notificacion",
     "NotificacionLeida",
     "PublicidadAsignacion",
+    "SubidaLog",
 ]

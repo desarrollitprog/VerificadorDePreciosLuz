@@ -69,6 +69,7 @@ device_command_bus: DeviceCommandBus | None = None
 device_bus_listener_task: asyncio.Task | None = None
 command_acker: Any = None
 pending_queue: Any = None
+banner_batch_manager: Any = None
 
 # Endpoint para consultar el estado de los dispositivos
 @app.get("/devices/status")
@@ -332,6 +333,34 @@ async def send_banner_notification_robust(banner: Publicidad, target_device_ids:
             await _send_to_device_robust(device_id, banner_info)
 
 
+async def _execute_banner_notification(banner, target_device_ids, command: str):
+    """Entrega un banner usando batch (BANNER_INICIADO) o directo (BANNER_FINALIZADO).
+    
+    Mantiene la lógica de envío centralizada para que schedule_banner_notification
+    y la recuperación post-reinicio compartan el mismo código.
+    """
+    if command == "BANNER_INICIADO" and banner_batch_manager is not None:
+        try:
+            banner_info = {
+                "banner_id": banner.id,
+                "titulo": banner.titulo,
+                "url": banner.url,
+                "tipo": banner.tipo,
+                "device_ids": target_device_ids,
+                "fecha_inicio": banner.fecha_inicio.isoformat() if banner.fecha_inicio else None,
+                "fecha_fin": banner.fecha_fin.isoformat() if banner.fecha_fin else None,
+            }
+            is_coordinator = await banner_batch_manager.accumulate(banner_info)
+            if is_coordinator:
+                asyncio.create_task(_delayed_batch_flush())
+            logger.info(f"Notificación de inicio acumulada para banner {banner.id}")
+        except Exception as e:
+            logger.error(f"Error acumulando banner {banner.id} en lote, enviando directo: {e}")
+            await send_banner_notification_robust(banner, target_device_ids, command)
+    else:
+        await send_banner_notification_robust(banner, target_device_ids, command)
+
+
 async def schedule_banner_notification(
     banner_id: int,
     device_ids: str | None,
@@ -380,9 +409,8 @@ async def schedule_banner_notification(
                         target_device_ids = None
                         if banner.device_ids:
                             target_device_ids = [d.strip() for d in banner.device_ids.split(",") if d.strip()]
-                        await send_banner_notification_robust(banner, target_device_ids, "BANNER_INICIADO")
+                        await _execute_banner_notification(banner, target_device_ids, "BANNER_INICIADO")
                         notified_banners_start.add(banner_id)
-                        logger.info(f"Notificación de inicio enviada para banner {banner_id}")
                     await remove_pending_notification(banner_id, "BANNER_INICIADO")
                     break
     
@@ -422,16 +450,119 @@ async def schedule_banner_notification(
                         target_device_ids = None
                         if banner.device_ids:
                             target_device_ids = [d.strip() for d in banner.device_ids.split(",") if d.strip()]
-                        await send_banner_notification_robust(banner, target_device_ids, "BANNER_FINALIZADO")
+                        await _execute_banner_notification(banner, target_device_ids, "BANNER_FINALIZADO")
                         notified_banners_end.add(banner_id)
                         logger.info(f"Notificación de fin enviada para banner {banner_id}")
                     await remove_pending_notification(banner_id, "BANNER_FINALIZADO")
                     break
 
 
+async def _delayed_batch_flush():
+    """Espera la ventana de coalescencia y luego flushea el lote de banners."""
+    global banner_batch_manager
+    try:
+        await asyncio.sleep(5)
+
+        if banner_batch_manager is None:
+            return
+
+        async def _send(msg: dict):
+            await tablet_ws_manager.broadcast(msg)
+            if device_command_bus is not None:
+                try:
+                    await device_command_bus.publish_command(
+                        device_id="*",
+                        command="BANNER_LIST",
+                        payload=msg,
+                    )
+                except Exception as e:
+                    logger.warning("[BANNER_BATCH] Redis bus falló: %s", e)
+
+        banners = await banner_batch_manager.flush(_send)
+        if banners:
+            logger.info("[BANNER_BATCH] Lote enviado con %d banners", len(banners))
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        logger.error("[BANNER_BATCH] Error en flush: %s", e)
+
+
+async def _recover_pending_scheduler_notifications():
+    """Re-programa notificaciones pendientes que no sobrevivieron al reinicio."""
+    try:
+        from app.services.scheduler_notifications import get_all_pending_notifications
+        pending = await get_all_pending_notifications()
+    except Exception as e:
+        logger.error("[RECOVERY] Error obteniendo notificaciones: %s", e)
+        return
+
+    if not pending:
+        logger.info("[RECOVERY] No hay notificaciones pendientes por recuperar")
+        return
+
+    now = get_venezuela_now()
+    recovered = 0
+    expired = 0
+
+    for notif in pending:
+        banner_id = notif["banner_id"]
+        command = notif["command"]
+        scheduled_at_str = notif.get("scheduled_at")
+        if not scheduled_at_str:
+            continue
+
+        try:
+            scheduled_at = datetime.fromisoformat(scheduled_at_str)
+            if scheduled_at.tzinfo is None:
+                scheduled_at = scheduled_at.replace(tzinfo=timezone(timedelta(hours=-4)))
+        except Exception:
+            continue
+
+        delay = (scheduled_at - now).total_seconds()
+
+        if delay > 0:
+            logger.info(f"[RECOVERY] Reprogramando {command} banner {banner_id} en {delay:.1f}s")
+            asyncio.create_task(schedule_banner_notification(
+                banner_id=banner_id,
+                device_ids=notif.get("device_ids"),
+                titulo=notif.get("titulo"),
+                url=notif.get("url"),
+                tipo=notif.get("tipo"),
+                fecha_inicio=datetime.fromisoformat(notif["fecha_inicio"]) if notif.get("fecha_inicio") else None,
+                fecha_fin=datetime.fromisoformat(notif["fecha_fin"]) if notif.get("fecha_fin") else None,
+            ))
+            recovered += 1
+
+        elif delay > -300:
+            logger.info(f"[RECOVERY] Ejecutando {command} banner {banner_id} inmediato (retraso {-delay:.1f}s)")
+            async for db in get_db_publicidad():
+                result = await db.execute(select(Publicidad).where(Publicidad.id == banner_id))
+                banner = result.scalars().first()
+                if banner and banner.activo:
+                    target_device_ids = None
+                    raw_ids = notif.get("device_ids")
+                    if raw_ids:
+                        target_device_ids = [d.strip() for d in raw_ids.split(",") if d.strip()]
+                    await _execute_banner_notification(banner, target_device_ids, command)
+                    if command == "BANNER_INICIADO":
+                        notified_banners_start.add(banner_id)
+                    elif command == "BANNER_FINALIZADO":
+                        notified_banners_end.add(banner_id)
+                await remove_pending_notification(banner_id, command)
+                break
+            recovered += 1
+
+        else:
+            logger.info(f"[RECOVERY] {command} banner {banner_id} vencido ({-delay:.1f}s), limpiando")
+            await remove_pending_notification(banner_id, command)
+            expired += 1
+
+    logger.info(f"[RECOVERY] Recuperadas: {recovered}, expiradas: {expired}")
+
+
 @app.on_event("startup")
 async def start_device_monitor():
-    global device_state_store, device_command_bus, device_bus_listener_task, banner_check_task, pending_queue
+    global device_state_store, device_command_bus, device_bus_listener_task, banner_check_task, pending_queue, banner_batch_manager
     try:
         device_state_store = await DeviceStateStore.create()
         logger.info("DeviceStateStore inicializado con Redis")
@@ -472,9 +603,11 @@ async def start_device_monitor():
     logger.info("Banner cleanup task iniciada")
 
     try:
-        from app.services.scheduler_notifications import SchedulerNotifications, scheduler_notifications as sn
+        from app.services.scheduler_notifications import SchedulerNotifications
+        import app.services.scheduler_notifications as sn_mod
         global scheduler_notifications
         scheduler_notifications = await SchedulerNotifications.create(ttl_seconds=7200)
+        sn_mod.scheduler_notifications = scheduler_notifications
         logger.info("SchedulerNotifications inicializado con Redis (TTL=2h)")
     except Exception as e:
         logger.warning(f"SchedulerNotifications no disponible: {e}")
@@ -487,6 +620,38 @@ async def start_device_monitor():
         logger.info("PendingCommandQueue inicializado con Redis")
     except Exception as e:
         logger.error("No se pudo inicializar PendingCommandQueue: %s", e)
+
+    # Inicializar BannerBatchManager (coalescencia de BANNER_INICIADO)
+    try:
+        from app.services.banner_batch import BannerBatchManager
+        global banner_batch_manager
+        banner_batch_manager = await BannerBatchManager.create()
+        logger.info("BannerBatchManager inicializado con Redis (batch_window=5s)")
+    except Exception as e:
+        logger.warning(f"BannerBatchManager no disponible: {e}")
+
+    # Recuperar notificaciones programadas que no sobrevivieron al reinicio
+    try:
+        await _recover_pending_scheduler_notifications()
+    except Exception as e:
+        logger.error(f"[RECOVERY] Error en _recover_pending_scheduler_notifications: {e}")
+
+    # Recuperar banners acumulados en batch cuyo coordinator murió
+    if banner_batch_manager is not None:
+        try:
+            stale_banners = await banner_batch_manager.recover_pending_batch()
+            if stale_banners:
+                msg = {"command": "BANNER_LIST", "banners": stale_banners}
+                await tablet_ws_manager.broadcast(msg)
+                if device_command_bus is not None:
+                    await device_command_bus.publish_command(
+                        device_id="*",
+                        command="BANNER_LIST",
+                        payload=msg,
+                    )
+                logger.info(f"[RECOVERY] Batch pendiente recuperado: {len(stale_banners)} banners")
+        except Exception as e:
+            logger.error(f"[RECOVERY] Error recuperando batch pendiente: {e}")
 
 
 @app.on_event("shutdown")
@@ -1232,12 +1397,12 @@ async def enviar_comando_a_dispositivo(
 ):
     """
     Envía un comando a un dispositivo específico vía WebSocket.
-    Soporta: REINICIAR
+    Soporta: REINICIAR, WIPE_AND_RESYNC
     Espera confirmación del dispositivo (timeout 60s).
     """
     comando = body.comando.upper()
     
-    if comando not in ("REINICIAR",):
+    if comando not in ("REINICIAR", "WIPE_AND_RESYNC"):
         raise HTTPException(status_code=400, detail=f"Comando no soportado: {comando}")
     
     # Preparar payload para comandos programados
@@ -1286,11 +1451,17 @@ async def enviar_comando_a_dispositivo(
             all_status = await device_state_store.get_all_status()
             is_online = all_status.get(device_id, {}).get("online", False)
             if not is_online:
-                logger.warning(f"[COMMAND] Dispositivo {device_id} no registrado o desconectado")
-                raise HTTPException(
-                    status_code=409, 
-                    detail=f"Dispositivo {device_id} no está conectado. Espere a que se reconecte."
+                logger.warning(f"[COMMAND] Dispositivo {device_id} no registrado o desconectado, publicando {comando}...")
+                await device_command_bus.publish_command(
+                    device_id=device_id,
+                    command=comando,
+                    payload=command_payload,
                 )
+                return {
+                    "success": True,
+                    "status": "QUEUED",
+                    "message": f"Dispositivo {device_id} offline, comando {comando} publicado para cuando reconecte",
+                }
             logger.info(f"[COMMAND] Dispositivo {device_id} encontrado en Redis (otro servidor)")
         else:
             # Si no hay device_state_store, permitir el intento (comando se perderá pero no se rechaza prematuramente)
@@ -1315,6 +1486,15 @@ async def enviar_comando_a_dispositivo(
         
         for _ in range(COMMAND_TIMEOUT):
             await asyncio.sleep(1)
+            
+            # 0. Detectar zombie: bus listener ya gestionó el comando vía send_to_device
+            if tablet_ws_manager.device_map.get(device_id) is None:
+                logger.warning(f"[COMMAND] WebSocket de {device_id} se desconectó durante la espera")
+                return {
+                    "success": True,
+                    "status": "QUEUED",
+                    "message": f"Dispositivo {device_id} se desconectó, comando {comando} será entregado cuando reconecte",
+                }
             
             # 1. Intentar obtener de Redis
             if command_acker:
@@ -1349,13 +1529,10 @@ async def enviar_comando_a_dispositivo(
         
         if not status:
             logger.warning(f"[COMMAND] Timeout esperando confirmación para {device_id}")
-            if comando == "REINICIAR" and pending_queue is not None:
-                await pending_queue.set_pending_reboot(device_id, command_payload)
-                asyncio.create_task(retry_reboot_with_device(device_id, command_payload))
             return {
-                "success": False,
-                "status": "TIMEOUT",
-                "message": f"El dispositivo no confirmó el comando en {COMMAND_TIMEOUT} segundos",
+                "success": True,
+                "status": "QUEUED",
+                "message": f"Dispositivo no confirmó el comando en {COMMAND_TIMEOUT}s, {comando} se entregará cuando reconecte",
             }
         
         if status in ("RECEIVED", "COMPLETED", "SUCCESS", "DONE"):
@@ -1365,9 +1542,6 @@ async def enviar_comando_a_dispositivo(
                 "message": f"Comando {comando} ejecutado correctamente",
             }
         else:
-            if comando == "REINICIAR" and pending_queue is not None:
-                await pending_queue.set_pending_reboot(device_id, command_payload)
-                asyncio.create_task(retry_reboot_with_device(device_id, command_payload))
             return {
                 "success": False,
                 "status": status,
@@ -1698,9 +1872,10 @@ class TabletWebSocketManager:
             if ws_state is not None and ws_state.name != "CONNECTED":
                 logger.warning(
                     f"[WS] Dispositivo {device_id} tiene conexión fantasma "
-                    f"(estado={ws_state.name}), limpiando"
+                    f"(estado={ws_state.name}), limpiando — NO se encola"
                 )
                 await self.disconnect(ws)
+                return True
             else:
                 try:
                     await ws.send_json(message)
@@ -1709,7 +1884,21 @@ class TabletWebSocketManager:
                     logger.warning(f"[WS] Error enviando a {device_id}: {e}")
                     await self.disconnect(ws)
         
-        # Dispositivo offline o desconectado — encolar para cuando reconecte
+        # Dispositivo no está en este worker
+        # Verificar si está vivo en otro worker (registry compartido)
+        from app.services import device_registry as dr
+        if dr.device_registry is not None:
+            try:
+                if await dr.device_registry.is_device_registered(device_id):
+                    # Vivo en otro worker → no enqueueamos (no infla badge)
+                    # Seteamos pending_sync 24h como respaldo
+                    if pending_queue is not None:
+                        await pending_queue.set_pending_sync(device_id)
+                    return True
+            except Exception:
+                pass
+        
+        # Dispositivo offline real — encolar para cuando reconecte
         await self._enqueue_message(device_id, message)
         return False
 
@@ -1718,6 +1907,13 @@ class TabletWebSocketManager:
         if pending_queue is not None:
             logger.info(f"[WS] Encolando en Redis para {device_id}: command={message.get('command')} command_id={message.get('command_id')}")
             await pending_queue.enqueue(device_id, message)
+            # Si el dispositivo reconectó entre tanto, flush inmediato
+            ws = self.device_map.get(device_id)
+            if ws:
+                asyncio.create_task(pending_queue.flush_all_to_device(
+                    device_id,
+                    lambda msg, _w=ws: _w.send_json(msg) or True
+                ))
             return
         
         # Fallback: cola local en memoria
@@ -1736,11 +1932,11 @@ class TabletWebSocketManager:
         """L2: Flush de cola Redis + cola local + pending banners."""
         # 1. Cola persistente Redis
         if pending_queue is not None:
-            await pending_queue.flush_all_to_device(
-                device_id,
-                lambda msg: websocket.send_json(msg)
-            )
-        
+            async def _deliver(msg):
+                await websocket.send_json(msg)
+                return True
+            await pending_queue.flush_all_to_device(device_id, _deliver)
+
         # 2. Cola local en memoria (fallback)
         if device_id in self._message_queues:
             await self.flush_message_queue(device_id, websocket)
@@ -1798,10 +1994,10 @@ class TabletWebSocketManager:
         L2: Usa cola Redis si está disponible, fallback a cola local."""
         # Priorizar cola Redis
         if pending_queue is not None:
-            delivered = await pending_queue.flush_all_to_device(
-                device_id,
-                lambda msg: websocket.send_json(msg)
-            )
+            async def _deliver(msg):
+                await websocket.send_json(msg)
+                return True
+            delivered = await pending_queue.flush_all_to_device(device_id, _deliver)
             return delivered
         
         # Fallback: cola local en memoria
@@ -1977,7 +2173,7 @@ class TabletWebSocketManager:
                     _ws = ws  # captura por valor para el closure
                     await pending_queue.flush_all_to_device(
                         device_id,
-                        lambda msg, _w=_ws: _w.send_json(msg)
+                        lambda msg, _w=_ws: _w.send_json(msg) or True
                     )
             # Cleanup DLQ vieja
             if pending_queue is not None:
@@ -2068,6 +2264,8 @@ async def _on_bus_command(device_id: str, command: str, payload: dict):
             await tablet_ws_manager.send_to_device(device_id, message)
         elif command in ("BANNER_INICIADO", "BANNER_FINALIZADO"):
             await tablet_ws_manager.send_to_device(device_id, payload)
+        elif command == "BANNER_LIST":
+            await tablet_ws_manager.broadcast(payload)
     except Exception as e:
         logger.error(f"[BUS] Error procesando comando '{command}' para {device_id}: {e}")
 
@@ -2079,6 +2277,12 @@ async def _on_bus_confirmation(device_id: str, command: str, status: str, reason
     # Manejar confirmación de WIPE_AND_RESYNC
     if command == "WIPE_AND_RESYNC":
         await _apply_sync_confirmation(device_id=device_id, status=status, reason=reason)
+        # Limpiar pending_sync por si este worker no coincide con el que recibió la confirmación directa
+        if pending_queue is not None and status in ("SUCCESS", "RECEIVED", "DONE"):
+            try:
+                await pending_queue.clear_pending_sync(device_id)
+            except Exception:
+                pass
         return
     
     # Manejar confirmación de REINICIAR
@@ -2293,12 +2497,13 @@ async def orchestrate_forced_sync_sequential(
                     logger.info(f"[SYNC] Confirmación via waiter para {device_id}: {ack.get('status')}")
                     break
             
-            # No se recibió ack en el timeout → comando encolado en Redis (dispositivo offline)
+            # No se recibió ack en el timeout → comando ya está en Redis queue (encolado por bus listener)
             if not ack:
                 timeout_reason = f"Sin confirmación en {SYNC_ACK_TIMEOUT}s"
                 was_queued = False
                 if pending_queue is not None:
-                    await pending_queue.set_pending_sync(device_id)
+                    # El command ya fue encolado en Redis por send_to_device/bus listener
+                    # set_pending_sync es redundante y causaría badge "En espera" duplicado
                     was_queued = True
                 if was_queued:
                     asyncio.create_task(notify_dashboard_sync_queued(device_id, timeout_reason))
@@ -2426,6 +2631,13 @@ async def process_sync_confirmation(websocket: WebSocket, msg: dict):
         if waiter:
             waiter.set()
         
+        # Limpiar pending_reboot si el reinicio se confirmó exitosamente
+        if status == "SUCCESS" and pending_queue is not None:
+            try:
+                await pending_queue.clear_pending_reboot(device_id)
+            except Exception as e:
+                logger.error(f"[REBOOT] Error limpiando pending_reboot: {e}")
+
         # NO publicamos al bus aquí - ya guardamos en Redis directamente
         # El bus es solo para el caso fallback (cuando no hay WebSocket directo)
         return
@@ -2451,6 +2663,14 @@ async def process_sync_confirmation(websocket: WebSocket, msg: dict):
 
     # Actualizar dict local (para backward compatibility)
     await _apply_sync_confirmation(device_id=device_id, status=status, reason=reason)
+
+    # Limpiar pending_sync cuando el sync se completa exitosamente
+    if status in ("SUCCESS", "RECEIVED", "DONE"):
+        if pending_queue is not None:
+            try:
+                await pending_queue.clear_pending_sync(device_id)
+            except Exception as e:
+                logger.error(f"[SYNC] Error limpiando pending_sync: {e}")
 
     # Notificar entrega exitosa al dashboard (FASE 17.3)
     if status in ("SUCCESS", "RECEIVED", "DONE"):
@@ -2695,12 +2915,16 @@ async def queue_status(device_id: str):
     try:
         queue_stats = await pending_queue.get_queue_size(device_id)
         dlq_size = await pending_queue.get_dlq_size(device_id)
+        pending_sync = await pending_queue.has_pending_sync(device_id)
+        pending_reboot = await pending_queue.has_pending_reboot(device_id)
         return {
             "device_id": device_id,
             "pending": queue_stats["pending"],
             "inflight": queue_stats["inflight"],
             "total": queue_stats["total"],
             "dlq": dlq_size,
+            "pending_sync": pending_sync,
+            "pending_reboot": pending_reboot,
         }
     except Exception as e:
         logger.error(f"Error obteniendo queue status para {device_id}: {e}")

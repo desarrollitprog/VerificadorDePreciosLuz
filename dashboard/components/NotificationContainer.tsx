@@ -3,10 +3,10 @@ import { CheckCircle, XCircle, Info, AlertTriangle, X } from 'lucide-react';
 import { useNotificationContext } from './NotificationContext';
 
 const iconMap = {
-  success: <CheckCircle className="text-emerald-500" size={24} />,
-  error: <XCircle className="text-red-500" size={24} />,
-  info: <Info className="text-blue-500" size={24} />,
-  warning: <AlertTriangle className="text-amber-500" size={24} />,
+  success: <CheckCircle className="text-emerald-500 w-5 h-5 md:w-6 md:h-6" />,
+  error: <XCircle className="text-red-500 w-5 h-5 md:w-6 md:h-6" />,
+  info: <Info className="text-blue-500 w-5 h-5 md:w-6 md:h-6" />,
+  warning: <AlertTriangle className="text-amber-500 w-5 h-5 md:w-6 md:h-6" />,
 };
 
 const colorMap = {
@@ -29,19 +29,19 @@ export const NotificationContainer: React.FC = () => {
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 items-end w-96">
+    <div className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-50 flex flex-col gap-2 md:gap-3 items-end w-[calc(100vw-2rem)] md:w-full max-w-xs md:max-w-sm">
       {notifications.map((n) => (
         <div
           key={n.id}
-          className={`relative flex items-center gap-3 px-4 py-3 pr-10 rounded-lg shadow-lg border overflow-hidden ${colorMap[n.type]} ${exiting.has(n.id) ? 'animate-slide-fade-out' : 'animate-slide-fade-in'}`}
+          className={`relative flex items-center gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 pr-8 md:pr-10 rounded-lg shadow-lg border overflow-hidden ${colorMap[n.type]} ${exiting.has(n.id) ? 'animate-slide-fade-out' : 'animate-slide-fade-in'}`}
         >
           {iconMap[n.type]}
-          <span className="text-sm font-medium text-slate-900 flex-1">{n.message}</span>
+          <span className="text-xs md:text-sm font-medium text-slate-900 flex-1">{n.message}</span>
           <button
             onClick={() => handleClose(n.id)}
-            className="absolute top-2 right-2 p-0.5 rounded-full text-slate-500 hover:text-slate-800 hover:bg-white/40 transition-colors"
+            className="absolute top-1 right-1 md:top-2 md:right-2 p-1.5 md:p-1 rounded-full text-slate-500 hover:text-slate-800 hover:bg-white/40 transition-colors"
           >
-            <X size={14} />
+            <X size={16} />
           </button>
           {!n.persistent && (
             <div

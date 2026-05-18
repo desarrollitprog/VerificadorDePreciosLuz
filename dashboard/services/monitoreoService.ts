@@ -195,9 +195,14 @@ export async function getDeviceContent(deviceId: string): Promise<DeviceContent>
   return response.data as DeviceContent;
 }
 
-export async function restartDevice(deviceId: string): Promise<{ success: boolean; message: string }> {
+export async function restartDevice(deviceId: string): Promise<{ success: boolean; status: string; message: string }> {
   const response = await api.post(`/dispositivos/${encodeURIComponent(deviceId)}/reiniciar`);
-  return response.data as { success: boolean; message: string };
+  return response.data as { success: boolean; status: string; message: string };
+}
+
+export async function purgeDevice(deviceId: string): Promise<{ success: boolean; status: string; message: string }> {
+  const response = await api.post(`/dispositivos/${encodeURIComponent(deviceId)}/purge`);
+  return response.data as { success: boolean; status: string; message: string };
 }
 
 export async function deleteDevice(deviceId: string): Promise<{ success: boolean; message: string }> {
@@ -239,9 +244,16 @@ export interface QueueStatus {
   inflight: number;
   total: number;
   dlq: number;
+  pending_sync: boolean;
+  pending_reboot: boolean;
 }
 
-export async function getQueueStatus(deviceId: string): Promise<QueueStatus> {
+export interface QueueStatusPerServer {
+  server: string;
+  status: QueueStatus;
+}
+
+export async function getQueueStatus(deviceId: string): Promise<QueueStatusPerServer[]> {
   const response = await api.get(`/monitoreo/cola/${encodeURIComponent(deviceId)}`);
-  return response.data as QueueStatus;
+  return response.data as QueueStatusPerServer[];
 }

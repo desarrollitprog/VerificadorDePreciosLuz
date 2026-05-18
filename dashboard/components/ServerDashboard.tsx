@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { ChevronDown, ChevronUp, RefreshCw, X, Monitor, Edit2, Play, RotateCcw, Eye, AlertCircle, Clock, Trash, Search, ArrowUpDown } from 'lucide-react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { ChevronDown, ChevronUp, RefreshCw, X, Monitor, Edit2, Play, RotateCcw, Eye, AlertCircle, Clock, Trash, Search, ArrowUpDown, Check } from 'lucide-react';
 import ServerCard from './monitoreo/ServerCard';
 import { useNotification } from './useNotification';
 import {
@@ -8,6 +8,7 @@ import {
   renameServer,
   getDeviceContent,
   restartDevice,
+  purgeDevice,
   deleteDevice,
   deleteServer,
   scheduleRestart,
@@ -16,6 +17,8 @@ import {
   DeviceContent,
   QueueStatus,
 } from '../services/monitoreoService';
+import { Servidor } from '../types';
+import { ServerDeviceSelector } from './ServerDeviceSelector';
 
 type RenameModalState =
   | {
@@ -32,8 +35,10 @@ export function ServerDashboard() {
   const showNotification = useNotification();
   const [servidores, setServidores] = useState<ServerStatusDetail[]>([]);
   const [expandedServerId, setExpandedServerId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isFirstLoadRef = useRef(true);
   const [renameModal, setRenameModal] = useState<RenameModalState | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [renameSaving, setRenameSaving] = useState(false);
@@ -45,6 +50,10 @@ export function ServerDashboard() {
   // Modal de reinicio
   const [restartModal, setRestartModal] = useState<{ deviceId: string; deviceName: string } | null>(null);
   const [restarting, setRestarting] = useState(false);
+
+  // Modal de limpiar cache
+  const [purgeModal, setPurgeModal] = useState<{ deviceId: string; deviceName: string } | null>(null);
+  const [purging, setPurging] = useState(false);
 
   // Modal de eliminar dispositivo
   const [deleteDeviceModal, setDeleteDeviceModal] = useState<{ deviceId: string; deviceName: string } | null>(null);
@@ -61,15 +70,19 @@ export function ServerDashboard() {
   // Modal de programar reinicio masivo
   const [scheduleRestartModal, setScheduleRestartModal] = useState<{
     isOpen: boolean;
-    mode: 'all' | 'selected';
-    selectedDevices: string[];
+    selectAll: boolean;
+    selectedServidorIds: number[];
+    selectedDispositivoIds: string[];
+    expandedServidores: number[];
     hour: string;
     recurring: boolean;
     scheduling: boolean;
   }>({
     isOpen: false,
-    mode: 'all',
-    selectedDevices: [],
+    selectAll: true,
+    selectedServidorIds: [],
+    selectedDispositivoIds: [],
+    expandedServidores: [],
     hour: '06:35',
     recurring: true,
     scheduling: false,
@@ -81,17 +94,21 @@ export function ServerDashboard() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
   const fetchStatus = async () => {
-    setLoading(true);
+    if (isFirstLoadRef.current) setInitialLoading(true);
+    else setIsRefreshing(true);
     setError(null);
     try {
       const data = await getServersStatusWithDevices();
-      const servidoresData = Array.isArray(data) ? data : [];
-      setServidores(servidoresData);
+      setServidores(Array.isArray(data) ? data : []);
     } catch {
-      setServidores([]);
-      setError('Error al conectar con el servicio de monitoreo');
+      if (isFirstLoadRef.current) {
+        setServidores([]);
+        setError('Error al conectar con el servicio de monitoreo');
+      }
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
+      setIsRefreshing(false);
+      isFirstLoadRef.current = false;
     }
   };
 
@@ -127,23 +144,49 @@ export function ServerDashboard() {
     setRenameValue('');
   };
 
-  const fetchQueueStatus = async (deviceId: string) => {
+  const fetchQueueStatus = async (deviceId: string, serverIp: string) => {
     try {
-      const status = await getQueueStatus(deviceId);
-      setQueueStatusMap(prev => ({ ...prev, [deviceId]: status }));
+      const serversStatus = await getQueueStatus(deviceId);
+      const match = serversStatus.find(s => s.server.includes(serverIp));
+      if (match) {
+        setQueueStatusMap(prev => ({ ...prev, [deviceId]: match.status }));
+      }
     } catch {
       // Silently fail — endpoint might not be available
     }
   };
 
-  useEffect(() => {
-    if (!expandedServerId) return;
-    const server = servidores.find(s => s.id === expandedServerId);
-    if (!server) return;
+  const pollQueues = useCallback(async () => {
+    if (servidores.length === 0) return;
     setLoadingQueues(true);
-    Promise.all(server.dispositivos.map(d => fetchQueueStatus(d.device_id)))
-      .finally(() => setLoadingQueues(false));
-  }, [expandedServerId, servidores]);
+    await Promise.all(
+      servidores.flatMap(s =>
+        s.dispositivos.map(d => fetchQueueStatus(d.device_id, s.ip))
+      )
+    );
+    setLoadingQueues(false);
+  }, [servidores]);
+
+  useEffect(() => {
+    if (servidores.length === 0) return;
+    pollQueues();
+    const interval = setInterval(pollQueues, 30000);
+    return () => clearInterval(interval);
+  }, [servidores, pollQueues]);
+
+  useEffect(() => {
+    const handleSyncCompleted = (e: CustomEvent<{ deviceId: string }>) => {
+      const deviceId = e.detail.deviceId;
+      const server = servidores.find(s =>
+        s.dispositivos.some(d => d.device_id === deviceId)
+      );
+      if (server) {
+        fetchQueueStatus(deviceId, server.ip);
+      }
+    };
+    window.addEventListener('sync-completed', handleSyncCompleted as EventListener);
+    return () => window.removeEventListener('sync-completed', handleSyncCompleted as EventListener);
+  }, [servidores]);
 
   const submitRename = async () => {
     if (!renameModal) return;
@@ -227,16 +270,57 @@ export function ServerDashboard() {
     setRestarting(true);
     try {
       const result = await restartDevice(restartModal.deviceId);
-      if (result.success) {
+      if (result.success && result.status === 'QUEUED') {
+        showNotification('Comando de reinicio encolado — se ejecutará cuando el dispositivo reconecte', 'warning');
+      } else if (result.success) {
         showNotification('Dispositivo reiniciado correctamente', 'success');
       } else {
         showNotification(result.message || 'Error al reiniciar dispositivo', 'error');
       }
       closeRestartModal();
-    } catch {
-      showNotification('Error al reiniciar dispositivo', 'error');
+    } catch (error: any) {
+      if (error?.response?.data?.status === 'QUEUED') {
+        showNotification('Comando de reinicio encolado — se ejecutará cuando el dispositivo reconecte', 'warning');
+        closeRestartModal();
+      } else {
+        showNotification('Error al reiniciar dispositivo', 'error');
+      }
     } finally {
       setRestarting(false);
+    }
+  };
+
+  const openPurgeModal = (deviceId: string, deviceName: string) => {
+    setPurgeModal({ deviceId, deviceName });
+  };
+
+  const closePurgeModal = () => {
+    if (purging) return;
+    setPurgeModal(null);
+  };
+
+  const handlePurge = async () => {
+    if (!purgeModal) return;
+    setPurging(true);
+    try {
+      const result = await purgeDevice(purgeModal.deviceId);
+      if (result.success && result.status === 'QUEUED') {
+        showNotification('Comando de limpieza encolado — se ejecutará cuando el dispositivo reconecte', 'warning');
+      } else if (result.success) {
+        showNotification('Cache del dispositivo limpiado y sincronizado correctamente', 'success');
+      } else {
+        showNotification(result.message || 'Error al limpiar cache del dispositivo', 'error');
+      }
+      closePurgeModal();
+    } catch (error: any) {
+      if (error?.response?.data?.status === 'QUEUED') {
+        showNotification('Comando de limpieza encolado — se ejecutará cuando el dispositivo reconecte', 'warning');
+        closePurgeModal();
+      } else {
+        showNotification('Error al limpiar cache del dispositivo', 'error');
+      }
+    } finally {
+      setPurging(false);
     }
   };
 
@@ -301,11 +385,71 @@ export function ServerDashboard() {
     setScheduleRestartModal(prev => ({ ...prev, isOpen: false }));
   };
 
+  const servidoresForSelector = useMemo<Servidor[]>(() =>
+    servidores.map(s => ({
+      id: Number(s.id),
+      nombre: s.nombre,
+      ip: s.ip,
+      api_url: '',
+      online: s.online,
+      dispositivos: (s.dispositivos || []).map(d => ({
+        id: Number(d.device_id),
+        codigo_kiosko: d.device_id,
+        nombre_amigable: d.nombre_amigable || null,
+        online: d.online,
+      })),
+    })),
+  [servidores]);
+
+  const handleRestartSelectAll = () => {
+    setScheduleRestartModal(prev => ({
+      ...prev,
+      selectAll: !prev.selectAll,
+      selectedServidorIds: [],
+      selectedDispositivoIds: [],
+      expandedServidores: [],
+    }));
+  };
+
+  const handleRestartServidorChange = (id: number, checked: boolean) => {
+    setScheduleRestartModal(prev => {
+      const srv = servidoresForSelector.find(s => s.id === id);
+      const deviceIds = srv?.dispositivos.map(d => String(d.id)) || [];
+      return {
+        ...prev,
+        selectedServidorIds: checked
+          ? [...prev.selectedServidorIds, id]
+          : prev.selectedServidorIds.filter(sid => sid !== id),
+        selectedDispositivoIds: checked
+          ? [...prev.selectedDispositivoIds, ...deviceIds]
+          : prev.selectedDispositivoIds.filter(did => !deviceIds.includes(did)),
+      };
+    });
+  };
+
+  const handleRestartDispositivoChange = (id: string, checked: boolean) => {
+    setScheduleRestartModal(prev => ({
+      ...prev,
+      selectedDispositivoIds: checked
+        ? [...prev.selectedDispositivoIds, id]
+        : prev.selectedDispositivoIds.filter(did => did !== id),
+    }));
+  };
+
+  const handleRestartToggleExpand = (id: number) => {
+    setScheduleRestartModal(prev => ({
+      ...prev,
+      expandedServidores: prev.expandedServidores.includes(id)
+        ? prev.expandedServidores.filter(eid => eid !== id)
+        : [...prev.expandedServidores, id],
+    }));
+  };
+
   const handleScheduleRestart = async () => {
     if (!scheduleRestartModal.hour) return;
     setScheduleRestartModal(prev => ({ ...prev, scheduling: true }));
     try {
-      const deviceIds = scheduleRestartModal.mode === 'selected' ? scheduleRestartModal.selectedDevices : [];
+      const deviceIds = scheduleRestartModal.selectAll ? [] : scheduleRestartModal.selectedDispositivoIds;
       const result = await scheduleRestart({
         device_ids: deviceIds,
         hour: scheduleRestartModal.hour,
@@ -398,8 +542,8 @@ export function ServerDashboard() {
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Servidores y Dispositivos</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">Monitoreo en tiempo real</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="relative">
+        <div className="flex flex-col sm:flex-row items-center gap-3">
+          <div className="relative w-full sm:w-auto">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input
               type="text"
@@ -425,25 +569,26 @@ export function ServerDashboard() {
               setSortBy(by as 'nombre' | 'estado' | 'dispositivos');
               setSortDir(dir as 'asc' | 'desc');
             }}
-            className="py-2 px-3 bg-slate-100 dark:bg-[#1c2936] rounded-lg text-sm text-slate-900 dark:text-white border-none focus:ring-2 focus:ring-primary"
+            className="py-2 px-3 bg-slate-100 dark:bg-[#1c2936] rounded-lg text-sm text-slate-900 dark:text-white border-none focus:ring-2 focus:ring-primary w-full sm:w-auto"
           >
             <option value="nombre-asc">Nombre A-Z</option>
             <option value="nombre-desc">Nombre Z-A</option>
-            <option value="estado-asc">Online primero</option>
-            <option value="estado-desc">Offline primero</option>
+            <option value="estado-asc">En línea primero</option>
+            <option value="estado-desc">Desconectado primero</option>
             <option value="dispositivos-desc">Más dispositivos</option>
             <option value="dispositivos-asc">Menos dispositivos</option>
           </select>
           <button
             onClick={fetchStatus}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            disabled={isRefreshing}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition w-full sm:w-auto justify-center disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            <RefreshCw size={16} />
-            Refrescar
+            <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
+            {isRefreshing ? 'Actualizando...' : 'Refrescar'}
           </button>
           <button
             onClick={() => setScheduleRestartModal(prev => ({ ...prev, isOpen: true }))}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition w-full sm:w-auto justify-center"
           >
             <Clock size={16} />
             Programar Reinicio
@@ -451,9 +596,9 @@ export function ServerDashboard() {
         </div>
       </div>
 
-      {loading ? (
+      {initialLoading ? (
         <div className="text-slate-500">Cargando monitoreo...</div>
-      ) : error ? (
+      ) : error && servidores.length === 0 ? (
         <div className="text-red-500">{error}</div>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-baseline">
@@ -501,7 +646,7 @@ export function ServerDashboard() {
                           <div key={d.device_id} className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                   <span className={`w-2 h-2 rounded-full ${d.online ? 'bg-emerald-500' : 'bg-red-500'}`} />
                                   <span className="font-medium text-sm text-slate-900 dark:text-white truncate">
                                     {d.nombre_mostrado || d.device_id}
@@ -517,7 +662,12 @@ export function ServerDashboard() {
                                   )}
                                   {queueStatusMap[d.device_id] && queueStatusMap[d.device_id]!.total > 0 && (
                                     <span className="ml-1 text-xs font-medium px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300" title={`${queueStatusMap[d.device_id]!.pending} pendientes, ${queueStatusMap[d.device_id]!.inflight} en vuelo`}>
-                                      {queueStatusMap[d.device_id]!.total} pendientes
+                                      Cola: {queueStatusMap[d.device_id]!.total}
+                                    </span>
+                                  )}
+                                  {queueStatusMap[d.device_id] && (
+                                    <span className={`ml-1 text-xs font-medium px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 ${(queueStatusMap[d.device_id]!.pending_sync || queueStatusMap[d.device_id]!.pending_reboot) ? '' : 'opacity-50'}`} title="Comando pendiente de reconexión del dispositivo">
+                                      En espera: {(queueStatusMap[d.device_id]!.pending_sync ? 1 : 0) + (queueStatusMap[d.device_id]!.pending_reboot ? 1 : 0)}
                                     </span>
                                   )}
                                   {loadingQueues && !queueStatusMap[d.device_id] && (
@@ -542,7 +692,7 @@ export function ServerDashboard() {
                                     <span className="text-slate-400 dark:text-slate-500">Sin reinicio</span>
                                   )}
                                 </div>
-                                <div className="flex items-center gap-2 mt-2">
+                                <div className="flex items-center gap-2 mt-2 flex-wrap">
                                   <button
                                     onClick={() => openRenameDeviceModal(d.device_id, d.nombre_amigable)}
                                     className="text-xs flex items-center gap-1 text-primary hover:underline"
@@ -556,6 +706,13 @@ export function ServerDashboard() {
                                   >
                                     <Eye size={12} />
                                     Ver contenido
+                                  </button>
+                                  <button
+                                    onClick={() => openPurgeModal(d.device_id, d.nombre_mostrado || d.device_id)}
+                                    className="text-xs flex items-center gap-1 text-blue-600 hover:underline"
+                                  >
+                                    <RefreshCw size={12} />
+                                    Limpiar y Sincronizar
                                   </button>
                                   <button
                                     onClick={() => openRestartModal(d.device_id, d.nombre_mostrado || d.device_id)}
@@ -726,6 +883,39 @@ export function ServerDashboard() {
         </div>
       )}
 
+      {/* Modal de limpiar cache */}
+      {purgeModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={closePurgeModal}>
+          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800" onClick={e => e.stopPropagation()}>
+            <div className="p-6 text-center">
+              <div className="w-12 h-12 mx-auto bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mb-4">
+                <RefreshCw size={24} className="text-blue-600" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Limpiar y Sincronizar</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+                ¿Estás seguro de limpiar el cache de <span className="font-medium text-slate-900 dark:text-white">{purgeModal.deviceName}</span>? Se eliminarán todos los banners descargados y se volverán a descargar.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={closePurgeModal}
+                  className="flex-1 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  disabled={purging}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handlePurge}
+                  className="flex-1 px-4 py-2 rounded-lg bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 disabled:opacity-50"
+                  disabled={purging}
+                >
+                  {purging ? 'Limpiando...' : 'Limpiar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal de eliminar dispositivo */}
       {deleteDeviceModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={closeDeleteDeviceModal}>
@@ -797,118 +987,168 @@ export function ServerDashboard() {
 
       {/* Modal de programar reinicio masivo */}
       {scheduleRestartModal.isOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={closeScheduleRestartModal}>
-          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800" onClick={e => e.stopPropagation()}>
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Programar Reinicio Masivo</h3>
-                <button onClick={closeScheduleRestartModal} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                  <X size={20} />
-                </button>
-              </div>
-              
-              <div className="space-y-4">
-                {/* Selección de dispositivos */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Dispositivos</label>
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="deviceMode"
-                        checked={scheduleRestartModal.mode === 'all'}
-                        onChange={() => setScheduleRestartModal(prev => ({ ...prev, mode: 'all', selectedDevices: [] }))}
-                        className="text-primary"
-                      />
-                      <span className="text-sm text-slate-700 dark:text-slate-300">Todos los dispositivos</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="deviceMode"
-                        checked={scheduleRestartModal.mode === 'selected'}
-                        onChange={() => setScheduleRestartModal(prev => ({ ...prev, mode: 'selected' }))}
-                        className="text-primary"
-                      />
-                      <span className="text-sm text-slate-700 dark:text-slate-300">Seleccionar dispositivos</span>
-                    </label>
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fade-in" onClick={closeScheduleRestartModal}>
+          <div
+            className="bg-white dark:bg-[#0f172a] w-full max-w-2xl mx-auto rounded-2xl shadow-2xl border border-blue-500/20 overflow-hidden flex flex-col max-h-[90vh] sm:max-h-none"
+            style={{ boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5), 0 0 0 1px rgba(59,130,246,0.1)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-slate-200/70 dark:border-slate-800/70">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: 'rgba(59,130,246,0.1)' }}>
+                    <Clock size={18} className="sm:size-5" style={{ color: '#3b82f6' }} />
                   </div>
-                  
-                  {scheduleRestartModal.mode === 'selected' && (
-                    <div className="mt-2 max-h-32 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-lg p-2">
-                      {servidores.flatMap(s => s.dispositivos).map(d => (
-                        <label key={d.device_id} className="flex items-center gap-2 cursor-pointer py-1">
-                          <input
-                            type="checkbox"
-                            checked={scheduleRestartModal.selectedDevices.includes(d.device_id)}
-                            onChange={(e) => {
-                              const checked = e.target.checked;
-                              setScheduleRestartModal(prev => ({
-                                ...prev,
-                                selectedDevices: checked
-                                  ? [...prev.selectedDevices, d.device_id]
-                                  : prev.selectedDevices.filter(id => id !== d.device_id)
-                              }));
-                            }}
-                            className="text-primary"
-                          />
-                          <span className="text-sm text-slate-600 dark:text-slate-400">
-                            {d.nombre_amigable || d.device_id}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
+                  <div className="min-w-0">
+                    <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate">Programar Reinicio Masivo</h3>
+                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 truncate">Programa un reinicio en uno o varios dispositivos</p>
+                  </div>
                 </div>
+                <button onClick={closeScheduleRestartModal} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors shrink-0">
+                  <X size={20} className="text-slate-400" />
+                </button>
+              </div>
+            </div>
 
-                {/* Hora */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    Hora de reinicio
-                  </label>
-                  <input
-                    type="time"
-                    value={scheduleRestartModal.hour}
-                    onChange={(e) => setScheduleRestartModal(prev => ({ ...prev, hour: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
-                  />
-                  <p className="text-xs text-slate-500 mt-1">
-                    Si la hora ya pasó hoy, se programará para mañana
-                  </p>
+            {/* Body */}
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-5 sm:space-y-6">
+              {/* Toggle todos */}
+              <div
+                className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl cursor-pointer border-2 transition-all duration-200"
+                style={{
+                  borderColor: scheduleRestartModal.selectAll ? 'rgba(59,130,246,0.3)' : 'rgba(148,163,184,0.2)',
+                  backgroundColor: scheduleRestartModal.selectAll ? 'rgba(59,130,246,0.03)' : 'transparent',
+                }}
+                onClick={handleRestartSelectAll}
+              >
+                <div
+                  className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg border-2 flex items-center justify-center transition-all duration-200 shrink-0"
+                  style={{
+                    backgroundColor: scheduleRestartModal.selectAll ? '#3b82f6' : 'transparent',
+                    borderColor: scheduleRestartModal.selectAll ? '#3b82f6' : '#94a3b8',
+                    transform: scheduleRestartModal.selectAll ? 'scale(1.1)' : 'scale(1)',
+                  }}
+                >
+                  {scheduleRestartModal.selectAll && <Check size={13} className="sm:size-[15px] text-white" />}
                 </div>
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 tracking-wide break-words">
+                    PROGRAMAR A TODOS LOS DISPOSITIVOS
+                  </span>
+                </div>
+                <span
+                  className="text-[9px] sm:text-[10px] px-2 sm:px-3 py-1 rounded-full font-bold uppercase tracking-widest transition-all duration-200 shrink-0"
+                  style={{
+                    backgroundColor: scheduleRestartModal.selectAll ? 'rgba(59,130,246,0.12)' : 'rgba(100,116,139,0.1)',
+                    color: scheduleRestartModal.selectAll ? '#3b82f6' : '#64748b',
+                  }}
+                >
+                  {scheduleRestartModal.selectAll ? 'ACTIVO' : 'SELECC.'}
+                </span>
+              </div>
 
-                {/* Recurrente */}
-                <div>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={scheduleRestartModal.recurring}
-                      onChange={(e) => setScheduleRestartModal(prev => ({ ...prev, recurring: e.target.checked }))}
-                      className="text-primary rounded"
+              {/* Selector jerárquico */}
+              {!scheduleRestartModal.selectAll && (
+                <ServerDeviceSelector
+                  servidores={servidoresForSelector}
+                  selectedServidorIds={scheduleRestartModal.selectedServidorIds}
+                  selectedDispositivoIds={scheduleRestartModal.selectedDispositivoIds}
+                  onServidorChange={handleRestartServidorChange}
+                  onDispositivoChange={handleRestartDispositivoChange}
+                  expandedServidores={scheduleRestartModal.expandedServidores}
+                  onToggleExpand={handleRestartToggleExpand}
+                  label="Seleccionar servidores para reinicio:"
+                  maxHeight="max-h-64"
+                  accentColor="#3b82f6"
+                />
+              )}
+
+              {/* Hora */}
+              <div className="space-y-2">
+                <label className="block text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Clock size={12} className="sm:size-[14px]" style={{ color: '#3b82f6' }} />
+                  Hora de reinicio
+                </label>
+                <input
+                  type="time"
+                  value={scheduleRestartModal.hour}
+                  onChange={(e) => setScheduleRestartModal(prev => ({ ...prev, hour: e.target.value }))}
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border-2 bg-white dark:bg-slate-800/50 text-slate-900 dark:text-white text-base sm:text-lg font-mono tracking-[0.15em] sm:tracking-[0.2em] outline-none transition-all"
+                  style={{
+                    borderColor: 'rgba(148,163,184,0.3)',
+                  }}
+                  onFocus={e => e.currentTarget.style.borderColor = '#3b82f6'}
+                  onBlur={e => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.3)'}
+                />
+                <p className="text-xs text-slate-500 dark:text-slate-500 flex items-center gap-1">
+                  <AlertCircle size={12} />
+                  Si la hora ya pasó hoy, se programará para mañana
+                </p>
+              </div>
+
+              {/* Recurrente — switch estilo píldora */}
+              <label className="flex items-center justify-between p-3 sm:p-4 rounded-xl cursor-pointer border-2 transition-all duration-200 gap-3" style={{ borderColor: 'rgba(148,163,184,0.2)' }}>
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className="w-10 sm:w-11 h-6 rounded-full transition-all duration-300 relative shrink-0"
+                    style={{ backgroundColor: scheduleRestartModal.recurring ? '#3b82f6' : 'rgba(100,116,139,0.3)' }}
+                  >
+                    <div
+                      className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-md transition-all duration-300"
+                      style={{
+                        left: scheduleRestartModal.recurring ? 'calc(100% - 22px)' : '2px',
+                        boxShadow: scheduleRestartModal.recurring ? '0 0 8px rgba(59,130,246,0.4)' : '0 1px 3px rgba(0,0,0,0.2)',
+                      }}
                     />
-                    <span className="text-sm text-slate-700 dark:text-slate-300">
-                      Repetir diariamente a las {scheduleRestartModal.hour}
-                    </span>
-                  </label>
+                  </div>
+                  <span className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 break-words">
+                    Repetir diariamente a las <span className="font-mono font-bold whitespace-nowrap" style={{ color: '#3b82f6' }}>{scheduleRestartModal.hour}</span>
+                  </span>
                 </div>
-              </div>
+                <input
+                  type="checkbox"
+                  checked={scheduleRestartModal.recurring}
+                  onChange={(e) => setScheduleRestartModal(prev => ({ ...prev, recurring: e.target.checked }))}
+                  className="sr-only"
+                />
+              </label>
+            </div>
 
-              <div className="flex gap-3 mt-6">
-                <button
-                  onClick={closeScheduleRestartModal}
-                  className="flex-1 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
-                  disabled={scheduleRestartModal.scheduling}
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleScheduleRestart}
-                  className="flex-1 px-4 py-2 rounded-lg bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 disabled:opacity-50"
-                  disabled={scheduleRestartModal.scheduling || (scheduleRestartModal.mode === 'selected' && scheduleRestartModal.selectedDevices.length === 0)}
-                >
-                  {scheduleRestartModal.scheduling ? 'Programando...' : 'Programar'}
-                </button>
-              </div>
+
+            {/* Footer */}
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-slate-200/70 dark:border-slate-800/70 flex flex-col-reverse sm:flex-row gap-2 sm:gap-3">
+              <button
+                onClick={closeScheduleRestartModal}
+                className="w-full sm:flex-1 px-4 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all"
+                style={{ borderColor: 'rgba(148,163,184,0.3)', color: '#64748b' }}
+                disabled={scheduleRestartModal.scheduling}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleScheduleRestart}
+                className="w-full sm:flex-1 px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-all disabled:opacity-40"
+                style={{
+                  background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+                  boxShadow: scheduleRestartModal.scheduling ? 'none' : '0 4px 14px rgba(59,130,246,0.35)',
+                }}
+                onMouseEnter={e => { if (!scheduleRestartModal.scheduling) e.currentTarget.style.boxShadow = '0 6px 20px rgba(59,130,246,0.5)'; }}
+                onMouseLeave={e => { if (!scheduleRestartModal.scheduling) e.currentTarget.style.boxShadow = '0 4px 14px rgba(59,130,246,0.35)'; }}
+                disabled={scheduleRestartModal.scheduling || (!scheduleRestartModal.selectAll && scheduleRestartModal.selectedDispositivoIds.length === 0)}
+              >
+                {scheduleRestartModal.scheduling ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <RefreshCw size={16} className="animate-spin" />
+                    Programando...
+                  </span>
+                ) : (
+                  <span className="flex items-center justify-center gap-2">
+                    <Clock size={16} />
+                    Programar
+                  </span>
+                )}
+              </button>
             </div>
           </div>
         </div>

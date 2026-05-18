@@ -90,14 +90,14 @@ class KioskService : Service() {
     private fun buildNotification(): Notification {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, CHANNEL_ID)
-                .setContentTitle("Luz Kiosko")
+                .setContentTitle("LuzApp")
                 .setContentText("Servicio activo")
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setFlag(Notification.FLAG_ONGOING_EVENT, true)
                 .build()
         } else {
             Notification.Builder(this)
-                .setContentTitle("Luz Kiosko")
+                .setContentTitle("LuzApp")
                 .setContentText("Servicio activo")
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setFlag(Notification.FLAG_ONGOING_EVENT, true)

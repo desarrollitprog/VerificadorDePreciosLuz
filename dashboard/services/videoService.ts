@@ -3,8 +3,8 @@ import { Video, Servidor } from '../types';
 
 export interface UpdateBannerMetadataPayload {
   activo?: boolean;
-  fechaInicio?: string | null;
-  fechaFin?: string | null;
+  fecha_inicio?: string | null;
+  fecha_fin?: string | null;
   titulo?: string;
 }
 

@@ -226,6 +226,38 @@ const calendarStyles = `
     background-color: #334155 !important;
     color: #f1f5f9 !important;
   }
+
+  /* Mobile responsive */
+  @media (max-width: 640px) {
+    .fc .fc-daygrid-day-frame {
+      min-height: 32px !important;
+    }
+    .fc .fc-daygrid-day-events {
+      min-height: 16px !important;
+    }
+    .fc-daygrid-event {
+      font-size: 0.5rem !important;
+      padding: 0.1rem 0.2rem !important;
+      margin-bottom: 0.1rem !important;
+    }
+    .fc .fc-daygrid-day-number {
+      font-size: 0.6rem !important;
+      padding: 0.1rem !important;
+    }
+    .fc .fc-toolbar-title {
+      font-size: 0.85rem !important;
+    }
+    .fc .fc-button {
+      font-size: 0.55rem !important;
+      padding: 0.25rem 0.4rem !important;
+    }
+    .fc .fc-col-header-cell-cushion {
+      font-size: 0.5rem !important;
+    }
+    .fc-more-link {
+      font-size: 0.5rem !important;
+    }
+  }
 `;
 
 interface CalendarEvent {
@@ -248,6 +280,12 @@ export const CalendarScreen: React.FC = () => {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [dayMaxEvents, setDayMaxEvents] = useState(
+    typeof window !== 'undefined' && window.innerWidth < 640 ? 2 : 3
+  );
+  const [initialView, setInitialView] = useState<'dayGridMonth' | 'dayGridWeek'>(
+    typeof window !== 'undefined' && window.innerWidth < 640 ? 'dayGridWeek' : 'dayGridMonth'
+  );
 
   const fetchEvents = useCallback(async () => {
     setLoading(true);
@@ -305,6 +343,14 @@ export const CalendarScreen: React.FC = () => {
     fetchEvents();
   }, [fetchEvents]);
 
+  useEffect(() => {
+    const handleResize = () => {
+      setDayMaxEvents(window.innerWidth < 640 ? 2 : 3);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const handleDatesSet = (dateInfo: any) => {
     // Recargar todos los eventos al cambiar de mes/semana
     fetchEvents();
@@ -325,7 +371,7 @@ export const CalendarScreen: React.FC = () => {
 
   const calendarOptions = {
     plugins: [dayGridPlugin, interactionPlugin],
-    initialView: 'dayGridMonth' as const,
+    initialView: initialView,
     events: events,
     eventClick: handleEventClick,
     datesSet: handleDatesSet,
@@ -341,7 +387,7 @@ export const CalendarScreen: React.FC = () => {
       week: 'Semana',
     },
     eventDisplay: 'block' as const,
-    dayMaxEvents: 3,
+    dayMaxEvents: dayMaxEvents,
     moreLinkClick: 'popover' as const,
     height: 'auto' as const,
     contentHeight: 'auto' as const,
@@ -352,8 +398,8 @@ export const CalendarScreen: React.FC = () => {
     <>
       <style>{calendarStyles}</style>
       <div className="flex flex-col gap-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="w-full">
           <h2 className="text-xl font-bold text-slate-800 dark:text-white">
             Programación
           </h2>
@@ -362,7 +408,7 @@ export const CalendarScreen: React.FC = () => {
           </p>
         </div>
         
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-4 text-xs font-medium bg-white dark:bg-slate-800 px-4 py-2 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
             <span className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
@@ -420,9 +466,9 @@ export const CalendarScreen: React.FC = () => {
               </div>
               
               <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">
-                <span className="font-semibold">Inicio:</span> {new Date(selectedEvent.start).toLocaleDateString('es-VE', { day: '2-digit', month: 'long', year: 'numeric' })}
+                <span className="font-semibold">Inicio:</span> {new Date(selectedEvent.start).toLocaleString('es-VE', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 {selectedEvent.end && (
-                  <span> • <span className="font-semibold">Fin:</span> {new Date(selectedEvent.end).toLocaleDateString('es-VE', { day: '2-digit', month: 'long', year: 'numeric' })}</span>
+                  <span> • <span className="font-semibold">Fin:</span> {new Date(selectedEvent.end).toLocaleString('es-VE', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                 )}
               </p>
 

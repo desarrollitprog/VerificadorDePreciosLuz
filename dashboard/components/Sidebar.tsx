@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { LogOut, X, Users, Server, Calendar, History, LayoutGrid } from 'lucide-react';
+import { LogOut, X, Users, Server, Calendar, History, Film, LayoutDashboard, Zap } from 'lucide-react';
 import { getUserRole, getUserName } from '../services/tokenUtils';
 
 interface SidebarProps {
@@ -10,7 +10,8 @@ interface SidebarProps {
 }
 
 const navItems = [
-  { path: '/', label: 'Mis Videos', icon: LayoutGrid, adminOnly: false },
+  { path: '/', label: 'Resumen', icon: LayoutDashboard, adminOnly: false },
+  { path: '/videos', label: 'Mis Videos', icon: Film, adminOnly: false },
   { path: '/calendario', label: 'Calendario', icon: Calendar, adminOnly: false },
   { path: '/servidores', label: 'Servidores', icon: Server, adminOnly: true },
   { path: '/auditoria', label: 'Auditoría', icon: History, adminOnly: true },
@@ -45,11 +46,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onLogout }) => {
       <div className="relative p-6 pr-14">
         <div className="flex items-center gap-3">
           <div className="bg-primary/20 flex items-center justify-center rounded-lg h-10 w-10 text-primary">
-            <LayoutGrid size={24} />
+            <Zap size={24} />
           </div>
           <div className="flex flex-col">
-            <h1 className="text-white text-lg font-bold leading-tight">Administrador de Videos</h1>
-            <p className="text-slate-400 text-xs font-medium">v1.2.4</p>
+            <h1 className="text-white text-lg font-bold leading-tight">LuzApp:Panel de Administracion</h1>
+            <p className="text-slate-400 text-xs font-medium">v1.0.0</p>
           </div>
         </div>
         <button

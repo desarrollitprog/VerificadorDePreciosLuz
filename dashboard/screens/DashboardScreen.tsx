@@ -337,6 +337,14 @@ export const DashboardScreen: React.FC = () => {
       }
       let fechaInicioIso = meta.fechaInicio || null;
       let fechaFinIso = meta.fechaFin || null;
+      if (fechaFinIso && !fechaInicioIso) {
+        showNotification(`Debes establecer fecha de inicio si pones fecha de fin para el archivo #${i + 1}`, 'warning');
+        return;
+      }
+      if (fechaInicioIso && !fechaFinIso) {
+        showNotification(`Debes establecer fecha de fin si pones fecha de inicio para el archivo #${i + 1}`, 'warning');
+        return;
+      }
       if (fechaInicioIso && fechaFinIso && new Date(fechaInicioIso) > new Date(fechaFinIso)) {
         showNotification(`La fecha de inicio no puede ser mayor a la fecha fin para el archivo #${i + 1}`, 'warning');
         return;
@@ -387,8 +395,9 @@ export const DashboardScreen: React.FC = () => {
       setVideos(data);
     } catch {}
     if (allSuccess) {
-      showNotification('Todos los archivos subidos correctamente', 'success');
       resetUploadModal();
+      showNotification('Todos los archivos subidos correctamente', 'success');
+      handleForceSync();
     } else {
       showNotification('Algunos archivos fallaron al subir', 'error');
     }
@@ -405,10 +414,11 @@ export const DashboardScreen: React.FC = () => {
      setDeletingVideoId(confirmDelete.videoId);
      setConfirmDelete({ open: false, videoId: null, titulo: '' });
      try {
-       await deleteVideo(confirmDelete.videoId);
-       showNotification('Archivo borrado correctamente', 'success');
-     } catch (err: any) {
-       setError('Error deleting video');
+        await deleteVideo(confirmDelete.videoId);
+        showNotification('Archivo borrado correctamente', 'success');
+        handleForceSync();
+      } catch (err: any) {
+       setError('Error al borrar el video');
        showNotification('Error al borrar archivo', 'error');
      } finally {
        setDeletingVideoId(null);
@@ -432,9 +442,10 @@ export const DashboardScreen: React.FC = () => {
          await deleteVideo(id);
        }
        
-       showNotification(`${idsToDelete.length} archivo${idsToDelete.length > 1 ? 's' : ''} borrado${idsToDelete.length > 1 ? 's' : ''} correctamente`, 'success');
-       setSelectedVideoIds([]);
-       
+        showNotification(`${idsToDelete.length} archivo${idsToDelete.length > 1 ? 's' : ''} borrado${idsToDelete.length > 1 ? 's' : ''} correctamente`, 'success');
+        setSelectedVideoIds([]);
+        handleForceSync();
+        
        // Refrescar lista
        const data = await getVideos();
        setVideos(data);
@@ -657,7 +668,7 @@ export const DashboardScreen: React.FC = () => {
             <UploadCloud className="text-primary" size={28} />
           </div>
           <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">Sube Nuevo Contenido</h3>
-          <p className="text-slate-500 text-sm max-w-sm mb-6">Click o arrastra aquí para subir Videos o Imagenes (Tamaño maximo = 20MB)</p>
+          <p className="text-slate-500 text-sm max-w-sm mb-6">Click o arrastra aquí para subir Videos o Imagenes (Tamaño maximo = 100MB, Formatos soportados: MP4, MKV, PNG, JPEG, JPG.)</p>
           <label className="px-6 py-2.5 bg-primary hover:bg-primary/90 text-white text-sm font-semibold rounded-lg shadow-lg shadow-primary/20 transition-all flex items-center gap-2 cursor-pointer">
             <Plus size={18} />
             Seleccionar Archivos
@@ -723,7 +734,7 @@ export const DashboardScreen: React.FC = () => {
                 Progreso de sincronización por servidor
               </p>
               {lastSyncAt && (
-                <p className="text-[11px] text-slate-500 mt-1">Última sync: {lastSyncAt}</p>
+                <p className="text-[11px] text-slate-500 mt-1">Última sincronización: {lastSyncAt}</p>
               )}
             </div>
             <button
@@ -783,7 +794,7 @@ export const DashboardScreen: React.FC = () => {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                 <input
                   type="text"
-                  className="pl-10 pr-8 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-500 focus:ring-2 focus:ring-primary w-48 transition-all"
+                  className="pl-10 pr-8 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-500 focus:ring-2 focus:ring-primary w-full sm:w-48 transition-all"
                   placeholder="Buscar..."
                   value={search}
                   onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
@@ -811,22 +822,24 @@ export const DashboardScreen: React.FC = () => {
               </select>
               
               {/* Date range filters */}
-              <input
-                type="date"
-                value={filterDateFrom}
-                onChange={e => { setFilterDateFrom(e.target.value); setCurrentPage(1); }}
-                className="px-3 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary"
-                placeholder="Desde"
-                title="Fecha desde"
-              />
-              <input
-                type="date"
-                value={filterDateTo}
-                onChange={e => { setFilterDateTo(e.target.value); setCurrentPage(1); }}
-                className="px-3 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary"
-                placeholder="Hasta"
-                title="Fecha hasta"
-              />
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-slate-500 font-medium">Desde</span>
+                <input
+                  type="date"
+                  value={filterDateFrom}
+                  onChange={e => { setFilterDateFrom(e.target.value); setCurrentPage(1); }}
+                  className="px-3 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-slate-500 font-medium">Hasta</span>
+                <input
+                  type="date"
+                  value={filterDateTo}
+                  onChange={e => { setFilterDateTo(e.target.value); setCurrentPage(1); }}
+                  className="px-3 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary"
+                />
+              </div>
               
               {/* View Toggle Buttons */}
                <button 
@@ -951,7 +964,7 @@ export const DashboardScreen: React.FC = () => {
                         ) : (
                           <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold bg-blue-500/10 text-blue-500 border border-blue-500/20">
                             <Smartphone size={10} />
-                            {video.dispositivos_count || 0} devs
+                            {video.dispositivos_count || 0} disp.
                           </span>
                         )}
                       </div>
@@ -1031,8 +1044,8 @@ export const DashboardScreen: React.FC = () => {
             </div>
            ) : (
              /* VISTA DE TABLA */
-             <div>
-               {/* Botones de acción masiva */}
+             <div className="overflow-x-auto">
+                {/* Botones de acción masiva */}
                {selectedVideoIds.length > 0 && (
                  <div className="flex items-center gap-4 mb-4 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
                    <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
@@ -1066,8 +1079,8 @@ export const DashboardScreen: React.FC = () => {
                    </button>
                  </div>
                )}
-                <div className="grid grid-cols-12 gap-4 border-b border-slate-200 dark:border-slate-700 px-3 py-2 bg-slate-50 dark:bg-slate-800/50 text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase">
-                   <div className="col-span-1 flex items-center">
+                  <div className="grid grid-cols-12 gap-4 max-lg:min-w-[1100px] border-b border-slate-200 dark:border-slate-700 px-3 py-2 bg-slate-50 dark:bg-slate-800/50 text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase">
+                    <div className="col-span-1 flex items-center">
                      <input 
                        type="checkbox" 
                        checked={selectedVideoIds.length === paginatedTableVideos.length && paginatedTableVideos.length > 0}
@@ -1089,8 +1102,8 @@ export const DashboardScreen: React.FC = () => {
                   <div className="col-span-2 text-right">Acciones</div>
                 </div>
                 {(() => {
-                  return paginatedTableVideos.length > 0 ? paginatedTableVideos.map((video) => (
-                    <div key={video.id} className="grid grid-cols-12 gap-4 border-b border-slate-100 dark:border-slate-700/30 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors items-center">
+                  return paginatedTableVideos.length > 0 ? paginatedTableVideos.map((video, index) => (
+                    <div key={video.id} className="grid grid-cols-12 gap-4 max-lg:min-w-[1100px] border-b border-slate-100 dark:border-slate-700/30 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors items-center">
                       <div className="col-span-1 flex items-center">
                         <input 
                           type="checkbox" 
@@ -1107,11 +1120,7 @@ export const DashboardScreen: React.FC = () => {
                       </div>
                       <div className="col-span-4 flex items-center gap-2 overflow-hidden">
                         <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded bg-slate-100 dark:bg-slate-800">
-                          {video.tipo === 'image' ? (
-                            <img src={video.thumbnail || video.url} alt={video.titulo} className="w-6 h-6 object-cover rounded" />
-                          ) : (
-                            <Film size={16} className="text-slate-400" />
-                          )}
+                          <img src={video.thumbnail || video.url} alt={video.titulo || video.filename} className="w-6 h-6 object-cover rounded" />
                         </div>
                         <span className="text-sm font-medium text-slate-900 dark:text-white truncate min-w-0" title={video.titulo || video.filename}>
                           {video.titulo || video.filename}
@@ -1133,7 +1142,7 @@ export const DashboardScreen: React.FC = () => {
                           {(video.estado || 'activo').toUpperCase()}
                         </span>
                         {/* Tooltip: Programación + Tipo de archivo */}
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 dark:bg-slate-800 text-white text-xs rounded-lg shadow-xl opacity-0 invisible group-hover/estado:opacity-100 group-hover/estado:visible transition-all duration-200 z-50 whitespace-nowrap">
+                        <div className={`absolute left-1/2 -translate-x-1/2 ${index === 0 ? 'top-full mt-2' : 'bottom-full mb-2'} px-3 py-2 bg-slate-900 dark:bg-slate-800 text-white text-xs rounded-lg shadow-xl opacity-0 invisible group-hover/estado:opacity-100 group-hover/estado:visible transition-all duration-200 z-50 whitespace-nowrap`}>
                             <div className="font-semibold mb-1">Programación</div>
                             <div className="text-slate-300">Tipo: <span className="text-white">{video.tipo === 'image' ? 'Imagen' : 'Video'}</span></div>
                             {video.fechaInicio && (
@@ -1142,7 +1151,7 @@ export const DashboardScreen: React.FC = () => {
                             {video.fechaFin && (
                               <div className="text-slate-300">Fin: <span className="text-white">{video.fechaFin}</span></div>
                             )}
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900 dark:border-t-slate-800"></div>
+                            <div className={`absolute left-1/2 -translate-x-1/2 border-4 border-transparent ${index === 0 ? 'bottom-full border-b-slate-900 dark:border-b-slate-800' : 'top-full border-t-slate-900 dark:border-t-slate-800'}`}></div>
                           </div>
                       </div>
                       <div className="col-span-1 text-sm text-slate-600 dark:text-slate-400">
@@ -1152,14 +1161,47 @@ export const DashboardScreen: React.FC = () => {
                             Todos
                           </span>
                         ) : (
-                          <span>{video.dispositivos_count || 0} devs</span>
+                          <div className="relative group/assign">
+                            <span className="cursor-help border-b border-dotted border-slate-400">
+                              {video.dispositivos_count || 0} disp.
+                            </span>
+                            {video.asignaciones && video.asignaciones.length > 0 && (() => {
+                              const grouped: Record<string, any[]> = {};
+                              video.asignaciones!.forEach(a => {
+                                const key = a.servidor_nombre || `Servidor #${a.servidor_id}`;
+                                if (!grouped[key]) grouped[key] = [];
+                                grouped[key].push(a);
+                              });
+                              return (
+                                <div className={`absolute left-1/2 -translate-x-1/2 ${index === 0 ? 'top-full mt-2' : 'bottom-full mb-2'} px-3 py-2 bg-slate-900 dark:bg-slate-800 text-white text-xs rounded-lg shadow-xl opacity-0 invisible group-hover/assign:opacity-100 group-hover/assign:visible transition-all duration-200 z-50 min-w-[220px] max-h-[300px] overflow-y-auto`}>
+                                  <div className="font-semibold mb-1.5 sticky top-0 bg-slate-900 dark:bg-slate-800 pb-1 border-b border-slate-700">
+                                    Dispositivos asignados
+                                  </div>
+                                  {Object.entries(grouped).map(([server, devices]) => (
+                                    <div key={server} className="mt-2 first:mt-0">
+                                      <div className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold mb-1">
+                                        {server}
+                                      </div>
+                                      {devices.map((a: any, i: number) => (
+                                        <div key={i} className="text-slate-300 py-0.5 pl-2 flex items-center gap-1.5">
+                                          <span className="w-1 h-1 rounded-full bg-primary/60" />
+                                          {a.dispositivo_nombre || a.dispositivo_codigo || `ID: ${a.dispositivo_id}`}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ))}
+                                  <div className={`absolute left-1/2 -translate-x-1/2 border-4 border-transparent ${index === 0 ? 'bottom-full border-b-slate-900 dark:border-b-slate-800' : 'top-full border-t-slate-900 dark:border-t-slate-800'}`}></div>
+                                </div>
+                              );
+                            })()}
+                          </div>
                         )}
                       </div>
-                      <div className="col-span-2 flex items-center justify-end gap-3">
-                        <button onClick={() => handlePreview(video)} className="p-2 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-transform hover:scale-110" title="Reproducir">
+                       <div className="col-span-2 flex items-center justify-end gap-1.5 md:gap-3">
+                        <button onClick={() => handlePreview(video)} className="p-1.5 md:p-2 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-transform hover:scale-110" title="Reproducir">
                           <Eye size={16} />
                         </button>
-                        <button onClick={() => downloadVideoFile(video)} className="p-2 rounded hover:bg-blue-500/10 transition-transform hover:scale-110" title="Descargar">
+                        <button onClick={() => downloadVideoFile(video)} className="p-1.5 md:p-2 rounded hover:bg-blue-500/10 transition-transform hover:scale-110" title="Descargar">
                           <Download size={16} />
                         </button>
                         <button
@@ -1187,12 +1229,12 @@ export const DashboardScreen: React.FC = () => {
                               window.scrollTo({ top: 0, behavior: 'smooth' });
                             }, 50);
                           }}
-                          className="p-2 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-transform hover:scale-110"
+                          className="p-1.5 md:p-2 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-transform hover:scale-110"
                           title="Editar"
                         >
                           <MoreVertical size={16} />
                         </button>
-                        <button onClick={() => handleDeleteClick(video.id, video.titulo || video.filename)} className="p-2 rounded hover:bg-red-500/10 transition-transform hover:scale-110" title="Borrar" disabled={deletingVideoId === video.id}>
+                        <button onClick={() => handleDeleteClick(video.id, video.titulo || video.filename)} className="p-1.5 md:p-2 rounded hover:bg-red-500/10 transition-transform hover:scale-110" title="Borrar" disabled={deletingVideoId === video.id}>
                           {deletingVideoId === video.id ? '...' : <Trash size={16} />}
                         </button>
                       </div>
@@ -1247,7 +1289,7 @@ export const DashboardScreen: React.FC = () => {
       </div>
 
       {isUploadModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-gradient-to-br from-black/70 via-black/60 to-black/80 px-4 pt-20">
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-gradient-to-br from-black/70 via-black/60 to-black/80 px-4 pt-4 md:pt-20 animate-fade-in">
            <div className="w-full max-w-6xl bg-white dark:bg-[#1c2936] rounded-2xl border border-slate-300/50 dark:border-slate-600/50 shadow-[0_20px_60px_rgba(0,0,0,0.3)] p-6">
              <div className="flex items-start justify-between mb-6 pb-4 border-b border-gradient-to-r from-transparent via-slate-300 to-transparent">
                <div>
@@ -1307,7 +1349,7 @@ export const DashboardScreen: React.FC = () => {
                            <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2">TÍTULO</label>
                            <input
                              type="text"
-                             className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-800 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200 "
+                             className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-800 dark:text-white focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200 "
                              value={fileMetadatas[idx]?.titulo || ''}
                              onChange={e => {
                                const newMetas = [...fileMetadatas];
@@ -1321,7 +1363,7 @@ export const DashboardScreen: React.FC = () => {
                          <div>
                            <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2">ESTADO</label>
                          <select
-                         className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-800 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200"
+                         className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-800 dark:text-white focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200"
                          value={fileMetadatas[idx]?.activo ? 'activo' : 'inactivo'}
                          onChange={e => {
                            const newMetas = [...fileMetadatas];
@@ -1338,30 +1380,36 @@ export const DashboardScreen: React.FC = () => {
                          {/* Fecha Inicio */}
                          <div>
                            <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2 ">FECHA INICIO</label>
-                           <input
-                             type="datetime-local"
-                             className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-900 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200"
-                             value={fileMetadatas[idx]?.fechaInicio || ''}
-                             onChange={e => {
-                               const newMetas = [...fileMetadatas];
-                               newMetas[idx].fechaInicio = e.target.value;
-                               setFileMetadatas(newMetas);
-                             }}
-                           />
+                            <input
+                              type="datetime-local"
+                              className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border-2 bg-white dark:bg-slate-800/50 text-slate-900 dark:text-white text-base sm:text-lg font-mono tracking-[0.15em] sm:tracking-[0.2em] outline-none transition-all"
+                              style={{ borderColor: 'rgba(148,163,184,0.3)' }}
+                              onFocus={e => e.currentTarget.style.borderColor = '#3b82f6'}
+                              onBlur={e => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.3)'}
+                              value={fileMetadatas[idx]?.fechaInicio || ''}
+                              onChange={e => {
+                                const newMetas = [...fileMetadatas];
+                                newMetas[idx].fechaInicio = e.target.value;
+                                setFileMetadatas(newMetas);
+                              }}
+                            />
                         </div>
                          {/* Fecha Fin */}
                          <div>
                            <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2">FECHA FIN</label>
-                           <input
-                             type="datetime-local"
-                             className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-900 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200"
-                             value={fileMetadatas[idx]?.fechaFin || ''}
-                             onChange={e => {
-                               const newMetas = [...fileMetadatas];
-                               newMetas[idx].fechaFin = e.target.value;
-                               setFileMetadatas(newMetas);
-                             }}
-                           />
+                            <input
+                              type="datetime-local"
+                              className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border-2 bg-white dark:bg-slate-800/50 text-slate-900 dark:text-white text-base sm:text-lg font-mono tracking-[0.15em] sm:tracking-[0.2em] outline-none transition-all"
+                              style={{ borderColor: 'rgba(148,163,184,0.3)' }}
+                              onFocus={e => e.currentTarget.style.borderColor = '#3b82f6'}
+                              onBlur={e => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.3)'}
+                              value={fileMetadatas[idx]?.fechaFin || ''}
+                              onChange={e => {
+                                const newMetas = [...fileMetadatas];
+                                newMetas[idx].fechaFin = e.target.value;
+                                setFileMetadatas(newMetas);
+                              }}
+                            />
                          </div>
                       </div>
                       {/* Asignación */}
@@ -1381,8 +1429,8 @@ export const DashboardScreen: React.FC = () => {
                         >
                           <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all duration-200 ${
                             (fileMetadatas[idx]?.asignacionTodos ?? true)
-                              ? 'bg-primary border-primary scale-110'
-                              : 'border-slate-300 dark:border-slate-600 hover:border-primary/50 scale-100'
+                              ? 'bg-blue-500 border-blue-500 scale-110'
+                              : 'border-slate-300 dark:border-slate-600 hover:border-blue-500/50 scale-100'
                           }`}>
                             {(fileMetadatas[idx]?.asignacionTodos ?? true) && <Check size={14} className="text-white" />}
                           </div>
@@ -1391,7 +1439,7 @@ export const DashboardScreen: React.FC = () => {
                           </span>
                           <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${
                             (fileMetadatas[idx]?.asignacionTodos ?? true)
-                              ? 'bg-amber-500/10 text-amber-500' 
+                              ? 'bg-emerald-500/10 text-emerald-500' 
                               : 'bg-slate-500/10 text-slate-500'
                           }`}>
                             {(fileMetadatas[idx]?.asignacionTodos ?? true) ? 'ACTIVO' : 'INACTIVO'}
@@ -1509,12 +1557,12 @@ export const DashboardScreen: React.FC = () => {
 
       {/* Sync Modal */}
       {isSyncModalOpen && (
-        <div className="fixed inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/80 flex items-start justify-center z-50 p-4 pt-20">
+        <div className="fixed inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/80 flex items-start justify-center z-50 p-4 pt-20 animate-fade-in">
           <div className="bg-white dark:bg-[#1c2936] rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.3)] w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
             <div className="p-6 border-b border-gradient-to-r from-transparent via-slate-300 to-transparent shrink-0">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-amber-500/10">
-                  <RefreshCw size={20} className="text-amber-500" />
+                <div className="p-2 rounded-lg bg-blue-500/10">
+                  <RefreshCw size={20} className="text-blue-500" />
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-wide">SINCRONIZACIÓN SELECTIVA</h2>
@@ -1525,7 +1573,7 @@ export const DashboardScreen: React.FC = () => {
             
             <div className="p-4 overflow-y-auto flex-1">
               <div 
-                className="flex items-center gap-3 mb-4 p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/30 cursor-pointer transition-colors"
+                className="flex items-center gap-3 mb-4 p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/30 cursor-pointer transition-colors flex-wrap"
                 onClick={() => {
                   const nuevoEstado = !syncAllDevices;
                   setSyncAllDevices(nuevoEstado);
@@ -1537,8 +1585,8 @@ export const DashboardScreen: React.FC = () => {
               >
                 <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all duration-200 ${
                   syncAllDevices
-                    ? 'bg-primary border-primary scale-110'
-                    : 'border-slate-300 dark:border-slate-600 hover:border-primary/50 scale-100'
+                    ? 'bg-blue-500 border-blue-500 scale-110'
+                    : 'border-slate-300 dark:border-slate-600 hover:border-blue-500/50 scale-100'
                 }`}>
                   {syncAllDevices && <Check size={14} className="text-white" />}
                 </div>
@@ -1547,7 +1595,7 @@ export const DashboardScreen: React.FC = () => {
                   </span>
                 <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${
                   syncAllDevices
-                    ? 'bg-amber-500/10 text-amber-500' 
+                    ? 'bg-emerald-500/10 text-emerald-500' 
                     : 'bg-slate-500/10 text-slate-500'
                 }`}>
                   {syncAllDevices ? 'ACTIVO' : 'INACTIVO'}
@@ -1636,12 +1684,12 @@ export const DashboardScreen: React.FC = () => {
       )}
       {/* Edit Modal */}
       {isEditModalOpen && editingVideo && (
-        <div className="fixed inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/80 flex items-start justify-center z-50 p-4 pt-20">
+        <div className="fixed inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/80 flex items-start justify-center z-50 p-4 pt-20 animate-fade-in">
           <div className="bg-white dark:bg-[#1c2936] rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.3)] w-full max-w-2xl max-h-[90vh] flex flex-col">
             <div className="p-6 border-b border-gradient-to-r from-transparent via-slate-300 to-transparent shrink-0">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-amber-500/10">
-                  <Pencil size={20} className="text-amber-500" />
+                <div className="p-2 rounded-lg bg-blue-500/10">
+                  <Pencil size={20} className="text-blue-500" />
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-wide">EDITAR PUBLICIDAD</h2>
@@ -1659,31 +1707,37 @@ export const DashboardScreen: React.FC = () => {
                   type="text"
                   value={editFormData.titulo}
                   onChange={e => setEditFormData({ ...editFormData, titulo: e.target.value })}
-                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-300/70 dark:border-slate-600/70 rounded-lg text-base text-slate-900 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200"
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-300/70 dark:border-slate-600/70 rounded-lg text-base text-slate-900 dark:text-white focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200"
                 />
               </div>
               
               <div>
-                <label className="block text-base font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  START DATE
+                  <label className="block text-base font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  FECHA DE INICIO
                 </label>
                 <input
                   type="datetime-local"
                   value={editFormData.fechaInicio}
                   onChange={e => setEditFormData({ ...editFormData, fechaInicio: e.target.value })}
-                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-300/70 dark:border-slate-600/70 rounded-lg text-base text-slate-900 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border-2 bg-white dark:bg-slate-800/50 text-slate-900 dark:text-white text-base sm:text-lg font-mono tracking-[0.15em] sm:tracking-[0.2em] outline-none transition-all"
+                  style={{ borderColor: 'rgba(148,163,184,0.3)' }}
+                  onFocus={e => e.currentTarget.style.borderColor = '#3b82f6'}
+                  onBlur={e => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.3)'}
                 />
               </div>
               
               <div>
-                <label className="block text-base font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  END DATE
+                  <label className="block text-base font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  FECHA DE FIN
                 </label>
                 <input
                   type="datetime-local"
                   value={editFormData.fechaFin}
                   onChange={e => setEditFormData({ ...editFormData, fechaFin: e.target.value })}
-                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-300/70 dark:border-slate-600/70 rounded-lg text-base text-slate-900 dark:text-white focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border-2 bg-white dark:bg-slate-800/50 text-slate-900 dark:text-white text-base sm:text-lg font-mono tracking-[0.15em] sm:tracking-[0.2em] outline-none transition-all"
+                  style={{ borderColor: 'rgba(148,163,184,0.3)' }}
+                  onFocus={e => e.currentTarget.style.borderColor = '#3b82f6'}
+                  onBlur={e => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.3)'}
                 />
               </div>
               
@@ -1691,8 +1745,8 @@ export const DashboardScreen: React.FC = () => {
                 <div 
                   className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all duration-200 ${
                     editFormData.activo
-                      ? 'bg-amber-500 border-amber-500 scale-110'
-                      : 'border-slate-300 dark:border-slate-600 hover:border-amber-500/50 scale-100'
+                      ? 'bg-emerald-500 border-emerald-500 scale-110'
+                      : 'border-slate-300 dark:border-slate-600 hover:border-emerald-500/50 scale-100'
                   }`}
                   onClick={() => setEditFormData({ ...editFormData, activo: !editFormData.activo })}
                 >
@@ -1706,10 +1760,10 @@ export const DashboardScreen: React.FC = () => {
                 </label>
                 <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${
                   editFormData.activo
-                    ? 'bg-amber-500/10 text-amber-500' 
+                    ? 'bg-emerald-500/10 text-emerald-500' 
                     : 'bg-slate-500/10 text-slate-500'
                 }`}>
-                  {editFormData.activo ? 'ON' : 'OFF'}
+                  {editFormData.activo ? 'ACTIVO' : 'INACTIVO'}
                 </span>
               </div>
                
@@ -1728,8 +1782,8 @@ export const DashboardScreen: React.FC = () => {
                  >
                    <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all duration-200 ${
                      editAsignacionTodos
-                       ? 'bg-primary border-primary scale-110'
-                       : 'border-slate-300 dark:border-slate-600 hover:border-primary/50 scale-100'
+                       ? 'bg-blue-500 border-blue-500 scale-110'
+                       : 'border-slate-300 dark:border-slate-600 hover:border-blue-500/50 scale-100'
                    }`}>
                      {editAsignacionTodos && <Check size={14} className="text-white" />}
                    </div>
@@ -1738,7 +1792,7 @@ export const DashboardScreen: React.FC = () => {
                    </span>
                    <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${
                      editAsignacionTodos
-                       ? 'bg-amber-500/10 text-amber-500' 
+                       ? 'bg-emerald-500/10 text-emerald-500' 
                        : 'bg-slate-500/10 text-slate-500'
                    }`}>
                      {editAsignacionTodos ? 'ACTIVO' : 'INACTIVO'}
@@ -1808,22 +1862,40 @@ export const DashboardScreen: React.FC = () => {
                </button>
                <button
                  type="button"
-                 onClick={async () => {
-                   const fechaInicio = editFormData.fechaInicio;
-                   const fechaFin = editFormData.fechaFin;
-                   if (fechaInicio && fechaFin && new Date(fechaInicio) > new Date(fechaFin)) {
-                     showNotification('La fecha de inicio no puede ser mayor a la fecha fin', 'warning');
-                     return;
-                   }
-                   setIsSavingEdit(true);
+                  onClick={async () => {
+                    const fechaInicio = editFormData.fechaInicio;
+                    const fechaFin = editFormData.fechaFin;
+
+                    if (fechaFin && !fechaInicio) {
+                      showNotification('Debes establecer fecha de inicio si pones fecha de fin', 'warning');
+                      return;
+                    }
+                    if (fechaInicio && !fechaFin) {
+                      showNotification('Debes establecer fecha de fin si pones fecha de inicio', 'warning');
+                      return;
+                    }
+                    if (fechaInicio && fechaFin && new Date(fechaInicio) > new Date(fechaFin)) {
+                      showNotification('La fecha de inicio no puede ser mayor a la fecha fin', 'warning');
+                      return;
+                    }
+
+                    const hadSchedule = editingVideo?.fechaInicio || editingVideo?.fechaFin;
+                    const nowHasSchedule = !!(fechaInicio && fechaFin);
+                    const willUnschedule = hadSchedule && !nowHasSchedule;
+                    if (willUnschedule) {
+                      const ok = window.confirm('¿Estás seguro de desprogramar esta publicidad?\n\nSe eliminarán las fechas de inicio y fin.');
+                      if (!ok) return;
+                    }
+
+                    setIsSavingEdit(true);
                    try {
                      // Actualizar metadata
-                     await updateBannerMetadata(editingVideo.id, {
-                       activo: editFormData.activo,
-                       titulo: editFormData.titulo || '',
-                       fechaInicio: editFormData.fechaInicio || null,
-                       fechaFin: editFormData.fechaFin || null,
-                     });
+                      await updateBannerMetadata(editingVideo.id, {
+                        activo: editFormData.activo,
+                        titulo: editFormData.titulo || '',
+                        fecha_inicio: editFormData.fechaInicio || null,
+                        fecha_fin: editFormData.fechaFin || null,
+                      });
                     
                     // Actualizar asignaciones
                     await updateBannerAsignations(
@@ -1833,7 +1905,14 @@ export const DashboardScreen: React.FC = () => {
                       editDispositivoIds
                     );
                     
-                    showNotification('Publicidad actualizada correctamente', 'success');
+                    const msg = hadSchedule && nowHasSchedule
+                      ? 'Publicidad reprogramada correctamente'
+                      : hadSchedule && !nowHasSchedule
+                      ? 'Publicidad desprogramada correctamente'
+                      : !hadSchedule && nowHasSchedule
+                      ? 'Publicidad programada correctamente'
+                      : 'Publicidad actualizada correctamente';
+                    showNotification(msg, 'success');
                     setIsEditModalOpen(false);
                     setEditingVideo(null);
                     setEditAsignacionTodos(true);

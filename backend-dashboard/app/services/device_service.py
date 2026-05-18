@@ -238,6 +238,75 @@ async def reboot_device(
         return {"success": False, "status_code": 500, "detail": f"Error al comunicarse con el servidor: {str(e)}"}
 
 
+async def purge_device(
+    db: AsyncSession,
+    device_id: str,
+    user_id: int | None,
+    actor_name: str,
+) -> dict[str, Any]:
+    stmt_disp = select(Dispositivo).where(Dispositivo.codigo_kiosko == device_id)
+    result_disp = await db.execute(stmt_disp)
+    dispositivo = result_disp.scalars().first()
+
+    if not dispositivo:
+        return {"success": False, "status_code": 404, "detail": "Dispositivo no encontrado"}
+
+    if not dispositivo.servidor_id:
+        return {"success": False, "status_code": 400, "detail": "El dispositivo no está asociado a ningún servidor"}
+
+    stmt_srv = select(ServidorSecundario).where(ServidorSecundario.id == dispositivo.servidor_id)
+    result_srv = await db.execute(stmt_srv)
+    servidor = result_srv.scalars().first()
+
+    if not servidor:
+        return {"success": False, "status_code": 404, "detail": "Servidor del dispositivo no encontrado"}
+
+    servidor_ip = servidor.ip
+    logger.info(f"[PURGE] Intentando limpiar cache de dispositivo {device_id} en servidor {servidor_ip}")
+
+    api_url = f"http://{servidor_ip}:8000/api/comandos/{device_id}"
+    logger.info(f"[PURGE] Llamando a: {api_url}")
+
+    try:
+        async with httpx.AsyncClient(timeout=RESTART_TIMEOUT) as client:
+            logger.info(f"[PURGE] Enviando comando WIPE_AND_RESYNC...")
+            response = await client.post(
+                api_url,
+                json={"comando": "WIPE_AND_RESYNC"},
+            )
+            logger.info(f"[PURGE] Respuesta recibida: status={response.status_code}")
+            result = response.json()
+            logger.info(f"[PURGE] Resultado: {result}")
+
+            nombre_disp = dispositivo.nombre_amigable or device_id
+            if result.get("success"):
+                await registrar_accion(
+                    db,
+                    user_id,
+                    "PURGA_DISPOSITIVO",
+                    f"Cache de '{nombre_disp}' ({device_id}) limpiado y sincronizado exitosamente por {actor_name}",
+                    dispositivo_id=device_id,
+                    servidor_id=servidor.id,
+                )
+            else:
+                await registrar_accion(
+                    db,
+                    user_id,
+                    "PURGA_DISPOSITIVO_FALLO",
+                    f"Error al limpiar cache de '{nombre_disp}' ({device_id}): {result.get('message', 'Error desconocido')}",
+                    dispositivo_id=device_id,
+                    servidor_id=servidor.id,
+                )
+
+            return {"success": True, "result": result}
+
+    except httpx.TimeoutException:
+        return {"success": False, "status_code": 504, "detail": f"Timeout esperando confirmación del dispositivo ({RESTART_TIMEOUT}s)"}
+    except Exception as e:
+        logger.error(f"Error al limpiar cache de dispositivo {device_id}: %s", e)
+        return {"success": False, "status_code": 500, "detail": f"Error al comunicarse con el servidor: {str(e)}"}
+
+
 async def program_reboot(
     db: AsyncSession,
     device_ids: list[str],

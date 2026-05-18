@@ -14,7 +14,7 @@ const Login: React.FC<{ onLoginSuccess: () => void }> = () => {
     setError(null);
     try {
       await loginStart(username, correo, password);
-      setError('Este formulario es legacy. Usa la pantalla principal para completar 2FA.');
+      setError('Este formulario es antiguo. Usa la pantalla principal para completar la verificación en dos pasos.');
     } catch (err: any) {
       setError(err.message);
     } finally {

@@ -12,6 +12,7 @@ interface ServerDeviceSelectorProps {
   onToggleExpand: (id: number) => void;
   label?: string;
   maxHeight?: string;
+  accentColor?: string;
 }
 
 export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
@@ -24,6 +25,7 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
   onToggleExpand,
   label = 'Seleccionar servidores:',
   maxHeight = 'max-h-32',
+  accentColor = '#3b82f6',
 }) => {
   if (servidores.length === 0) {
     return <p className="text-sm text-slate-500">No hay servidores disponibles</p>;
@@ -33,7 +35,7 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
     <div className="space-y-4">
       <div className="flex items-center justify-between pb-3 border-b border-slate-200/70 dark:border-slate-700/50">
         <p className="text-base font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
-          <Server size={18} className="text-primary" />
+          <Server size={18} style={{ color: accentColor }} />
           {label}
         </p>
         <span className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full font-medium text-slate-600 dark:text-slate-400">
@@ -42,15 +44,20 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
       </div>
 
       <div className={`${maxHeight} overflow-y-auto space-y-3 pr-2 custom-scrollbar`}>
-        {servidores.map(srv => (
+        {servidores.map(srv => {
+          const onlineCount = srv.dispositivos?.filter(d => d.online).length ?? 0;
+          const offlineCount = srv.dispositivos?.filter(d => !d.online).length ?? 0;
+          const totalDispositivos = onlineCount + offlineCount;
+          return (
           <div key={srv.id} className="border border-slate-200/70 dark:border-slate-700/50 rounded-xl overflow-hidden hover:border-primary/30 transition-all duration-300 server-card-glow">
             <div className="flex items-center gap-3 p-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
                  onClick={() => onServidorChange(Number(srv.id), !selectedServidorIds.includes(Number(srv.id)))}>
-              <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all duration-200 ${
+              <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all duration-200 shrink-0 ${
                 selectedServidorIds.includes(Number(srv.id))
-                  ? 'bg-primary border-primary scale-110'
+                  ? 'scale-110'
                   : 'border-slate-300 dark:border-slate-600 hover:border-primary/50 scale-100'
-              }`}>
+              }`}
+              style={selectedServidorIds.includes(Number(srv.id)) ? { backgroundColor: accentColor, borderColor: accentColor } : undefined}>
                 {selectedServidorIds.includes(Number(srv.id)) && <Check size={14} className="text-white" />}
               </div>
 
@@ -60,10 +67,20 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
                   {srv.nombre}
                 </span>
                 <span className="text-xs text-slate-500 flex items-center gap-1">
-                  <span className={`w-1.5 h-1.5 rounded-full ${
-                    srv.online ? 'bg-emerald-500' : 'bg-slate-400'
-                  }`} />
-                  {srv.dispositivos?.length ?? 0} dispositivos
+                  {onlineCount > 0 && (
+                    <span className="flex items-center gap-0.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      {onlineCount}
+                    </span>
+                  )}
+                  {offlineCount > 0 && (
+                    <span className="flex items-center gap-0.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                      {offlineCount}
+                    </span>
+                  )}
+                  <span className="text-slate-400 mx-0.5">|</span>
+                  {totalDispositivos} dispositivos
                 </span>
               </div>
 
@@ -72,7 +89,7 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
                   ? 'bg-emerald-500/10 text-emerald-500'
                   : 'bg-slate-500/10 text-slate-500'
               }`}>
-                {srv.online ? 'Online' : 'Offline'}
+                {srv.online ? 'En línea' : 'Desconectado'}
               </span>
 
               <button
@@ -93,18 +110,19 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
 
             {expandedServidores.includes(srv.id) && srv.dispositivos && srv.dispositivos.length > 0 && (
               <div className="bg-slate-50/50 dark:bg-slate-800/30 px-3 pb-3">
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {srv.dispositivos.map(disp => (
                     <div
                       key={`${srv.id}-${disp.id}`}
                       className="flex items-center gap-2 p-2 rounded-lg hover:bg-white dark:hover:bg-slate-700/50 cursor-pointer transition-colors group"
                       onClick={() => onDispositivoChange(String(disp.id), !selectedDispositivoIds.includes(String(disp.id)))}
                     >
-                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all duration-200 ${
+                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all duration-200 shrink-0 ${
                         selectedDispositivoIds.includes(String(disp.id))
-                          ? 'bg-primary border-primary scale-110'
+                          ? 'scale-110'
                           : 'border-slate-300 dark:border-slate-600 group-hover:border-primary/50'
-                      }`}>
+                      }`}
+                      style={selectedDispositivoIds.includes(String(disp.id)) ? { backgroundColor: accentColor, borderColor: accentColor } : undefined}>
                         {selectedDispositivoIds.includes(String(disp.id)) && <Check size={12} className="text-white" />}
                       </div>
                       <Smartphone size={12} className="text-slate-400 flex-shrink-0" />
@@ -115,7 +133,7 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
                         disp.online ? 'text-emerald-500' : 'text-slate-400'
                       }`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${disp.online ? 'bg-emerald-500' : 'bg-slate-400'}`} />
-                        {disp.online ? 'Online' : 'Offline'}
+                        {disp.online ? 'En línea' : 'Desconectado'}
                       </span>
                     </div>
                   ))}
@@ -123,7 +141,8 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="pt-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { loginStart, resendTwoFactor, verifyTwoFactor } from '../services/authService';
 import { saveToken } from '../services/tokenUtils';
-import { Lock, User, Eye, EyeOff, Video, Mail, ShieldCheck } from 'lucide-react';
+import { Lock, User, Eye, EyeOff, Mail, ShieldCheck } from 'lucide-react';
 
 interface LoginScreenProps {
   onLogin: () => void;
@@ -122,26 +122,26 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
       </div>
 
       <div className="relative z-10 w-full max-w-md transform rounded-xl border border-slate-200/50 bg-white/95 p-8 shadow-lg transition-all dark:border-slate-800/50 dark:bg-[#182430]/95 backdrop-blur-sm" translate="no">
-        <div className="mb-8 text-center">
-          <div className="mb-4 flex justify-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/20 text-primary">
-              <Video size={28} />
+        {step !== 'otp' && (
+          <div className="mb-8 text-center">
+            <div className="mb-4 flex justify-center">
+              <img src="/logoluz.png" alt="LUZAPP" className="h-16 w-auto" />
             </div>
+            <h1 className="mb-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-white" translate="no">
+              LUZAPP
+            </h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400" translate="no">
+              Bienvenidos, por favor ingresa tus credenciales
+            </p>
           </div>
-          <h1 className="mb-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-white" translate="no">
-            VERIFICADOR DE PRECIOS LUZ
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400" translate="no">
-            BIENVENIDOS, POR FAVOR INGRESA TUS CREDENCIALES 
-          </p>
-        </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
           {step === 'credentials' ? (
             <>
               <div className="space-y-1.5">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300" htmlFor="username">
-                  NOMBRE DE USUARIO
+                  Nombre de Usuario
                 </label>
                 <div className="relative">
                   <input
@@ -161,7 +161,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
 
               <div className="space-y-1.5">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300" htmlFor="correo">
-                  CORREO
+                  Correo Electronico
                 </label>
                 <div className="relative">
                   <input
@@ -181,7 +181,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
 
               <div className="space-y-1.5">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300" htmlFor="password">
-                  CONTRASEÑA
+                  Contraseña
                 </label>
                 <div className="relative">
                   <input
@@ -230,7 +230,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                 </p>
               </div>
 
-              <div className="flex items-center justify-between gap-2">
+              <div className="grid grid-cols-6 gap-2">
                 {otpDigits.map((digit, index) => (
                   <input
                     key={index}
@@ -244,7 +244,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                     onChange={e => handleOtpChange(index, e.target.value)}
                     onKeyDown={e => handleOtpKeyDown(index, e)}
                     onPaste={handleOtpPaste}
-                    className="h-12 w-12 rounded-lg border border-slate-200/50 bg-slate-50/50 text-center text-lg font-semibold text-slate-800 focus:border-primary/50 focus:ring-1 focus:ring-primary/20 dark:border-slate-700/50 dark:bg-[#111a22]/50 dark:text-white transition-all duration-200"
+                    className="w-full aspect-square rounded-lg border border-slate-200/50 bg-slate-50/50 text-center text-lg font-semibold text-slate-800 focus:border-primary/50 focus:ring-1 focus:ring-primary/20 dark:border-slate-700/50 dark:bg-[#111a22]/50 dark:text-white transition-all duration-200"
                   />
                 ))}
               </div>
@@ -301,7 +301,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
       </div>
 
       <p className="mt-8 text-center text-xs text-slate-400 dark:text-slate-600" translate="no">
-        © 2026 Verificador de Precios Luz. Todos los derechos reservados.
+        © 2026 LUZAPP | Automercados Luz. Todos los derechos reservados.
       </p>
     </div>
   );

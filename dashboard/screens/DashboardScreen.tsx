@@ -822,22 +822,24 @@ export const DashboardScreen: React.FC = () => {
               </select>
               
               {/* Date range filters */}
-              <input
-                type="date"
-                value={filterDateFrom}
-                onChange={e => { setFilterDateFrom(e.target.value); setCurrentPage(1); }}
-                className="px-3 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary"
-                placeholder="Desde"
-                title="Fecha desde"
-              />
-              <input
-                type="date"
-                value={filterDateTo}
-                onChange={e => { setFilterDateTo(e.target.value); setCurrentPage(1); }}
-                className="px-3 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary"
-                placeholder="Hasta"
-                title="Fecha hasta"
-              />
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-slate-500 font-medium">Desde</span>
+                <input
+                  type="date"
+                  value={filterDateFrom}
+                  onChange={e => { setFilterDateFrom(e.target.value); setCurrentPage(1); }}
+                  className="px-3 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-slate-500 font-medium">Hasta</span>
+                <input
+                  type="date"
+                  value={filterDateTo}
+                  onChange={e => { setFilterDateTo(e.target.value); setCurrentPage(1); }}
+                  className="px-3 py-2 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary"
+                />
+              </div>
               
               {/* View Toggle Buttons */}
                <button 

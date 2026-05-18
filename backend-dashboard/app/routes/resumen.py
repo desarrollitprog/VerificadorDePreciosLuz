@@ -11,6 +11,7 @@ from app.models.dispositivo import Dispositivo
 from app.models.publicidad import Publicidad
 from app.models.usuario import Usuario
 from app.models.asignacion import PublicidadAsignacion
+from app.models.subida_log import SubidaLog
 from app.services.server_service import HEARTBEAT_OFFLINE_MINUTES, _utcnow
 
 router = APIRouter(tags=["resumen"])
@@ -102,14 +103,14 @@ async def obtener_resumen(
             for row in bps_rows
         ]
 
-        # Historial subidas (últimos 30 días)
+        # Historial subidas (últimos 30 días) — tabla inmutable SubidaLog
         hace_30 = now - timedelta(days=30)
         stmt_hist = select(
-            cast(Publicidad.UpdatedAt, Date).label("fecha"),
-            func.count(Publicidad.IdPublicidad).label("cantidad"),
-        ).where(Publicidad.UpdatedAt >= hace_30).group_by(
-            cast(Publicidad.UpdatedAt, Date)
-        ).order_by(cast(Publicidad.UpdatedAt, Date))
+            cast(SubidaLog.fecha_subida, Date).label("fecha"),
+            func.count(SubidaLog.id).label("cantidad"),
+        ).where(SubidaLog.fecha_subida >= hace_30).group_by(
+            cast(SubidaLog.fecha_subida, Date)
+        ).order_by(cast(SubidaLog.fecha_subida, Date))
 
         result_hist = await db.execute(stmt_hist)
         historial_subidas = [

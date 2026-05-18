@@ -387,8 +387,9 @@ export const DashboardScreen: React.FC = () => {
       setVideos(data);
     } catch {}
     if (allSuccess) {
-      showNotification('Todos los archivos subidos correctamente', 'success');
       resetUploadModal();
+      showNotification('Todos los archivos subidos correctamente', 'success');
+      handleForceSync();
     } else {
       showNotification('Algunos archivos fallaron al subir', 'error');
     }
@@ -405,9 +406,10 @@ export const DashboardScreen: React.FC = () => {
      setDeletingVideoId(confirmDelete.videoId);
      setConfirmDelete({ open: false, videoId: null, titulo: '' });
      try {
-       await deleteVideo(confirmDelete.videoId);
-       showNotification('Archivo borrado correctamente', 'success');
-     } catch (err: any) {
+        await deleteVideo(confirmDelete.videoId);
+        showNotification('Archivo borrado correctamente', 'success');
+        handleForceSync();
+      } catch (err: any) {
        setError('Error al borrar el video');
        showNotification('Error al borrar archivo', 'error');
      } finally {
@@ -432,9 +434,10 @@ export const DashboardScreen: React.FC = () => {
          await deleteVideo(id);
        }
        
-       showNotification(`${idsToDelete.length} archivo${idsToDelete.length > 1 ? 's' : ''} borrado${idsToDelete.length > 1 ? 's' : ''} correctamente`, 'success');
-       setSelectedVideoIds([]);
-       
+        showNotification(`${idsToDelete.length} archivo${idsToDelete.length > 1 ? 's' : ''} borrado${idsToDelete.length > 1 ? 's' : ''} correctamente`, 'success');
+        setSelectedVideoIds([]);
+        handleForceSync();
+        
        // Refrescar lista
        const data = await getVideos();
        setVideos(data);

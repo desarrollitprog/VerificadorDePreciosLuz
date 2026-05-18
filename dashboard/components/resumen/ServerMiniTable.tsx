@@ -53,7 +53,7 @@ const ServerMiniTable: React.FC<Props> = ({ data, loading }) => {
       <div className="absolute inset-0 bg-gradient-to-br from-white via-white to-slate-50/30 dark:from-[#1c2936] dark:via-[#1c2936] dark:to-slate-700/5 pointer-events-none" />
       <div className="relative z-10 p-5">
         <h3 className="text-slate-900 dark:text-white font-semibold text-sm mb-4">Sedes</h3>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">

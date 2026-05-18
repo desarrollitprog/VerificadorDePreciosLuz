@@ -66,18 +66,20 @@ const ServerStorageChart: React.FC<Props> = ({ data, loading }) => {
       <div className="absolute inset-0 bg-gradient-to-br from-white via-white to-cyan-50/30 dark:from-[#1c2936] dark:via-[#1c2936] dark:to-cyan-500/5 pointer-events-none" />
       <div className="relative z-10 p-5">
         <h3 className="text-slate-900 dark:text-white font-semibold text-sm mb-4">Almacenamiento por Sede</h3>
-        <ResponsiveContainer width="100%" height={Math.max(200, chartData.length * 48)}>
-          <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 20, top: 0, bottom: 0 }}>
-            <XAxis type="number" domain={[0, 100]} tick={{ fill: '#71717a', fontSize: 11 }} tickLine={false} axisLine={false} />
-            <YAxis type="category" dataKey="name" tick={{ fill: '#a1a1aa', fontSize: 12 }} tickLine={false} axisLine={false} width={90} />
-            <Tooltip content={<CustomTooltip />} cursor={{ fill: '#27272a' }} />
-            <Bar dataKey="pct" radius={[0, 4, 4, 0]} barSize={20}>
-              {chartData.map((_, idx) => (
-                <Cell key={idx} fill={getBarColor(chartData[idx].pct)} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+        <div className="max-h-[480px] overflow-y-auto">
+          <ResponsiveContainer width="100%" height={Math.max(200, chartData.length * 48)}>
+            <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 20, top: 0, bottom: 0 }}>
+              <XAxis type="number" domain={[0, 100]} tick={{ fill: '#71717a', fontSize: 11 }} tickLine={false} axisLine={false} />
+              <YAxis type="category" dataKey="name" tick={{ fill: '#a1a1aa', fontSize: 12 }} tickLine={false} axisLine={false} width={120} />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: '#27272a' }} />
+              <Bar dataKey="pct" radius={[0, 4, 4, 0]} barSize={20}>
+                {chartData.map((_, idx) => (
+                  <Cell key={idx} fill={getBarColor(chartData[idx].pct)} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </div>
     </div>
   );

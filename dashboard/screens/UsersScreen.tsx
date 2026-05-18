@@ -325,7 +325,7 @@ export const UsersScreen: React.FC = () => {
           </table>
         </div>
 
-        <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-[13px] text-slate-500 dark:text-slate-400">
+        <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-2 text-[13px] text-slate-500 dark:text-slate-400">
           <span>{summaryText}</span>
           <div className="flex items-center gap-2">
             <button

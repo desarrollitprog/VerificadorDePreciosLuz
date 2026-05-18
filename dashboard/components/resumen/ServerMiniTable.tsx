@@ -75,7 +75,7 @@ const ServerMiniTable: React.FC<Props> = ({ data, loading }) => {
                     <div className="flex items-center gap-1.5">
                       <span className={`h-2 w-2 rounded-full ${s.online ? 'bg-green-500' : 'bg-red-500'}`} />
                       <span className={s.online ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
-                        {s.online ? 'Online' : 'Offline'}
+                        {s.online ? 'En línea' : 'Desconectado'}
                       </span>
                     </div>
                   </td>

@@ -10,7 +10,7 @@ interface SidebarProps {
 }
 
 const navItems = [
-  { path: '/', label: 'Dashboard', icon: LayoutDashboard, adminOnly: false },
+  { path: '/', label: 'Resumen', icon: LayoutDashboard, adminOnly: false },
   { path: '/videos', label: 'Mis Videos', icon: LayoutGrid, adminOnly: false },
   { path: '/calendario', label: 'Calendario', icon: Calendar, adminOnly: false },
   { path: '/servidores', label: 'Servidores', icon: Server, adminOnly: true },
@@ -49,8 +49,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onLogout }) => {
             <LayoutGrid size={24} />
           </div>
           <div className="flex flex-col">
-            <h1 className="text-white text-lg font-bold leading-tight">Administrador de Videos</h1>
-            <p className="text-slate-400 text-xs font-medium">v1.2.4</p>
+            <h1 className="text-white text-lg font-bold leading-tight">LuzApp:Panel de Administracion</h1>
+            <p className="text-slate-400 text-xs font-medium">v1.0.0</p>
           </div>
         </div>
         <button

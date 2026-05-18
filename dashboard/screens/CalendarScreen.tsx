@@ -352,8 +352,8 @@ export const CalendarScreen: React.FC = () => {
     <>
       <style>{calendarStyles}</style>
       <div className="flex flex-col gap-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="w-full">
           <h2 className="text-xl font-bold text-slate-800 dark:text-white">
             Programación
           </h2>
@@ -362,7 +362,7 @@ export const CalendarScreen: React.FC = () => {
           </p>
         </div>
         
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-4 text-xs font-medium bg-white dark:bg-slate-800 px-4 py-2 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
             <span className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>

@@ -5,7 +5,7 @@ import { GeneralNotifications } from './GeneralNotifications';
 import { useThemeStore } from '../stores/themeStore';
 
 const breadcrumbMap: Record<string, string> = {
-  '/': 'Dashboard',
+  '/': 'Resumen',
   '/videos': 'Mis Videos',
   '/servidores': 'Servidores',
   '/usuarios': 'Gestión de Usuarios',

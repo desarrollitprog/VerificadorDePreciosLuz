@@ -46,8 +46,8 @@ docker-compose logs -f
 ## Key Architecture
 
 ### Two Backends — Different Roles
-- **backend-dashboard** (port 8001): Admin UI backend. Routes: `/api/banners`, `/api/heartbeat`, `/api/monitoreo`, `/api/auth`, `/api/notificaciones`, `/api/auditoria`. Talks to `DashboardUsuarios` DB.
-- **backend-api** (port 8000): Runs on each kiosk server. Routes: `/consultar/{codigo}`, `/banners/remoto/{id}`, `/backup`, `/heartbeat`, `/api/comandos/{device_id}`. Talks to `ERP_MPC` + `PublicidadSecundaria` DBs. Exposes WebSocket for device commands.
+- **backend-dashboard** (port 8001): Admin UI backend. Routes: `/api/banners`, `/api/heartbeat`, `/api/monitoreo` (package: `devices`, `heartbeat`, `servers`, `sync`), `/api/auth`, `/api/notificaciones`, `/api/auditoria`, `/api/resumen`. Talks to `DashboardUsuarios` DB.
+- **backend-api** (port 8000): Runs on each kiosk server. Routes: `/consultar/{codigo}`, `/banners/remoto/{id}`, `/banners/{id}`, `/banners/{id}/exists`, `/replicar-archivo`, `/backup`, `/heartbeat`, `/api/comandos/{device_id}`, `/devices/status`, `/devices/{device_id}`, `/ping`, `/api/fuerza-sync`, `/api/debug-bcv`. Talks to `ERP_MPC` + `PublicidadSecundaria` DBs. Exposes WebSocket (same port) for device commands.
 
 ### Replication (banner sync)
 - backend-dashboard **pushes** banners/videos to all backend-api servers
@@ -66,11 +66,13 @@ docker-compose logs -f
 - Files stored in `backend-dashboard/static/banners/` (mounted volume)
 - Served via FastAPI `StaticFiles` mount at `/static`
 - Video thumbnails generated via OpenCV on upload
+- backend-api also serves its own `/static` for Android devices
 
 ### Scheduler (APScheduler)
-- Runs every 3.5 min in backend-dashboard (`lifespan` hook in `main.py`):
-  - `actualizar_sesiones_dispositivos()` — marks offline devices
-  - `expirar_banners_vencidos()` — sets `Activo=False` on expired banners
+Scheduled in `backend-dashboard/app/scheduler.py`, started via `lifespan` hook in `main.py`:
+- Every 3.5 min: `actualizar_sesiones_dispositivos()` (mark offline devices), `expirar_banners_vencidos()` (expire banners)
+- Every 15 days: `cleanup_old_sessions()` (>90 day sessions), `cleanup_old_notifications()` (>15 day notifications)
+- Every 24h: `cleanup_orphan_files()` (stale banner files with no DB record)
 
 ### Database
 - SQL Server via `aioodbc`, ODBC Driver 18
@@ -85,7 +87,7 @@ docker-compose logs -f
 - `dashboard-redis` container inside docker-compose (port 6380)
 
 ### CORS
-- `ALLOWED_ORIGINS` env var on backend-dashboard — comma-separated, no wildcards allowed in production
+- `ALLOWED_ORIGINS` env var on backend-dashboard — comma-separated, no wildcards allowed. `*` raises `RuntimeError` at startup (main.py:36-37).
 
 ### 2FA
 - Email-based OTP via SMTP (Gmail) on login
@@ -106,17 +108,25 @@ docker-compose logs -f
 - Keystore defined in `app/build.gradle.kts` via env vars: `KEYSTORE_PATH`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` — same for debug and release builds
 - **Critical**: both `debug` and `release` build types use the same release signing config. If a device has a debug APK from local dev, automated updates will **fail** (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`). Desinstall and reinstall via CI-built APK once.
 - `versionName` in `app/build.gradle.kts` is the source of truth for version comparison (supports both semver like "1.2.0" and date like "20260429")
+- CI pushes `version.json` + `luzapp.apk` to `main` with `--force` (build-apk.yml:67)
 
 ## Frontend (dashboard/)
 
 - React 18 + TypeScript + Vite 6 + Tailwind CSS
 - Axios for API calls (axios instance at `services/axiosInstance.ts`)
 - No lint/typecheck scripts configured in package.json
+- `VITE_API_URL` in `.env.local` — in Docker it's `/api` (nginx proxy); locally defaults to `http://192.168.0.104:8001` (vite.config.ts:7)
 
 ## Useful Gotchas
 
 ### Deletion errors (2026-05 fix context)
 When deleting a banner assigned to multiple servers, `Borrado_api` now treats 404 as success. A server that never had the banner responds 404 (not an error). Before the fix, this caused a 500 response. The frontend re-fetches the video list on any delete outcome (success or error) via `getVideos()` in the `finally` block of `handleDeleteConfirm`.
+
+### nginx
+- Nginx config + SSL certs (`dashboard.crt`, `dashboard.key`, `dashboard.pfx`) in `nginx/` and `nginx/ssl/`
+
+### `dashboard/README.md`
+- **Ignore it** — leftover AI Studio template. The real frontend setup is in `AGENTS.md` commands above. No `GEMINI_API_KEY` needed.
 
 ### `.env` files
 | File | Component |
@@ -129,5 +139,4 @@ When deleting a banner assigned to multiple servers, `Borrado_api` now treats 40
 
 ### Tests
 - 15 test files in `backend-dashboard/tests/`, pytest
-- Coverage: rate limiting, sanitization, MIME validation, health checks, 2FA (Redis), pagination, parallel replication, code quality, banner exists endpoint
 - Run via `pytest tests/`

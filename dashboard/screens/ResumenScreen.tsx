@@ -57,7 +57,7 @@ export const ResumenScreen: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Dashboard</h1>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Resumen</h1>
         <div className="flex items-center gap-3">
           {lastUpdated && (
             <span className="text-xs text-slate-500 dark:text-zinc-500">
@@ -76,7 +76,7 @@ export const ResumenScreen: React.FC = () => {
       </div>
 
       {loading && !data && (
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard icon={Server} label="Sedes" value={0} subtitle="" color="cyan" loading />
           <KpiCard icon={Smartphone} label="Dispositivos" value={0} subtitle="" color="emerald" loading />
           <KpiCard icon={Film} label="Archivos" value={0} subtitle="" color="violet" loading />
@@ -86,7 +86,7 @@ export const ResumenScreen: React.FC = () => {
 
       {data && (
         <>
-          <div className="grid grid-cols-4 gap-4 stagger-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 stagger-1">
             <KpiCard
               icon={Server}
               label="Sedes"

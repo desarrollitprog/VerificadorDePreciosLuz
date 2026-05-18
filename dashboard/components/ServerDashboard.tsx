@@ -470,8 +470,8 @@ export function ServerDashboard() {
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Servidores y Dispositivos</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">Monitoreo en tiempo real</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="relative">
+        <div className="flex flex-col sm:flex-row items-center gap-3">
+          <div className="relative w-full sm:w-auto">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input
               type="text"
@@ -497,25 +497,25 @@ export function ServerDashboard() {
               setSortBy(by as 'nombre' | 'estado' | 'dispositivos');
               setSortDir(dir as 'asc' | 'desc');
             }}
-            className="py-2 px-3 bg-slate-100 dark:bg-[#1c2936] rounded-lg text-sm text-slate-900 dark:text-white border-none focus:ring-2 focus:ring-primary"
+            className="py-2 px-3 bg-slate-100 dark:bg-[#1c2936] rounded-lg text-sm text-slate-900 dark:text-white border-none focus:ring-2 focus:ring-primary w-full sm:w-auto"
           >
             <option value="nombre-asc">Nombre A-Z</option>
             <option value="nombre-desc">Nombre Z-A</option>
-            <option value="estado-asc">Online primero</option>
-            <option value="estado-desc">Offline primero</option>
+            <option value="estado-asc">En línea primero</option>
+            <option value="estado-desc">Desconectado primero</option>
             <option value="dispositivos-desc">Más dispositivos</option>
             <option value="dispositivos-asc">Menos dispositivos</option>
           </select>
           <button
             onClick={fetchStatus}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition w-full sm:w-auto justify-center"
           >
             <RefreshCw size={16} />
             Refrescar
           </button>
           <button
             onClick={() => setScheduleRestartModal(prev => ({ ...prev, isOpen: true }))}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition w-full sm:w-auto justify-center"
           >
             <Clock size={16} />
             Programar Reinicio
@@ -573,7 +573,7 @@ export function ServerDashboard() {
                           <div key={d.device_id} className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                   <span className={`w-2 h-2 rounded-full ${d.online ? 'bg-emerald-500' : 'bg-red-500'}`} />
                                   <span className="font-medium text-sm text-slate-900 dark:text-white truncate">
                                     {d.nombre_mostrado || d.device_id}
@@ -619,7 +619,7 @@ export function ServerDashboard() {
                                     <span className="text-slate-400 dark:text-slate-500">Sin reinicio</span>
                                   )}
                                 </div>
-                                <div className="flex items-center gap-2 mt-2">
+                                <div className="flex items-center gap-2 mt-2 flex-wrap">
                                   <button
                                     onClick={() => openRenameDeviceModal(d.device_id, d.nombre_amigable)}
                                     className="text-xs flex items-center gap-1 text-primary hover:underline"

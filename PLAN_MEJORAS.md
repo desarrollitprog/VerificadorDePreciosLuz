@@ -1528,3 +1528,77 @@ Paso 12 (documentación)    → último
 | Limpieza Caché Luzapp | 19 | 0/5 (0%) | 5/5 |
 | Panel Resumen | 20 | 0/5 (0%) | 5/5 |
 | **TOTAL** | **1-20** | **88/99 (89%)** | **11/99** |
+
+---
+
+## FASE 21: Responsividad Móvil (Dashboard Frontend)
+
+*Prioridad: Media | Objetivo: Adaptar el dashboard a pantallas de celular, evitando recortes, desbordes y mala UX en viewports < 640px.*
+
+### Problema Raíz
+
+Varias pantallas del dashboard usan layouts fijos sin responsive breakpoints, causando:
+- Texto recortado o superpuesto en móvil
+- Barras de herramientas con múltiples botones que se desbordan
+- Tablas sin scroll horizontal
+- Cuadrículas que no se reacomodan
+- Modales con espaciado vertical insuficiente en landscape
+
+---
+
+### 🔴 ALTA (se rompe en móvil)
+
+| # | Archivo:Línea | Problema | Solución |
+|---|---|---|---|
+| 21.1 | `ResumenScreen.tsx:79,89` | `grid-cols-4` fuerza 4 KPIs en una fila en móvil → texto `text-4xl` se desborda | `grid-cols-1 sm:grid-cols-2 lg:grid-cols-4` |
+| 21.2 | `DashboardScreen.tsx:1069,1093` | Tabla `grid grid-cols-12` sin `overflow-x-auto` → columnas de ~27px no muestran texto | Envolver en `<div className="overflow-x-auto">` |
+| 21.3 | `NotificationContainer.tsx:32` | `w-96` fijo (384px) se desborda en iPhone SE (375px) y pantallas menores | `w-full max-w-sm` o `max-w-[90vw]` |
+| 21.4 | `ServerDashboard.tsx:622-657` | 5 botones de acción por dispositivo en fila sin wrap → se desbordan en móvil | Agregar `flex-wrap` o colapsar acciones secundarias en menú |
+| 21.5 | `AuditoriaScreen.tsx:222-268` | 5 elementos en toolbar (buscar, filtros, botones) sin wrap → desbordamiento | `flex-wrap` o `flex-col sm:flex-row` |
+| 21.6 | `DashboardScreen.tsx:786` | Input de búsqueda `w-48` fijo (192px) no ocupa ancho disponible | `w-full sm:w-48` |
+
+### 🟡 MEDIA (UX deficiente en móvil)
+
+| # | Archivo:Línea | Problema | Solución |
+|---|---|---|---|
+| 21.7 | `AuditoriaScreen.tsx:352-456` | Tabla de 8 columnas, mucho scroll horizontal, ninguna columna oculta en móvil | `hidden md:table-cell` en columnas de baja prioridad (Servidor, Duración, Usuario) |
+| 21.8 | `ServerDashboard.tsx:473-523` | Toolbar (buscar, ordenar, actualizar, programar) sin wrap → desbordamiento | `flex-wrap` o `flex-col sm:flex-row` |
+| 21.9 | `ServerDashboard.tsx:576-603` | Fila de insignias (nombre + 3-4 badges) sin wrap → se desbordan | Agregar `flex-wrap` al contenedor |
+| 21.10 | `CalendarScreen.tsx:355` | Título + leyenda (4 items) lado a lado → se superponen | `flex-col md:flex-row` con `gap-4` |
+| 21.11 | `ServerDeviceSelector.tsx:96` | `grid-cols-2` en pantallas muy pequeñas → items de ~140px | `grid-cols-1 sm:grid-cols-2` |
+| 21.12 | `UsersScreen.tsx:328` | Paginación `justify-between` sin wrap → texto y botones se superponen | Agregar `flex-wrap` o `flex-col` en móvil |
+
+### 🔵 BAJA (casos esquina)
+
+| # | Archivo:Línea | Problema | Solución |
+|---|---|---|---|
+| 21.13 | `DeviceStatusChart.tsx:53` | `ResponsiveContainer width={220}` no se expande | `width="100%"` |
+| 21.14 | `DashboardScreen.tsx:1250` | Modal upload `pt-20` deja ~126px en landscape | `pt-4 md:pt-20` |
+| 21.15 | `DashboardScreen.tsx:1527` | Fila "SINCRONIZAR A TODOS" sin wrap | Agregar `flex-wrap` |
+| 21.16 | `ServerStorageChart.tsx:72` | `width={90}` fijo en YAxis — aceptable | Dejar como está |
+| 21.17 | Modales varios | `max-w-6xl/5xl/2xl` — correctos con `w-full` | Sin cambios |
+| 21.18 | `CalendarScreen.tsx:348` | FullCalendar `aspectRatio: 1.5` — menor | Ajustar si es necesario |
+
+---
+
+### Orden de implementación sugerido
+
+```
+Lote 1 (ALTA)  → 6 cambios, todos de 1 línea (flex-wrap, overflow-x-auto, grid responsive)
+Lote 2 (MEDIA) → 6 cambios, algunos requieren hidden cols o reordenamiento flex
+Lote 3 (BAJA)  → 3 cambios opcionales, impacto menor
+```
+
+### Archivos a modificar
+
+| Archivo | Items | Cambios |
+|---------|-------|---------|
+| `dashboard/screens/ResumenScreen.tsx` | 21.1 | Grid classes |
+| `dashboard/screens/DashboardScreen.tsx` | 21.2, 21.6, 21.14, 21.15 | overflow-x-auto, input width, pt responsive, flex-wrap |
+| `dashboard/components/NotificationContainer.tsx` | 21.3 | w-96 → max-w-sm |
+| `dashboard/components/ServerDashboard.tsx` | 21.4, 21.8, 21.9 | 3× flex-wrap |
+| `dashboard/screens/AuditoriaScreen.tsx` | 21.5, 21.7 | flex-wrap + hidden cols |
+| `dashboard/screens/CalendarScreen.tsx` | 21.10 | flex-col responsive |
+| `dashboard/components/ServerDeviceSelector.tsx` | 21.11 | grid-cols responsive |
+| `dashboard/screens/UsersScreen.tsx` | 21.12 | flex-wrap |
+| `dashboard/components/resumen/DeviceStatusChart.tsx` | 21.13 | width 100% |

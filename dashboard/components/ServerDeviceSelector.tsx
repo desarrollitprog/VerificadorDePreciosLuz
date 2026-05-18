@@ -72,7 +72,7 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
                   ? 'bg-emerald-500/10 text-emerald-500'
                   : 'bg-slate-500/10 text-slate-500'
               }`}>
-                {srv.online ? 'Online' : 'Offline'}
+                {srv.online ? 'En línea' : 'Desconectado'}
               </span>
 
               <button
@@ -93,7 +93,7 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
 
             {expandedServidores.includes(srv.id) && srv.dispositivos && srv.dispositivos.length > 0 && (
               <div className="bg-slate-50/50 dark:bg-slate-800/30 px-3 pb-3">
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {srv.dispositivos.map(disp => (
                     <div
                       key={`${srv.id}-${disp.id}`}
@@ -115,7 +115,7 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
                         disp.online ? 'text-emerald-500' : 'text-slate-400'
                       }`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${disp.online ? 'bg-emerald-500' : 'bg-slate-400'}`} />
-                        {disp.online ? 'Online' : 'Offline'}
+                        {disp.online ? 'En línea' : 'Desconectado'}
                       </span>
                     </div>
                   ))}

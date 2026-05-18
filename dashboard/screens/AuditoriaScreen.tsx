@@ -219,7 +219,7 @@ export const AuditoriaScreen: React.FC = () => {
 
       {/* Buscador Principal */}
       <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 mb-4">
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input
@@ -363,18 +363,18 @@ export const AuditoriaScreen: React.FC = () => {
                   <Monitor size={14} className="inline mr-1" />
                   Dispositivo
                 </th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider hidden md:table-cell">
                   <Server size={14} className="inline mr-1" />
                   Servidor
                 </th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Descripción
                 </th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider hidden md:table-cell">
                   <User size={14} className="inline mr-1" />
                   Usuario
                 </th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider hidden md:table-cell">
                   Duración
                 </th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -415,7 +415,7 @@ export const AuditoriaScreen: React.FC = () => {
                           <div className="text-xs text-slate-400">{item.dispositivo_id}</div>
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 hidden md:table-cell">
                         <div className="text-sm font-medium text-slate-900 dark:text-white">
                           {item.servidor_nombre || (item.servidor_id != null ? `ID: ${item.servidor_id}` : '-')}
                         </div>
@@ -430,10 +430,10 @@ export const AuditoriaScreen: React.FC = () => {
                           item.descripcion
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">
+                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300 hidden md:table-cell">
                         {item.usuario || '-'}
                       </td>
-                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap hidden md:table-cell">
                         {formatDuration(item.duracion_segundos)}
                       </td>
                       <td className="px-4 py-3">

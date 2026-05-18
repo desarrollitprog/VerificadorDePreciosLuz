@@ -34,13 +34,11 @@ const DeviceStatusChart: React.FC<Props> = ({ data, loading }) => {
 
   const total = data.total || 1;
   const pieData = [
-    { name: 'Online', value: data.online, percent: data.online / total },
-    { name: 'Offline', value: data.offline, percent: data.offline / total },
+    { name: 'En línea', value: data.online, percent: data.online / total },
+    { name: 'Desconectado', value: data.offline, percent: data.offline / total },
   ];
 
   const COLORS = ['#22c55e', '#ef4444'];
-  const centerValue = data.online;
-  const centerLabel = 'Online';
 
   return (
     <div className="bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-0.5 overflow-hidden relative group">
@@ -50,7 +48,7 @@ const DeviceStatusChart: React.FC<Props> = ({ data, loading }) => {
         <h3 className="text-slate-900 dark:text-white font-semibold text-sm mb-4">Estado de Dispositivos</h3>
         <div className="flex items-center justify-center">
           <div className="relative">
-            <ResponsiveContainer width={220} height={220}>
+            <ResponsiveContainer width="100%" height={220}>
               <PieChart>
                 <Pie
                   data={pieData}

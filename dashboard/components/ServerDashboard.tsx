@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { ChevronDown, ChevronUp, RefreshCw, X, Monitor, Edit2, Play, RotateCcw, Eye, AlertCircle, Clock, Trash, Search, ArrowUpDown, Check } from 'lucide-react';
 import ServerCard from './monitoreo/ServerCard';
 import { useNotification } from './useNotification';
@@ -38,6 +38,7 @@ export function ServerDashboard() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isFirstLoadRef = useRef(true);
   const [renameModal, setRenameModal] = useState<RenameModalState | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [renameSaving, setRenameSaving] = useState(false);
@@ -93,21 +94,21 @@ export function ServerDashboard() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
   const fetchStatus = async () => {
-    const isFirstLoad = servidores.length === 0;
-    if (isFirstLoad) setInitialLoading(true);
+    if (isFirstLoadRef.current) setInitialLoading(true);
     else setIsRefreshing(true);
     setError(null);
     try {
       const data = await getServersStatusWithDevices();
       setServidores(Array.isArray(data) ? data : []);
     } catch {
-      if (isFirstLoad) {
+      if (isFirstLoadRef.current) {
         setServidores([]);
         setError('Error al conectar con el servicio de monitoreo');
       }
     } finally {
       setInitialLoading(false);
       setIsRefreshing(false);
+      isFirstLoadRef.current = false;
     }
   };
 

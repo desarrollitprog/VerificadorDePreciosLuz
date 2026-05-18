@@ -1347,7 +1347,7 @@ export const DashboardScreen: React.FC = () => {
                            <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2">TÍTULO</label>
                            <input
                              type="text"
-                             className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-800 dark:text-white focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all duration-200 "
+                             className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-800 dark:text-white focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200 "
                              value={fileMetadatas[idx]?.titulo || ''}
                              onChange={e => {
                                const newMetas = [...fileMetadatas];
@@ -1361,7 +1361,7 @@ export const DashboardScreen: React.FC = () => {
                          <div>
                            <label className="block text-base font-medium text-slate-700 dark:text-slate-200 mb-2">ESTADO</label>
                          <select
-                         className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-800 dark:text-white focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all duration-200"
+                         className="w-full rounded-lg border border-slate-300/70 dark:border-slate-600/70 bg-slate-50/50 dark:bg-[#17202b]/80 px-4 py-3 text-base text-slate-800 dark:text-white focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200"
                          value={fileMetadatas[idx]?.activo ? 'activo' : 'inactivo'}
                          onChange={e => {
                            const newMetas = [...fileMetadatas];
@@ -1382,7 +1382,7 @@ export const DashboardScreen: React.FC = () => {
                               type="datetime-local"
                               className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border-2 bg-white dark:bg-slate-800/50 text-slate-900 dark:text-white text-base sm:text-lg font-mono tracking-[0.15em] sm:tracking-[0.2em] outline-none transition-all"
                               style={{ borderColor: 'rgba(148,163,184,0.3)' }}
-                              onFocus={e => e.currentTarget.style.borderColor = '#10b981'}
+                              onFocus={e => e.currentTarget.style.borderColor = '#3b82f6'}
                               onBlur={e => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.3)'}
                               value={fileMetadatas[idx]?.fechaInicio || ''}
                               onChange={e => {
@@ -1399,7 +1399,7 @@ export const DashboardScreen: React.FC = () => {
                               type="datetime-local"
                               className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border-2 bg-white dark:bg-slate-800/50 text-slate-900 dark:text-white text-base sm:text-lg font-mono tracking-[0.15em] sm:tracking-[0.2em] outline-none transition-all"
                               style={{ borderColor: 'rgba(148,163,184,0.3)' }}
-                              onFocus={e => e.currentTarget.style.borderColor = '#10b981'}
+                              onFocus={e => e.currentTarget.style.borderColor = '#3b82f6'}
                               onBlur={e => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.3)'}
                               value={fileMetadatas[idx]?.fechaFin || ''}
                               onChange={e => {
@@ -1427,8 +1427,8 @@ export const DashboardScreen: React.FC = () => {
                         >
                           <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all duration-200 ${
                             (fileMetadatas[idx]?.asignacionTodos ?? true)
-                              ? 'bg-primary border-primary scale-110'
-                              : 'border-slate-300 dark:border-slate-600 hover:border-primary/50 scale-100'
+                              ? 'bg-blue-500 border-blue-500 scale-110'
+                              : 'border-slate-300 dark:border-slate-600 hover:border-blue-500/50 scale-100'
                           }`}>
                             {(fileMetadatas[idx]?.asignacionTodos ?? true) && <Check size={14} className="text-white" />}
                           </div>
@@ -1555,12 +1555,12 @@ export const DashboardScreen: React.FC = () => {
 
       {/* Sync Modal */}
       {isSyncModalOpen && (
-        <div className="fixed inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/80 flex items-start justify-center z-50 p-4 pt-20">
+        <div className="fixed inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/80 flex items-start justify-center z-50 p-4 pt-20 animate-fade-in">
           <div className="bg-white dark:bg-[#1c2936] rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.3)] w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
             <div className="p-6 border-b border-gradient-to-r from-transparent via-slate-300 to-transparent shrink-0">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-emerald-500/10">
-                  <RefreshCw size={20} className="text-emerald-500" />
+                <div className="p-2 rounded-lg bg-blue-500/10">
+                  <RefreshCw size={20} className="text-blue-500" />
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-wide">SINCRONIZACIÓN SELECTIVA</h2>
@@ -1583,8 +1583,8 @@ export const DashboardScreen: React.FC = () => {
               >
                 <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all duration-200 ${
                   syncAllDevices
-                    ? 'bg-primary border-primary scale-110'
-                    : 'border-slate-300 dark:border-slate-600 hover:border-primary/50 scale-100'
+                    ? 'bg-blue-500 border-blue-500 scale-110'
+                    : 'border-slate-300 dark:border-slate-600 hover:border-blue-500/50 scale-100'
                 }`}>
                   {syncAllDevices && <Check size={14} className="text-white" />}
                 </div>
@@ -1686,8 +1686,8 @@ export const DashboardScreen: React.FC = () => {
           <div className="bg-white dark:bg-[#1c2936] rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.3)] w-full max-w-2xl max-h-[90vh] flex flex-col">
             <div className="p-6 border-b border-gradient-to-r from-transparent via-slate-300 to-transparent shrink-0">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-emerald-500/10">
-                  <Pencil size={20} className="text-emerald-500" />
+                <div className="p-2 rounded-lg bg-blue-500/10">
+                  <Pencil size={20} className="text-blue-500" />
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-wide">EDITAR PUBLICIDAD</h2>
@@ -1705,7 +1705,7 @@ export const DashboardScreen: React.FC = () => {
                   type="text"
                   value={editFormData.titulo}
                   onChange={e => setEditFormData({ ...editFormData, titulo: e.target.value })}
-                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-300/70 dark:border-slate-600/70 rounded-lg text-base text-slate-900 dark:text-white focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all duration-200"
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-300/70 dark:border-slate-600/70 rounded-lg text-base text-slate-900 dark:text-white focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200"
                 />
               </div>
               
@@ -1719,7 +1719,7 @@ export const DashboardScreen: React.FC = () => {
                   onChange={e => setEditFormData({ ...editFormData, fechaInicio: e.target.value })}
                   className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border-2 bg-white dark:bg-slate-800/50 text-slate-900 dark:text-white text-base sm:text-lg font-mono tracking-[0.15em] sm:tracking-[0.2em] outline-none transition-all"
                   style={{ borderColor: 'rgba(148,163,184,0.3)' }}
-                  onFocus={e => e.currentTarget.style.borderColor = '#10b981'}
+                  onFocus={e => e.currentTarget.style.borderColor = '#3b82f6'}
                   onBlur={e => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.3)'}
                 />
               </div>
@@ -1734,7 +1734,7 @@ export const DashboardScreen: React.FC = () => {
                   onChange={e => setEditFormData({ ...editFormData, fechaFin: e.target.value })}
                   className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border-2 bg-white dark:bg-slate-800/50 text-slate-900 dark:text-white text-base sm:text-lg font-mono tracking-[0.15em] sm:tracking-[0.2em] outline-none transition-all"
                   style={{ borderColor: 'rgba(148,163,184,0.3)' }}
-                  onFocus={e => e.currentTarget.style.borderColor = '#10b981'}
+                  onFocus={e => e.currentTarget.style.borderColor = '#3b82f6'}
                   onBlur={e => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.3)'}
                 />
               </div>
@@ -1780,8 +1780,8 @@ export const DashboardScreen: React.FC = () => {
                  >
                    <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all duration-200 ${
                      editAsignacionTodos
-                       ? 'bg-primary border-primary scale-110'
-                       : 'border-slate-300 dark:border-slate-600 hover:border-primary/50 scale-100'
+                       ? 'bg-blue-500 border-blue-500 scale-110'
+                       : 'border-slate-300 dark:border-slate-600 hover:border-blue-500/50 scale-100'
                    }`}>
                      {editAsignacionTodos && <Check size={14} className="text-white" />}
                    </div>

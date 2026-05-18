@@ -982,16 +982,16 @@ export function ServerDashboard() {
       {scheduleRestartModal.isOpen && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fade-in" onClick={closeScheduleRestartModal}>
           <div
-            className="bg-white dark:bg-[#0f172a] w-full max-w-2xl mx-auto rounded-2xl shadow-2xl border border-emerald-500/20 overflow-hidden flex flex-col max-h-[90vh] sm:max-h-none"
-            style={{ boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5), 0 0 0 1px rgba(16,185,129,0.1)' }}
+            className="bg-white dark:bg-[#0f172a] w-full max-w-2xl mx-auto rounded-2xl shadow-2xl border border-blue-500/20 overflow-hidden flex flex-col max-h-[90vh] sm:max-h-none"
+            style={{ boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5), 0 0 0 1px rgba(59,130,246,0.1)' }}
             onClick={e => e.stopPropagation()}
           >
             {/* Header */}
             <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-slate-200/70 dark:border-slate-800/70">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: 'rgba(16,185,129,0.1)' }}>
-                    <Clock size={18} className="sm:size-5" style={{ color: '#10b981' }} />
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: 'rgba(59,130,246,0.1)' }}>
+                    <Clock size={18} className="sm:size-5" style={{ color: '#3b82f6' }} />
                   </div>
                   <div className="min-w-0">
                     <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate">Programar Reinicio Masivo</h3>
@@ -1010,16 +1010,16 @@ export function ServerDashboard() {
               <div
                 className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl cursor-pointer border-2 transition-all duration-200"
                 style={{
-                  borderColor: scheduleRestartModal.selectAll ? 'rgba(16,185,129,0.3)' : 'rgba(148,163,184,0.2)',
-                  backgroundColor: scheduleRestartModal.selectAll ? 'rgba(16,185,129,0.03)' : 'transparent',
+                  borderColor: scheduleRestartModal.selectAll ? 'rgba(59,130,246,0.3)' : 'rgba(148,163,184,0.2)',
+                  backgroundColor: scheduleRestartModal.selectAll ? 'rgba(59,130,246,0.03)' : 'transparent',
                 }}
                 onClick={handleRestartSelectAll}
               >
                 <div
                   className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg border-2 flex items-center justify-center transition-all duration-200 shrink-0"
                   style={{
-                    backgroundColor: scheduleRestartModal.selectAll ? '#10b981' : 'transparent',
-                    borderColor: scheduleRestartModal.selectAll ? '#10b981' : '#94a3b8',
+                    backgroundColor: scheduleRestartModal.selectAll ? '#3b82f6' : 'transparent',
+                    borderColor: scheduleRestartModal.selectAll ? '#3b82f6' : '#94a3b8',
                     transform: scheduleRestartModal.selectAll ? 'scale(1.1)' : 'scale(1)',
                   }}
                 >
@@ -1033,8 +1033,8 @@ export function ServerDashboard() {
                 <span
                   className="text-[9px] sm:text-[10px] px-2 sm:px-3 py-1 rounded-full font-bold uppercase tracking-widest transition-all duration-200 shrink-0"
                   style={{
-                    backgroundColor: scheduleRestartModal.selectAll ? 'rgba(16,185,129,0.12)' : 'rgba(100,116,139,0.1)',
-                    color: scheduleRestartModal.selectAll ? '#10b981' : '#64748b',
+                    backgroundColor: scheduleRestartModal.selectAll ? 'rgba(59,130,246,0.12)' : 'rgba(100,116,139,0.1)',
+                    color: scheduleRestartModal.selectAll ? '#3b82f6' : '#64748b',
                   }}
                 >
                   {scheduleRestartModal.selectAll ? 'ACTIVO' : 'SELECC.'}
@@ -1053,14 +1053,14 @@ export function ServerDashboard() {
                   onToggleExpand={handleRestartToggleExpand}
                   label="Seleccionar servidores para reinicio:"
                   maxHeight="max-h-64"
-                  accentColor="#10b981"
+                  accentColor="#3b82f6"
                 />
               )}
 
               {/* Hora */}
               <div className="space-y-2">
                 <label className="block text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Clock size={12} className="sm:size-[14px]" style={{ color: '#10b981' }} />
+                  <Clock size={12} className="sm:size-[14px]" style={{ color: '#3b82f6' }} />
                   Hora de reinicio
                 </label>
                 <input
@@ -1071,7 +1071,7 @@ export function ServerDashboard() {
                   style={{
                     borderColor: 'rgba(148,163,184,0.3)',
                   }}
-                  onFocus={e => e.currentTarget.style.borderColor = '#10b981'}
+                  onFocus={e => e.currentTarget.style.borderColor = '#3b82f6'}
                   onBlur={e => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.3)'}
                 />
                 <p className="text-xs text-slate-500 dark:text-slate-500 flex items-center gap-1">
@@ -1085,18 +1085,18 @@ export function ServerDashboard() {
                 <div className="flex items-center gap-3 min-w-0">
                   <div
                     className="w-10 sm:w-11 h-6 rounded-full transition-all duration-300 relative shrink-0"
-                    style={{ backgroundColor: scheduleRestartModal.recurring ? '#10b981' : 'rgba(100,116,139,0.3)' }}
+                    style={{ backgroundColor: scheduleRestartModal.recurring ? '#3b82f6' : 'rgba(100,116,139,0.3)' }}
                   >
                     <div
                       className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-md transition-all duration-300"
                       style={{
                         left: scheduleRestartModal.recurring ? 'calc(100% - 22px)' : '2px',
-                        boxShadow: scheduleRestartModal.recurring ? '0 0 8px rgba(16,185,129,0.4)' : '0 1px 3px rgba(0,0,0,0.2)',
+                        boxShadow: scheduleRestartModal.recurring ? '0 0 8px rgba(59,130,246,0.4)' : '0 1px 3px rgba(0,0,0,0.2)',
                       }}
                     />
                   </div>
                   <span className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 break-words">
-                    Repetir diariamente a las <span className="font-mono font-bold whitespace-nowrap" style={{ color: '#10b981' }}>{scheduleRestartModal.hour}</span>
+                    Repetir diariamente a las <span className="font-mono font-bold whitespace-nowrap" style={{ color: '#3b82f6' }}>{scheduleRestartModal.hour}</span>
                   </span>
                 </div>
                 <input
@@ -1123,11 +1123,11 @@ export function ServerDashboard() {
                 onClick={handleScheduleRestart}
                 className="w-full sm:flex-1 px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-all disabled:opacity-40"
                 style={{
-                  background: 'linear-gradient(135deg, #10b981, #059669)',
-                  boxShadow: scheduleRestartModal.scheduling ? 'none' : '0 4px 14px rgba(16,185,129,0.35)',
+                  background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+                  boxShadow: scheduleRestartModal.scheduling ? 'none' : '0 4px 14px rgba(59,130,246,0.35)',
                 }}
-                onMouseEnter={e => { if (!scheduleRestartModal.scheduling) e.currentTarget.style.boxShadow = '0 6px 20px rgba(16,185,129,0.5)'; }}
-                onMouseLeave={e => { if (!scheduleRestartModal.scheduling) e.currentTarget.style.boxShadow = '0 4px 14px rgba(16,185,129,0.35)'; }}
+                onMouseEnter={e => { if (!scheduleRestartModal.scheduling) e.currentTarget.style.boxShadow = '0 6px 20px rgba(59,130,246,0.5)'; }}
+                onMouseLeave={e => { if (!scheduleRestartModal.scheduling) e.currentTarget.style.boxShadow = '0 4px 14px rgba(59,130,246,0.35)'; }}
                 disabled={scheduleRestartModal.scheduling || (!scheduleRestartModal.selectAll && scheduleRestartModal.selectedDispositivoIds.length === 0)}
               >
                 {scheduleRestartModal.scheduling ? (

@@ -67,7 +67,6 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
                   {srv.nombre}
                 </span>
                 <span className="text-xs text-slate-500 flex items-center gap-1">
-                  <span className={`w-1.5 h-1.5 rounded-full ${srv.online ? 'bg-emerald-500' : 'bg-slate-400'}`} />
                   {onlineCount > 0 && (
                     <span className="flex items-center gap-0.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />

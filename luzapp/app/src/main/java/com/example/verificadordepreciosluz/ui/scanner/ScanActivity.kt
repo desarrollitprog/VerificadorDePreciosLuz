@@ -1177,7 +1177,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 nextStandbyItem()
             }
             binding.standbyVideo.setOnPreparedListener { mp ->
-                mp.setVideoScalingMode(android.media.MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING)
+                mp.setVideoScalingMode(android.media.MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT)
             }
             binding.standbyVideo.setOnErrorListener { _, what, extra ->
                 Log.w(TAG, "Standby: error video what=$what extra=$extra para ${item.localPath}")

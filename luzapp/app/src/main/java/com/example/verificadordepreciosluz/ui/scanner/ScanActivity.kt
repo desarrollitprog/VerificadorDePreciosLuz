@@ -297,6 +297,11 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
         ensurePermissionAndStart()
 
+        if (Build.MANUFACTURER.equals("amazon", ignoreCase = true)) {
+            binding.tvTituloScanner.text = getString(R.string.title_tv_mode)
+            Log.d(TAG, "FireTV detectado, título cambiado a 'AUTOMERCADOS LUZ'")
+        }
+
         // Toggle del panel de prueba tocando el título (para emulador/técnico)
         binding.tvTituloScanner.setOnClickListener {
             toggleMockPanel()
@@ -709,12 +714,12 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 // Forzar descarga inmediata (maxAgeMs = 0) cuando se recibe BANNER_INICIADO
                 repo.refreshIfStale(0L, deviceId)
                 
-                // Esperar 500ms para que termine la descarga antes de priorizar
+                // Esperar 500 ms para que termine la descarga antes de priorizar
                 delay(500L)
                 
-                // Recargar el cache local y priorizar el nuevo banner
+                // Recargar el caché local y priorizar el nuevo banner
                 uiHandler.post {
-                    // Recargar lista desde cache
+                    // Recargar lista desde caché
                     val cache = repo.loadCache()
                     if (cache != null && cache.items.isNotEmpty()) {
                         standbyItems = cache.items.toMutableList()
@@ -994,7 +999,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         }, msUntilMidnight)
     }
 
-    // Programa limpieza periódica del cache de banners cada 30 días
+    // Programa limpieza periódica del caché de banners cada 30 días
     private fun schedulePeriodicPurge() {
         val prefs = getSharedPreferences("PurgePrefs", MODE_PRIVATE)
         val lastPurgeAt = prefs.getLong("lastPurgeAt", 0L)
@@ -1367,6 +1372,10 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     }
 
     private fun shouldDownloadBackup(): Boolean {
+        if (Build.MANUFACTURER.equals("amazon", ignoreCase = true)) {
+            Log.d(TAG, "FireTV detectado, saltando descarga de backup")
+            return false
+        }
         val repo = BackupRepository(this)
         val updatedAt = repo.getUpdatedAt() ?: return true
         val updatedAtMillis = parseIsoToMillis(updatedAt) ?: return true

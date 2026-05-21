@@ -12,6 +12,7 @@ import com.example.verificadordepreciosluz.data.local.BackupIndexRepository
 import com.example.verificadordepreciosluz.data.local.BackupRepository
 import com.example.verificadordepreciosluz.data.local.BackupUtils
 import com.example.verificadordepreciosluz.data.network.ApiClient
+import android.os.Build
 import java.util.Calendar
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
@@ -22,6 +23,12 @@ class BackupWorker(context: Context, workerParams: WorkerParameters) :
     override suspend fun doWork(): Result {
         return try {
             val ctx = applicationContext
+
+            if (Build.MANUFACTURER.equals("amazon", ignoreCase = true)) {
+                Log.i(TAG, "FireTV detectado (${Build.MANUFACTURER}), saltando backup programado")
+                return Result.success()
+            }
+
             val prefs = ctx.getSharedPreferences("ConfigLuz", Context.MODE_PRIVATE)
             val host = prefs.getString("ip_servidor", null) ?: return Result.failure()
             val port = prefs.getString("puerto_servidor", "8000")

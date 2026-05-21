@@ -347,6 +347,13 @@ class BackupIndexRepository(private val context: Context) {
         var insertedCount = 0
         var skippedCount = 0
         BackupUtils.streamArray(context, FILE_PRECIOS) { item: BackupPrecio ->
+            val hasCosto = (item.costoBase ?: 0.0) > 0.0
+            val hasPvpBase = (item.pvpBase ?: 0.0) > 0.0
+            val hasPvpConversion = (item.pvpConversion ?: 0.0) > 0.0
+            if (!hasCosto || (!hasPvpBase && !hasPvpConversion)) {
+                skippedCount++
+                return@streamArray
+            }
             try {
                 stmt.bindLong(1, item.idProducto.toLong())
                 stmt.bindLong(2, item.idEmpaque.toLong())

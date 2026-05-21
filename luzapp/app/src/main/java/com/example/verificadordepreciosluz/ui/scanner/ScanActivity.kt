@@ -297,6 +297,11 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
         ensurePermissionAndStart()
 
+        if (Build.MANUFACTURER.equals("amazon", ignoreCase = true)) {
+            binding.tvTituloScanner.text = getString(R.string.title_tv_mode)
+            Log.d(TAG, "FireTV detectado, título cambiado a 'AUTOMERCADOS LUZ'")
+        }
+
         // Toggle del panel de prueba tocando el título (para emulador/técnico)
         binding.tvTituloScanner.setOnClickListener {
             toggleMockPanel()
@@ -574,7 +579,11 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         pendingMockText = null
         resetStandbyTimer() // Reinicia el timer de publicidad también en mock
         maybeProcessCode(code)
-        binding.etMockCode.text?.clear()
+        // No limpiar si hay solicitud en vuelo: el texto acumulado podría ser
+        // el inicio de un nuevo código cuyo escaneo comenzó mientras requestInFlight=true
+        if (!requestInFlight) {
+            binding.etMockCode.text?.clear()
+        }
     }
 
     private fun sanitizeCode(raw: String): String? {
@@ -709,12 +718,12 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 // Forzar descarga inmediata (maxAgeMs = 0) cuando se recibe BANNER_INICIADO
                 repo.refreshIfStale(0L, deviceId)
                 
-                // Esperar 500ms para que termine la descarga antes de priorizar
+                // Esperar 500 ms para que termine la descarga antes de priorizar
                 delay(500L)
                 
-                // Recargar el cache local y priorizar el nuevo banner
+                // Recargar el caché local y priorizar el nuevo banner
                 uiHandler.post {
-                    // Recargar lista desde cache
+                    // Recargar lista desde caché
                     val cache = repo.loadCache()
                     if (cache != null && cache.items.isNotEmpty()) {
                         standbyItems = cache.items.toMutableList()
@@ -994,7 +1003,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         }, msUntilMidnight)
     }
 
-    // Programa limpieza periódica del cache de banners cada 30 días
+    // Programa limpieza periódica del caché de banners cada 30 días
     private fun schedulePeriodicPurge() {
         val prefs = getSharedPreferences("PurgePrefs", MODE_PRIVATE)
         val lastPurgeAt = prefs.getLong("lastPurgeAt", 0L)
@@ -1177,7 +1186,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 nextStandbyItem()
             }
             binding.standbyVideo.setOnPreparedListener { mp ->
-                mp.setVideoScalingMode(android.media.MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING)
+                mp.setVideoScalingMode(android.media.MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT)
             }
             binding.standbyVideo.setOnErrorListener { _, what, extra ->
                 Log.w(TAG, "Standby: error video what=$what extra=$extra para ${item.localPath}")
@@ -1367,6 +1376,10 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     }
 
     private fun shouldDownloadBackup(): Boolean {
+        if (Build.MANUFACTURER.equals("amazon", ignoreCase = true)) {
+            Log.d(TAG, "FireTV detectado, saltando descarga de backup")
+            return false
+        }
         val repo = BackupRepository(this)
         val updatedAt = repo.getUpdatedAt() ?: return true
         val updatedAtMillis = parseIsoToMillis(updatedAt) ?: return true
@@ -1468,6 +1481,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                     lastCode = null
                 }
                 requestInFlight = false
+                // Reprocesar texto acumulado en el campo mock mientras había requestInFlight=true
+                uiHandler.post { processPendingMockText() }
             }
         }
     }
@@ -1508,6 +1523,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                     lastCode = null
                 }
                 requestInFlight = false
+                uiHandler.post { processPendingMockText() }
             }
         }
     }
@@ -1741,7 +1757,10 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         resultHideRunnable = Runnable {
             binding.resultOverlay.visibility = View.GONE
             pauseAnalyzer(false)
-            binding.etMockCode.requestFocus()
+            // Pequeño delay para que el layout termine antes de pedir foco
+            binding.etMockCode.post {
+                binding.etMockCode.requestFocus()
+            }
             resetStandbyTimer()
         }
         uiHandler.postDelayed(resultHideRunnable!!, 4_000)
@@ -1761,6 +1780,15 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             } else {
                 analysis.setAnalyzer(cameraExecutor, ::analyzeImage)
             }
+        }
+    }
+
+    // Reprocesar texto acumulado en etMockCode mientras había requestInFlight=true
+    private fun processPendingMockText() {
+        if (requestInFlight) return
+        val text = binding.etMockCode.text?.toString().orEmpty()
+        if (text.isNotEmpty()) {
+            maybeProcessCode(text)
         }
     }
 

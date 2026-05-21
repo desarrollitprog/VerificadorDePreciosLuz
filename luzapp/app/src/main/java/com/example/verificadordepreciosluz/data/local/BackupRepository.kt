@@ -6,7 +6,9 @@ import com.example.verificadordepreciosluz.data.network.ApiService
 import com.example.verificadordepreciosluz.data.network.ProductoResponse
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.google.gson.stream.JsonWriter
 import java.io.File
+import java.io.IOException
 
 class BackupRepository(
     private val context: Context,
@@ -37,9 +39,8 @@ class BackupRepository(
         return try {
             Log.i("BackupRepository", "Iniciando descarga de backup")
             val service = api ?: return Result.failure(IllegalStateException("ApiService no disponible"))
-            val backup = downloadPagedBackup(service, progressListener)
-            saveBackup(backup)
-            Result.success(backup)
+            val updatedAt = downloadSectionsToDisk(service, progressListener)
+            Result.success(BackupResponse(updatedAt = updatedAt))
         } catch (e: Exception) {
             Log.e("BackupRepository", "Error descargando backup", e)
             progressListener?.onError("general", e)
@@ -47,94 +48,83 @@ class BackupRepository(
         }
     }
 
-    private suspend fun downloadPagedBackup(
+    private val PACING_MS = 500L
+
+    private suspend fun downloadSectionsToDisk(
         service: ApiService,
         progressListener: BackupProgressListener? = null
-    ): BackupResponse {
-        val productosMap = mutableMapOf<String, BackupProducto>()
-        val preciosMap = mutableMapOf<String, BackupPrecio>()
-        val ofertas = mutableListOf<BackupOferta>()
-        val ofertasVigencia = mutableListOf<BackupOfertaVigencia>()
-        val ofertasSucursal = mutableListOf<BackupOfertaSucursal>()
-        val ofertasDetalles = mutableListOf<BackupOfertaDetalle>()
-        val impuestosProducto = mutableListOf<BackupImpuestoProducto>()
-        val tasasImpuesto = mutableListOf<BackupTasaImpuesto>()
-        val barrasAsociadas = mutableListOf<BackupBarrasAsociadas>()
-        var updatedAt: String? = null
+    ): String? {
         val sections = listOf(
             "productos", "precios", "ofertas", "ofertas_vigencia", "ofertas_sucursal",
             "ofertas_detalles", "impuestos_producto", "tasas_impuesto", "barras_asociadas"
         )
         val limit = 1000
-        for (section in sections) {
-            var totalItems = 0
+        var updatedAt: String? = null
+
+        for ((sectionIdx, section) in sections.withIndex()) {
             var offset = 0
-                do {
-                    try {
-                        // Siempre descargar backup completo (sin filtro updatedSince)
+            var totalForSection = 0
+            val file = File(context.filesDir, "backup_${section}.json")
+            val tempFile = File(context.filesDir, "backup_${section}.json.tmp")
+
+            try {
+                tempFile.bufferedWriter(bufferSize = 8192).use { writer ->
+                    val jsonWriter = JsonWriter(writer)
+                    jsonWriter.beginArray()
+
+                    do {
                         val page = service.getBackupSection(section, offset, limit, null)
-                    if (updatedAt == null) updatedAt = page.updatedAt
-                    when (section) {
-                        "productos" -> {
-                            page.productos.forEach { item -> productosMap.putIfAbsent(item.sku, item) }
-                            totalItems += page.productos.size
+                        if (updatedAt == null) updatedAt = page.updatedAt
+
+                        val items = getSectionItems(page, section)
+                        for (item in items) {
+                            gson.toJson(item, item.javaClass, jsonWriter)
                         }
-                        "precios" -> {
-                            page.precios.forEach { item ->
-                                val hasCosto = (item.costoBase ?: 0.0) > 0.0
-                                val hasPvpBase = (item.pvpBase ?: 0.0) > 0.0
-                                val hasPvpConversion = (item.pvpConversion ?: 0.0) > 0.0
-                                if (!hasCosto || (!hasPvpBase && !hasPvpConversion)) return@forEach
-                                val key = "${item.idProducto}:${item.idEmpaque}"
-                                val existing = preciosMap[key]
-                                if (existing == null) {
-                                    preciosMap[key] = item
-                                } else {
-                                    val existingHasConversion = (existing.pvpConversion ?: 0.0) > 0.0
-                                    val shouldReplace = when {
-                                        hasPvpConversion && !existingHasConversion -> true
-                                        hasPvpConversion == existingHasConversion ->
-                                            (item.pvpBase ?: 0.0) > (existing.pvpBase ?: 0.0)
-                                        else -> false
-                                    }
-                                    if (shouldReplace) {
-                                        preciosMap[key] = item
-                                    }
-                                }
-                            }
-                            totalItems += page.precios.size
-                        }
-                        "ofertas" -> { ofertas.addAll(page.ofertas); totalItems += page.ofertas.size }
-                        "ofertas_vigencia" -> { ofertasVigencia.addAll(page.ofertasVigencia); totalItems += page.ofertasVigencia.size }
-                        "ofertas_sucursal" -> { ofertasSucursal.addAll(page.ofertasSucursal); totalItems += page.ofertasSucursal.size }
-                        "ofertas_detalles" -> { ofertasDetalles.addAll(page.ofertasDetalles); totalItems += page.ofertasDetalles.size }
-                        "impuestos_producto" -> { impuestosProducto.addAll(page.impuestosProducto); totalItems += page.impuestosProducto.size }
-                        "tasas_impuesto" -> { tasasImpuesto.addAll(page.tasasImpuesto); totalItems += page.tasasImpuesto.size }
-                        "barras_asociadas" -> { barrasAsociadas.addAll(page.barrasAsociadas); totalItems += page.barrasAsociadas.size }
-                    }
-                    val received = countSectionItems(page, section)
-                    progressListener?.onProgress(section, offset, received, totalItems)
-                    Log.i("BackupRepository", "backup section=$section offset=$offset received=$received")
-                    if (received < limit) break
-                    offset += limit
-                } catch (e: Exception) {
-                    progressListener?.onError(section, e)
-                    throw e
+
+                        totalForSection += items.size
+                        progressListener?.onProgress(section, offset, items.size, totalForSection)
+                        Log.i("BackupRepository", "backup section=$section offset=$offset received=${items.size}")
+
+                        if (items.size < limit) break
+                        offset += limit
+                    } while (true)
+
+                    jsonWriter.endArray()
                 }
-            } while (true)
+
+                if (file.exists()) file.delete()
+                if (!tempFile.renameTo(file)) {
+                    throw IOException("No se pudo renombrar ${tempFile.name} a ${file.name}")
+                }
+
+                if (sectionIdx < sections.size - 1) {
+                    Thread.sleep(PACING_MS)
+                }
+
+            } catch (e: Exception) {
+                tempFile.delete()
+                progressListener?.onError(section, e)
+                throw e
+            }
         }
-        return BackupResponse(
-            updatedAt = updatedAt,
-            productos = productosMap.values.toList(),
-            precios = preciosMap.values.toList(),
-            ofertas = ofertas,
-            ofertasVigencia = ofertasVigencia,
-            ofertasSucursal = ofertasSucursal,
-            ofertasDetalles = ofertasDetalles,
-            impuestosProducto = impuestosProducto,
-            tasasImpuesto = tasasImpuesto,
-            barrasAsociadas = barrasAsociadas,
-        )
+
+        writeMeta(updatedAt)
+        return updatedAt
+    }
+
+    private fun getSectionItems(page: BackupResponse, section: String): List<Any> {
+        return when (section) {
+            "productos" -> page.productos
+            "precios" -> page.precios
+            "ofertas" -> page.ofertas
+            "ofertas_vigencia" -> page.ofertasVigencia
+            "ofertas_sucursal" -> page.ofertasSucursal
+            "ofertas_detalles" -> page.ofertasDetalles
+            "impuestos_producto" -> page.impuestosProducto
+            "tasas_impuesto" -> page.tasasImpuesto
+            "barras_asociadas" -> page.barrasAsociadas
+            else -> emptyList()
+        }
     }
 
     private fun countSectionItems(page: BackupResponse, section: String): Int {

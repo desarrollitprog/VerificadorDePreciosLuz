@@ -579,7 +579,11 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         pendingMockText = null
         resetStandbyTimer() // Reinicia el timer de publicidad también en mock
         maybeProcessCode(code)
-        binding.etMockCode.text?.clear()
+        // No limpiar si hay solicitud en vuelo: el texto acumulado podría ser
+        // el inicio de un nuevo código cuyo escaneo comenzó mientras requestInFlight=true
+        if (!requestInFlight) {
+            binding.etMockCode.text?.clear()
+        }
     }
 
     private fun sanitizeCode(raw: String): String? {
@@ -1477,6 +1481,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                     lastCode = null
                 }
                 requestInFlight = false
+                // Reprocesar texto acumulado en el campo mock mientras había requestInFlight=true
+                uiHandler.post { processPendingMockText() }
             }
         }
     }
@@ -1517,6 +1523,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                     lastCode = null
                 }
                 requestInFlight = false
+                uiHandler.post { processPendingMockText() }
             }
         }
     }
@@ -1750,7 +1757,10 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         resultHideRunnable = Runnable {
             binding.resultOverlay.visibility = View.GONE
             pauseAnalyzer(false)
-            binding.etMockCode.requestFocus()
+            // Pequeño delay para que el layout termine antes de pedir foco
+            binding.etMockCode.post {
+                binding.etMockCode.requestFocus()
+            }
             resetStandbyTimer()
         }
         uiHandler.postDelayed(resultHideRunnable!!, 4_000)
@@ -1770,6 +1780,15 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             } else {
                 analysis.setAnalyzer(cameraExecutor, ::analyzeImage)
             }
+        }
+    }
+
+    // Reprocesar texto acumulado en etMockCode mientras había requestInFlight=true
+    private fun processPendingMockText() {
+        if (requestInFlight) return
+        val text = binding.etMockCode.text?.toString().orEmpty()
+        if (text.isNotEmpty()) {
+            maybeProcessCode(text)
         }
     }
 

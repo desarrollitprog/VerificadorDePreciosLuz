@@ -13,8 +13,8 @@ android {
         // Android 7.0 en adelante (API 24)
         minSdk = 24
         targetSdk = 36
-        versionCode = 14
-        versionName = "2.0.0"
+        versionCode = 16
+        versionName = "2.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

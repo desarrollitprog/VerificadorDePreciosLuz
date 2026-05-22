@@ -12,6 +12,7 @@ from .notificacion import Notificacion
 from .notificacion_leida import NotificacionLeida
 from .asignacion import PublicidadAsignacion
 from .subida_log import SubidaLog
+from .reproduccion_metrica import ReproduccionMetrica
 
 __all__ = [
     "Usuario",
@@ -24,4 +25,5 @@ __all__ = [
     "NotificacionLeida",
     "PublicidadAsignacion",
     "SubidaLog",
+    "ReproduccionMetrica",
 ]

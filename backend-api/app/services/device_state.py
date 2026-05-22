@@ -45,24 +45,25 @@ class DeviceStateStore:
                     logger.error(f"[Redis] {operation_name} falló después de {self.max_retries} intentos: {e}")
         raise last_exception
 
-    async def upsert_heartbeat(self, device_id: str, server_id: str | None = None) -> None:
+    async def upsert_heartbeat(self, device_id: str, server_id: str | None = None, device_type: str | None = None) -> None:
         async def _do_upsert():
             now_epoch = int(time.time())
             now_iso = datetime.now(timezone.utc).isoformat()
             key = f"device:state:{device_id}"
 
+            mapping = {
+                "device_id": device_id,
+                "server_id": server_id or "",
+                "last_seen": now_iso,
+                "last_seen_epoch": str(now_epoch),
+                "online": "1",
+            }
+            if device_type:
+                mapping["device_type"] = device_type
+
             pipe = self.redis.pipeline()
             pipe.sadd("devices:all", device_id)
-            pipe.hset(
-                key,
-                mapping={
-                    "device_id": device_id,
-                    "server_id": server_id or "",
-                    "last_seen": now_iso,
-                    "last_seen_epoch": str(now_epoch),
-                    "online": "1",
-                },
-            )
+            pipe.hset(key, mapping=mapping)
             pipe.expire(key, 172800)  # 48h TTL
             await pipe.execute()
         
@@ -108,6 +109,7 @@ class DeviceStateStore:
                     "online": bool(is_online_by_ttl and explicit_online),
                     "last_seen": row.get("last_seen"),
                     "server_id": row.get("server_id") or None,
+                    "device_type": row.get("device_type") or "verificador",
                 }
 
             return result

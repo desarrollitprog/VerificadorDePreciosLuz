@@ -6,6 +6,7 @@ import os
 import json
 import io
 
+_old_stdout = sys.stdout
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

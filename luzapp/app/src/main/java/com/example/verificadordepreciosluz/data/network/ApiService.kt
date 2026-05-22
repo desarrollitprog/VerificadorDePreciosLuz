@@ -58,6 +58,22 @@ data class PlaybackStatusResponse(
     val duplicated: Boolean? = null
 )
 
+data class PlaybackProgressRequest(
+    @SerializedName("reproduccion_id") val reproduccionId: String,
+    @SerializedName("dispositivo_id") val dispositivoId: String,
+    @SerializedName("banner_id") val bannerId: Int,
+    val titulo: String? = null,
+    @SerializedName("tipo_evento") val tipoEvento: String,
+    @SerializedName("duracion_total_seg") val duracionTotalSeg: Double? = null,
+    @SerializedName("segundos_reproducidos") val segundosReproducidos: Double? = null,
+    @SerializedName("porcentaje_completado") val porcentajeCompletado: Double? = null,
+    @SerializedName("cuartil_50") val cuartil50: Boolean? = null,
+    @SerializedName("cuartil_75") val cuartil75: Boolean? = null,
+    @SerializedName("cuartil_100") val cuartil100: Boolean? = null,
+    val completo: Boolean? = null,
+    @SerializedName("motivo_fin") val motivoFin: String? = null
+)
+
 interface ApiService {
     @GET("ping")
     suspend fun ping(@Query("device_id") deviceId: String): PingResponse
@@ -86,6 +102,11 @@ interface ApiService {
     @POST("api/playback-status")
     suspend fun reportPlaybackStatus(
         @Body body: PlaybackStatusRequest
+    ): PlaybackStatusResponse
+
+    @POST("api/reproducciones/progreso")
+    suspend fun reportarProgresoReproduccion(
+        @Body body: PlaybackProgressRequest
     ): PlaybackStatusResponse
 }
 

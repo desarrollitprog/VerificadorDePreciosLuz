@@ -76,6 +76,7 @@ async def actualizar_sesiones_dispositivos() -> None:
                             codigo_kiosko=codigo,
                             online=ahora_online,
                             servidor_id=s.id,
+                            tipo=info.get("device_type", "verificador"),
                         )
                         db.add(dispositivo)
                         dispositivo_por_codigo[codigo] = dispositivo

@@ -41,6 +41,7 @@ import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import android.provider.Settings
+import android.media.MediaMetadataRetriever
 import com.example.verificadordepreciosluz.MainActivity
 import com.example.verificadordepreciosluz.BuildConfig
 import com.example.verificadordepreciosluz.data.network.ApiClient
@@ -152,6 +153,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private var reproduccionIdActual: String? = null
     private var progresoRunnable: Runnable? = null
     private var ultimoBannerId: Int? = null
+    private var ultimoTitulo: String? = null
+    private var ultimoTipoReproduccion: String? = null
     private var ultimoCuartilReportado: Int = 0
     private val PURGE_INTERVAL_MS = 30L * 24 * 60 * 60 * 1000  // 30 días
     private var purgeTimerRunnable: Runnable? = null
@@ -1184,15 +1187,49 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         binding.standbyVideo.visibility = View.GONE
         releaseStandbyBitmap()
         
+        // Finalizar reproducción anterior si existe
+        if (reproduccionIdActual != null && ultimoBannerId != null) {
+            val tipoAnterior = ultimoTipoReproduccion ?: "image"
+            if (tipoAnterior == "image") {
+                sendPlaybackEvent(
+                    bannerId = ultimoBannerId!!,
+                    titulo = ultimoTitulo,
+                    tipoEvento = "COMPLETED",
+                    completo = true,
+                    cuartil50 = true,
+                    cuartil75 = true,
+                    cuartil100 = true,
+                    motivoFin = "completion"
+                )
+            } else {
+                sendPlaybackEvent(
+                    bannerId = ultimoBannerId!!,
+                    titulo = ultimoTitulo,
+                    tipoEvento = "INTERRUPTED",
+                    completo = false,
+                    motivoFin = "skip"
+                )
+            }
+            reproduccionIdActual = null
+        }
+
         // Generar ID único para esta reproducción
-        val durSeg = item.duracionSeg?.toDouble() ?: 10.0
+        val fallbackDur = item.duracionSeg?.toDouble() ?: 10.0
+        val durSeg = if (item.tipo == "video") {
+            getVideoDurationSeconds(item.localPath) ?: fallbackDur
+        } else {
+            fallbackDur
+        }
         reproduccionIdActual = "${deviceId}_${item.id}_${System.currentTimeMillis()}"
         ultimoBannerId = item.id
+        ultimoTitulo = item.titulo
+        ultimoTipoReproduccion = item.tipo
         ultimoCuartilReportado = 0
         
         // Reportar inicio de reproducción
         sendPlaybackEvent(
             bannerId = item.id,
+            titulo = item.titulo,
             tipoEvento = "START",
             duracionTotalSeg = durSeg
         )
@@ -1206,6 +1243,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             binding.standbyVideo.setOnCompletionListener {
                 sendPlaybackEvent(
                     bannerId = item.id,
+                    titulo = item.titulo,
                     tipoEvento = "COMPLETED",
                     duracionTotalSeg = durSeg,
                     segundosReproducidos = durSeg,
@@ -1218,6 +1256,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 )
                 stopVideoProgressTracker()
                 reproduccionIdActual = null
+                ultimoTipoReproduccion = null
                 resetVideoView()
                 nextStandbyItem()
             }
@@ -1308,26 +1347,42 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         val lastBanner = ultimoBannerId
         stopVideoProgressTracker()
         if (lastBanner != null && reproduccionIdActual != null) {
+            val tipoAnterior = ultimoTipoReproduccion ?: "image"
             try {
-                val currentPos = binding.standbyVideo.currentPosition.toDouble()
-                val duration = binding.standbyVideo.duration.toDouble()
-                val pct = if (duration > 0) (currentPos / duration) * 100.0 else 0.0
-                sendPlaybackEvent(
-                    bannerId = lastBanner,
-                    tipoEvento = "INTERRUPTED",
-                    segundosReproducidos = currentPos / 1000.0,
-                    porcentajeCompletado = pct,
-                    cuartil50 = pct >= 50,
-                    cuartil75 = pct >= 75,
-                    cuartil100 = false,
-                    completo = false,
-                    motivoFin = motivo
-                )
+                if (tipoAnterior == "image") {
+                    sendPlaybackEvent(
+                        bannerId = lastBanner,
+                        titulo = ultimoTitulo,
+                        tipoEvento = "COMPLETED",
+                        completo = true,
+                        cuartil50 = true,
+                        cuartil75 = true,
+                        cuartil100 = true,
+                        motivoFin = motivo
+                    )
+                } else {
+                    val currentPos = binding.standbyVideo.currentPosition.toDouble()
+                    val duration = binding.standbyVideo.duration.toDouble()
+                    val pct = if (duration > 0) (currentPos / duration) * 100.0 else 0.0
+                    sendPlaybackEvent(
+                        bannerId = lastBanner,
+                        titulo = ultimoTitulo,
+                        tipoEvento = "INTERRUPTED",
+                        segundosReproducidos = currentPos / 1000.0,
+                        porcentajeCompletado = pct,
+                        cuartil50 = pct >= 50,
+                        cuartil75 = pct >= 75,
+                        cuartil100 = false,
+                        completo = false,
+                        motivoFin = motivo
+                    )
+                }
             } catch (e: Exception) {
-                Log.w(TAG, "Error enviando INTERRUPTED: ${e.message}")
+                Log.w(TAG, "Error enviando ${if (tipoAnterior == "image") "COMPLETED" else "INTERRUPTED"}: ${e.message}")
             }
         }
         reproduccionIdActual = null
+        ultimoTipoReproduccion = null
         standbyActive = false
         standbySlideRunnable?.let { uiHandler.removeCallbacks(it) }
         binding.standbyVideo.stopPlayback()
@@ -1640,8 +1695,22 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         }
     }
 
+    private fun getVideoDurationSeconds(localPath: String): Double? {
+        return try {
+            val retriever = MediaMetadataRetriever()
+            retriever.setDataSource(localPath)
+            val durMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+            retriever.release()
+            durMs?.toDoubleOrNull()?.let { it / 1000.0 }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error obteniendo duración real del video: ${e.message}")
+            null
+        }
+    }
+
     private fun sendPlaybackEvent(
         bannerId: Int,
+        titulo: String? = null,
         tipoEvento: String,
         duracionTotalSeg: Double? = null,
         segundosReproducidos: Double? = null,
@@ -1661,6 +1730,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                         reproduccionId = rid,
                         dispositivoId = deviceId,
                         bannerId = bannerId,
+                        titulo = titulo,
                         tipoEvento = tipoEvento,
                         duracionTotalSeg = duracionTotalSeg,
                         segundosReproducidos = segundosReproducidos,
@@ -1701,6 +1771,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                     ultimoCuartilReportado = cuartil
                     sendPlaybackEvent(
                         bannerId = bannerId,
+                        titulo = ultimoTitulo,
                         tipoEvento = "PROGRESS",
                         duracionTotalSeg = duracionTotalSeg,
                         segundosReproducidos = currentPos / 1000.0,

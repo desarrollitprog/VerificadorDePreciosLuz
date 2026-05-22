@@ -51,6 +51,8 @@ async def recibir_batch_reproducciones(
             existing = result.scalars().first()
 
             if existing is None:
+                if ev.tipo_evento not in ("START", "COMPLETED", "INTERRUPTED"):
+                    continue
                 nueva = ReproduccionMetrica(
                     reproduccion_id=ev.reproduccion_id,
                     dispositivo_id=ev.dispositivo_id,
@@ -72,6 +74,12 @@ async def recibir_batch_reproducciones(
                 db.add(nueva)
                 count += 1
             else:
+                if ev.tipo_evento == "START" and existing.inicio_reproduccion is None:
+                    existing.inicio_reproduccion = now
+                if ev.titulo and not existing.titulo:
+                    existing.titulo = ev.titulo
+                if ev.duracion_total_seg is not None:
+                    existing.duracion_total_seg = ev.duracion_total_seg
                 if ev.segundos_reproducidos is not None:
                     existing.segundos_reproducidos = ev.segundos_reproducidos
                 if ev.porcentaje_completado is not None:

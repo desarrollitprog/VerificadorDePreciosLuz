@@ -1520,7 +1520,7 @@ export const DashboardScreen: React.FC = () => {
                                   : [...prev, id]
                               );
                             }}
-                            maxHeight="max-h-[30vh]"
+                            maxHeight="max-h-[40vh] sm:max-h-[30vh]"
                           />
                         )}
                       </div>
@@ -1533,12 +1533,12 @@ export const DashboardScreen: React.FC = () => {
                 </div>
               ))}
             </div>
-            <div className="mt-6 flex justify-end gap-2">
+            <div className="mt-6 flex flex-col-reverse sm:flex-row justify-end gap-2">
               <button
                 type="button"
                 onClick={resetUploadModal}
                 disabled={uploading}
-                className="px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform duration-150"
+                className="w-full sm:w-auto px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform duration-150"
               >
                 CANCELAR
               </button>
@@ -1546,7 +1546,7 @@ export const DashboardScreen: React.FC = () => {
                 type="button"
                 onClick={handleSubmitUpload}
                 disabled={uploading}
-                className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-white text-base font-semibold disabled:opacity-60 active:scale-95 transition-all duration-150"
+                className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-white text-base font-semibold disabled:opacity-60 active:scale-95 transition-all duration-150"
               >
                 {uploading ? 'SUBIENDO...' : 'GUARDAR Y SUBIR'}
               </button>
@@ -1557,7 +1557,7 @@ export const DashboardScreen: React.FC = () => {
 
       {/* Sync Modal */}
       {isSyncModalOpen && (
-        <div className="fixed inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/80 flex items-start justify-center z-50 p-4 pt-20 animate-fade-in">
+        <div className="fixed inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/80 flex items-start justify-center z-50 p-4 pt-4 md:pt-20 animate-fade-in">
           <div className="bg-white dark:bg-[#1c2936] rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.3)] w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
             <div className="p-6 border-b border-gradient-to-r from-transparent via-slate-300 to-transparent shrink-0">
               <div className="flex items-center gap-3">
@@ -1648,12 +1648,12 @@ export const DashboardScreen: React.FC = () => {
                         : [...prev, id]
                     );
                   }}
-                  maxHeight="max-h-[65vh]"
+                  maxHeight="max-h-[50vh] sm:max-h-[65vh]"
                 />
               )}
             </div>
 
-            <div className="mt-4 flex justify-end gap-2 p-6 border-t border-gradient-to-r from-transparent via-slate-300 to-transparent">
+            <div className="mt-4 flex flex-col-reverse sm:flex-row justify-end gap-2 p-6 border-t border-gradient-to-r from-transparent via-slate-300 to-transparent">
               <button
                 type="button"
                 onClick={() => {
@@ -1663,7 +1663,7 @@ export const DashboardScreen: React.FC = () => {
                   setSyncDispositivoIds([]);
                   setSyncExpandedServers([]);
                 }}
-                className="px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform duration-150"
+                className="w-full sm:w-auto px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform duration-150"
               >
                 CANCELAR
               </button>
@@ -1674,7 +1674,7 @@ export const DashboardScreen: React.FC = () => {
                   await executeSync();
                 }}
                 disabled={!syncAllDevices && syncServidorIds.length === 0 && syncDispositivoIds.length === 0}
-                className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-base font-semibold disabled:opacity-60 active:scale-95 transition-all duration-150"
+                className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-base font-semibold disabled:opacity-60 active:scale-95 transition-all duration-150"
               >
                 SINCRONIZAR
               </button>
@@ -1684,7 +1684,7 @@ export const DashboardScreen: React.FC = () => {
       )}
       {/* Edit Modal */}
       {isEditModalOpen && editingVideo && (
-        <div className="fixed inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/80 flex items-start justify-center z-50 p-4 pt-20 animate-fade-in">
+        <div className="fixed inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/80 flex items-start justify-center z-50 p-4 pt-4 md:pt-20 animate-fade-in">
           <div className="bg-white dark:bg-[#1c2936] rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.3)] w-full max-w-2xl max-h-[90vh] flex flex-col">
             <div className="p-6 border-b border-gradient-to-r from-transparent via-slate-300 to-transparent shrink-0">
               <div className="flex items-center gap-3">
@@ -1838,13 +1838,13 @@ export const DashboardScreen: React.FC = () => {
                           : [...prev, id]
                       );
                     }}
-                    maxHeight="max-h-[30vh]"
+                    maxHeight="max-h-[40vh] sm:max-h-[30vh]"
                   />
                 )}
               </div>
             </div>
 
-            <div className="mt-4 flex justify-end gap-2 p-4 border-t border-slate-200 dark:border-slate-700">
+            <div className="mt-4 flex flex-col-reverse sm:flex-row justify-end gap-2 p-4 border-t border-slate-200 dark:border-slate-700">
               <button
                 type="button"
                 onClick={() => {
@@ -1856,13 +1856,13 @@ export const DashboardScreen: React.FC = () => {
                   setEditExpandedServers([]);
                 }}
                  disabled={isSavingEdit}
-                 className="px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform duration-150"
-               >
-                 CANCELAR
-               </button>
-               <button
-                 type="button"
-                  onClick={async () => {
+                 className="w-full sm:w-auto px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform duration-150"
+                >
+                  CANCELAR
+                </button>
+                <button
+                  type="button"
+                   onClick={async () => {
                     const fechaInicio = editFormData.fechaInicio;
                     const fechaFin = editFormData.fechaFin;
 
@@ -1935,9 +1935,9 @@ export const DashboardScreen: React.FC = () => {
                   }
                 }}
                 disabled={isSavingEdit}
-                 className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-white text-base font-semibold disabled:opacity-60 active:scale-95 transition-all duration-150"
-               >
-                 {isSavingEdit ? 'GUARDANDO...' : 'GUARDADO'}
+                 className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-white text-base font-semibold disabled:opacity-60 active:scale-95 transition-all duration-150"
+                >
+                  {isSavingEdit ? 'GUARDANDO...' : 'GUARDADO'}
               </button>
             </div>
           </div>

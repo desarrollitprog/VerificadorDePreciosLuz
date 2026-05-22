@@ -778,11 +778,11 @@ export function ServerDashboard() {
                 ) : null}
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={closeRenameModal}
-                  className="px-4 h-10 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  className="w-full sm:w-auto px-4 h-10 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                   disabled={renameSaving}
                 >
                   Cancelar
@@ -790,7 +790,7 @@ export function ServerDashboard() {
                 <button
                   type="button"
                   onClick={submitRename}
-                  className="px-4 h-10 rounded-lg bg-primary text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50"
+                  className="w-full sm:w-auto px-4 h-10 rounded-lg bg-primary text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50"
                   disabled={renameSaving}
                 >
                   {renameSaving ? 'Guardando...' : 'Guardar'}
@@ -862,17 +862,17 @@ export function ServerDashboard() {
               <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
                 ¿Estás seguro de reiniciar <span className="font-medium text-slate-900 dark:text-white">{restartModal.deviceName}</span>?
               </p>
-              <div className="flex gap-3">
+              <div className="flex flex-col-reverse sm:flex-row gap-3">
                 <button
                   onClick={closeRestartModal}
-                  className="flex-1 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  className="w-full sm:flex-1 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                   disabled={restarting}
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleRestart}
-                  className="flex-1 px-4 py-2 rounded-lg bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
+                  className="w-full sm:flex-1 px-4 py-2 rounded-lg bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
                   disabled={restarting}
                 >
                   {restarting ? 'Reiniciando...' : 'Reiniciar'}
@@ -895,17 +895,17 @@ export function ServerDashboard() {
               <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
                 ¿Estás seguro de limpiar el cache de <span className="font-medium text-slate-900 dark:text-white">{purgeModal.deviceName}</span>? Se eliminarán todos los banners descargados y se volverán a descargar.
               </p>
-              <div className="flex gap-3">
+              <div className="flex flex-col-reverse sm:flex-row gap-3">
                 <button
                   onClick={closePurgeModal}
-                  className="flex-1 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  className="w-full sm:flex-1 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                   disabled={purging}
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handlePurge}
-                  className="flex-1 px-4 py-2 rounded-lg bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 disabled:opacity-50"
+                  className="w-full sm:flex-1 px-4 py-2 rounded-lg bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 disabled:opacity-50"
                   disabled={purging}
                 >
                   {purging ? 'Limpiando...' : 'Limpiar'}
@@ -928,17 +928,17 @@ export function ServerDashboard() {
               <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
                 ¿Estás seguro de eliminar <span className="font-medium text-slate-900 dark:text-white">{deleteDeviceModal.deviceName}</span>? Esta acción no se puede deshacer.
               </p>
-              <div className="flex gap-3">
+              <div className="flex flex-col-reverse sm:flex-row gap-3">
                 <button
                   onClick={closeDeleteDeviceModal}
-                  className="flex-1 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  className="w-full sm:flex-1 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                   disabled={deletingDevice}
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleDeleteDevice}
-                  className="flex-1 px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-semibold hover:bg-red-600 disabled:opacity-50"
+                  className="w-full sm:flex-1 px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-semibold hover:bg-red-600 disabled:opacity-50"
                   disabled={deletingDevice}
                 >
                   {deletingDevice ? 'Eliminando...' : 'Eliminar'}
@@ -964,17 +964,17 @@ export function ServerDashboard() {
               <p className="text-xs text-amber-600 dark:text-amber-400 mb-6">
                 Los dispositivos asociados se desvincularán pero no se eliminarán.
               </p>
-              <div className="flex gap-3">
+              <div className="flex flex-col-reverse sm:flex-row gap-3">
                 <button
                   onClick={closeDeleteServerModal}
-                  className="flex-1 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  className="w-full sm:flex-1 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                   disabled={deletingServer}
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleDeleteServer}
-                  className="flex-1 px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-semibold hover:bg-red-600 disabled:opacity-50"
+                  className="w-full sm:flex-1 px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-semibold hover:bg-red-600 disabled:opacity-50"
                   disabled={deletingServer}
                 >
                   {deletingServer ? 'Eliminando...' : 'Eliminar'}

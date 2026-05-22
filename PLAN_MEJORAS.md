@@ -103,8 +103,9 @@
 | FASE 15 (Blindaje WebSocket) | 17/17 ✅ | 0/17 |
 | FASE 17 (Cola Dashboard) | 17/17 ✅ | 0/17 |
 | FASE 18 (Bots Mantenimiento) | 5/5 ✅ | 0/5 |
+| FASE 21 (Responsividad Móvil) | 17/17 ✅ | 0/17 |
 
-**Total: 88/89 completados (99%) — solo falta FASE 5.1 (backups manuales en servidor)**
+**Total: 105/106 completados (99%) — solo falta FASE 5.1 (backups manuales en servidor)**
 
 ---
 
@@ -1527,61 +1528,62 @@ Paso 12 (documentación)    → último
 | Bots Mantenimiento | 18 | 5/5 ✅ (100%) | 0/5 |
 | Limpieza Caché Luzapp | 19 | 0/5 (0%) | 5/5 |
 | Panel Resumen | 20 | 0/5 (0%) | 5/5 |
-| **TOTAL** | **1-20** | **88/99 (89%)** | **11/99** |
+| Responsividad Móvil | 21 | 17/17 ✅ (100%) | 0/17 |
+| **TOTAL** | **1-21** | **105/116 (91%)** | **11/116** |
 
 ---
 
-## FASE 21: Responsividad Móvil (Dashboard Frontend)
+## FASE 21: Responsividad Móvil (Dashboard Frontend) ✅ COMPLETADA
 
 *Prioridad: Media | Objetivo: Adaptar el dashboard a pantallas de celular, evitando recortes, desbordes y mala UX en viewports < 640px.*
 
-### Problema Raíz
+### Problema Raíz ~~~ (RESUELTO)
 
-Varias pantallas del dashboard usan layouts fijos sin responsive breakpoints, causando:
+~~Varias pantallas del dashboard usan layouts fijos sin responsive breakpoints, causando:
 - Texto recortado o superpuesto en móvil
 - Barras de herramientas con múltiples botones que se desbordan
 - Tablas sin scroll horizontal
 - Cuadrículas que no se reacomodan
-- Modales con espaciado vertical insuficiente en landscape
+- Modales con espaciado vertical insuficiente en landscape~~
 
 ---
 
-### 🔴 ALTA (se rompe en móvil)
+### 🔴 ALTA (se rompe en móvil) ✅ COMPLETADO
 
 | # | Archivo:Línea | Problema | Solución |
 |---|---|---|---|
-| 21.1 | `ResumenScreen.tsx:79,89` | `grid-cols-4` fuerza 4 KPIs en una fila en móvil → texto `text-4xl` se desborda | `grid-cols-1 sm:grid-cols-2 lg:grid-cols-4` |
-| 21.2 | `DashboardScreen.tsx:1069,1093` | Tabla `grid grid-cols-12` sin `overflow-x-auto` → columnas de ~27px no muestran texto | Envolver en `<div className="overflow-x-auto">` |
-| 21.3 | `NotificationContainer.tsx:32` | `w-96` fijo (384px) se desborda en iPhone SE (375px) y pantallas menores | `w-full max-w-sm` o `max-w-[90vw]` |
-| 21.4 | `ServerDashboard.tsx:622-657` | 5 botones de acción por dispositivo en fila sin wrap → se desbordan en móvil | Agregar `flex-wrap` o colapsar acciones secundarias en menú |
-| 21.5 | `AuditoriaScreen.tsx:222-268` | 5 elementos en toolbar (buscar, filtros, botones) sin wrap → desbordamiento | `flex-wrap` o `flex-col sm:flex-row` |
-| 21.6 | `DashboardScreen.tsx:786` | Input de búsqueda `w-48` fijo (192px) no ocupa ancho disponible | `w-full sm:w-48` |
+| 21.1 | ~~`ResumenScreen.tsx:79,89`~~ | ~~`grid-cols-4` fuerza 4 KPIs en una fila en móvil → texto `text-4xl` se desborda~~ | ~~`grid-cols-1 sm:grid-cols-2 lg:grid-cols-4`~~ ✅ |
+| 21.2 | ~~`DashboardScreen.tsx:1069,1093`~~ | ~~Tabla `grid grid-cols-12` sin `overflow-x-auto` → columnas de ~27px no muestran texto~~ | ~~Envolver en `<div className="overflow-x-auto">`~~ ✅ |
+| 21.3 | ~~`NotificationContainer.tsx:32`~~ | ~~`w-96` fijo (384px) se desborda en iPhone SE (375px) y pantallas menores~~ | ~~`w-full max-w-sm` o `max-w-[90vw]`~~ ✅ |
+| 21.4 | ~~`ServerDashboard.tsx:622-657`~~ | ~~5 botones de acción por dispositivo en fila sin wrap → se desbordan en móvil~~ | ~~Agregar `flex-wrap` o colapsar acciones secundarias en menú~~ ✅ |
+| 21.5 | ~~`AuditoriaScreen.tsx:222-268`~~ | ~~5 elementos en toolbar (buscar, filtros, botones) sin wrap → desbordamiento~~ | ~~`flex-wrap` o `flex-col sm:flex-row`~~ ✅ |
+| 21.6 | ~~`DashboardScreen.tsx:786`~~ | ~~Input de búsqueda `w-48` fijo (192px) no ocupa ancho disponible~~ | ~~`w-full sm:w-48`~~ ✅ |
 
-### 🟡 MEDIA (UX deficiente en móvil)
-
-| # | Archivo:Línea | Problema | Solución |
-|---|---|---|---|
-| 21.7 | `AuditoriaScreen.tsx:352-456` | Tabla de 8 columnas, mucho scroll horizontal, ninguna columna oculta en móvil | `hidden md:table-cell` en columnas de baja prioridad (Servidor, Duración, Usuario) |
-| 21.8 | `ServerDashboard.tsx:473-523` | Toolbar (buscar, ordenar, actualizar, programar) sin wrap → desbordamiento | `flex-wrap` o `flex-col sm:flex-row` |
-| 21.9 | `ServerDashboard.tsx:576-603` | Fila de insignias (nombre + 3-4 badges) sin wrap → se desbordan | Agregar `flex-wrap` al contenedor |
-| 21.10 | `CalendarScreen.tsx:355` | Título + leyenda (4 items) lado a lado → se superponen | `flex-col md:flex-row` con `gap-4` |
-| 21.11 | `ServerDeviceSelector.tsx:96` | `grid-cols-2` en pantallas muy pequeñas → items de ~140px | `grid-cols-1 sm:grid-cols-2` |
-| 21.12 | `UsersScreen.tsx:328` | Paginación `justify-between` sin wrap → texto y botones se superponen | Agregar `flex-wrap` o `flex-col` en móvil |
-
-### 🔵 BAJA (casos esquina)
+### 🟡 MEDIA (UX deficiente en móvil) ✅ COMPLETADO
 
 | # | Archivo:Línea | Problema | Solución |
 |---|---|---|---|
-| 21.13 | `DeviceStatusChart.tsx:53` | `ResponsiveContainer width={220}` no se expande | `width="100%"` |
-| 21.14 | `DashboardScreen.tsx:1250` | Modal upload `pt-20` deja ~126px en landscape | `pt-4 md:pt-20` |
-| 21.15 | `DashboardScreen.tsx:1527` | Fila "SINCRONIZAR A TODOS" sin wrap | Agregar `flex-wrap` |
+| 21.7 | ~~`AuditoriaScreen.tsx:352-456`~~ | ~~Tabla de 8 columnas, mucho scroll horizontal, ninguna columna oculta en móvil~~ | ~~`hidden md:table-cell` en columnas de baja prioridad (Servidor, Duración, Usuario)~~ ✅ |
+| 21.8 | ~~`ServerDashboard.tsx:473-523`~~ | ~~Toolbar (buscar, ordenar, actualizar, programar) sin wrap → desbordamiento~~ | ~~`flex-wrap` o `flex-col sm:flex-row`~~ ✅ |
+| 21.9 | ~~`ServerDashboard.tsx:576-603`~~ | ~~Fila de insignias (nombre + 3-4 badges) sin wrap → se desbordan~~ | ~~Agregar `flex-wrap` al contenedor~~ ✅ |
+| 21.10 | ~~`CalendarScreen.tsx:355`~~ | ~~Título + leyenda (4 items) lado a lado → se superponen~~ | ~~`flex-col md:flex-row` con `gap-4`~~ ✅ |
+| 21.11 | ~~`ServerDeviceSelector.tsx:96`~~ | ~~`grid-cols-2` en pantallas muy pequeñas → items de ~140px~~ | ~~`grid-cols-1 sm:grid-cols-2`~~ ✅ |
+| 21.12 | ~~`UsersScreen.tsx:328`~~ | ~~Paginación `justify-between` sin wrap → texto y botones se superponen~~ | ~~Agregar `flex-wrap` o `flex-col` en móvil~~ ✅ |
+
+### 🔵 BAJA (casos esquina) ✅ COMPLETADO
+
+| # | Archivo:Línea | Problema | Solución |
+|---|---|---|---|
+| 21.13 | ~~`DeviceStatusChart.tsx:53`~~ | ~~`ResponsiveContainer width={220}` no se expande~~ | ~~`width="100%"`~~ ✅ |
+| 21.14 | ~~`DashboardScreen.tsx:1250`~~ | ~~Modal upload `pt-20` deja ~126px en landscape~~ | ~~`pt-4 md:pt-20`~~ ✅ |
+| 21.15 | ~~`DashboardScreen.tsx:1527`~~ | ~~Fila "SINCRONIZAR A TODOS" sin wrap~~ | ~~Agregar `flex-wrap`~~ ✅ |
 | 21.16 | `ServerStorageChart.tsx:72` | `width={90}` fijo en YAxis — aceptable | Dejar como está |
 | 21.17 | Modales varios | `max-w-6xl/5xl/2xl` — correctos con `w-full` | Sin cambios |
 | 21.18 | `CalendarScreen.tsx:348` | FullCalendar `aspectRatio: 1.5` — menor | Ajustar si es necesario |
 
 ---
 
-### Orden de implementación sugerido
+### Orden de implementación sugerido ~~~ (COMPLETADO)
 
 ```
 Lote 1 (ALTA)  → 6 cambios, todos de 1 línea (flex-wrap, overflow-x-auto, grid responsive)
@@ -1589,16 +1591,164 @@ Lote 2 (MEDIA) → 6 cambios, algunos requieren hidden cols o reordenamiento fle
 Lote 3 (BAJA)  → 3 cambios opcionales, impacto menor
 ```
 
-### Archivos a modificar
+### Archivos a modificar ~~~ (COMPLETADO)
 
 | Archivo | Items | Cambios |
 |---------|-------|---------|
-| `dashboard/screens/ResumenScreen.tsx` | 21.1 | Grid classes |
-| `dashboard/screens/DashboardScreen.tsx` | 21.2, 21.6, 21.14, 21.15 | overflow-x-auto, input width, pt responsive, flex-wrap |
-| `dashboard/components/NotificationContainer.tsx` | 21.3 | w-96 → max-w-sm |
-| `dashboard/components/ServerDashboard.tsx` | 21.4, 21.8, 21.9 | 3× flex-wrap |
-| `dashboard/screens/AuditoriaScreen.tsx` | 21.5, 21.7 | flex-wrap + hidden cols |
-| `dashboard/screens/CalendarScreen.tsx` | 21.10 | flex-col responsive |
-| `dashboard/components/ServerDeviceSelector.tsx` | 21.11 | grid-cols responsive |
-| `dashboard/screens/UsersScreen.tsx` | 21.12 | flex-wrap |
-| `dashboard/components/resumen/DeviceStatusChart.tsx` | 21.13 | width 100% |
+| `dashboard/screens/ResumenScreen.tsx` | 21.1 | ✅ Grid classes |
+| `dashboard/screens/DashboardScreen.tsx` | 21.2, 21.6, 21.14, 21.15 | ✅ overflow-x-auto, input width, pt responsive, flex-wrap |
+| `dashboard/components/NotificationContainer.tsx` | 21.3 | ✅ w-96 → max-w-sm |
+| `dashboard/components/ServerDashboard.tsx` | 21.4, 21.8, 21.9 | ✅ 3× flex-wrap |
+| `dashboard/screens/AuditoriaScreen.tsx` | 21.5, 21.7 | ✅ flex-wrap + hidden cols |
+| `dashboard/screens/CalendarScreen.tsx` | 21.10 | ✅ flex-col responsive |
+| `dashboard/components/ServerDeviceSelector.tsx` | 21.11 | ✅ grid-cols responsive |
+| `dashboard/screens/UsersScreen.tsx` | 21.12 | ✅ flex-wrap |
+| `dashboard/components/resumen/DeviceStatusChart.tsx` | 21.13 | ✅ width 100% |
+
+---
+
+## FASE 22: Categorización de Dispositivos + Métricas DOOH
+
+*Prioridad: Alta | Objetivo: Diferenciar dispositivos entre TELEVISOR y VERIFICADOR, y recolectar métricas de reproducción con lógica distinta para cada tipo.*
+
+---
+
+### Fase 22.1 — Identificación de Tipo de Dispositivo
+
+**Android — DeviceTypeHelper simplificado:**
+- Refactor `isTv()` booleano → `detectDeviceType()` retornando enum `TELEVISOR` | `VERIFICADOR`
+- Lógica: si `Build.MANUFACTURER.equals("amazon", ignoreCase = true)` → `TELEVISOR`, si no → `VERIFICADOR`
+- Se reutiliza el `isAmazon` existente, no se agregan nuevas comprobaciones
+
+| # | Tarea | Estado | Ubicación |
+|---|-------|--------|-----------|
+| 22.1.1 | Refactor `DeviceTypeHelper.kt`: `isTv()` → `detectDeviceType(): DeviceType` con enum | ⏳ Pendiente | `luzapp/.../util/DeviceTypeHelper.kt` |
+| 22.1.2 | Enviar `device_type` en mensaje WebSocket IDENTIFY usando `detectDeviceType(this).name.lowercase()` | ⏳ Pendiente | `luzapp/.../ui/scanner/ScanActivity.kt:1997-2000` |
+| 22.1.3 | Actualizar `KioskService.kt` para usar nuevo enum (`!= TELEVISOR` en vez de `!isTv()`) | ⏳ Pendiente | `luzapp/.../KioskService.kt:28` |
+| 22.1.4 | Actualizar `BootReceiver.kt` para usar nuevo enum (`== TELEVISOR` en vez de `isTv()`) | ⏳ Pendiente | `luzapp/.../BootReceiver.kt:15` |
+| 22.1.5 | Loggear `Build.MANUFACTURER`, `MODEL`, `PRODUCT`, `BOARD` en `ScanActivity.onCreate()` para calibración | ⏳ Pendiente | `luzapp/.../ui/scanner/ScanActivity.kt` |
+
+### Fase 22.2 — Backend: Almacenar `device_type`
+
+| # | Tarea | Estado | Ubicación |
+|---|-------|--------|-----------|
+| 22.2.1 | Extraer `device_type` del mensaje IDENTIFY y pasarlo a `upsert_heartbeat()` | ⏳ Pendiente | `backend-api/app/main.py:1776` |
+| 22.2.2 | Modificar `DeviceStateStore.upsert_heartbeat()` para incluir `device_type` en hash de Redis | ⏳ Pendiente | `backend-api/app/services/device_state.py:48-68` |
+| 22.2.3 | Modelo `Dispositivo`: agregar columna `tipo = Column(String(20), nullable=False, default="verificador")` | ⏳ Pendiente | `backend-dashboard/app/models/dispositivo.py` |
+| 22.2.4 | En `monitoreo_service.py`, al auto-crear un `Dispositivo`, leer `device_type` desde runtime y guardarlo | ⏳ Pendiente | `backend-dashboard/app/services/monitoreo_service.py` |
+| 22.2.5 | Migración BD: `ALTER TABLE dispositivos ADD tipo VARCHAR(20) NOT NULL DEFAULT 'verificador'` | ⏳ Pendiente | SQL Server |
+| 22.2.6 | Incluir `tipo` en respuesta de `/status-detalle` por dispositivo | ⏳ Pendiente | `backend-dashboard/app/routes/monitoreo/servers.py:227-241` |
+| 22.2.7 | Endpoint `PATCH /api/dispositivos/{id}/tipo` para override manual desde dashboard | ⏳ Pendiente | `backend-dashboard/app/routes/monitoreo/devices.py` |
+| 22.2.8 | Incluir desglose `verificadores`/`televisores` en endpoint `/resumen` | ⏳ Pendiente | `backend-dashboard/app/routes/resumen.py` |
+
+### Fase 22.3 — Pipeline de Métricas de Reproducción
+
+**Android — Reporte por cuartiles:**
+- `PLAYBACK_START` al iniciar video
+- `PLAYBACK_PROGRESS` periódico (% reproducido, cuartiles alcanzados)
+- `PLAYBACK_COMPLETED` en `onCompletion`
+- `PLAYBACK_INTERRUPTED` al escanear (con segundos reproducidos)
+- Debounce de 5s entre reportes para evitar spam
+
+| # | Tarea | Estado | Ubicación |
+|---|-------|--------|-----------|
+| 22.3.1 | Enviar `PLAYBACK_START` con `banner_id`, `duracion_total` al iniciar reproducción | ⏳ Pendiente | `luzapp/.../ui/scanner/ScanActivity.kt:playStandbyItem()` |
+| 22.3.2 | Timer periódico que calcula % reproducido y envía `PLAYBACK_PROGRESS` con cuartiles alcanzados | ⏳ Pendiente | `luzapp/.../ui/scanner/ScanActivity.kt:startVideoPlayback()` |
+| 22.3.3 | Enviar `PLAYBACK_COMPLETED` en `setOnCompletionListener` | ⏳ Pendiente | `luzapp/.../ui/scanner/ScanActivity.kt:1106` |
+| 22.3.4 | Enviar `PLAYBACK_INTERRUPTED` cuando el carrusel se detiene por escaneo (con segundos reproducidos) | ⏳ Pendiente | `luzapp/.../ui/scanner/ScanActivity.kt:stopStandbyCarousel()` |
+| 22.3.5 | Handler WebSocket en backend-api para `PLAYBACK_START/PROGRESS/COMPLETED/INTERRUPTED` | ⏳ Pendiente | `backend-api/app/main.py:2882-2893` |
+| 22.3.6 | Almacenar métricas en Redis (TTL corto 600s) mientras dura la reproducción | ⏳ Pendiente | `backend-api/app/services/device_state.py` |
+| 22.3.7 | Nuevo endpoint `POST /api/reproducciones` en backend-dashboard para ingesta de métricas | ⏳ Pendiente | `backend-dashboard/app/routes/reproducciones.py` |
+
+### Fase 22.4 — Nuevo Modelo `ReproduccionMetrica`
+
+| # | Tarea | Estado | Ubicación |
+|---|-------|--------|-----------|
+| 22.4.1 | Crear modelo `ReproduccionMetrica` con campos: `dispositivo_id`, `banner_id`, `titulo`, `tipo`, `duracion_total_seg`, `inicio_reproduccion`, `fin_reproduccion`, `segundos_reproducidos`, `completo`, `porcentaje_completado`, `cuartil_25/50/75/100`, `motivo_fin` | ⏳ Pendiente | `backend-dashboard/app/models/reproduccion_metrica.py` |
+| 22.4.2 | Migración BD: `CREATE TABLE reproducciones_metricas (...)` | ⏳ Pendiente | SQL Server |
+
+### Fase 22.5 — Endpoint de Métricas para Dashboard
+
+| # | Tarea | Estado | Ubicación |
+|---|-------|--------|-----------|
+| 22.5.1 | Endpoint `GET /api/reproducciones/resumen-diario` — retorna: `hoy {}`, `ayer {}`, `banners[]` con métricas por banner | ⏳ Pendiente | `backend-dashboard/app/routes/reproducciones.py` |
+| 22.5.2 | Servicio `metricas_service.py` con lógica de consolidación (cálculo VCR, impresiones válidas >50%, agrupación por banner) | ⏳ Pendiente | `backend-dashboard/app/services/metricas_service.py` |
+
+### Fase 22.6 — Dashboard: ResumenScreen — Sección Reproducciones
+
+Agregar al final del `ResumenScreen.tsx`, colapsado por defecto, con carga lazy.
+
+**A) Línea de tendencia combinada (últimos 14 días):**
+- Línea TV (estimadas) — constante, siempre más alta
+- Línea VER (válidas >50%) — variable según interrupciones
+- Recharts `LineChart` con dos líneas y tooltip
+
+**B) Tabla completa de banners (todos, paginada, ordenable):**
+| Banner | Tipo | Duración | Inicios | Válidas >50% | VCR |
+|---|---|---|---|---|---|
+| Coca-Cola | video | 15s | 1,200 | 540 | 45% |
+
+- Sin top 5 — todos los banners visibles
+- Ordenable por cualquier columna
+- Imágenes muestran "N/A" en VCR
+
+| # | Tarea | Estado | Ubicación |
+|---|-------|--------|-----------|
+| 22.6.1 | Componente `ReproductionTrendChart.tsx`: línea de tendencia 14 días TV + VER con Recharts | ⏳ Pendiente | `dashboard/components/resumen/ReproductionTrendChart.tsx` |
+| 22.6.2 | Componente `BannerMetricsTable.tsx`: tabla completa de banners paginada y ordenable | ⏳ Pendiente | `dashboard/components/resumen/BannerMetricsTable.tsx` |
+| 22.6.3 | Integrar sección "Reproducciones" colapsable al final de `ResumenScreen.tsx` | ⏳ Pendiente | `dashboard/screens/ResumenScreen.tsx` |
+| 22.6.4 | Actualizar `resumenService.ts` con tipos para métricas y función `fetchReproduccionesResumenDiario()` | ⏳ Pendiente | `dashboard/services/resumenService.ts` |
+
+### Fase 22.7 — Dashboard: Categorías en ServerDashboard
+
+| # | Tarea | Estado | Ubicación |
+|---|-------|--------|-----------|
+| 22.7.1 | Agregar `tipo` al interface `DeviceStatus` en `monitoreoService.ts` | ⏳ Pendiente | `dashboard/services/monitoreoService.ts` |
+| 22.7.2 | Badge de tipo (`📺 TV` / `🔍 VER`) en cada dispositivo listado en ServerDashboard | ⏳ Pendiente | `dashboard/components/ServerDashboard.tsx` |
+| 22.7.3 | Filtro por tipo (dropdown: Todos / Verificadores / Televisores) en barra de herramientas | ⏳ Pendiente | `dashboard/components/ServerDashboard.tsx` |
+| 22.7.4 | Modal para cambiar tipo de dispositivo (radio buttons: Verificador | Televisor) | ⏳ Pendiente | `dashboard/components/ServerDashboard.tsx` |
+
+### Fase 22.8 — Scheduler: Cómputos Periódicos
+
+| # | Tarea | Estado | Ubicación |
+|---|-------|--------|-----------|
+| 22.8.1 | Tarea `computar_metricas_televisores()` cada 3.5 min: calcular impresiones estimadas para TVs | ⏳ Pendiente | `backend-dashboard/app/scheduler.py` |
+| 22.8.2 | Tarea `consolidar_reproducciones_hora()` cada hora: agrupar métricas por hora para reportes | ⏳ Pendiente | `backend-dashboard/app/scheduler.py` |
+| 22.8.3 | Tarea `limpiar_metricas_antiguas()` cada 24h: borrar métricas >90 días | ⏳ Pendiente | `backend-dashboard/app/scheduler.py` |
+
+### Orden de implementación sugerido
+
+```
+Paso 1  → FASE 22.1 (identificación Android) — sin backend, solo refactor
+Paso 2  → FASE 22.2 (backend almacena device_type) — depende de Paso 1
+Paso 3  → FASE 22.7 (dashboard muestra categorías) — depende de Paso 2
+Paso 4  → FASE 22.3 (Android reporta métricas) — paralelo al resto
+Paso 5  → FASE 22.4 (modelo ReproduccionMetrica) — depende de Paso 4
+Paso 6  → FASE 22.5 (endpoint resumen-diario) — depende de Paso 4+5
+Paso 7  → FASE 22.6 (dashboard sección reproducciones) — depende de Paso 5+6
+Paso 8  → FASE 22.8 (scheduler) — último, depende del resto
+```
+
+### Archivos a modificar/crear (resumen)
+
+| Capa | Archivo | Acción |
+|---|---|---|
+| **Android** | `util/DeviceTypeHelper.kt` | ✎ Refactor a enum |
+| | `ui/scanner/ScanActivity.kt` | ✎ IDENTIFY + reportes cuartil |
+| | `KioskService.kt` | ✎ Usar nuevo enum |
+| | `BootReceiver.kt` | ✎ Usar nuevo enum |
+| **Backend-API** | `app/main.py` | ✎ Handler IDENTIFY + PLAYBACK_PROGRESS/START/COMPLETED/INTERRUPTED |
+| | `app/services/device_state.py` | ✎ Almacenar `device_type` en Redis |
+| **Backend-Dashboard** | `app/models/dispositivo.py` | ✎ +`tipo` column |
+| | `app/models/reproduccion_metrica.py` | ✚ **Nuevo** |
+| | `app/routes/reproducciones.py` | ✚ **Nuevo** |
+| | `app/routes/monitoreo/devices.py` | ✎ `PATCH /tipo` |
+| | `app/routes/resumen.py` | ✎ Desglose por tipo |
+| | `app/services/metricas_service.py` | ✚ **Nuevo** |
+| | `app/scheduler.py` | ✎ Nuevas tareas |
+| **Frontend** | `services/monitoreoService.ts` | ✎ +`tipo` en `DeviceStatus` |
+| | `services/resumenService.ts` | ✎ Tipos métricas + fetch |
+| | `components/ServerDashboard.tsx` | ✎ Badge, filtro, modal cambio tipo |
+| | `screens/ResumenScreen.tsx` | ✎ Sección reproducciones colapsable |
+| | `components/resumen/ReproductionTrendChart.tsx` | ✚ **Nuevo** — línea tendencia 14 días |
+| | `components/resumen/BannerMetricsTable.tsx` | ✚ **Nuevo** — tabla completa banners |

@@ -1,6 +1,6 @@
 import logging
 from datetime import date, datetime, timedelta
-from sqlalchemy import select, func, cast, Date, Integer
+from sqlalchemy import select, func, cast, case, Date, Integer
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.reproduccion_metrica import ReproduccionMetrica
 from app.models.dispositivo import Dispositivo
@@ -57,9 +57,9 @@ async def resumen_diario(db: AsyncSession, target_date: date) -> dict:
         ReproduccionMetrica.titulo,
         func.count(ReproduccionMetrica.id).label("inicios"),
         func.sum(
-            func.cast(
-                (ReproduccionMetrica.completo == True) | (ReproduccionMetrica.cuartil_50 == True),
-                Integer,
+            case(
+                ((ReproduccionMetrica.completo == True) | (ReproduccionMetrica.cuartil_50 == True), 1),
+                else_=0
             )
         ).label("validas_50"),
         func.avg(ReproduccionMetrica.porcentaje_completado).label("vcr_promedio"),
@@ -138,9 +138,9 @@ async def consolidar_por_hora(db: AsyncSession) -> dict:
         ReproduccionMetrica.banner_id,
         func.count(ReproduccionMetrica.id).label("eventos"),
         func.sum(
-            func.cast(
-                (ReproduccionMetrica.completo == True) | (ReproduccionMetrica.cuartil_50 == True),
-                Integer,
+            case(
+                ((ReproduccionMetrica.completo == True) | (ReproduccionMetrica.cuartil_50 == True), 1),
+                else_=0
             )
         ).label("validas"),
     ).where(

@@ -3048,7 +3048,7 @@ async def recibir_progreso_reproduccion(body: PlaybackProgressRequest):
             import json
             item = body.model_dump()
             item["_ts"] = datetime.now(timezone.utc).isoformat()
-            await reproducciones_redis.lpush("reproducciones:pending", json.dumps(item))
+            await reproducciones_redis.rpush("reproducciones:pending", json.dumps(item))
             await reproducciones_redis.expire("reproducciones:pending", 28800)
         return {"success": True}
     except Exception as e:

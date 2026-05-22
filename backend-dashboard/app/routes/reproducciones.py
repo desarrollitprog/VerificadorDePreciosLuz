@@ -80,9 +80,9 @@ async def recibir_batch_reproducciones(
                     existing.titulo = ev.titulo
                 if ev.duracion_total_seg is not None:
                     existing.duracion_total_seg = ev.duracion_total_seg
-                if ev.segundos_reproducidos is not None:
+                if ev.segundos_reproducidos is not None and (existing.segundos_reproducidos is None or ev.segundos_reproducidos > existing.segundos_reproducidos):
                     existing.segundos_reproducidos = ev.segundos_reproducidos
-                if ev.porcentaje_completado is not None:
+                if ev.porcentaje_completado is not None and (existing.porcentaje_completado is None or ev.porcentaje_completado > existing.porcentaje_completado):
                     existing.porcentaje_completado = ev.porcentaje_completado
                 if ev.cuartil_50:
                     existing.cuartil_50 = True

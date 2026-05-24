@@ -161,8 +161,14 @@ export async function getSecondaryServersVideoCounts(): Promise<SecondaryServerV
   }));
 }
 
-export async function startForceSyncJob(): Promise<ForceSyncJobStart> {
-  const response = await api.post('/monitoreo/sincronizar-fuerza');
+export async function startForceSyncJob(
+  servidor_ids?: number[],
+  dispositivo_ids?: string[]
+): Promise<ForceSyncJobStart> {
+  const response = await api.post('/monitoreo/sincronizar-fuerza', {
+    servidor_ids: servidor_ids && servidor_ids.length > 0 ? servidor_ids : undefined,
+    dispositivo_ids: dispositivo_ids && dispositivo_ids.length > 0 ? dispositivo_ids : undefined,
+  });
   return response.data as ForceSyncJobStart;
 }
 

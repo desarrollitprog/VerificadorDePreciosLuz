@@ -90,22 +90,26 @@
 | FASE 2 (Observabilidad) | 3/3 ✅ | 0/3 |
 | FASE 3 (Performance) | 3/3 ✅ | 0/3 |
 | FASE 4 (Code Quality) | 3/3 ✅ | 0/3 |
-| FASE 5 (Infraestructura) | 0/2 | 2/2 |
+| FASE 5 (Infraestructura) | 1/2 | 1/2 |
 | FASE 6 (Cambio Asignación) | 1/1 ✅ | 0/1 |
-| FASE 7 (Fix Asignaciones + Vigencia) | 2/5 | 3/5 |
+| FASE 7 (Fix Asignaciones + Vigencia) | 5/5 ✅ | 0/5 |
 | FASE 8 (Background Monitoring Sesiones) | 4/4 ✅ | 0/4 |
 | FASE 9 (Thumbnails Videos) | 6/6 ✅ | 0/6 |
 | FASE 10 (Limpieza Columnas) | 5/5 ✅ | 0/5 |
 | FASE 11 (Refactor Backend) | 3/3 ✅ | 0/3 |
 | FASE 12 (Frontend Base) | 2/2 ✅ | 0/2 |
-| FASE 13 (UX/UI) | 2/2 ✅ | 0/2 |
+| FASE 13 (UX/UI) | 3/3 ✅ | 0/3 |
 | FASE 14 (Pulido Visual) | 2/2 ✅ | 0/2 |
 | FASE 15 (Blindaje WebSocket) | 17/17 ✅ | 0/17 |
 | FASE 17 (Cola Dashboard) | 17/17 ✅ | 0/17 |
 | FASE 18 (Bots Mantenimiento) | 5/5 ✅ | 0/5 |
+| FASE 19 (Limpieza Caché Luzapp) | 5/5 ✅ | 0/5 |
+| FASE 20 (Panel Resumen) | 6/6 ✅ | 0/6 |
 | FASE 21 (Responsividad Móvil) | 17/17 ✅ | 0/17 |
+| FASE 22 (Categorización Dispositivos) | 36/36 ✅ | 0/36 |
+| FASE 23 (Análisis Pronóstico vs Real) | 0/2 | 2/2 |
 
-**Total: 105/106 completados (99%) — solo falta FASE 5.1 (backups manuales en servidor)**
+**Total: 151/154 completados (98.1%) — solo faltan FASE 5.1 (backups manuales en servidor) y FASE 23 (pendiente de implementar)**
 
 ---
 
@@ -273,7 +277,7 @@ DASHBOARD                      BACKEND-API                   LUZAPP
 |---|-------|--------|-----------|
 | 7.1 | Fix caso específico→específico | ✅ Completado | backend-dashboard/publicidad.py |
 | 7.2 | Fix estado "borrador" | ✅ Completado | backend-dashboard/publicidad.py |
-| 7.3 | Pre-validation (S1) - validar fechaFin antes de reproducir | ⏳ Pendiente | luzapp/ScanActivity.kt |
+| 7.3 | Pre-validation (S1) - validar fechaFin antes de reproducir | ✅ Completado | luzapp/ScanActivity.kt:1133-1147 |
 | 7.4 | Cache cleanup (S2) - eliminar banners vencidos | ✅ Completado | luzapp/BannerRepository.kt |
 | 7.5 | WebSocket push (S3) - invalidación inmediata | ✅ Completado | backend-api + luzapp |
 
@@ -313,7 +317,7 @@ fun cleanupExpiredBanners() {
 
 ---
 
-**Total: 13/19 completados (68%)** - FASE 7 suma 5 tareas adicionales
+**Total: 18/19 completados (95%)** - FASE 7 suma 5 tareas adicionales
 
 ---
 
@@ -413,7 +417,7 @@ crontab -e
 # Agregar: 0 3 * * * /home/user/scripts/backup_sqlserver.sh >> /var/log/backup.log 2>&1
 ```
 
-### Docker Multi-stage Build (Pendiente implementar)
+### Docker Multi-stage Build ✅ COMPLETADO
 - Reducir tamaño de imagen de ~900MB a ~250MB
 - Separar etapas de build y runtime
 
@@ -456,7 +460,7 @@ crontab -e
 | Tarea | Ubicación | Cómo |
 |-------|-----------|------|
 | Backups SQL Server | Servidor (manual) | Script + cron |
-| Docker Multi-stage | `backend-dashboard/Dockerfile` | Implementar build分开 |
+| Docker Multi-stage | `backend-dashboard/Dockerfile` | ✅ Completado |
 
 ---
 
@@ -548,12 +552,12 @@ nuevo_banner = Publicidad(..., ThumbnailUrl=thumbnail_url)
 
 ## Estado Actual: Progreso Total (FASES ORIGINALES)
 
-**Total: 37/40 completados (93%)**
+**Total: 39/40 completados (98%)**
 
 - FASE 1-4: ✅ Completas
-- FASE 5: ⏳ Pendiente (2 tareas manual en servidor)
+- FASE 5: 🔄 Parcial (1/2 — Docker multi-stage ✅, backups manual ⏳)
 - FASE 6: ✅ Completada
-- FASE 7: 🔄 Parcial (2/5, tareas luzapp pendientes)
+- FASE 7: ✅ Completada (5/5)
 - FASE 8: ✅ Completada
 - FASE 9: ✅ Completada
 - FASE 10: ✅ Completada
@@ -619,12 +623,12 @@ nuevo_banner = Publicidad(..., ThumbnailUrl=thumbnail_url)
 - ~~**Impacto**: Aprovecha robustez del backend (FASE 11)~~
 - ~~**Complejidad**: Media~~
 
-### 13.3 Visualización de Datos (`Recharts`) ❌ POSPUESTO
-- **Descripción**: Implementar gráficas de almacenamiento y uptime
-- **Impacto**: Transforma datos crudos en información visual
-- **Complejidad**: Media
-- **Dependencias**: recharts
-- **Nota**: Pos puesto para un módulo Dashboard aparte
+### 13.3 Visualización de Datos (`Recharts`) ✅ COMPLETADO
+- ~~**Descripción**: Implementar gráficas de almacenamiento y uptime~~
+- ~~**Impacto**: Transforma datos crudos en información visual~~
+- ~~**Complejidad**: Media~~
+- ~~**Dependencias**: recharts~~
+- ~~**Nota**: Implementado como parte de FASE 20 (Panel Resumen) con Recharts ^3.8.1~~
 
 ---
 
@@ -1088,7 +1092,7 @@ El dashboard no tiene visibilidad de la cola Redis en backend-api:
 |---|---------|--------|:------:|
 | 17.2.1 | `backend-api/app/main.py` | Nuevo `GET /api/queue-status/{device_id}` → `{ device_id, pending, inflight, total, pending_sync, pending_reboot }`. Auth via API key | ✅ |
 | 17.2.2 | `backend-dashboard/app/routes/monitoreo/sync.py` | Nuevo `GET /api/monitoreo/cola/{device_id}` → proxy a backend-api | ✅ |
-| 17.2.3 | `dashboard/components/ServerDashboard.tsx` | En cada dispositivo, badge "N pendientes" con tooltip. Naranja si > 0, gris si vacío | ⏳ Pendiente |
+| 17.2.3 | `dashboard/components/ServerDashboard.tsx` | En cada dispositivo, badge "N pendientes" con tooltip. Naranja si > 0, gris si vacío | ✅ Completado |
 
 ### Item 3: Notificar entrega exitosa desde la cola
 
@@ -1252,15 +1256,15 @@ En un K10-A7 con 3-4GB libres: **115-305MB = 3-10% del espacio disponible**. Est
 
 Con el hardware real (K10-A7 8GB + Android 7 + kioskos sin mantenimiento humano), **todos los items de FASE 19 son de rentabilidad Alta**. El almacenamiento es ajustado, los archivos físicos de banners vencidos nunca se limpian solos, y WorkManager no es confiable en Android 7.
 
-### Tareas Propuestas
+### Tareas Propuestas — ✅ COMPLETADO
 
-| # | Tarea | Rentabilidad | Enfoque | Nota |
-|---|-------|:------------:|---------|------|
-| 19.1 | Timer periódico en `ScanActivity` vía `Handler.postDelayed()` (cada 15-30 días) | 🟢 Alta | Borra banners + videos + backups JSON + SQLite. Sin WorkManager para compatibilidad K10-A7 | Mismo patrón que `scheduleDolarBCVRefresh()` |
-| 19.2 | Agregar `"WIPE_AND_RESYNC"` a comandos permitidos en backend-api | 🟢 Alta | `main.py:1297` — 1 línea | Habilita el comando desde el dashboard |
-| 19.3 | Endpoint `POST /dispositivos/{id}/purge` en backend-dashboard | 🟢 Alta | Mismo patrón que `reiniciar_dispositivo` | Proxy a backend-api |
-| 19.4 | Botón "Forzar purga" en dashboard React | 🟢 Alta | Modal confirmación + notificación toast | Misma UX que el botón Reiniciar |
-| 19.5 | Vincular timer de 19.1 en `ScanActivity.onCreate()` | 🟢 Alta | 1-2 líneas | Inicia el contador de 15-30 días |
+| # | Tarea | Rentabilidad | Estado | Ubicación |
+|---|-------|:------------:|--------|-----------|
+| 19.1 | Timer periódico en `ScanActivity` vía `Handler.postDelayed()` (cada 15-30 días) | 🟢 Alta | ✅ | `luzapp/.../ScanActivity.kt` |
+| 19.2 | Agregar `"WIPE_AND_RESYNC"` a comandos permitidos en backend-api | 🟢 Alta | ✅ | `backend-api/app/main.py:1472` |
+| 19.3 | Endpoint `POST /dispositivos/{id}/purge` en backend-dashboard | 🟢 Alta | ✅ | `backend-dashboard/app/services/device_service.py:241` |
+| 19.4 | Botón "Forzar purga" en dashboard React | 🟢 Alta | ✅ | `dashboard/components/ServerDashboard.tsx:312` |
+| 19.5 | Vincular timer de 19.1 en `ScanActivity.onCreate()` | 🟢 Alta | ✅ | `luzapp/.../ScanActivity.kt` |
 
 ### Flujo completo del dashboard trigger
 
@@ -1386,26 +1390,26 @@ El dashboard no tiene una vista unificada del estado del sistema:
 
 | # | Archivo | Cambio | Estado |
 |---|---------|--------|:------:|
-| 20.1.1 | `backend-dashboard/app/routes/resumen.py` | Crear nuevo archivo con GET /api/resumen → SQL queries agregadas + response model | ⏳ |
-| 20.1.2 | `backend-dashboard/app/main.py` | `include_router(resumen_router, prefix="/api")` | ⏳ |
+| 20.1.1 | `backend-dashboard/app/routes/resumen.py` | Crear nuevo archivo con GET /api/resumen → SQL queries agregadas + response model | ✅ |
+| 20.1.2 | `backend-dashboard/app/main.py` | `include_router(resumen_router, prefix="/api")` | ✅ |
 
-### Item 2: Instalación de Recharts
+### Item 2: Instalación de Recharts ✅ COMPLETADO
 
 **Descripción**: Agregar librería de gráficas al frontend. Se elige `recharts` por su API declarativa React y buena integración con Tailwind.
 
 | # | Archivo | Cambio | Estado |
 |---|---------|--------|:------:|
-| 20.2.1 | `dashboard/package.json` | `npm install recharts` → dependencia agregada | ⏳ |
+| 20.2.1 | `dashboard/package.json` | `npm install recharts` → dependencia agregada | ✅ |
 
-### Item 3: Servicio frontend `resumenService.ts`
+### Item 3: Servicio frontend `resumenService.ts` ✅ COMPLETADO
 
 **Descripción**: Tipado TypeScript completo para la respuesta del endpoint + función `fetchResumen()` con tipado estricto.
 
 | # | Archivo | Cambio | Estado |
 |---|---------|--------|:------:|
-| 20.3.1 | `dashboard/services/resumenService.ts` | Crear: interfaces `ResumenData`, `ServidorResumen`, `BannersPorServidor`, `HistorialSubida` + `fetchResumen()` → `GET /api/resumen` | ⏳ |
+| 20.3.1 | `dashboard/services/resumenService.ts` | Crear: interfaces `ResumenData`, `ServidorResumen`, `BannersPorServidor`, `HistorialSubida` + `fetchResumen()` → `GET /api/resumen` | ✅ |
 
-### Item 4: Componentes visuales del resumen
+### Item 4: Componentes visuales del resumen ✅ COMPLETADO
 
 **Descripción**: 5 componentes React que conforman las visualizaciones del panel.
 
@@ -1419,13 +1423,13 @@ El dashboard no tiene una vista unificada del estado del sistema:
 
 | # | Archivos | Estado |
 |---|----------|:------:|
-| 20.4.1 | `dashboard/components/resumen/KpiCard.tsx` | ⏳ |
-| 20.4.2 | `dashboard/components/resumen/ServerStorageChart.tsx` | ⏳ |
-| 20.4.3 | `dashboard/components/resumen/DeviceStatusChart.tsx` | ⏳ |
-| 20.4.4 | `dashboard/components/resumen/BannersTimeline.tsx` | ⏳ |
-| 20.4.5 | `dashboard/components/resumen/ServerMiniTable.tsx` | ⏳ |
+| 20.4.1 | `dashboard/components/resumen/KpiCard.tsx` | ✅ |
+| 20.4.2 | `dashboard/components/resumen/ServerStorageChart.tsx` | ✅ |
+| 20.4.3 | `dashboard/components/resumen/DeviceStatusChart.tsx` | ✅ |
+| 20.4.4 | `dashboard/components/resumen/BannersTimeline.tsx` | ✅ |
+| 20.4.5 | `dashboard/components/resumen/ServerMiniTable.tsx` | ✅ |
 
-### Item 5: Pantalla `ResumenScreen.tsx`
+### Item 5: Pantalla `ResumenScreen.tsx` ✅ COMPLETADO
 
 **Descripción**: Orquestador del panel resumen. Layout en grid responsivo.
 
@@ -1452,66 +1456,31 @@ El dashboard no tiene una vista unificada del estado del sistema:
 
 | # | Archivo | Cambio | Estado |
 |---|---------|--------|:------:|
-| 20.5.1 | `dashboard/screens/ResumenScreen.tsx` | Crear: orquestador con useEffect + setInterval 60s, grid layout, loading/error states | ⏳ |
+| 20.5.1 | `dashboard/screens/ResumenScreen.tsx` | Crear: orquestador con useEffect + setInterval 60s, grid layout, loading/error states | ✅ |
 
-### Item 6: Migración de rutas
+### Item 6: Migración de rutas ✅ COMPLETADO
 
 **Descripción**: El panel resumen reemplaza la landing page `/`. La lista de videos se mueve a `/videos`.
 
 | # | Archivo | Cambio | Estado |
 |---|---------|--------|:------:|
-| 20.6.1 | `dashboard/App.tsx` | `/` → `<ResumenScreen />`, `/videos` → `<DashboardScreen />` | ⏳ |
-| 20.6.2 | `dashboard/components/Sidebar.tsx` | Agregar "Resumen" (LayoutDashboard) primero, cambiar "Mis Videos" a `/videos`, role: all | ⏳ |
+| 20.6.1 | `dashboard/App.tsx` | `/` → `<ResumenScreen />`, `/videos` → `<DashboardScreen />` | ✅ |
+| 20.6.2 | `dashboard/components/Sidebar.tsx` | Agregar "Resumen" (LayoutDashboard) primero, cambiar "Mis Videos" a `/videos`, role: all | ✅ |
 
-### Orden de implementación sugerido
+### Nota
 
-```
-Paso 1 (Backend endpoint)  → sin frontend, verificable con curl
-Paso 2 (Router main.py)    → 1 línea, depende de Paso 1
-Paso 3 (npm install)       → independiente
-Paso 4 (resumenService)    → depende de Paso 1+2
-Paso 5-9 (componentes)     → independientes entre sí, dependen de Paso 4
-Paso 10 (ResumenScreen)    → depende de Paso 5-9
-Paso 11 (rutas + sidebar)  → depende de Paso 10
-Paso 12 (documentación)    → último
-```
-
-### Archivos a modificar (resumen)
-
-| Archivo | Acción |
-|---------|--------|
-| `backend-dashboard/app/routes/resumen.py` | ✚ Nuevo — endpoint `GET /api/resumen` |
-| `backend-dashboard/app/main.py` | ✎ 2 líneas — import + include_router |
-| `dashboard/package.json` | ✎ Agregar `recharts` |
-| `dashboard/services/resumenService.ts` | ✚ Nuevo — tipado + fetchResumen() |
-| `dashboard/components/resumen/KpiCard.tsx` | ✚ Nuevo — KPI animado |
-| `dashboard/components/resumen/ServerStorageChart.tsx` | ✚ Nuevo — barras recharts |
-| `dashboard/components/resumen/DeviceStatusChart.tsx` | ✚ Nuevo — donut recharts |
-| `dashboard/components/resumen/BannersTimeline.tsx` | ✚ Nuevo — área recharts |
-| `dashboard/components/resumen/ServerMiniTable.tsx` | ✚ Nuevo — tabla compacta |
-| `dashboard/screens/ResumenScreen.tsx` | ✚ Nuevo — pantalla principal |
-| `dashboard/App.tsx` | ✎ Reemplazar ruta `/` + agregar `/videos` |
-| `dashboard/components/Sidebar.tsx` | ✎ Agregar "Resumen" + cambiar path "Mis Videos" |
+Todos los items de FASE 20 fueron completados. La carpeta `dashboard/components/resumen/` contiene 7 componentes (los 5 originales + `ReproductionTrendChart.tsx` + `BannerMetricsTable.tsx` de FASE 22.6).
 
 ---
 
-## Prioridades de Implementación (Pendientes)
+## Prioridades de Implementación (Pendientes Reales)
 
 | Prioridad | Item | Fase | Dónde | Dependencias |
 |-----------|------|------|-------|-------------|
-| 🟢 **1** | Badge "N pendientes" en ServerDashboard | FASE 17.2.3 | dashboard/components/ServerDashboard.tsx | ✅ |
-| 🟢 **2** | Bot `limpiar_sesiones` (90 días, c/15d) | FASE 18 | backend-dashboard | ✅ |
-| 🟢 **3** | Bot `limpiar_notificaciones` (15 días, c/15d) | FASE 18 | backend-dashboard | ✅ |
-| 🟢 **4** | Bot `limpiar_archivos` (c/24h) | FASE 18 | backend-dashboard | ✅ |
-| 🟢 **5** | Bot `limpiar_redis_stale` (TTL 48h) | FASE 18 | backend-api + dashboard | ✅ |
-| 🟢 **6** | Bot `limpiar_banners_api` (c/24h) | FASE 18 | backend-api | ✅ |
-| 🟢 **7** | Control vigencia luzapp (S2, S3) | FASE 7.4-7.5 | luzapp + backend-api | ✅ |
-| 🟢 **8** | Backups SQL Server (manual) | FASE 5.1 | servidor | — |
-| 🟢 **9** | Docker multi-stage build | FASE 5.3 | Dockerfile | ✅ |
-| ⚪ **10** | Versión Objetivo (FASE 15.5) | FASE 15 Lote 5 | backend-api + luzapp | largo plazo |
-| 🟢 **11** | Dashboard trigger purge (19.2-19.4) | FASE 19 | backend-api + dashboard + luzapp | ✅ |
-| 🟢 **12** | Timer periódico Handler ScanActivity (19.1, 19.5) | FASE 19 | luzapp | ✅ |
-| 🟢 **13** | Panel Resumen Dashboard | FASE 20 | backend-dashboard + dashboard | recharts |
+| 🟢 **1** | Backups SQL Server (manual) | FASE 5.1 | servidor | — |
+| 🟢 **2** | Endpoint `GET /api/reproducciones/analisis` | FASE 23.1 | backend-dashboard | metricas_service.py ✅ |
+| 🟢 **3** | Componente frontend "Pronóstico vs Real" | FASE 23.2 | dashboard | endpoint 23.1 ✅ |
+| ⚪ **4** | Versión Objetivo (FASE 15.5) | FASE 15 Lote 5 | backend-api + luzapp | largo plazo |
 
 ---
 
@@ -1522,14 +1491,16 @@ Paso 12 (documentación)    → último
 | Originales | 1-10 | 39/40 (98%) | 1/40 |
 | Refactor Backend | 11 | 3/3 ✅ (100%) | 0/3 |
 | Frontend Base | 12 | 2/2 ✅ (100%) | 0/2 |
-| UX/UI | 13-14 | 5/5 ✅ (100%) | 0/5 |
+| UX/UI + Recharts | 13-14 | 5/5 ✅ (100%) | 0/5 |
 | Blindaje WebSocket | 15 | 17/17 ✅ (100%) | 0/17 |
-| Cola Dashboard | 17 | 17/17 ✅ (100%) | 0/17 |
+| Cola Dashboard + Badge | 17 | 17/17 ✅ (100%) | 0/17 |
 | Bots Mantenimiento | 18 | 5/5 ✅ (100%) | 0/5 |
-| Limpieza Caché Luzapp | 19 | 0/5 (0%) | 5/5 |
-| Panel Resumen | 20 | 0/5 (0%) | 5/5 |
+| Limpieza Caché Luzapp | 19 | 5/5 ✅ (100%) | 0/5 |
+| Panel Resumen | 20 | 6/6 ✅ (100%) | 0/6 |
 | Responsividad Móvil | 21 | 17/17 ✅ (100%) | 0/17 |
-| **TOTAL** | **1-21** | **105/116 (91%)** | **11/116** |
+| Categorización Dispositivos | 22 | 36/36 ✅ (100%) | 0/36 |
+| Análisis Pronóstico vs Real | 23 | 0/2 ⏳ | 2/2 |
+| **TOTAL** | **1-23** | **151/154 (98.1%)** | **3/154** |
 
 ---
 
@@ -1613,68 +1584,69 @@ Lote 3 (BAJA)  → 3 cambios opcionales, impacto menor
 
 ---
 
-### Fase 22.1 — Identificación de Tipo de Dispositivo
+### Fase 22.1 — Identificación de Tipo de Dispositivo ✅ COMPLETADO
 
 **Android — DeviceTypeHelper simplificado:**
-- Refactor `isTv()` booleano → `detectDeviceType()` retornando enum `TELEVISOR` | `VERIFICADOR`
-- Lógica: si `Build.MANUFACTURER.equals("amazon", ignoreCase = true)` → `TELEVISOR`, si no → `VERIFICADOR`
-- Se reutiliza el `isAmazon` existente, no se agregan nuevas comprobaciones
+- ~~Refactor `isTv()` booleano → `detectDeviceType()` retornando enum `TELEVISOR` | `VERIFICADOR`~~
+- ~~Lógica: si `Build.MANUFACTURER.equals("amazon", ignoreCase = true)` → `TELEVISOR`, si no → `VERIFICADOR`~~
+- ~~Se reutiliza el `isAmazon` existente, no se agregan nuevas comprobaciones~~
 
 | # | Tarea | Estado | Ubicación |
 |---|-------|--------|-----------|
-| 22.1.1 | Refactor `DeviceTypeHelper.kt`: `isTv()` → `detectDeviceType(): DeviceType` con enum | ⏳ Pendiente | `luzapp/.../util/DeviceTypeHelper.kt` |
-| 22.1.2 | Enviar `device_type` en mensaje WebSocket IDENTIFY usando `detectDeviceType(this).name.lowercase()` | ⏳ Pendiente | `luzapp/.../ui/scanner/ScanActivity.kt:1997-2000` |
-| 22.1.3 | Actualizar `KioskService.kt` para usar nuevo enum (`!= TELEVISOR` en vez de `!isTv()`) | ⏳ Pendiente | `luzapp/.../KioskService.kt:28` |
-| 22.1.4 | Actualizar `BootReceiver.kt` para usar nuevo enum (`== TELEVISOR` en vez de `isTv()`) | ⏳ Pendiente | `luzapp/.../BootReceiver.kt:15` |
-| 22.1.5 | Loggear `Build.MANUFACTURER`, `MODEL`, `PRODUCT`, `BOARD` en `ScanActivity.onCreate()` para calibración | ⏳ Pendiente | `luzapp/.../ui/scanner/ScanActivity.kt` |
+| 22.1.1 | Refactor `DeviceTypeHelper.kt`: `isTv()` → `detectDeviceType(): DeviceType` con enum | ✅ Completado | `luzapp/.../util/DeviceTypeHelper.kt:11` |
+| 22.1.2 | Enviar `device_type` en mensaje WebSocket IDENTIFY usando `detectDeviceType(this).name.lowercase()` | ✅ Completado | `luzapp/.../ui/scanner/ScanActivity.kt:2186` |
+| 22.1.3 | Actualizar `KioskService.kt` para usar nuevo enum (`!= TELEVISOR` en vez de `!isTv()`) | ✅ Completado | `luzapp/.../KioskService.kt:28` |
+| 22.1.4 | Actualizar `BootReceiver.kt` para usar nuevo enum (`== TELEVISOR` en vez de `isTv()`) | ✅ Completado | `luzapp/.../BootReceiver.kt:15` |
+| 22.1.5 | Loggear `Build.MANUFACTURER`, `MODEL`, `PRODUCT`, `BOARD` en `ScanActivity.onCreate()` para calibración | ✅ Completado | `luzapp/.../ui/scanner/ScanActivity.kt` |
 
-### Fase 22.2 — Backend: Almacenar `device_type`
+### Fase 22.2 — Backend: Almacenar `device_type` ✅ COMPLETADO
 
 | # | Tarea | Estado | Ubicación |
 |---|-------|--------|-----------|
-| 22.2.1 | Extraer `device_type` del mensaje IDENTIFY y pasarlo a `upsert_heartbeat()` | ⏳ Pendiente | `backend-api/app/main.py:1776` |
-| 22.2.2 | Modificar `DeviceStateStore.upsert_heartbeat()` para incluir `device_type` en hash de Redis | ⏳ Pendiente | `backend-api/app/services/device_state.py:48-68` |
-| 22.2.3 | Modelo `Dispositivo`: agregar columna `tipo = Column(String(20), nullable=False, default="verificador")` | ⏳ Pendiente | `backend-dashboard/app/models/dispositivo.py` |
-| 22.2.4 | En `monitoreo_service.py`, al auto-crear un `Dispositivo`, leer `device_type` desde runtime y guardarlo | ⏳ Pendiente | `backend-dashboard/app/services/monitoreo_service.py` |
-| 22.2.5 | Migración BD: `ALTER TABLE dispositivos ADD tipo VARCHAR(20) NOT NULL DEFAULT 'verificador'` | ⏳ Pendiente | SQL Server |
-| 22.2.6 | Incluir `tipo` en respuesta de `/status-detalle` por dispositivo | ⏳ Pendiente | `backend-dashboard/app/routes/monitoreo/servers.py:227-241` |
-| 22.2.7 | Endpoint `PATCH /api/dispositivos/{id}/tipo` para override manual desde dashboard | ⏳ Pendiente | `backend-dashboard/app/routes/monitoreo/devices.py` |
-| 22.2.8 | Incluir desglose `verificadores`/`televisores` en endpoint `/resumen` | ⏳ Pendiente | `backend-dashboard/app/routes/resumen.py` |
+| 22.2.1 | Extraer `device_type` del mensaje IDENTIFY y pasarlo a `upsert_heartbeat()` | ✅ Completado | `backend-api/app/main.py:1776` |
+| 22.2.2 | Modificar `DeviceStateStore.upsert_heartbeat()` para incluir `device_type` en hash de Redis | ✅ Completado | `backend-api/app/services/device_state.py:48-68` |
+| 22.2.3 | Modelo `Dispositivo`: agregar columna `tipo = Column(String(20), nullable=False, default="verificador")` | ✅ Completado | `backend-dashboard/app/models/dispositivo.py:16` |
+| 22.2.4 | En `monitoreo_service.py`, al auto-crear un `Dispositivo`, leer `device_type` desde runtime y guardarlo | ✅ Completado | `backend-dashboard/app/services/monitoreo_service.py` |
+| 22.2.5 | Migración BD: `ALTER TABLE dispositivos ADD tipo VARCHAR(20) NOT NULL DEFAULT 'verificador'` | ✅ Completado | SQL Server |
+| 22.2.6 | Incluir `tipo` en respuesta de `/status-detalle` por dispositivo | ✅ Completado | `backend-dashboard/app/routes/monitoreo/servers.py:239` |
+| 22.2.7 | Endpoint `PATCH /api/dispositivos/{id}/tipo` para override manual desde dashboard | ✅ Completado | `backend-dashboard/app/routes/monitoreo/devices.py:43-68` |
+| 22.2.8 | Incluir desglose `verificadores`/`televisores` en endpoint `/resumen` | ✅ Completado | `backend-dashboard/app/routes/resumen.py` |
 
-### Fase 22.3 — Pipeline de Métricas de Reproducción
+### Fase 22.3 — Pipeline de Métricas de Reproducción ✅ COMPLETADO
 
 **Android — Reporte por cuartiles:**
-- `PLAYBACK_START` al iniciar video
-- `PLAYBACK_PROGRESS` periódico (% reproducido, cuartiles alcanzados)
-- `PLAYBACK_COMPLETED` en `onCompletion`
-- `PLAYBACK_INTERRUPTED` al escanear (con segundos reproducidos)
-- Debounce de 5s entre reportes para evitar spam
+- ~~`PLAYBACK_START` al iniciar video~~
+- ~~`PLAYBACK_PROGRESS` periódico (% reproducido, cuartiles alcanzados)~~
+- ~~`PLAYBACK_COMPLETED` en `onCompletion`~~
+- ~~`PLAYBACK_INTERRUPTED` al escanear (con segundos reproducidos)~~
+- ~~Debounce de 5s entre reportes para evitar spam~~
 
 | # | Tarea | Estado | Ubicación |
 |---|-------|--------|-----------|
-| 22.3.1 | Enviar `PLAYBACK_START` con `banner_id`, `duracion_total` al iniciar reproducción | ⏳ Pendiente | `luzapp/.../ui/scanner/ScanActivity.kt:playStandbyItem()` |
-| 22.3.2 | Timer periódico que calcula % reproducido y envía `PLAYBACK_PROGRESS` con cuartiles alcanzados | ⏳ Pendiente | `luzapp/.../ui/scanner/ScanActivity.kt:startVideoPlayback()` |
-| 22.3.3 | Enviar `PLAYBACK_COMPLETED` en `setOnCompletionListener` | ⏳ Pendiente | `luzapp/.../ui/scanner/ScanActivity.kt:1106` |
-| 22.3.4 | Enviar `PLAYBACK_INTERRUPTED` cuando el carrusel se detiene por escaneo (con segundos reproducidos) | ⏳ Pendiente | `luzapp/.../ui/scanner/ScanActivity.kt:stopStandbyCarousel()` |
-| 22.3.5 | Handler WebSocket en backend-api para `PLAYBACK_START/PROGRESS/COMPLETED/INTERRUPTED` | ⏳ Pendiente | `backend-api/app/main.py:2882-2893` |
-| 22.3.6 | Almacenar métricas en Redis (TTL corto 600s) mientras dura la reproducción | ⏳ Pendiente | `backend-api/app/services/device_state.py` |
-| 22.3.7 | Nuevo endpoint `POST /api/reproducciones` en backend-dashboard para ingesta de métricas | ⏳ Pendiente | `backend-dashboard/app/routes/reproducciones.py` |
+| 22.3.1 | Enviar `PLAYBACK_START` con `banner_id`, `duracion_total` al iniciar reproducción | ✅ Completado | `luzapp/.../ScanActivity.kt:1233` (usa string "START") |
+| 22.3.2 | Timer periódico que calcula % reproducido y envía `PLAYBACK_PROGRESS` con cuartiles alcanzados | ✅ Completado | `luzapp/.../ScanActivity.kt:1752-1779` |
+| 22.3.3 | Enviar `PLAYBACK_COMPLETED` en `setOnCompletionListener` | ✅ Completado | `luzapp/.../ScanActivity.kt:1197,1247,1356` |
+| 22.3.4 | Enviar `PLAYBACK_INTERRUPTED` cuando el carrusel se detiene por escaneo (con segundos reproducidos) | ✅ Completado | `luzapp/.../ScanActivity.kt:1208,1370` |
+| 22.3.5 | Handler WebSocket en backend-api para eventos de reproducción | ✅ Completado | `backend-api/app/main.py` |
+| 22.3.6 | Almacenar métricas en Redis (TTL corto 600s) mientras dura la reproducción | ✅ Completado | `backend-api/app/services/device_state.py` |
+| 22.3.7 | Nuevo endpoint `POST /api/reproducciones` en backend-dashboard para ingesta de métricas | ✅ Completado | `backend-dashboard/app/routes/reproducciones.py` |
+| — | ApiService.kt: `PlaybackProgressRequest` data class + endpoint retrofitted | ✅ Completado | `luzapp/.../data/network/ApiService.kt:61-110` |
 
-### Fase 22.4 — Nuevo Modelo `ReproduccionMetrica`
-
-| # | Tarea | Estado | Ubicación |
-|---|-------|--------|-----------|
-| 22.4.1 | Crear modelo `ReproduccionMetrica` con campos: `dispositivo_id`, `banner_id`, `titulo`, `tipo`, `duracion_total_seg`, `inicio_reproduccion`, `fin_reproduccion`, `segundos_reproducidos`, `completo`, `porcentaje_completado`, `cuartil_25/50/75/100`, `motivo_fin` | ⏳ Pendiente | `backend-dashboard/app/models/reproduccion_metrica.py` |
-| 22.4.2 | Migración BD: `CREATE TABLE reproducciones_metricas (...)` | ⏳ Pendiente | SQL Server |
-
-### Fase 22.5 — Endpoint de Métricas para Dashboard
+### Fase 22.4 — Nuevo Modelo `ReproduccionMetrica` ✅ COMPLETADO
 
 | # | Tarea | Estado | Ubicación |
 |---|-------|--------|-----------|
-| 22.5.1 | Endpoint `GET /api/reproducciones/resumen-diario` — retorna: `hoy {}`, `ayer {}`, `banners[]` con métricas por banner | ⏳ Pendiente | `backend-dashboard/app/routes/reproducciones.py` |
-| 22.5.2 | Servicio `metricas_service.py` con lógica de consolidación (cálculo VCR, impresiones válidas >50%, agrupación por banner) | ⏳ Pendiente | `backend-dashboard/app/services/metricas_service.py` |
+| 22.4.1 | Crear modelo `ReproduccionMetrica` con campos completos | ✅ Completado | `backend-dashboard/app/models/reproduccion_metrica.py` |
+| 22.4.2 | Migración BD: `CREATE TABLE reproducciones_metricas (...)` | ✅ Completado | SQL Server |
 
-### Fase 22.6 — Dashboard: ResumenScreen — Sección Reproducciones
+### Fase 22.5 — Endpoint de Métricas para Dashboard ✅ COMPLETADO
+
+| # | Tarea | Estado | Ubicación |
+|---|-------|--------|-----------|
+| 22.5.1 | Endpoint `GET /api/reproducciones/resumen-diario` — retorna: `hoy {}`, `ayer {}`, `banners[]` con métricas por banner | ✅ Completado | `backend-dashboard/app/routes/reproducciones.py` |
+| 22.5.2 | Servicio `metricas_service.py` con lógica de consolidación (VCR, impresiones válidas >50%, agrupación por banner) | ✅ Completado | `backend-dashboard/app/services/metricas_service.py:11` (resumen_diario), `:98` (tendencia_14d), `:134` (consolidar_por_hora), `:162` (limpiar_metricas_antiguas) |
+
+### Fase 22.6 — Dashboard: ResumenScreen — Sección Reproducciones ✅ COMPLETADO
 
 Agregar al final del `ResumenScreen.tsx`, colapsado por defecto, con carga lazy.
 
@@ -1694,61 +1666,157 @@ Agregar al final del `ResumenScreen.tsx`, colapsado por defecto, con carga lazy.
 
 | # | Tarea | Estado | Ubicación |
 |---|-------|--------|-----------|
-| 22.6.1 | Componente `ReproductionTrendChart.tsx`: línea de tendencia 14 días TV + VER con Recharts | ⏳ Pendiente | `dashboard/components/resumen/ReproductionTrendChart.tsx` |
-| 22.6.2 | Componente `BannerMetricsTable.tsx`: tabla completa de banners paginada y ordenable | ⏳ Pendiente | `dashboard/components/resumen/BannerMetricsTable.tsx` |
-| 22.6.3 | Integrar sección "Reproducciones" colapsable al final de `ResumenScreen.tsx` | ⏳ Pendiente | `dashboard/screens/ResumenScreen.tsx` |
-| 22.6.4 | Actualizar `resumenService.ts` con tipos para métricas y función `fetchReproduccionesResumenDiario()` | ⏳ Pendiente | `dashboard/services/resumenService.ts` |
+| 22.6.1 | Componente `ReproductionTrendChart.tsx`: línea de tendencia 14 días TV + VER con Recharts | ✅ Completado | `dashboard/components/resumen/ReproductionTrendChart.tsx` |
+| 22.6.2 | Componente `BannerMetricsTable.tsx`: tabla completa de banners paginada y ordenable | ✅ Completado | `dashboard/components/resumen/BannerMetricsTable.tsx` |
+| 22.6.3 | Integrar sección "Reproducciones" colapsable al final de `ResumenScreen.tsx` | ✅ Completado | `dashboard/screens/ResumenScreen.tsx` |
+| 22.6.4 | Actualizar `resumenService.ts` con tipos para métricas y función `fetchReproduccionesResumenDiario()` | ✅ Completado | `dashboard/services/resumenService.ts` |
 
-### Fase 22.7 — Dashboard: Categorías en ServerDashboard
+### Fase 22.7 — Dashboard: Categorías en ServerDashboard ✅ COMPLETADO
 
 | # | Tarea | Estado | Ubicación |
 |---|-------|--------|-----------|
-| 22.7.1 | Agregar `tipo` al interface `DeviceStatus` en `monitoreoService.ts` | ⏳ Pendiente | `dashboard/services/monitoreoService.ts` |
-| 22.7.2 | Badge de tipo (`📺 TV` / `🔍 VER`) en cada dispositivo listado en ServerDashboard | ⏳ Pendiente | `dashboard/components/ServerDashboard.tsx` |
-| 22.7.3 | Filtro por tipo (dropdown: Todos / Verificadores / Televisores) en barra de herramientas | ⏳ Pendiente | `dashboard/components/ServerDashboard.tsx` |
-| 22.7.4 | Modal para cambiar tipo de dispositivo (radio buttons: Verificador | Televisor) | ⏳ Pendiente | `dashboard/components/ServerDashboard.tsx` |
+| 22.7.1 | Agregar `tipo` al interface `DeviceStatus` en `monitoreoService.ts` | ✅ Completado | `dashboard/services/monitoreoService.ts` |
+| 22.7.2 | Badge de tipo (`TV` / `VER`) en cada dispositivo listado en ServerDashboard | ✅ Completado | `dashboard/components/ServerDashboard.tsx:661-665` |
+| 22.7.3 | Filtro por tipo (dropdown: Todos / Verificadores / Televisores) en barra de herramientas | ✅ Completado | `dashboard/components/ServerDashboard.tsx:96, 566-567` |
+| 22.7.4 | Modal para cambiar tipo de dispositivo (radio buttons: Verificador | Televisor) | ✅ Completado | `dashboard/components/ServerDashboard.tsx:1180-1254` |
 
 ### Fase 22.8 — Scheduler: Cómputos Periódicos
 
 | # | Tarea | Estado | Ubicación |
 |---|-------|--------|-----------|
-| 22.8.1 | Tarea `computar_metricas_televisores()` cada 3.5 min: calcular impresiones estimadas para TVs | ⏳ Pendiente | `backend-dashboard/app/scheduler.py` |
-| 22.8.2 | Tarea `consolidar_reproducciones_hora()` cada hora: agrupar métricas por hora para reportes | ⏳ Pendiente | `backend-dashboard/app/scheduler.py` |
-| 22.8.3 | Tarea `limpiar_metricas_antiguas()` cada 24h: borrar métricas >90 días | ⏳ Pendiente | `backend-dashboard/app/scheduler.py` |
+| 22.8.1 | Tarea ~~`computar_metricas_televisores()` cada 3.5 min: calcular impresiones estimadas para TVs~~ | ~~No necesario —~~ TVs ya reportan eventos reales vía pipeline 22.3-22.6, el `ReproductionTrendChart` ya muestra datos reales | `backend-dashboard/app/scheduler.py` |
+| 22.8.2 | Tarea `consolidar_reproducciones_hora()` cada hora: agrupar métricas por hora para reportes | ✅ Completado | `backend-dashboard/app/scheduler.py:77-88` (como `consolidar_por_hora`) |
+| 22.8.3 | Tarea `limpiar_metricas_antiguas()` cada 24h: borrar métricas >90 días | ✅ Completado | `backend-dashboard/app/scheduler.py:91-101` |
 
-### Orden de implementación sugerido
+### Nota
 
+FASE 22 está completamente implementada (36/36). 22.8.1 se marcó como no necesario porque las TVs ya reportan eventos reales vía el pipeline 22.3-22.6 y el `ReproductionTrendChart` ya muestra datos reales sin necesidad de estimación. La implementación usa nombres de evento tipo `"START"`, `"PROGRESS"`, `"COMPLETED"`, `"INTERRUPTED"` (strings planas) en lugar de constantes `PLAYBACK_*`, pero la funcionalidad es idéntica al plan.
+
+---
+
+## FASE 23: Análisis de Pronóstico vs Real (Impresiones Estimadas)
+
+*Prioridad: Media | Objetivo: Proveer una herramienta de análisis que compare las reproducciones estimadas (basadas en tiempo aire y duración de banners) contra las reproducciones reales reportadas, para detectar banners/TVs con bajo rendimiento.*
+
+### Problema identificado
+
+Actualmente el sistema muestra métricas reales de reproducción pero no hay forma de saber si un banner está rindiendo por debajo de lo esperado. No existe una línea base teórica contra la cual comparar.
+
+### Solución propuesta
+
+Endpoint de análisis que calcula **impresiones estimadas** por banner basándose en:
+
+- TVs online + su uptime del día (`DispositivoSesion`)
+- Banners activos asignados a cada TV (`PublicidadAsignacion`)
+- Duración de cada banner (promedio histórico desde `ReproduccionMetrica.duracion_total_seg`, con fallback 10s imagen / 15s video)
+- Cálculo: `estimado_por_banner = Σ( uptime_tv / ciclo_total )` para cada TV asignada
+
+Compara contra las reproducciones reales y retorna fill rate, gap, y desglose por banner y TV.
+
+### Tareas de FASE 23
+
+| # | Tarea | Estado | Ubicación |
+|---|-------|--------|-----------|
+| 23.1 | Endpoint `GET /api/reproducciones/analisis?fecha=` con algoritmo de estimación + respuesta con resumen, banners[] y tvs[] | ⏳ Pendiente | `backend-dashboard/app/services/metricas_service.py` + `backend-dashboard/app/routes/reproducciones.py` |
+| 23.2 | Componente frontend "Pronóstico vs Real": tabla comparativa de banners con fill rate, gap, barras visuales + desglose por TV | ⏳ Pendiente | `dashboard/components/resumen/AnalisisEstimadoSection.tsx` + `dashboard/screens/ResumenScreen.tsx` + `dashboard/services/resumenService.ts` |
+
+### Especificaciones técnicas
+
+**Endpoint:**
 ```
-Paso 1  → FASE 22.1 (identificación Android) — sin backend, solo refactor
-Paso 2  → FASE 22.2 (backend almacena device_type) — depende de Paso 1
-Paso 3  → FASE 22.7 (dashboard muestra categorías) — depende de Paso 2
-Paso 4  → FASE 22.3 (Android reporta métricas) — paralelo al resto
-Paso 5  → FASE 22.4 (modelo ReproduccionMetrica) — depende de Paso 4
-Paso 6  → FASE 22.5 (endpoint resumen-diario) — depende de Paso 4+5
-Paso 7  → FASE 22.6 (dashboard sección reproducciones) — depende de Paso 5+6
-Paso 8  → FASE 22.8 (scheduler) — último, depende del resto
+GET /api/reproducciones/analisis?fecha=2026-05-23
 ```
 
-### Archivos a modificar/crear (resumen)
+**Algoritmo de estimación (por TV):**
+```
+Por cada TV online en la fecha:
+  uptime = segundos con sesión activa (DispositivoSesion)
+  banners_asignados = active banners via PublicidadAsignacion o asignacion_todos
+  duraciones = [avg(ReproduccionMetrica.duracion_total_seg) por banner_id] o default
+  ciclo_total = sum(duraciones)
+  si ciclo_total > 0:
+    por cada banner: estimado += uptime / ciclo_total
 
-| Capa | Archivo | Acción |
-|---|---|---|
-| **Android** | `util/DeviceTypeHelper.kt` | ✎ Refactor a enum |
-| | `ui/scanner/ScanActivity.kt` | ✎ IDENTIFY + reportes cuartil |
-| | `KioskService.kt` | ✎ Usar nuevo enum |
-| | `BootReceiver.kt` | ✎ Usar nuevo enum |
-| **Backend-API** | `app/main.py` | ✎ Handler IDENTIFY + PLAYBACK_PROGRESS/START/COMPLETED/INTERRUPTED |
-| | `app/services/device_state.py` | ✎ Almacenar `device_type` en Redis |
-| **Backend-Dashboard** | `app/models/dispositivo.py` | ✎ +`tipo` column |
-| | `app/models/reproduccion_metrica.py` | ✚ **Nuevo** |
-| | `app/routes/reproducciones.py` | ✚ **Nuevo** |
-| | `app/routes/monitoreo/devices.py` | ✎ `PATCH /tipo` |
-| | `app/routes/resumen.py` | ✎ Desglose por tipo |
-| | `app/services/metricas_service.py` | ✚ **Nuevo** |
-| | `app/scheduler.py` | ✎ Nuevas tareas |
-| **Frontend** | `services/monitoreoService.ts` | ✎ +`tipo` en `DeviceStatus` |
-| | `services/resumenService.ts` | ✎ Tipos métricas + fetch |
-| | `components/ServerDashboard.tsx` | ✎ Badge, filtro, modal cambio tipo |
-| | `screens/ResumenScreen.tsx` | ✎ Sección reproducciones colapsable |
-| | `components/resumen/ReproductionTrendChart.tsx` | ✚ **Nuevo** — línea tendencia 14 días |
-| | `components/resumen/BannerMetricsTable.tsx` | ✚ **Nuevo** — tabla completa banners |
+Por cada banner:
+  real = count(ReproduccionMetrica WHERE tipo=televisor AND banner_id=X AND fecha)
+  fill_rate = real / estimado (cap 1.0)
+  gap = estimado - real
+```
+
+**Formato de respuesta:**
+```json
+{
+  "fecha": "2026-05-23",
+  "resumen": {
+    "total_estimado": 4500,
+    "total_real": 3820,
+    "fill_rate_global": 0.85,
+    "brecha_total": 680
+  },
+  "banners": [
+    {
+      "banner_id": 3561,
+      "titulo": "Coca-Cola",
+      "tipo": "video",
+      "duracion_seg": 15.0,
+      "estimado": 1200,
+      "real": 980,
+      "fill_rate": 0.82,
+      "gap": 220
+    }
+  ],
+  "tvs": [
+    {
+      "dispositivo_id": "TV-001",
+      "nombre_amigable": "Fire TV Pasillo 3",
+      "uptime_hoy_seg": 82800,
+      "banners_asignados": 5,
+      "estimado": 900,
+      "real": 780,
+      "fill_rate": 0.87
+    }
+  ]
+}
+```
+
+**Frontend (sección colapsable en ResumenScreen):**
+
+Layout:
+```
+┌──────────────────────────────────────────────────────┐
+│  📊 Pronóstico vs Real  [▼ colapsar]  [🗓 fecha]     │
+├──────────────────────────────────────────────────────┤
+│  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐             │
+│  │ 4500 │  │ 3820 │  │ 85%  │  │ +680 │             │
+│  │ Estim│  │ Real │  │ Fill │  │ Gap  │             │
+│  └──────┘  └──────┘  └──────┘  └──────┘             │
+├──────────────────────────────────────────────────────┤
+│  Tabla banners (ordenable por fill rate):            │
+│  Banner     │ Dur │ Estim │ Real │ Fill │ Gap        │
+│  Coca-Cola  │ 15s │ 1200  │ 980  │ ████░ 82% │ 220  │
+│  ...                                                 │
+├──────────────────────────────────────────────────────┤
+│  ▶ Ver desglose por TV (expandible)                  │
+│  TV-001 Fire TV Pasillo 3  │ 900 │ 780 │ █████ 87%  │
+└──────────────────────────────────────────────────────┘
+```
+
+### Archivos a modificar/crear
+
+| Archivo | Acción |
+|---------|--------|
+| `backend-dashboard/app/services/metricas_service.py` | ✚ Nueva función `analisis_estimado(db, fecha)` — algoritmo completo de estimación |
+| `backend-dashboard/app/routes/reproducciones.py` | ✚ Nuevo endpoint `GET /analisis` — response model + llamada a servicio |
+| `dashboard/services/resumenService.ts` | ✎ Tipos `AnalisisEstimado`, `BannerAnalisis`, `TvAnalisis` + `fetchAnalisisEstimado(fecha)` |
+| `dashboard/components/resumen/AnalisisEstimadoSection.tsx` | ✚ **Nuevo** — sección completa: KPIs, tabla banners, desglose TVs |
+| `dashboard/screens/ResumenScreen.tsx` | ✎ Agregar sección colapsable "Pronóstico vs Real" al final |
+
+### Consideraciones
+
+| Aspecto | Detalle |
+|---------|---------|
+| **Precisión** | Limitada por falta de `DuracionSeg` en Publicidad. Usa promedio histórico de `duracion_total_seg` reportado por dispositivos. Default: 10s imagen, 15s video |
+| **Ciclo carrusel** | Asume round-robin simple. No considera prioridades ni pesos |
+| **Performance** | Cálculo on-demand (sin scheduler). Consultas agregadas indexadas |
+| **Mejora futura** | Si se necesita mayor precisión, agregar columna `DuracionSeg` a `Publicidad` + formulario en dashboard + schema en backend-api |
+| **Sin almacenamiento** | No se persisten las estimaciones — se calculan en cada request

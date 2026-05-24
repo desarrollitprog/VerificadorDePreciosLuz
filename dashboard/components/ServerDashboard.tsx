@@ -418,19 +418,12 @@ export function ServerDashboard() {
   };
 
   const handleRestartServidorChange = (id: number, checked: boolean) => {
-    setScheduleRestartModal(prev => {
-      const srv = servidoresForSelector.find(s => s.id === id);
-      const deviceIds = srv?.dispositivos.map(d => String(d.id)) || [];
-      return {
-        ...prev,
-        selectedServidorIds: checked
-          ? [...prev.selectedServidorIds, id]
-          : prev.selectedServidorIds.filter(sid => sid !== id),
-        selectedDispositivoIds: checked
-          ? [...prev.selectedDispositivoIds, ...deviceIds]
-          : prev.selectedDispositivoIds.filter(did => !deviceIds.includes(did)),
-      };
-    });
+    setScheduleRestartModal(prev => ({
+      ...prev,
+      selectedServidorIds: checked
+        ? [...prev.selectedServidorIds, id]
+        : prev.selectedServidorIds.filter(sid => sid !== id),
+    }));
   };
 
   const handleRestartDispositivoChange = (id: string, checked: boolean) => {

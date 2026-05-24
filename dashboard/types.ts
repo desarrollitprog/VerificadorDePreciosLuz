@@ -49,4 +49,5 @@ export interface Dispositivo {
   codigo_kiosko: string;
   nombre_amigable: string | null;
   online: boolean;
+  tipo?: string;
 }

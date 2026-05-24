@@ -397,7 +397,14 @@ export const DashboardScreen: React.FC = () => {
     if (allSuccess) {
       resetUploadModal();
       showNotification('Todos los archivos subidos correctamente', 'success');
-      handleForceSync();
+      const anyTodos = fileMetadatas.some(m => m.asignacionTodos && m.servidorIds.length === 0);
+      if (anyTodos) {
+        handleForceSync();
+      } else {
+        const srvIds = [...new Set(fileMetadatas.flatMap(m => m.servidorIds))];
+        const dispIds = [...new Set(fileMetadatas.flatMap(m => m.dispositivoIds))];
+        handleForceSync(srvIds.length > 0 ? srvIds : undefined, dispIds.length > 0 ? dispIds : undefined);
+      }
     } else {
       showNotification('Algunos archivos fallaron al subir', 'error');
     }
@@ -412,22 +419,31 @@ export const DashboardScreen: React.FC = () => {
      if (!confirmDelete.videoId) return;
      setError(null);
      setDeletingVideoId(confirmDelete.videoId);
+     const deletedVideo = videos.find(v => v.id === confirmDelete.videoId);
      setConfirmDelete({ open: false, videoId: null, titulo: '' });
      try {
         await deleteVideo(confirmDelete.videoId);
         showNotification('Archivo borrado correctamente', 'success');
-        handleForceSync();
-      } catch (err: any) {
-       setError('Error al borrar el video');
-       showNotification('Error al borrar archivo', 'error');
-     } finally {
-       setDeletingVideoId(null);
-       try {
-         const data = await getVideos();
-         setVideos(data);
-       } catch {}
-     }
-   };
+        if (deletedVideo?.asignacion_todos) {
+          handleForceSync();
+        } else if (deletedVideo?.asignaciones?.length) {
+          const srvIds = [...new Set(deletedVideo.asignaciones.map(a => a.servidor_id).filter(Boolean))];
+          const dispIds = [...new Set(deletedVideo.asignaciones.map(a => String(a.dispositivo_id)).filter(Boolean))];
+          handleForceSync(srvIds.length > 0 ? srvIds : undefined, dispIds.length > 0 ? dispIds : undefined);
+        } else {
+          handleForceSync();
+        }
+       } catch (err: any) {
+        setError('Error al borrar el video');
+        showNotification('Error al borrar archivo', 'error');
+      } finally {
+        setDeletingVideoId(null);
+        try {
+          const data = await getVideos();
+          setVideos(data);
+        } catch {}
+      }
+    };
 
    // Función para confirmar borrado masivo
    const handleBulkDeleteConfirm = async () => {
@@ -435,18 +451,25 @@ export const DashboardScreen: React.FC = () => {
      
      setError(null);
      const idsToDelete = [...confirmBulkDelete.videoIds];
+     const deletedVideos = videos.filter(v => idsToDelete.includes(v.id));
      
      try {
-       // Borrar todos los videos seleccionados
        for (const id of idsToDelete) {
          await deleteVideo(id);
        }
        
         showNotification(`${idsToDelete.length} archivo${idsToDelete.length > 1 ? 's' : ''} borrado${idsToDelete.length > 1 ? 's' : ''} correctamente`, 'success');
         setSelectedVideoIds([]);
-        handleForceSync();
+
+        const anyTodos = deletedVideos.some(v => v.asignacion_todos);
+        if (anyTodos) {
+          handleForceSync();
+        } else {
+          const srvIds = [...new Set(deletedVideos.flatMap(v => v.asignaciones?.map(a => a.servidor_id).filter(Boolean) ?? []))];
+          const dispIds = [...new Set(deletedVideos.flatMap(v => v.asignaciones?.map(a => String(a.dispositivo_id)).filter(Boolean) ?? []))];
+          handleForceSync(srvIds.length > 0 ? srvIds : undefined, dispIds.length > 0 ? dispIds : undefined);
+        }
         
-       // Refrescar lista
        const data = await getVideos();
        setVideos(data);
      } catch (err: any) {
@@ -475,11 +498,11 @@ export const DashboardScreen: React.FC = () => {
     setConfirmDelete({ open: false, videoId: null, titulo: '' });
   };
 
-  const handleForceSync = async () => {
+  const handleForceSync = async (servidor_ids?: number[], dispositivo_ids?: string[]) => {
     setSyncLoading(true);
     setSyncServerProgress([]);
     try {
-      const start = await startForceSyncJob();
+      const start = await startForceSyncJob(servidor_ids, dispositivo_ids);
       if (!start.success || !start.job_id) {
         showNotification('No se pudo iniciar la sincronización', 'error');
         return;

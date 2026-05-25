@@ -67,14 +67,8 @@ async def recibir_batch_reproducciones(
     db: AsyncSession = Depends(get_db_usuarios),
 ):
     try:
-        # Dedup: keep last event per reproduccion_id (most complete)
-        dedup: dict[str, EventoProgreso] = {}
-        for ev in body.eventos:
-            dedup[ev.reproduccion_id] = ev
-        eventos = list(dedup.values())
-
         count = 0
-        for ev in eventos:
+        for ev in body.eventos:
             now = datetime.utcnow()
             stmt = select(ReproduccionMetrica).where(
                 ReproduccionMetrica.reproduccion_id == ev.reproduccion_id
@@ -109,6 +103,7 @@ async def recibir_batch_reproducciones(
                         await db.flush()
                     count += 1
                 except IntegrityError:
+                    db.expunge(nueva)
                     stmt = select(ReproduccionMetrica).where(
                         ReproduccionMetrica.reproduccion_id == ev.reproduccion_id
                     )

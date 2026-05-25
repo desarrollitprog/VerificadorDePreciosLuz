@@ -140,8 +140,25 @@ export const ResumenScreen: React.FC = () => {
             )}
           </div>
 
+          {role === 'ADMIN' ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 stagger-2">
+              <DeviceStatusChart data={data.dispositivos} />
+              <ServerStorageChart data={data.servidores_detalle} />
+            </div>
+          ) : (
+            <div className="stagger-2">
+              <DeviceStatusChart data={data.dispositivos} />
+            </div>
+          )}
+
+          {role === 'ADMIN' && (
+            <div className="stagger-3">
+              <BannersTimeline data={data.historial_subidas} />
+            </div>
+          )}
+
           {/* Sección de Reproducciones - siempre visible */}
-          <div className="stagger-2">
+          <div className="stagger-4">
             <div className="bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
               <div className="h-1 bg-gradient-to-r from-violet-500 to-cyan-500" />
               <div className="p-5">
@@ -165,23 +182,6 @@ export const ResumenScreen: React.FC = () => {
               </div>
             </div>
           </div>
-
-          {role === 'ADMIN' ? (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 stagger-3">
-              <DeviceStatusChart data={data.dispositivos} />
-              <ServerStorageChart data={data.servidores_detalle} />
-            </div>
-          ) : (
-            <div className="stagger-3">
-              <DeviceStatusChart data={data.dispositivos} />
-            </div>
-          )}
-
-          {role === 'ADMIN' && (
-            <div className="stagger-4">
-              <BannersTimeline data={data.historial_subidas} />
-            </div>
-          )}
 
           <div className="stagger-5">
             <ServerMiniTable data={data.servidores_detalle} />

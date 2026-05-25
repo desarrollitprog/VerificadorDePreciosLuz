@@ -76,18 +76,49 @@ class BannerRepository(
     }
 
     // Descarga un banner (imagen/video) y lo guarda en files/banners
+    private fun buildCacheItem(item: BannerResponse, localPath: String) = BannerCacheItem(
+        id = item.id,
+        titulo = item.titulo,
+        tipo = item.tipo,
+        remoteUrl = item.url,
+        localPath = localPath,
+        duracionSeg = item.duracionSeg,
+        prioridad = item.prioridad,
+        fechaInicioMs = item.fechaInicioMs,
+        fechaFinMs = item.fechaFinMs
+    )
+
     public fun downloadBanner(item: BannerResponse): BannerCacheItem? {
         val absoluteUrl = if (item.url.startsWith("http")) item.url else baseUrl.trimEnd('/') + "/" + item.url.trimStart('/')
         val safeUrl = absoluteUrl.replace(" ", "%20")
         val ext = absoluteUrl.substringAfterLast('.', "")
         val safeExt = ext.ifBlank { "bin" }
         val fileName = "banner_${item.id}.$safeExt"
-        val tmpFileName = "${fileName}.tmp"
         val dir = File(context.filesDir, DIR_BANNERS)
         if (!dir.exists()) dir.mkdirs()
         val outFile = File(dir, fileName)
-        val tmpFile = File(dir, tmpFileName)
 
+        // Skip descarga si archivo ya existe y es válido
+        if (outFile.exists() && outFile.length() > 10000) {
+            if (item.tipo == "video") {
+                try {
+                    val retriever = android.media.MediaMetadataRetriever()
+                    retriever.setDataSource(outFile.absolutePath)
+                    val duration = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
+                    retriever.release()
+                    if (duration != null) {
+                        Log.d(TAG, "Banner skip descarga, ya existe: ${outFile.absolutePath} (id=${item.id})")
+                        return buildCacheItem(item, outFile.absolutePath)
+                    }
+                } catch (_: Exception) {}
+            } else {
+                Log.d(TAG, "Banner skip descarga, ya existe: ${outFile.absolutePath} (id=${item.id})")
+                return buildCacheItem(item, outFile.absolutePath)
+            }
+        }
+
+        // Si llegó aquí: archivo no existe o inválido → descargar
+        val tmpFile = File(dir, "${fileName}.tmp")
         if (tmpFile.exists()) tmpFile.delete()
 
         val request = Request.Builder().url(safeUrl).build()
@@ -152,17 +183,7 @@ class BannerRepository(
         }
         Log.d(TAG, "Banner descargado OK: ${outFile.absolutePath} (id=${item.id}) size=${fileSize}")
 
-        return BannerCacheItem(
-            id = item.id,
-            titulo = item.titulo,
-            tipo = item.tipo,
-            remoteUrl = item.url,
-            localPath = outFile.absolutePath,
-            duracionSeg = item.duracionSeg,
-            prioridad = item.prioridad,
-            fechaInicioMs = item.fechaInicioMs,
-            fechaFinMs = item.fechaFinMs
-        )
+        return buildCacheItem(item, outFile.absolutePath)
     }
 
     // Guarda metadata local de banners

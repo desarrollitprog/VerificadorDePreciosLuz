@@ -2845,6 +2845,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             val playingMsg = org.json.JSONObject()
             playingMsg.put("type", "PLAYING_NOW")
             playingMsg.put("device_id", deviceId)
+            playingMsg.put("banner_id", item.id)
             
             val content = org.json.JSONObject()
             content.put("titulo", item.titulo ?: File(item.localPath).name)

@@ -147,36 +147,6 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
 
             {expandedServidores.includes(srv.id) && srv.dispositivos && srv.dispositivos.length > 0 && (
               <div className="bg-slate-50/50 dark:bg-slate-800/30 px-3 pb-3">
-                <div
-                  className="flex items-center gap-2.5 px-1 py-1.5 mb-2 rounded-lg cursor-pointer hover:bg-white/50 dark:hover:bg-slate-700/20 transition-colors group"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    serverDispIds.forEach(id => {
-                      if (allServerDevicesSelected === selectedDispositivoIds.includes(id)) return;
-                      onDispositivoChange(id, !allServerDevicesSelected);
-                    });
-                  }}
-                >
-                  <div
-                    className="w-4 h-4 rounded border-2 flex items-center justify-center transition-all shrink-0"
-                    style={{
-                      borderColor: serverSelectedCount === 0 ? '#cbd5e1' : serverSelectedCount === serverDispIds.length ? accentColor : '#94a3b8',
-                      backgroundColor: serverSelectedCount === 0 ? 'transparent' : serverSelectedCount === serverDispIds.length ? accentColor : '#94a3b8',
-                    }}
-                  >
-                    {serverSelectedCount === 0 ? null : serverSelectedCount === serverDispIds.length ? (
-                      <Check size={12} className="text-white" />
-                    ) : (
-                      <Minus size={12} className="text-white" />
-                    )}
-                  </div>
-                  <span className="text-xs font-medium text-slate-600 dark:text-slate-400 group-hover:text-slate-800 dark:group-hover:text-slate-200 transition-colors">
-                    {allServerDevicesSelected ? 'Deseleccionar todos' : 'Seleccionar todos'}
-                  </span>
-                  <span className="ml-auto text-[10px] font-mono tabular-nums text-slate-400 dark:text-slate-500">
-                    {serverSelectedCount}/{serverDispIds.length}
-                  </span>
-                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {srv.dispositivos.map(disp => (
                     <div
@@ -217,6 +187,39 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
                       </span>
                     </div>
                   ))}
+                </div>
+                <div className="flex justify-end mt-1.5">
+                  <div
+                    className="flex items-center gap-2 px-2 py-1 rounded-md cursor-pointer hover:bg-white/60 dark:hover:bg-slate-700/20 transition-colors group"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const newState = !allServerDevicesSelected;
+                      serverDispIds.forEach(id => {
+                        if (selectedDispositivoIds.includes(id) === newState) return;
+                        onDispositivoChange(id, newState);
+                      });
+                    }}
+                  >
+                    <div
+                      className="w-3.5 h-3.5 rounded border-2 flex items-center justify-center transition-all shrink-0"
+                      style={{
+                        borderColor: serverSelectedCount === 0 ? '#cbd5e1' : serverSelectedCount === serverDispIds.length ? accentColor : '#94a3b8',
+                        backgroundColor: serverSelectedCount === 0 ? 'transparent' : serverSelectedCount === serverDispIds.length ? accentColor : '#94a3b8',
+                      }}
+                    >
+                      {serverSelectedCount === 0 ? null : serverSelectedCount === serverDispIds.length ? (
+                        <Check size={10} className="text-white" />
+                      ) : (
+                        <Minus size={10} className="text-white" />
+                      )}
+                    </div>
+                    <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors whitespace-nowrap">
+                      {allServerDevicesSelected ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                    </span>
+                    <span className="text-[10px] font-mono tabular-nums text-slate-400 dark:text-slate-500">
+                      {serverSelectedCount}/{serverDispIds.length}
+                    </span>
+                  </div>
                 </div>
               </div>
             )}

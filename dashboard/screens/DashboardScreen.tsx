@@ -1475,47 +1475,25 @@ export const DashboardScreen: React.FC = () => {
                             selectedServidorIds={fileMetadatas[idx]?.servidorIds || []}
                             selectedDispositivoIds={fileMetadatas[idx]?.dispositivoIds || []}
                              onServidorChange={(servidorId, checked) => {
-                               setFileMetadatas(prevMetas => {
-                                 const newMetas = [...prevMetas];
-                                 const currentServidorIds = [...(newMetas[idx]?.servidorIds || [])];
-                                 const currentDispositivoIds = [...(newMetas[idx]?.dispositivoIds || [])];
-                                 
-                                 if (checked) {
-                                   // Add server
-                                   const updatedServidorIds = [...currentServidorIds, servidorId];
-                                   
-                                   // Find devices of this server
-                                   const servidor = servidores.find(s => s.id === servidorId);
-                                   const newDispIds = servidor?.dispositivos?.map(d => String(d.id)) || [];
-                                   
-                                   // Add devices that are not already selected
-                                   const updatedDispositivoIds = [...currentDispositivoIds, ...newDispIds.filter(id => !currentDispositivoIds.includes(id))];
-                                   
-                                   newMetas[idx] = {
-                                     ...newMetas[idx],
-                                     asignacionTodos: false,
-                                     servidorIds: updatedServidorIds,
-                                     dispositivoIds: updatedDispositivoIds
-                                   };
-                                 } else {
-                                   // Remove server
-                                   const updatedServidorIds = currentServidorIds.filter(id => id !== servidorId);
-                                   
-                                   // Remove devices of this server
-                                   const servidor = servidores.find(s => s.id === servidorId);
-                                   const dispIdsToRemove = servidor?.dispositivos?.map(d => String(d.id)) || [];
-                                   const updatedDispositivoIds = currentDispositivoIds.filter(id => !dispIdsToRemove.includes(id));
-                                   
-                                   newMetas[idx] = {
-                                     ...newMetas[idx],
-                                     asignacionTodos: false,
-                                     servidorIds: updatedServidorIds,
-                                     dispositivoIds: updatedDispositivoIds
-                                   };
-                                 }
-                                 return newMetas;
-                               });
-                             }}
+                                setFileMetadatas(prevMetas => {
+                                  const newMetas = [...prevMetas];
+                                  const currentServidorIds = [...(newMetas[idx]?.servidorIds || [])];
+                                  if (checked) {
+                                    newMetas[idx] = {
+                                      ...newMetas[idx],
+                                      asignacionTodos: false,
+                                      servidorIds: [...currentServidorIds, servidorId],
+                                    };
+                                  } else {
+                                    newMetas[idx] = {
+                                      ...newMetas[idx],
+                                      asignacionTodos: false,
+                                      servidorIds: currentServidorIds.filter(id => id !== servidorId),
+                                    };
+                                  }
+                                  return newMetas;
+                                });
+                              }}
                             onDispositivoChange={(dispositivoId, checked) => {
                               setFileMetadatas(prevMetas => {
                                 const newMetas = [...prevMetas];
@@ -1631,31 +1609,11 @@ export const DashboardScreen: React.FC = () => {
                   servidores={servidores}
                   selectedServidorIds={syncServidorIds}
                   selectedDispositivoIds={syncDispositivoIds}
-                  onServidorChange={(id, checked) => {
-                    setSyncServidorIds(prev => {
-                      if (checked) {
-                        const updatedServidorIds = [...prev, id];
-                        
-                        // Find devices of this server
-                        const servidor = servidores.find(s => s.id === id);
-                        const newDispIds = servidor?.dispositivos?.map(d => String(d.id)) || [];
-                        
-                        // Add devices that are not already selected
-                        setSyncDispositivoIds(prevDisp => [...prevDisp, ...newDispIds.filter(dId => !prevDisp.includes(dId))]);
-                        
-                        return updatedServidorIds;
-                      } else {
-                        const updatedServidorIds = prev.filter(srvId => srvId !== id);
-                        
-                        // Remove devices of this server
-                        const servidor = servidores.find(s => s.id === id);
-                        const dispIdsToRemove = servidor?.dispositivos?.map(d => String(d.id)) || [];
-                        setSyncDispositivoIds(prevDisp => prevDisp.filter(dId => !dispIdsToRemove.includes(dId)));
-                        
-                        return updatedServidorIds;
-                      }
-                    });
-                  }}
+                   onServidorChange={(id, checked) => {
+                     setSyncServidorIds(prev =>
+                       checked ? [...prev, id] : prev.filter(srvId => srvId !== id)
+                     );
+                   }}
                   onDispositivoChange={(id, checked) => {
                     setSyncDispositivoIds(prev => {
                       if (checked) {
@@ -1829,31 +1787,15 @@ export const DashboardScreen: React.FC = () => {
                     selectedServidorIds={editServidorIds}
                     selectedDispositivoIds={editDispositivoIds}
                      onServidorChange={(id, checked) => {
-                       if (checked) {
-                         // Add server
-                         setEditServidorIds([...editServidorIds, id]);
-                         
-                         // Find devices of this server and add them
-                         const servidor = servidores.find(s => s.id === id);
-                         const newDispIds = servidor?.dispositivos?.map(d => String(d.id)) || [];
-                         setEditDispositivoIds(prev => [...prev, ...newDispIds.filter(dId => !prev.includes(dId))]);
-                       } else {
-                         // Remove server
-                         setEditServidorIds(editServidorIds.filter(srvId => srvId !== id));
-                         
-                         // Remove devices of this server
-                         const servidor = servidores.find(s => s.id === id);
-                         const dispIdsToRemove = servidor?.dispositivos?.map(d => String(d.id)) || [];
-                         setEditDispositivoIds(prev => prev.filter(dId => !dispIdsToRemove.includes(dId)));
-                       }
+                        setEditServidorIds(prev =>
+                          checked ? [...prev, id] : prev.filter(srvId => srvId !== id)
+                        );
+                      }}
+                     onDispositivoChange={(id, checked) => {
+                       setEditDispositivoIds(prev =>
+                         checked ? [...prev, id] : prev.filter(dispId => dispId !== id)
+                       );
                      }}
-                    onDispositivoChange={(id, checked) => {
-                      if (checked) {
-                        setEditDispositivoIds([...editDispositivoIds, id]);
-                      } else {
-                        setEditDispositivoIds(editDispositivoIds.filter(dispId => dispId !== id));
-                      }
-                    }}
                     expandedServidores={editExpandedServers}
                     onToggleExpand={(id) => {
                       setEditExpandedServers(prev =>

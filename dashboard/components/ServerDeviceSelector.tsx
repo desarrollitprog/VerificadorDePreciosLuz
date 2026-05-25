@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Servidor } from '../types';
-import { Server, Smartphone, ChevronDown, ChevronRight, Check, Monitor, Search } from 'lucide-react';
+import { Server, Smartphone, ChevronDown, ChevronRight, Check, Monitor, Search, Minus } from 'lucide-react';
 
 interface ServerDeviceSelectorProps {
   servidores: Servidor[];
@@ -82,6 +82,9 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
           const onlineCount = srv.dispositivos?.filter(d => d.online).length ?? 0;
           const offlineCount = srv.dispositivos?.filter(d => !d.online).length ?? 0;
           const totalDispositivos = onlineCount + offlineCount;
+          const serverDispIds = (srv.dispositivos || []).map(d => String(d.id));
+          const serverSelectedCount = serverDispIds.filter(id => selectedDispositivoIds.includes(id)).length;
+          const allServerDevicesSelected = serverSelectedCount === serverDispIds.length && serverDispIds.length > 0;
           return (
           <div key={srv.id} className="border border-slate-200/70 dark:border-slate-700/50 rounded-xl overflow-hidden hover:border-primary/30 transition-all duration-300 server-card-glow">
             <div className="flex items-center gap-3 p-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
@@ -144,6 +147,36 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
 
             {expandedServidores.includes(srv.id) && srv.dispositivos && srv.dispositivos.length > 0 && (
               <div className="bg-slate-50/50 dark:bg-slate-800/30 px-3 pb-3">
+                <div
+                  className="flex items-center gap-2.5 px-1 py-1.5 mb-2 rounded-lg cursor-pointer hover:bg-white/50 dark:hover:bg-slate-700/20 transition-colors group"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    serverDispIds.forEach(id => {
+                      if (allServerDevicesSelected === selectedDispositivoIds.includes(id)) return;
+                      onDispositivoChange(id, !allServerDevicesSelected);
+                    });
+                  }}
+                >
+                  <div
+                    className="w-4 h-4 rounded border-2 flex items-center justify-center transition-all shrink-0"
+                    style={{
+                      borderColor: serverSelectedCount === 0 ? '#cbd5e1' : serverSelectedCount === serverDispIds.length ? accentColor : '#94a3b8',
+                      backgroundColor: serverSelectedCount === 0 ? 'transparent' : serverSelectedCount === serverDispIds.length ? accentColor : '#94a3b8',
+                    }}
+                  >
+                    {serverSelectedCount === 0 ? null : serverSelectedCount === serverDispIds.length ? (
+                      <Check size={12} className="text-white" />
+                    ) : (
+                      <Minus size={12} className="text-white" />
+                    )}
+                  </div>
+                  <span className="text-xs font-medium text-slate-600 dark:text-slate-400 group-hover:text-slate-800 dark:group-hover:text-slate-200 transition-colors">
+                    {allServerDevicesSelected ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                  </span>
+                  <span className="ml-auto text-[10px] font-mono tabular-nums text-slate-400 dark:text-slate-500">
+                    {serverSelectedCount}/{serverDispIds.length}
+                  </span>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {srv.dispositivos.map(disp => (
                     <div

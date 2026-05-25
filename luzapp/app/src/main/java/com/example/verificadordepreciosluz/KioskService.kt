@@ -25,7 +25,7 @@ class KioskService : Service() {
         super.onCreate()
         Log.i(TAG, "KioskService onCreate")
 
-        if (!DeviceTypeHelper.isTv(this)) {
+        if (DeviceTypeHelper.detectDeviceType(this) != DeviceTypeHelper.DeviceType.TELEVISOR) {
             Log.d(TAG, "No es TV, deteniendo servicio")
             stopSelf()
             return

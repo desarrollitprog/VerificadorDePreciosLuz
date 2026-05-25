@@ -12,13 +12,13 @@ logger = logging.getLogger(__name__)
 
 
 class SchedulerNotifications:
-    def __init__(self, redis: Redis, default_ttl: int = 7200):
+    def __init__(self, redis: Redis, default_ttl: int = 86400):
         self.redis = redis
         self.default_ttl = default_ttl
         self.key_prefix = "pending:scheduler"
 
     @classmethod
-    async def create(cls, ttl_seconds: int = 7200) -> "SchedulerNotifications":
+    async def create(cls, ttl_seconds: int = 86400) -> "SchedulerNotifications":
         redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
         redis = Redis.from_url(redis_url, decode_responses=True)
         await redis.ping()

@@ -212,6 +212,7 @@ export const DashboardScreen: React.FC = () => {
             codigo_kiosko: d.device_id,
             nombre_amigable: d.nombre_amigable,
             online: d.online,
+            tipo: d.tipo ?? 'verificador',
           })),
         }));
         setServidores(mapped);
@@ -397,7 +398,14 @@ export const DashboardScreen: React.FC = () => {
     if (allSuccess) {
       resetUploadModal();
       showNotification('Todos los archivos subidos correctamente', 'success');
-      handleForceSync();
+      const anyTodos = fileMetadatas.some(m => m.asignacionTodos && m.servidorIds.length === 0);
+      if (anyTodos) {
+        handleForceSync();
+      } else {
+        const srvIds = [...new Set(fileMetadatas.flatMap(m => m.servidorIds))];
+        const dispIds = [...new Set(fileMetadatas.flatMap(m => m.dispositivoIds))];
+        handleForceSync(srvIds.length > 0 ? srvIds : undefined, dispIds.length > 0 ? dispIds : undefined);
+      }
     } else {
       showNotification('Algunos archivos fallaron al subir', 'error');
     }
@@ -412,22 +420,31 @@ export const DashboardScreen: React.FC = () => {
      if (!confirmDelete.videoId) return;
      setError(null);
      setDeletingVideoId(confirmDelete.videoId);
+     const deletedVideo = videos.find(v => v.id === confirmDelete.videoId);
      setConfirmDelete({ open: false, videoId: null, titulo: '' });
      try {
         await deleteVideo(confirmDelete.videoId);
         showNotification('Archivo borrado correctamente', 'success');
-        handleForceSync();
-      } catch (err: any) {
-       setError('Error al borrar el video');
-       showNotification('Error al borrar archivo', 'error');
-     } finally {
-       setDeletingVideoId(null);
-       try {
-         const data = await getVideos();
-         setVideos(data);
-       } catch {}
-     }
-   };
+        if (deletedVideo?.asignacion_todos) {
+          handleForceSync();
+        } else if (deletedVideo?.asignaciones?.length) {
+          const srvIds = [...new Set(deletedVideo.asignaciones.map(a => a.servidor_id).filter(Boolean))];
+          const dispIds = [...new Set(deletedVideo.asignaciones.map(a => String(a.dispositivo_id)).filter(Boolean))];
+          handleForceSync(srvIds.length > 0 ? srvIds : undefined, dispIds.length > 0 ? dispIds : undefined);
+        } else {
+          handleForceSync();
+        }
+       } catch (err: any) {
+        setError('Error al borrar el video');
+        showNotification('Error al borrar archivo', 'error');
+      } finally {
+        setDeletingVideoId(null);
+        try {
+          const data = await getVideos();
+          setVideos(data);
+        } catch {}
+      }
+    };
 
    // Función para confirmar borrado masivo
    const handleBulkDeleteConfirm = async () => {
@@ -435,18 +452,25 @@ export const DashboardScreen: React.FC = () => {
      
      setError(null);
      const idsToDelete = [...confirmBulkDelete.videoIds];
+     const deletedVideos = videos.filter(v => idsToDelete.includes(v.id));
      
      try {
-       // Borrar todos los videos seleccionados
        for (const id of idsToDelete) {
          await deleteVideo(id);
        }
        
         showNotification(`${idsToDelete.length} archivo${idsToDelete.length > 1 ? 's' : ''} borrado${idsToDelete.length > 1 ? 's' : ''} correctamente`, 'success');
         setSelectedVideoIds([]);
-        handleForceSync();
+
+        const anyTodos = deletedVideos.some(v => v.asignacion_todos);
+        if (anyTodos) {
+          handleForceSync();
+        } else {
+          const srvIds = [...new Set(deletedVideos.flatMap(v => v.asignaciones?.map(a => a.servidor_id).filter(Boolean) ?? []))];
+          const dispIds = [...new Set(deletedVideos.flatMap(v => v.asignaciones?.map(a => String(a.dispositivo_id)).filter(Boolean) ?? []))];
+          handleForceSync(srvIds.length > 0 ? srvIds : undefined, dispIds.length > 0 ? dispIds : undefined);
+        }
         
-       // Refrescar lista
        const data = await getVideos();
        setVideos(data);
      } catch (err: any) {
@@ -475,11 +499,11 @@ export const DashboardScreen: React.FC = () => {
     setConfirmDelete({ open: false, videoId: null, titulo: '' });
   };
 
-  const handleForceSync = async () => {
+  const handleForceSync = async (servidor_ids?: number[], dispositivo_ids?: string[]) => {
     setSyncLoading(true);
     setSyncServerProgress([]);
     try {
-      const start = await startForceSyncJob();
+      const start = await startForceSyncJob(servidor_ids, dispositivo_ids);
       if (!start.success || !start.job_id) {
         showNotification('No se pudo iniciar la sincronización', 'error');
         return;
@@ -1451,47 +1475,25 @@ export const DashboardScreen: React.FC = () => {
                             selectedServidorIds={fileMetadatas[idx]?.servidorIds || []}
                             selectedDispositivoIds={fileMetadatas[idx]?.dispositivoIds || []}
                              onServidorChange={(servidorId, checked) => {
-                               setFileMetadatas(prevMetas => {
-                                 const newMetas = [...prevMetas];
-                                 const currentServidorIds = [...(newMetas[idx]?.servidorIds || [])];
-                                 const currentDispositivoIds = [...(newMetas[idx]?.dispositivoIds || [])];
-                                 
-                                 if (checked) {
-                                   // Add server
-                                   const updatedServidorIds = [...currentServidorIds, servidorId];
-                                   
-                                   // Find devices of this server
-                                   const servidor = servidores.find(s => s.id === servidorId);
-                                   const newDispIds = servidor?.dispositivos?.map(d => String(d.id)) || [];
-                                   
-                                   // Add devices that are not already selected
-                                   const updatedDispositivoIds = [...currentDispositivoIds, ...newDispIds.filter(id => !currentDispositivoIds.includes(id))];
-                                   
-                                   newMetas[idx] = {
-                                     ...newMetas[idx],
-                                     asignacionTodos: false,
-                                     servidorIds: updatedServidorIds,
-                                     dispositivoIds: updatedDispositivoIds
-                                   };
-                                 } else {
-                                   // Remove server
-                                   const updatedServidorIds = currentServidorIds.filter(id => id !== servidorId);
-                                   
-                                   // Remove devices of this server
-                                   const servidor = servidores.find(s => s.id === servidorId);
-                                   const dispIdsToRemove = servidor?.dispositivos?.map(d => String(d.id)) || [];
-                                   const updatedDispositivoIds = currentDispositivoIds.filter(id => !dispIdsToRemove.includes(id));
-                                   
-                                   newMetas[idx] = {
-                                     ...newMetas[idx],
-                                     asignacionTodos: false,
-                                     servidorIds: updatedServidorIds,
-                                     dispositivoIds: updatedDispositivoIds
-                                   };
-                                 }
-                                 return newMetas;
-                               });
-                             }}
+                                setFileMetadatas(prevMetas => {
+                                  const newMetas = [...prevMetas];
+                                  const currentServidorIds = [...(newMetas[idx]?.servidorIds || [])];
+                                  if (checked) {
+                                    newMetas[idx] = {
+                                      ...newMetas[idx],
+                                      asignacionTodos: false,
+                                      servidorIds: [...currentServidorIds, servidorId],
+                                    };
+                                  } else {
+                                    newMetas[idx] = {
+                                      ...newMetas[idx],
+                                      asignacionTodos: false,
+                                      servidorIds: currentServidorIds.filter(id => id !== servidorId),
+                                    };
+                                  }
+                                  return newMetas;
+                                });
+                              }}
                             onDispositivoChange={(dispositivoId, checked) => {
                               setFileMetadatas(prevMetas => {
                                 const newMetas = [...prevMetas];
@@ -1520,7 +1522,7 @@ export const DashboardScreen: React.FC = () => {
                                   : [...prev, id]
                               );
                             }}
-                            maxHeight="max-h-[30vh]"
+                            maxHeight="max-h-[40vh] sm:max-h-[30vh]"
                           />
                         )}
                       </div>
@@ -1533,12 +1535,12 @@ export const DashboardScreen: React.FC = () => {
                 </div>
               ))}
             </div>
-            <div className="mt-6 flex justify-end gap-2">
+            <div className="mt-6 flex flex-col-reverse sm:flex-row justify-end gap-2">
               <button
                 type="button"
                 onClick={resetUploadModal}
                 disabled={uploading}
-                className="px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform duration-150"
+                className="w-full sm:w-auto px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform duration-150"
               >
                 CANCELAR
               </button>
@@ -1546,7 +1548,7 @@ export const DashboardScreen: React.FC = () => {
                 type="button"
                 onClick={handleSubmitUpload}
                 disabled={uploading}
-                className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-white text-base font-semibold disabled:opacity-60 active:scale-95 transition-all duration-150"
+                className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-white text-base font-semibold disabled:opacity-60 active:scale-95 transition-all duration-150"
               >
                 {uploading ? 'SUBIENDO...' : 'GUARDAR Y SUBIR'}
               </button>
@@ -1557,7 +1559,7 @@ export const DashboardScreen: React.FC = () => {
 
       {/* Sync Modal */}
       {isSyncModalOpen && (
-        <div className="fixed inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/80 flex items-start justify-center z-50 p-4 pt-20 animate-fade-in">
+        <div className="fixed inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/80 flex items-start justify-center z-50 p-4 pt-4 md:pt-20 animate-fade-in">
           <div className="bg-white dark:bg-[#1c2936] rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.3)] w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
             <div className="p-6 border-b border-gradient-to-r from-transparent via-slate-300 to-transparent shrink-0">
               <div className="flex items-center gap-3">
@@ -1607,31 +1609,11 @@ export const DashboardScreen: React.FC = () => {
                   servidores={servidores}
                   selectedServidorIds={syncServidorIds}
                   selectedDispositivoIds={syncDispositivoIds}
-                  onServidorChange={(id, checked) => {
-                    setSyncServidorIds(prev => {
-                      if (checked) {
-                        const updatedServidorIds = [...prev, id];
-                        
-                        // Find devices of this server
-                        const servidor = servidores.find(s => s.id === id);
-                        const newDispIds = servidor?.dispositivos?.map(d => String(d.id)) || [];
-                        
-                        // Add devices that are not already selected
-                        setSyncDispositivoIds(prevDisp => [...prevDisp, ...newDispIds.filter(dId => !prevDisp.includes(dId))]);
-                        
-                        return updatedServidorIds;
-                      } else {
-                        const updatedServidorIds = prev.filter(srvId => srvId !== id);
-                        
-                        // Remove devices of this server
-                        const servidor = servidores.find(s => s.id === id);
-                        const dispIdsToRemove = servidor?.dispositivos?.map(d => String(d.id)) || [];
-                        setSyncDispositivoIds(prevDisp => prevDisp.filter(dId => !dispIdsToRemove.includes(dId)));
-                        
-                        return updatedServidorIds;
-                      }
-                    });
-                  }}
+                   onServidorChange={(id, checked) => {
+                     setSyncServidorIds(prev =>
+                       checked ? [...prev, id] : prev.filter(srvId => srvId !== id)
+                     );
+                   }}
                   onDispositivoChange={(id, checked) => {
                     setSyncDispositivoIds(prev => {
                       if (checked) {
@@ -1648,12 +1630,12 @@ export const DashboardScreen: React.FC = () => {
                         : [...prev, id]
                     );
                   }}
-                  maxHeight="max-h-[65vh]"
+                  maxHeight="max-h-[50vh] sm:max-h-[65vh]"
                 />
               )}
             </div>
 
-            <div className="mt-4 flex justify-end gap-2 p-6 border-t border-gradient-to-r from-transparent via-slate-300 to-transparent">
+            <div className="mt-4 flex flex-col-reverse sm:flex-row justify-end gap-2 p-6 border-t border-gradient-to-r from-transparent via-slate-300 to-transparent">
               <button
                 type="button"
                 onClick={() => {
@@ -1663,7 +1645,7 @@ export const DashboardScreen: React.FC = () => {
                   setSyncDispositivoIds([]);
                   setSyncExpandedServers([]);
                 }}
-                className="px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform duration-150"
+                className="w-full sm:w-auto px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform duration-150"
               >
                 CANCELAR
               </button>
@@ -1674,7 +1656,7 @@ export const DashboardScreen: React.FC = () => {
                   await executeSync();
                 }}
                 disabled={!syncAllDevices && syncServidorIds.length === 0 && syncDispositivoIds.length === 0}
-                className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-base font-semibold disabled:opacity-60 active:scale-95 transition-all duration-150"
+                className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-base font-semibold disabled:opacity-60 active:scale-95 transition-all duration-150"
               >
                 SINCRONIZAR
               </button>
@@ -1684,7 +1666,7 @@ export const DashboardScreen: React.FC = () => {
       )}
       {/* Edit Modal */}
       {isEditModalOpen && editingVideo && (
-        <div className="fixed inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/80 flex items-start justify-center z-50 p-4 pt-20 animate-fade-in">
+        <div className="fixed inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/80 flex items-start justify-center z-50 p-4 pt-4 md:pt-20 animate-fade-in">
           <div className="bg-white dark:bg-[#1c2936] rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.3)] w-full max-w-2xl max-h-[90vh] flex flex-col">
             <div className="p-6 border-b border-gradient-to-r from-transparent via-slate-300 to-transparent shrink-0">
               <div className="flex items-center gap-3">
@@ -1805,31 +1787,15 @@ export const DashboardScreen: React.FC = () => {
                     selectedServidorIds={editServidorIds}
                     selectedDispositivoIds={editDispositivoIds}
                      onServidorChange={(id, checked) => {
-                       if (checked) {
-                         // Add server
-                         setEditServidorIds([...editServidorIds, id]);
-                         
-                         // Find devices of this server and add them
-                         const servidor = servidores.find(s => s.id === id);
-                         const newDispIds = servidor?.dispositivos?.map(d => String(d.id)) || [];
-                         setEditDispositivoIds(prev => [...prev, ...newDispIds.filter(dId => !prev.includes(dId))]);
-                       } else {
-                         // Remove server
-                         setEditServidorIds(editServidorIds.filter(srvId => srvId !== id));
-                         
-                         // Remove devices of this server
-                         const servidor = servidores.find(s => s.id === id);
-                         const dispIdsToRemove = servidor?.dispositivos?.map(d => String(d.id)) || [];
-                         setEditDispositivoIds(prev => prev.filter(dId => !dispIdsToRemove.includes(dId)));
-                       }
+                        setEditServidorIds(prev =>
+                          checked ? [...prev, id] : prev.filter(srvId => srvId !== id)
+                        );
+                      }}
+                     onDispositivoChange={(id, checked) => {
+                       setEditDispositivoIds(prev =>
+                         checked ? [...prev, id] : prev.filter(dispId => dispId !== id)
+                       );
                      }}
-                    onDispositivoChange={(id, checked) => {
-                      if (checked) {
-                        setEditDispositivoIds([...editDispositivoIds, id]);
-                      } else {
-                        setEditDispositivoIds(editDispositivoIds.filter(dispId => dispId !== id));
-                      }
-                    }}
                     expandedServidores={editExpandedServers}
                     onToggleExpand={(id) => {
                       setEditExpandedServers(prev =>
@@ -1838,13 +1804,13 @@ export const DashboardScreen: React.FC = () => {
                           : [...prev, id]
                       );
                     }}
-                    maxHeight="max-h-[30vh]"
+                    maxHeight="max-h-[40vh] sm:max-h-[30vh]"
                   />
                 )}
               </div>
             </div>
 
-            <div className="mt-4 flex justify-end gap-2 p-4 border-t border-slate-200 dark:border-slate-700">
+            <div className="mt-4 flex flex-col-reverse sm:flex-row justify-end gap-2 p-4 border-t border-slate-200 dark:border-slate-700">
               <button
                 type="button"
                 onClick={() => {
@@ -1856,13 +1822,13 @@ export const DashboardScreen: React.FC = () => {
                   setEditExpandedServers([]);
                 }}
                  disabled={isSavingEdit}
-                 className="px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform duration-150"
-               >
-                 CANCELAR
-               </button>
-               <button
-                 type="button"
-                  onClick={async () => {
+                 className="w-full sm:w-auto px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-base text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform duration-150"
+                >
+                  CANCELAR
+                </button>
+                <button
+                  type="button"
+                   onClick={async () => {
                     const fechaInicio = editFormData.fechaInicio;
                     const fechaFin = editFormData.fechaFin;
 
@@ -1935,9 +1901,9 @@ export const DashboardScreen: React.FC = () => {
                   }
                 }}
                 disabled={isSavingEdit}
-                 className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-white text-base font-semibold disabled:opacity-60 active:scale-95 transition-all duration-150"
-               >
-                 {isSavingEdit ? 'GUARDANDO...' : 'GUARDADO'}
+                 className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-white text-base font-semibold disabled:opacity-60 active:scale-95 transition-all duration-150"
+                >
+                  {isSavingEdit ? 'GUARDANDO...' : 'GUARDADO'}
               </button>
             </div>
           </div>

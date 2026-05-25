@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Servidor } from '../types';
-import { Server, Smartphone, ChevronDown, ChevronRight, Check } from 'lucide-react';
+import { Server, Smartphone, ChevronDown, ChevronRight, Check, Monitor, Search, Minus } from 'lucide-react';
 
 interface ServerDeviceSelectorProps {
   servidores: Servidor[];
@@ -15,6 +15,8 @@ interface ServerDeviceSelectorProps {
   accentColor?: string;
 }
 
+type TipoFilter = 'todos' | 'verificador' | 'televisor';
+
 export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
   servidores,
   selectedServidorIds,
@@ -27,9 +29,20 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
   maxHeight = 'max-h-32',
   accentColor = '#3b82f6',
 }) => {
+  const [tipoFilter, setTipoFilter] = useState<TipoFilter>('todos');
+
   if (servidores.length === 0) {
     return <p className="text-sm text-slate-500">No hay servidores disponibles</p>;
   }
+
+  const filteredServidores = servidores
+    .map(srv => ({
+      ...srv,
+      dispositivos: tipoFilter === 'todos'
+        ? srv.dispositivos
+        : (srv.dispositivos || []).filter(d => d.tipo === tipoFilter),
+    }))
+    .filter(srv => srv.dispositivos.length > 0);
 
   return (
     <div className="space-y-4">
@@ -43,11 +56,35 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
         </span>
       </div>
 
+      <div className="flex gap-1 pb-2 border-b border-slate-200/50 dark:border-slate-700/30">
+        {(['todos', 'verificador', 'televisor'] as TipoFilter[]).map(t => {
+          const isActive = tipoFilter === t;
+          const label = t === 'todos' ? 'Todos' : t === 'verificador' ? '🔍 Verificadores' : '📺 Televisores';
+          return (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTipoFilter(t)}
+              className={`text-xs px-2.5 py-1 rounded-full font-medium transition-all ${
+                isActive
+                  ? 'bg-slate-800 text-white dark:bg-white dark:text-slate-900 shadow-sm'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+              }`}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
       <div className={`${maxHeight} overflow-y-auto space-y-3 pr-2 custom-scrollbar`}>
-        {servidores.map(srv => {
+        {filteredServidores.map(srv => {
           const onlineCount = srv.dispositivos?.filter(d => d.online).length ?? 0;
           const offlineCount = srv.dispositivos?.filter(d => !d.online).length ?? 0;
           const totalDispositivos = onlineCount + offlineCount;
+          const serverDispIds = (srv.dispositivos || []).map(d => String(d.id));
+          const serverSelectedCount = serverDispIds.filter(id => selectedDispositivoIds.includes(id)).length;
+          const allServerDevicesSelected = serverSelectedCount === serverDispIds.length && serverDispIds.length > 0;
           return (
           <div key={srv.id} className="border border-slate-200/70 dark:border-slate-700/50 rounded-xl overflow-hidden hover:border-primary/30 transition-all duration-300 server-card-glow">
             <div className="flex items-center gap-3 p-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
@@ -125,9 +162,22 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
                       style={selectedDispositivoIds.includes(String(disp.id)) ? { backgroundColor: accentColor, borderColor: accentColor } : undefined}>
                         {selectedDispositivoIds.includes(String(disp.id)) && <Check size={12} className="text-white" />}
                       </div>
-                      <Smartphone size={12} className="text-slate-400 flex-shrink-0" />
+                      <div className="flex-shrink-0">
+                        {disp.tipo === 'televisor' ? (
+                          <Monitor size={12} className="text-green-500" />
+                        ) : (
+                          <Search size={12} className="text-blue-500" />
+                        )}
+                      </div>
                       <span className="text-base text-slate-600 dark:text-slate-300 truncate">
                         {disp.nombre_amigable || String(disp.codigo_kiosko)}
+                      </span>
+                      <span className={`inline-flex items-center px-1 py-0.5 rounded text-[10px] font-bold ${
+                        disp.tipo === 'televisor'
+                          ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                          : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                      }`}>
+                        {disp.tipo === 'televisor' ? 'TV' : 'VER'}
                       </span>
                       <span className={`text-[10px] flex items-center gap-1 ml-1 ${
                         disp.online ? 'text-emerald-500' : 'text-slate-400'
@@ -137,6 +187,39 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
                       </span>
                     </div>
                   ))}
+                </div>
+                <div className="flex justify-end mt-1.5">
+                  <div
+                    className="flex items-center gap-2 px-2 py-1 rounded-md cursor-pointer hover:bg-white/60 dark:hover:bg-slate-700/20 transition-colors group"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const newState = !allServerDevicesSelected;
+                      serverDispIds.forEach(id => {
+                        if (selectedDispositivoIds.includes(id) === newState) return;
+                        onDispositivoChange(id, newState);
+                      });
+                    }}
+                  >
+                    <div
+                      className="w-3.5 h-3.5 rounded border-2 flex items-center justify-center transition-all shrink-0"
+                      style={{
+                        borderColor: serverSelectedCount === 0 ? '#cbd5e1' : serverSelectedCount === serverDispIds.length ? accentColor : '#94a3b8',
+                        backgroundColor: serverSelectedCount === 0 ? 'transparent' : serverSelectedCount === serverDispIds.length ? accentColor : '#94a3b8',
+                      }}
+                    >
+                      {serverSelectedCount === 0 ? null : serverSelectedCount === serverDispIds.length ? (
+                        <Check size={10} className="text-white" />
+                      ) : (
+                        <Minus size={10} className="text-white" />
+                      )}
+                    </div>
+                    <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors whitespace-nowrap">
+                      {allServerDevicesSelected ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                    </span>
+                    <span className="text-[10px] font-mono tabular-nums text-slate-400 dark:text-slate-500">
+                      {serverSelectedCount}/{serverDispIds.length}
+                    </span>
+                  </div>
                 </div>
               </div>
             )}

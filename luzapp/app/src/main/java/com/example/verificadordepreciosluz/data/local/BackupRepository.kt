@@ -93,8 +93,19 @@ class BackupRepository(
                 }
 
                 if (file.exists()) file.delete()
-                if (!tempFile.renameTo(file)) {
-                    throw IOException("No se pudo renombrar ${tempFile.name} a ${file.name}")
+                val maxRetries = 3
+                val retryDelayMs = 500L
+                var renamed = false
+                for (attempt in 1..maxRetries) {
+                    if (tempFile.renameTo(file)) {
+                        renamed = true
+                        break
+                    }
+                    Log.w("BackupRepository", "Reintento $attempt/$maxRetries para renombrar ${tempFile.name} a ${file.name}")
+                    if (attempt < maxRetries) Thread.sleep(retryDelayMs)
+                }
+                if (!renamed) {
+                    throw IOException("No se pudo renombrar ${tempFile.name} a ${file.name} tras $maxRetries intentos")
                 }
 
                 if (sectionIdx < sections.size - 1) {

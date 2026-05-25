@@ -13,6 +13,7 @@ import {
   deleteServer,
   scheduleRestart,
   getQueueStatus,
+  changeDeviceTipo,
   ServerStatusDetail,
   DeviceContent,
   QueueStatus,
@@ -88,10 +89,15 @@ export function ServerDashboard() {
     scheduling: false,
   });
 
-  // Búsqueda y orden
+  // Búsqueda, orden y filtro tipo
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<'nombre' | 'estado' | 'dispositivos'>('nombre');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [tipoFilter, setTipoFilter] = useState<'todos' | 'verificador' | 'televisor'>('todos');
+
+  // Modal de cambio de tipo de dispositivo
+  const [tipoChangeModal, setTipoChangeModal] = useState<{ deviceId: string; deviceName: string; currentTipo: string } | null>(null);
+  const [tipoChangeSaving, setTipoChangeSaving] = useState(false);
 
   const fetchStatus = async () => {
     if (isFirstLoadRef.current) setInitialLoading(true);
@@ -397,6 +403,7 @@ export function ServerDashboard() {
         codigo_kiosko: d.device_id,
         nombre_amigable: d.nombre_amigable || null,
         online: d.online,
+        tipo: d.tipo ?? 'verificador',
       })),
     })),
   [servidores]);
@@ -412,19 +419,12 @@ export function ServerDashboard() {
   };
 
   const handleRestartServidorChange = (id: number, checked: boolean) => {
-    setScheduleRestartModal(prev => {
-      const srv = servidoresForSelector.find(s => s.id === id);
-      const deviceIds = srv?.dispositivos.map(d => String(d.id)) || [];
-      return {
-        ...prev,
-        selectedServidorIds: checked
-          ? [...prev.selectedServidorIds, id]
-          : prev.selectedServidorIds.filter(sid => sid !== id),
-        selectedDispositivoIds: checked
-          ? [...prev.selectedDispositivoIds, ...deviceIds]
-          : prev.selectedDispositivoIds.filter(did => !deviceIds.includes(did)),
-      };
-    });
+    setScheduleRestartModal(prev => ({
+      ...prev,
+      selectedServidorIds: checked
+        ? [...prev.selectedServidorIds, id]
+        : prev.selectedServidorIds.filter(sid => sid !== id),
+    }));
   };
 
   const handleRestartDispositivoChange = (id: string, checked: boolean) => {
@@ -473,6 +473,7 @@ export function ServerDashboard() {
 
   const filteredAndSortedServidores = servidores
     .filter(s => {
+      if (tipoFilter !== 'todos' && !s.dispositivos.some(d => d.tipo === tipoFilter)) return false;
       if (!search) return true;
       const searchLower = search.toLowerCase();
       return (
@@ -563,6 +564,15 @@ export function ServerDashboard() {
             )}
           </div>
           <select
+            value={tipoFilter}
+            onChange={e => setTipoFilter(e.target.value as typeof tipoFilter)}
+            className="py-2 px-3 bg-slate-100 dark:bg-[#1c2936] border-none rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary"
+          >
+            <option value="todos">Todos</option>
+            <option value="verificador">🔍 Verificadores</option>
+            <option value="televisor">📺 Televisores</option>
+          </select>
+          <select
             value={`${sortBy}-${sortDir}`}
             onChange={e => {
               const [by, dir] = e.target.value.split('-');
@@ -642,12 +652,19 @@ export function ServerDashboard() {
                       {s.dispositivos.length === 0 ? (
                         <div className="p-4 text-sm text-slate-500 text-center">Sin dispositivos reportados</div>
                       ) : (
-                        s.dispositivos.map((d) => (
+                        s.dispositivos.filter(d => tipoFilter === 'todos' || d.tipo === tipoFilter).map((d) => (
                           <div key={d.device_id} className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className={`w-2 h-2 rounded-full ${d.online ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold ${
+                                    d.tipo === 'televisor'
+                                      ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                                      : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                                  }`}>
+                                    {d.tipo === 'televisor' ? 'TV' : 'VER'}
+                                  </span>
                                   <span className="font-medium text-sm text-slate-900 dark:text-white truncate">
                                     {d.nombre_mostrado || d.device_id}
                                   </span>
@@ -699,6 +716,13 @@ export function ServerDashboard() {
                                   >
                                     <Edit2 size={12} />
                                     Renombrar
+                                  </button>
+                                  <button
+                                    onClick={() => setTipoChangeModal({ deviceId: d.device_id, deviceName: d.nombre_mostrado || d.device_id, currentTipo: d.tipo || 'verificador' })}
+                                    className="text-xs flex items-center gap-1 text-violet-600 hover:underline"
+                                  >
+                                    <Monitor size={12} />
+                                    Cambiar tipo
                                   </button>
                                   <button
                                     onClick={() => openPreviewModal(d.device_id)}
@@ -778,11 +802,11 @@ export function ServerDashboard() {
                 ) : null}
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={closeRenameModal}
-                  className="px-4 h-10 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  className="w-full sm:w-auto px-4 h-10 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                   disabled={renameSaving}
                 >
                   Cancelar
@@ -790,7 +814,7 @@ export function ServerDashboard() {
                 <button
                   type="button"
                   onClick={submitRename}
-                  className="px-4 h-10 rounded-lg bg-primary text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50"
+                  className="w-full sm:w-auto px-4 h-10 rounded-lg bg-primary text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50"
                   disabled={renameSaving}
                 >
                   {renameSaving ? 'Guardando...' : 'Guardar'}
@@ -862,17 +886,17 @@ export function ServerDashboard() {
               <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
                 ¿Estás seguro de reiniciar <span className="font-medium text-slate-900 dark:text-white">{restartModal.deviceName}</span>?
               </p>
-              <div className="flex gap-3">
+              <div className="flex flex-col-reverse sm:flex-row gap-3">
                 <button
                   onClick={closeRestartModal}
-                  className="flex-1 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  className="w-full sm:flex-1 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                   disabled={restarting}
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleRestart}
-                  className="flex-1 px-4 py-2 rounded-lg bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
+                  className="w-full sm:flex-1 px-4 py-2 rounded-lg bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
                   disabled={restarting}
                 >
                   {restarting ? 'Reiniciando...' : 'Reiniciar'}
@@ -895,17 +919,17 @@ export function ServerDashboard() {
               <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
                 ¿Estás seguro de limpiar el cache de <span className="font-medium text-slate-900 dark:text-white">{purgeModal.deviceName}</span>? Se eliminarán todos los banners descargados y se volverán a descargar.
               </p>
-              <div className="flex gap-3">
+              <div className="flex flex-col-reverse sm:flex-row gap-3">
                 <button
                   onClick={closePurgeModal}
-                  className="flex-1 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  className="w-full sm:flex-1 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                   disabled={purging}
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handlePurge}
-                  className="flex-1 px-4 py-2 rounded-lg bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 disabled:opacity-50"
+                  className="w-full sm:flex-1 px-4 py-2 rounded-lg bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 disabled:opacity-50"
                   disabled={purging}
                 >
                   {purging ? 'Limpiando...' : 'Limpiar'}
@@ -928,17 +952,17 @@ export function ServerDashboard() {
               <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
                 ¿Estás seguro de eliminar <span className="font-medium text-slate-900 dark:text-white">{deleteDeviceModal.deviceName}</span>? Esta acción no se puede deshacer.
               </p>
-              <div className="flex gap-3">
+              <div className="flex flex-col-reverse sm:flex-row gap-3">
                 <button
                   onClick={closeDeleteDeviceModal}
-                  className="flex-1 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  className="w-full sm:flex-1 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                   disabled={deletingDevice}
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleDeleteDevice}
-                  className="flex-1 px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-semibold hover:bg-red-600 disabled:opacity-50"
+                  className="w-full sm:flex-1 px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-semibold hover:bg-red-600 disabled:opacity-50"
                   disabled={deletingDevice}
                 >
                   {deletingDevice ? 'Eliminando...' : 'Eliminar'}
@@ -964,17 +988,17 @@ export function ServerDashboard() {
               <p className="text-xs text-amber-600 dark:text-amber-400 mb-6">
                 Los dispositivos asociados se desvincularán pero no se eliminarán.
               </p>
-              <div className="flex gap-3">
+              <div className="flex flex-col-reverse sm:flex-row gap-3">
                 <button
                   onClick={closeDeleteServerModal}
-                  className="flex-1 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  className="w-full sm:flex-1 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                   disabled={deletingServer}
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleDeleteServer}
-                  className="flex-1 px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-semibold hover:bg-red-600 disabled:opacity-50"
+                  className="w-full sm:flex-1 px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-semibold hover:bg-red-600 disabled:opacity-50"
                   disabled={deletingServer}
                 >
                   {deletingServer ? 'Eliminando...' : 'Eliminar'}
@@ -1148,6 +1172,87 @@ export function ServerDashboard() {
                     Programar
                   </span>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de cambiar tipo de dispositivo */}
+      {tipoChangeModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Cambiar tipo de dispositivo</h3>
+              <button onClick={() => { if (!tipoChangeSaving) setTipoChangeModal(null); }} className="text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" disabled={tipoChangeSaving}>
+                <X className="size-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                Dispositivo: <strong>{tipoChangeModal.deviceName}</strong>
+              </p>
+              <div className="flex gap-4">
+                <label className={`flex-1 flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${tipoChangeModal.currentTipo === 'verificador' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-700'}`}>
+                  <input
+                    type="radio"
+                    name="tipo"
+                    value="verificador"
+                    checked={tipoChangeModal.currentTipo === 'verificador'}
+                    onChange={() => setTipoChangeModal({ ...tipoChangeModal, currentTipo: 'verificador' })}
+                    className="accent-blue-600"
+                    disabled={tipoChangeSaving}
+                  />
+                  <div>
+                    <div className="font-medium text-sm text-slate-900 dark:text-white">🔍 Verificador</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">Tableta con escáner</div>
+                  </div>
+                </label>
+                <label className={`flex-1 flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${tipoChangeModal.currentTipo === 'televisor' ? 'border-green-500 bg-green-50 dark:bg-green-900/20' : 'border-slate-200 dark:border-slate-700'}`}>
+                  <input
+                    type="radio"
+                    name="tipo"
+                    value="televisor"
+                    checked={tipoChangeModal.currentTipo === 'televisor'}
+                    onChange={() => setTipoChangeModal({ ...tipoChangeModal, currentTipo: 'televisor' })}
+                    className="accent-green-600"
+                    disabled={tipoChangeSaving}
+                  />
+                  <div>
+                    <div className="font-medium text-sm text-slate-900 dark:text-white">📺 Televisor</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">Pantalla publicitaria</div>
+                  </div>
+                </label>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3">
+              <button
+                onClick={() => setTipoChangeModal(null)}
+                className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                disabled={tipoChangeSaving}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={async () => {
+                  setTipoChangeSaving(true);
+                  try {
+                    const result = await changeDeviceTipo(tipoChangeModal.deviceId, tipoChangeModal.currentTipo);
+                    if (result.success) {
+                      showNotification('Tipo de dispositivo actualizado', 'success');
+                      setTipoChangeModal(null);
+                      fetchStatus();
+                    }
+                  } catch (err: any) {
+                    showNotification(err?.response?.data?.detail || 'Error al cambiar tipo', 'error');
+                  } finally {
+                    setTipoChangeSaving(false);
+                  }
+                }}
+                disabled={tipoChangeSaving}
+                className="px-4 py-2 text-sm font-bold text-white bg-violet-600 hover:bg-violet-500 rounded-lg transition-colors disabled:opacity-40"
+              >
+                {tipoChangeSaving ? 'Guardando...' : 'Guardar'}
               </button>
             </div>
           </div>

@@ -11,6 +11,7 @@ export interface DeviceStatus {
   ultima_duracion?: number | null;
   tiempo_acumulado?: number | null;
   server_id?: string | null;
+  tipo?: string;
   hora_reinicio?: string | null;
   reinicio_recurrente?: boolean;
 }
@@ -127,6 +128,7 @@ export async function getServersStatusWithDevices(): Promise<ServerStatusDetail[
           ultima_duracion: d.ultima_duracion ?? null,
           tiempo_acumulado: d.tiempo_acumulado ?? null,
           server_id: d.server_id ?? null,
+          tipo: d.tipo ?? 'verificador',
           hora_reinicio: d.hora_reinicio ?? null,
           reinicio_recurrente: d.reinicio_recurrente ?? false,
         }))
@@ -159,8 +161,14 @@ export async function getSecondaryServersVideoCounts(): Promise<SecondaryServerV
   }));
 }
 
-export async function startForceSyncJob(): Promise<ForceSyncJobStart> {
-  const response = await api.post('/monitoreo/sincronizar-fuerza');
+export async function startForceSyncJob(
+  servidor_ids?: number[],
+  dispositivo_ids?: string[]
+): Promise<ForceSyncJobStart> {
+  const response = await api.post('/monitoreo/sincronizar-fuerza', {
+    servidor_ids: servidor_ids && servidor_ids.length > 0 ? servidor_ids : undefined,
+    dispositivo_ids: dispositivo_ids && dispositivo_ids.length > 0 ? dispositivo_ids : undefined,
+  });
   return response.data as ForceSyncJobStart;
 }
 
@@ -251,6 +259,11 @@ export interface QueueStatus {
 export interface QueueStatusPerServer {
   server: string;
   status: QueueStatus;
+}
+
+export async function changeDeviceTipo(deviceId: string, tipo: string): Promise<{ success: boolean; device_id: string; tipo: string }> {
+  const response = await api.patch(`/dispositivos/${encodeURIComponent(deviceId)}/tipo`, { tipo });
+  return response.data as { success: boolean; device_id: string; tipo: string };
 }
 
 export async function getQueueStatus(deviceId: string): Promise<QueueStatusPerServer[]> {

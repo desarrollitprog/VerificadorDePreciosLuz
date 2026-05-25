@@ -12,7 +12,7 @@ class BootReceiver : BroadcastReceiver() {
             Log.i("BootReceiver", "Dispositivo encendido, iniciando aplicación...")
             
             // Iniciar servicio KioskService solo si es TV (FireTV)
-            if (DeviceTypeHelper.isTv(context)) {
+            if (DeviceTypeHelper.detectDeviceType(context) == DeviceTypeHelper.DeviceType.TELEVISOR) {
                 Log.i("BootReceiver", "Dispositivo TV detectado, iniciando KioskService...")
                 val serviceIntent = Intent(context, KioskService::class.java)
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {

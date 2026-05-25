@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Any, Awaitable, Callable, List, Optional
 import uuid
 from pydantic import BaseModel
+from redis.asyncio import Redis
 from . import database, models, schemas
 from .routes import consultas, publicidad
 from .services import DeviceCommandBus, DeviceStateStore
@@ -67,9 +68,27 @@ if os.path.isdir(static_dir):
 device_state_store: DeviceStateStore | None = None
 device_command_bus: DeviceCommandBus | None = None
 device_bus_listener_task: asyncio.Task | None = None
+reproducciones_forward_task: asyncio.Task | None = None
+reproducciones_redis: redis.asyncio.Redis | None = None
 command_acker: Any = None
 pending_queue: Any = None
 banner_batch_manager: Any = None
+
+class PlaybackProgressRequest(BaseModel):
+    reproduccion_id: str
+    dispositivo_id: str
+    banner_id: int
+    titulo: str | None = None
+    tipo_evento: str
+    duracion_total_seg: float | None = None
+    segundos_reproducidos: float | None = None
+    porcentaje_completado: float | None = None
+    cuartil_50: bool | None = None
+    cuartil_75: bool | None = None
+    cuartil_100: bool | None = None
+    completo: bool | None = None
+    motivo_fin: str | None = None
+
 
 # Endpoint para consultar el estado de los dispositivos
 @app.get("/devices/status")
@@ -177,6 +196,35 @@ async def _periodic_banner_cleanup():
             await asyncio.sleep(86400)
 
 
+async def _forward_reproducciones_batch():
+    DASHBOARD_URL = os.getenv("DASHBOARD_URL", "http://localhost:8001").rstrip("/")
+    BATCH_URL = f"{DASHBOARD_URL}/api/reproducciones/batch"
+    while True:
+        try:
+            await asyncio.sleep(60)
+            global reproducciones_redis
+            if reproducciones_redis is None:
+                continue
+            import json
+            items = await reproducciones_redis.lrange("reproducciones:pending", 0, -1)
+            if not items:
+                continue
+            eventos = [json.loads(i) for i in items]
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.post(BATCH_URL, json={"eventos": eventos})
+                if resp.status_code == 200:
+                    await reproducciones_redis.ltrim("reproducciones:pending", len(items), -1)
+                    logger.info(f"[Reproducciones] Batch enviado: {len(eventos)} eventos")
+                else:
+                    logger.warning(f"[Reproducciones] Dashboard respondió {resp.status_code}, reintentando en 60s")
+        except httpx.ConnectError:
+            logger.warning("[Reproducciones] Dashboard no disponible, reintentando en 60s")
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"[Reproducciones] Error en forward batch: {e}")
+
+
 async def _notify_banners_started():
     try:
         async for db in get_db_publicidad():
@@ -262,41 +310,50 @@ async def _send_banner_notification(banner: Publicidad, target_device_ids: List[
 
 async def _send_to_device_robust(device_id: str, banner_info: dict) -> bool:
     sent_via = None
-    
+    command = banner_info.get("command", "")
+
     if device_command_bus is not None:
         try:
             await device_command_bus.publish_command(
                 device_id=device_id,
-                command=banner_info.get("command", ""),
+                command=command,
                 payload=banner_info,
             )
             sent_via = "Redis"
-            logger.info(f"[BANNER_ROBUST] Enviado {banner_info.get('command')} via Redis a {device_id}")
+            logger.info(f"[BANNER_ROBUST] Enviado {command} via Redis a {device_id}")
         except Exception as e:
             logger.warning(f"[BANNER_ROBUST] Redis falló para {device_id}: {e}")
-    
+
     ws = tablet_ws_manager.device_map.get(device_id)
     if ws:
         try:
             await ws.send_json(banner_info)
             sent_via = "WS"
-            logger.info(f"[BANNER_ROBUST] Enviado {banner_info.get('command')} via WS a {device_id}")
+            logger.info(f"[BANNER_ROBUST] Enviado {command} via WS a {device_id}")
         except Exception as e:
             logger.warning(f"[BANNER_ROBUST] WS falló para {device_id}: {e}")
-    
+
     if sent_via:
         return True
-    
+
+    # Fallback 1: key legacy pending:banner con TTL 24h
     try:
-        from app.services.device_state import DeviceStateStore
         key = f"device:pending:banner:{device_id}"
         import json
-        await device_state_store.redis.set(key, json.dumps(banner_info), ex=300)
-        logger.info(f"[BANNER_ROBUST] Guardado en cola Redis para {device_id}")
+        await device_state_store.redis.set(key, json.dumps(banner_info), ex=86400)
+        logger.info(f"[BANNER_ROBUST] Guardado en pending:banner para {device_id} (24h TTL)")
     except Exception as e:
-        logger.warning(f"[BANNER_ROBUST] Cola Redis falló para {device_id}: {e}")
-    
-    return sent_via is not None
+        logger.warning(f"[BANNER_ROBUST] pending:banner falló para {device_id}: {e}")
+
+    # Fallback 2: cola persistente Redis (se entrega en reconexión)
+    if command in ("BANNER_INICIADO", "BANNER_FINALIZADO") and pending_queue is not None:
+        try:
+            await pending_queue.enqueue(device_id, banner_info)
+            logger.info(f"[BANNER_ROBUST] Encolado en pending_queue para {device_id}")
+        except Exception as e:
+            logger.warning(f"[BANNER_ROBUST] pending_queue falló para {device_id}: {e}")
+
+    return False
 
 
 async def send_banner_notification_robust(banner: Publicidad, target_device_ids: List[str] | None, command: str):
@@ -309,27 +366,26 @@ async def send_banner_notification_robust(banner: Publicidad, target_device_ids:
         "fecha_inicio": banner.fecha_inicio.isoformat() if banner.fecha_inicio else None,
         "fecha_fin": banner.fecha_fin.isoformat() if banner.fecha_fin else None,
     }
-    
+
     if target_device_ids:
         for device_id in target_device_ids:
             await _send_to_device_robust(device_id, banner_info)
     else:
+        all_device_ids: set[str] = set()
         if device_state_store is not None:
             try:
                 status_map = await device_state_store.get_all_status()
-                online_devices = [d for d, info in status_map.items() if info.get("online")]
+                all_device_ids = set(status_map.keys())
             except Exception as e:
                 logger.warning(f"[BANNER_ROBUST] Error obteniendo estado de Redis: {e}")
-                online_devices = []
-        else:
-            online_devices = []
-        
-        if not online_devices:
-            online_devices = [d for d, _ in tablet_ws_manager.get_connected_targets() if d]
-        
-        logger.info(f"[BANNER_ROBUST] {command} para banner {banner.id}: {len(online_devices)} dispositivos")
-        
-        for device_id in online_devices:
+
+        if not all_device_ids:
+            all_device_ids = set(d for d, _ in tablet_ws_manager.get_connected_targets() if d)
+
+        online_count = sum(1 for d in all_device_ids if d in tablet_ws_manager.device_map)
+        logger.info(f"[BANNER_ROBUST] {command} para banner {banner.id}: {len(all_device_ids)} disp. ({online_count} online)")
+
+        for device_id in all_device_ids:
             await _send_to_device_robust(device_id, banner_info)
 
 
@@ -479,8 +535,41 @@ async def _delayed_batch_flush():
                     logger.warning("[BANNER_BATCH] Redis bus falló: %s", e)
 
         banners = await banner_batch_manager.flush(_send)
-        if banners:
-            logger.info("[BANNER_BATCH] Lote enviado con %d banners", len(banners))
+        if not banners:
+            return
+
+        logger.info("[BANNER_BATCH] Lote enviado con %d banners", len(banners))
+
+        # Encolar BANNER_LIST a dispositivos offline
+        if pending_queue is not None and device_state_store is not None:
+            try:
+                status_map = await device_state_store.get_all_status()
+                offline_ids = set(status_map.keys()) - set(tablet_ws_manager.device_map.keys())
+                if not offline_ids:
+                    return
+
+                target: set[str] = set()
+                is_broadcast = any(b.get("device_ids") is None for b in banners)
+                if is_broadcast:
+                    target = offline_ids
+                else:
+                    for b in banners:
+                        dids = b.get("device_ids")
+                        if dids:
+                            target.update(d.strip() for d in dids if d.strip())
+                    target &= offline_ids
+
+                if not target:
+                    return
+
+                msg = {"command": "BANNER_LIST", "banners": banners}
+                for device_id in target:
+                    await pending_queue.enqueue(device_id, msg)
+                logger.info("[BANNER_BATCH] BANNER_LIST encolado para %d disp. offline", len(target))
+
+            except Exception as e:
+                logger.error("[BANNER_BATCH] Error encolando para offline: %s", e)
+
     except asyncio.CancelledError:
         pass
     except Exception as e:
@@ -603,12 +692,22 @@ async def start_device_monitor():
     logger.info("Banner cleanup task iniciada")
 
     try:
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        global reproducciones_redis
+        reproducciones_redis = Redis.from_url(redis_url, decode_responses=True)
+        await reproducciones_redis.ping()
+        reproducciones_forward_task = asyncio.create_task(_forward_reproducciones_batch())
+        logger.info("[Reproducciones] Redis buffer + forward task iniciados")
+    except Exception as e:
+        logger.warning(f"[Reproducciones] No se pudo inicializar buffer Redis: {e}")
+
+    try:
         from app.services.scheduler_notifications import SchedulerNotifications
         import app.services.scheduler_notifications as sn_mod
         global scheduler_notifications
-        scheduler_notifications = await SchedulerNotifications.create(ttl_seconds=7200)
+        scheduler_notifications = await SchedulerNotifications.create(ttl_seconds=86400)
         sn_mod.scheduler_notifications = scheduler_notifications
-        logger.info("SchedulerNotifications inicializado con Redis (TTL=2h)")
+        logger.info("SchedulerNotifications inicializado con Redis (TTL=24h)")
     except Exception as e:
         logger.warning(f"SchedulerNotifications no disponible: {e}")
 
@@ -649,6 +748,19 @@ async def start_device_monitor():
                         command="BANNER_LIST",
                         payload=msg,
                     )
+
+                # Encolar BANNER_LIST a dispositivos offline
+                if pending_queue is not None and device_state_store is not None:
+                    try:
+                        status_map = await device_state_store.get_all_status()
+                        offline_ids = set(status_map.keys()) - set(tablet_ws_manager.device_map.keys())
+                        if offline_ids:
+                            for device_id in offline_ids:
+                                await pending_queue.enqueue(device_id, msg)
+                            logger.info(f"[RECOVERY] BANNER_LIST encolado para {len(offline_ids)} disp. offline")
+                    except Exception as e:
+                        logger.error(f"[RECOVERY] Error encolando batch recuperado: {e}")
+
                 logger.info(f"[RECOVERY] Batch pendiente recuperado: {len(stale_banners)} banners")
         except Exception as e:
             logger.error(f"[RECOVERY] Error recuperando batch pendiente: {e}")
@@ -706,6 +818,15 @@ async def shutdown_device_state_store():
     if device_command_bus is not None:
         await device_command_bus.close()
         device_command_bus = None
+
+    if reproducciones_forward_task is not None:
+        reproducciones_forward_task.cancel()
+        reproducciones_forward_task = None
+
+    global reproducciones_redis
+    if reproducciones_redis is not None:
+        await reproducciones_redis.close()
+        reproducciones_redis = None
 
     if device_state_store is not None:
         await device_state_store.close()
@@ -1674,6 +1795,7 @@ class TabletWebSocketManager:
     def __init__(self):
         self.active_connections: list[WebSocket] = []
         self.device_map: dict[str, WebSocket] = {}  # device_id -> WebSocket
+        self.device_types: dict[str, str] = {}  # device_id -> device_type
         self.ping_tasks: dict[int, asyncio.Task] = {}  # id(websocket) -> Task
         self.pending_pong: dict[int, asyncio.Event] = {}  # id(websocket) -> Event (set by main loop when pong arrives)
         self._lock = asyncio.Lock()  # Protege acceso concurrente a estructuras compartidas
@@ -1775,6 +1897,8 @@ class TabletWebSocketManager:
             logger.info(f"[WebSocket] Primer mensaje recibido: {msg}")
             device_id = msg.get("device_id")
             logger.info(f"[WebSocket] device_id del mensaje: {device_id}")
+            device_type = msg.get("device_type", "verificador")
+            logger.info(f"[WebSocket] device_type del mensaje: {device_type}")
             
             if not device_id:
                 logger.warning("[WebSocket] device_id no proporcionado, cerrando conexión")
@@ -1792,12 +1916,13 @@ class TabletWebSocketManager:
                 logger.info(f"[WebSocket] Conexión anterior de {device_id} cerrada por reconexión")
             
             self.device_map[device_id] = websocket
-            logger.info(f"[WebSocket] device_map actualizado: {device_id} -> websocket")
+            self.device_types[device_id] = device_type
+            logger.info(f"[WebSocket] device_map actualizado: {device_id} -> websocket (tipo={device_type})")
             
             # Actualizar heartbeat en Redis
             if device_state_store is not None:
                 try:
-                    await device_state_store.upsert_heartbeat(device_id=device_id)
+                    await device_state_store.upsert_heartbeat(device_id=device_id, device_type=device_type)
                 except Exception as e:
                     logger.error(f"[Heartbeat] Error actualizando estado para {device_id}: {e}")
             
@@ -1835,6 +1960,7 @@ class TabletWebSocketManager:
                 if v is websocket:
                     device_id = k
                     del self.device_map[k]
+                    self.device_types.pop(k, None)
                     self._message_queues.pop(k, None)
                     # L2: Recuperar mensajes inflight de Redis
                     if pending_queue is not None:
@@ -1882,7 +2008,15 @@ class TabletWebSocketManager:
                     return True
                 except Exception as e:
                     logger.warning(f"[WS] Error enviando a {device_id}: {e}")
-                    await self.disconnect(ws)
+                    await asyncio.sleep(0.5)
+                    try:
+                        await ws.send_json(message)
+                        return True
+                    except Exception as e2:
+                        logger.warning(f"[WS] Reintento falló para {device_id}: {e2}")
+                        await self.disconnect(ws)
+                        await self._enqueue_message(device_id, message)
+                        return False
         
         # Dispositivo no está en este worker
         # Verificar si está vivo en otro worker (registry compartido)
@@ -1902,13 +2036,13 @@ class TabletWebSocketManager:
         await self._enqueue_message(device_id, message)
         return False
 
-    async def _enqueue_message(self, device_id: str, message: dict):
+    async def _enqueue_message(self, device_id: str, message: dict, websocket: WebSocket | None = None):
         # L2: Priorizar cola persistente en Redis
         if pending_queue is not None:
             logger.info(f"[WS] Encolando en Redis para {device_id}: command={message.get('command')} command_id={message.get('command_id')}")
             await pending_queue.enqueue(device_id, message)
             # Si el dispositivo reconectó entre tanto, flush inmediato
-            ws = self.device_map.get(device_id)
+            ws = websocket or self.device_map.get(device_id)
             if ws:
                 asyncio.create_task(pending_queue.flush_all_to_device(
                     device_id,
@@ -2092,6 +2226,8 @@ class TabletWebSocketManager:
                 # L2: Cleanup de mensajes antiguos en Redis
                 if pending_queue is not None:
                     asyncio.create_task(pending_queue.cleanup_old_messages())
+                # Flush de cola Redis para dispositivos online
+                asyncio.create_task(self._flush_online_queues())
             except asyncio.CancelledError:
                 logger.info("[WS] Tarea de cleanup cancelada")
                 break
@@ -2154,6 +2290,21 @@ class TabletWebSocketManager:
         
         if cleaned > 0:
             logger.info(f"[WS] Total de mensajes antiguos limpiados: {cleaned}")
+
+    async def _flush_online_queues(self):
+        """Flushea colas Redis de dispositivos online en este worker.
+        Se ejecuta cada 60s desde _periodic_cleanup para entregar
+        mensajes encolados a dispositivos que están conectados."""
+        if pending_queue is None:
+            return
+        for device_id, ws in list(self.device_map.items()):
+            try:
+                await pending_queue.flush_all_to_device(
+                    device_id,
+                    lambda msg, _w=ws: _w.send_json(msg) or True
+                )
+            except Exception as e:
+                logger.warning(f"[FLUSH] Error flusheando cola para {device_id}: {e}")
 
     async def _reconcile_all_queues(self):
         """L4.2: Reconciliación de colas Redis vs dispositivos online cada 30 min.
@@ -2895,7 +3046,8 @@ async def websocket_tablet(websocket: WebSocket):
             device_id = msg.get("device_id") or tablet_ws_manager.get_device_id(websocket)
             if device_id and device_state_store is not None:
                 try:
-                    await device_state_store.upsert_heartbeat(device_id=device_id)
+                    dt = tablet_ws_manager.device_types.get(device_id)
+                    await device_state_store.upsert_heartbeat(device_id=device_id, device_type=dt)
                 except Exception:
                     pass
             try:
@@ -2941,6 +3093,37 @@ async def ws_broadcast(message: dict):
         return {"success": True, "forwarded": len(tablet_ws_manager.active_connections)}
     logger.warning(f"[ws/broadcast] Unknown message type: {msg_type}")
     raise HTTPException(status_code=400, detail=f"Unknown message type: {msg_type}")
+
+@app.post("/api/reproducciones/progreso")
+async def recibir_progreso_reproduccion(body: PlaybackProgressRequest):
+    global reproducciones_redis
+    try:
+        if reproducciones_redis is not None:
+            import json
+            item = body.model_dump()
+            item["_ts"] = datetime.now(timezone.utc).isoformat()
+            await reproducciones_redis.rpush("reproducciones:pending", json.dumps(item))
+            await reproducciones_redis.expire("reproducciones:pending", 28800)
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Error guardando progreso reproducción: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/api/reproducciones/pendientes")
+async def obtener_reproducciones_pendientes():
+    global reproducciones_redis
+    if reproducciones_redis is None:
+        return {"eventos": []}
+    try:
+        import json
+        items = await reproducciones_redis.lrange("reproducciones:pending", 0, -1)
+        eventos = [json.loads(i) for i in items]
+        return {"eventos": eventos}
+    except Exception as e:
+        logger.error(f"Error leyendo reproducciones pendientes: {e}")
+        return {"eventos": []}
+
 
 app.include_router(consultas)
 app.include_router(publicidad)

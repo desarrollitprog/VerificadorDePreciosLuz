@@ -23,14 +23,59 @@ export interface HistorialSubida {
   cantidad: number;
 }
 
+export interface DispositivosResumen {
+  total: number;
+  online: number;
+  offline: number;
+  verificadores?: number;
+  televisores?: number;
+}
+
 export interface ResumenData {
   servidores: { total: number; online: number; offline: number };
-  dispositivos: { total: number; online: number; offline: number };
+  dispositivos: DispositivosResumen;
   banners: { total: number; programados: number; inactivos: number; vencidos: number; reproduciendose: number };
   usuarios: { total: number; activos: number };
   servidores_detalle: ServidorResumen[];
   banners_por_servidor: BannersPorServidor[];
   historial_subidas: HistorialSubida[];
+}
+
+export interface BannerMetrica {
+  banner_id: number;
+  titulo: string | null;
+  inicios: number;
+  validas_50: number;
+  vcr: number;
+}
+
+export interface TendenciaDiaria {
+  fecha: string;
+  tv_estimadas: number;
+  ver_validas: number;
+}
+
+export interface ResumenReproducciones {
+  total_eventos: number;
+  inicios: number;
+  validas_50: number;
+  ver_total: number;
+  tv_total: number;
+  banners: BannerMetrica[];
+}
+
+export interface ReproduccionesResponse {
+  success: boolean;
+  fecha: string;
+  resumen: ResumenReproducciones;
+  tendencia_14d: TendenciaDiaria[];
+}
+
+export async function fetchReproduccionesResumenDiario(fecha?: string): Promise<ReproduccionesResponse> {
+  const params: any = {};
+  if (fecha) params.fecha = fecha;
+  const response = await api.get('/reproducciones/resumen-diario', { params });
+  return response.data as ReproduccionesResponse;
 }
 
 export async function fetchResumen(): Promise<ResumenData> {

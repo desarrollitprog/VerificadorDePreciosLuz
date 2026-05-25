@@ -1,142 +1,102 @@
 # AGENTS.md - VerificadorDePreciosLuz
 
-## Project Overview
-
 Multiservice kiosk system: admin dashboard + secondary-server APIs + Android barcode scanner app. Manages banners/publicity, product price lookups, and device monitoring across ~10 servers / ~20 devices.
 
 ## Commands
 
 ### Frontend (dashboard)
 ```powershell
-cd dashboard
-npm install
-npm run dev  # Port 3000, proxies /api + /static to backend-dashboard via vite.config.ts
+cd dashboard; npm install; npm run dev  # Port 3000, proxies /api+/static to backend-dashboard
 ```
-
 ### Backend (backend-dashboard)
 ```powershell
-cd backend-dashboard
-python -m venv venv
-.\venv\Scripts\Activate
-pip install -r requirements.txt
+cd backend-dashboard; python -m venv venv; .\venv\Scripts\Activate; pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
 ```
-
-### Backend (backend-api) - runs on each secondary server
+### Backend (backend-api) — runs on each kiosk server
 ```powershell
-cd backend-api
-python -m venv venv
-.\venv\Scripts\Activate
-pip install -r requirements.txt
+cd backend-api; python -m venv venv; .\venv\Scripts\Activate; pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
-
 ### Tests
 ```powershell
-cd backend-dashboard
-pytest tests/ -v
+cd backend-dashboard; pytest tests/ -v
 ```
-
 ### Docker
 ```powershell
 docker-compose up -d --build
-docker-compose logs -f
 ```
 
-## Key Architecture
+## Architecture
 
 ### Two Backends — Different Roles
-- **backend-dashboard** (port 8001): Admin UI backend. Routes: `/api/banners`, `/api/heartbeat`, `/api/monitoreo` (package: `devices`, `heartbeat`, `servers`, `sync`), `/api/auth`, `/api/notificaciones`, `/api/auditoria`, `/api/resumen`. Talks to `DashboardUsuarios` DB.
-- **backend-api** (port 8000): Runs on each kiosk server. Routes: `/consultar/{codigo}`, `/banners/remoto/{id}`, `/banners/{id}`, `/banners/{id}/exists`, `/replicar-archivo`, `/backup`, `/heartbeat`, `/api/comandos/{device_id}`, `/devices/status`, `/devices/{device_id}`, `/ping`, `/api/fuerza-sync`, `/api/debug-bcv`. Talks to `ERP_MPC` + `PublicidadSecundaria` DBs. Exposes WebSocket (same port) for device commands.
+- **backend-dashboard** (port 8001 dev, port 8000 container → docker-compose maps 8001:8000): Admin UI backend. Routes mounted under `/api`: banners, heartbeat, monitoreo, auth, notificaciones, auditoria, resumen, reproducciones. Talks to `DashboardUsuarios` DB (SQL Server via aioodbc, ODBC Driver 18). Serves `/static` for banners/files.
+- **backend-api** (port 8000): Runs on each kiosk server. Routes mounted **directly** (no prefix): `/consultar/{codigo}`, `/banners/remoto/{id}`, `/banners/{id}`, `/banners/{id}/exists`, `/replicar-archivo`, `/backup`, `/heartbeat`, `/api/comandos/{device_id}`, `/devices/status`, `/devices/{device_id}`, `/ping`. Talks to **3 databases**: (1) ERP_MPC (products/prices), (2) ERP_POS_CENTRAL (tax rates), (3) PublicidadSecundaria (banners). Exposes WebSocket (same port) for device commands.
+
+### nginx (production)
+- `nginx/nginx.conf`: Serves React SPA (`/usr/share/nginx/html`, SPA fallback), proxies `/api/` and `/static/` to backend container at `dashboard-backend:8000`. `client_max_body_size 100M` for banner uploads. Alternative SSL config at `nginx/nginx-ssl.conf`.
 
 ### Replication (banner sync)
-- backend-dashboard **pushes** banners/videos to all backend-api servers
-- Uses `asyncio.gather()` for parallel execution across servers
-- `get_api_urls()` reads `BACKEND_API_URLS` env var (comma-separated list)
-- Endpoints: `/banners/remoto/{id}` (POST/PATCH/DELETE) on backend-api
-- **Deletion is idempotent**: `Borrado_api()` treats both 200 and 404 as success (2026-05 fix). Server without a banner responds 404 = no-op, not error.
-- Some legacy replication functions iterate sequentially (`Borrado_a_todas_las_apis`, `replicar_archivo_a_todas_las_apis`); newer ones use `asyncio.gather` in parallel.
+- backend-dashboard **pushes** banners/videos to all backend-api servers via `asyncio.gather()` for parallel execution.
+- `get_api_urls()` reads `BACKEND_API_URLS` env var (comma-separated). For `ServidorSecundario`-based targets, `api_url = f"http://{srv.ip}:8000"`.
+- Endpoints hit on backend-api: `/replicar-archivo` (POST/PATCH), `/banners/remoto/{id_remoto}` (DELETE), `/banners/remoto/{id_remoto}/estado` (PATCH), `/banners/remoto/{id_remoto}` (PATCH metadata).
+- **Deletion is idempotent**: `Borrado_api()` treats 200 and 404 as success (2026-05 fix). Server with no banner responds 404 = no-op.
+- Some legacy functions (`Borrado_a_todas_las_apis`, `replicar_archivo_a_todas_las_apis`) iterate sequentially; newer ones use `asyncio.gather`.
 
 ### Heartbeat
-- Each backend-api server sends periodic POST `/api/heartbeat` to dashboard with storage stats
-- Key-authenticated via `HEARTBEAT_API_KEY`
-- Devices also send WebSocket heartbeats stored in Redis (`DeviceStateStore`)
+- Each backend-api server sends periodic POST `/api/heartbeat` to dashboard with storage stats. Key-authenticated via `HEARTBEAT_API_KEY`.
+- Devices send WebSocket heartbeats stored in Redis (`DeviceStateStore`).
 
-### Banner Storage
-- Files stored in `backend-dashboard/static/banners/` (mounted volume)
-- Served via FastAPI `StaticFiles` mount at `/static`
-- Video thumbnails generated via OpenCV on upload
-- backend-api also serves its own `/static` for Android devices
+### Scheduler (APScheduler) — `backend-dashboard/app/scheduler.py`
+| Interval | Jobs |
+|----------|------|
+| Every 3.5 min | `actualizar_sesiones_dispositivos` (mark offline), `expirar_banners_vencidos` |
+| Every 15 days | `cleanup_old_sessions` (>90 day sessions), `cleanup_old_notifications` (>15 day) |
+| Every 24h | `cleanup_orphan_files` (stale banner files), `limpiar_metricas_antiguas` |
+| Every hour | `consolidar_por_hora` (metric aggregation) |
 
-### Scheduler (APScheduler)
-Scheduled in `backend-dashboard/app/scheduler.py`, started via `lifespan` hook in `main.py`:
-- Every 3.5 min: `actualizar_sesiones_dispositivos()` (mark offline devices), `expirar_banners_vencidos()` (expire banners)
-- Every 15 days: `cleanup_old_sessions()` (>90 day sessions), `cleanup_old_notifications()` (>15 day notifications)
-- Every 24h: `cleanup_orphan_files()` (stale banner files with no DB record)
-
-### Database
-- SQL Server via `aioodbc`, ODBC Driver 18
-- backend-dashboard: `DashboardUsuarios` DB (users, banners, assignments, audit)
-- backend-api: `ERP_MPC` (products/prices) + `PublicidadSecundaria` (banners)
+### Databases
+- **backend-dashboard**: `DashboardUsuarios` — users, banners, assignments, audit, devices, servers, notifications
+- **backend-api**:
+  - **ERP_MPC** (Transaccional) — products, prices, offers, barcodes, tax links
+  - **ERP_POS_CENTRAL** — tax rates (`TasaImpuesto`)
+  - **PublicidadSecundaria** — replicated banners (model `Publicidad` with `IdPublicidadRemoto` foreign key to dashboard's `IdPublicidad`)
 
 ### Redis
 - Shared device state across backend-api instances (`DeviceStateStore`)
-- Command bus (pub/sub): device commands via Redis channels
+- Command bus (pub/sub) for device commands
 - Command ack waiters (polling with timeout)
-- 2FA rate limiting
-- `dashboard-redis` container inside docker-compose (port 6380)
+- 2FA rate limiting, pending notification storage, banner batch coalescence
+- `dashboard-redis` container in docker-compose (port 6380, internal 6379)
 
 ### CORS
-- `ALLOWED_ORIGINS` env var on backend-dashboard — comma-separated, no wildcards allowed. `*` raises `RuntimeError` at startup (main.py:36-37).
-
-### 2FA
-- Email-based OTP via SMTP (Gmail) on login
-- Rate-limited in Redis
-
-## Android App (luzapp/)
-
-### Overview
-- Kotlin, CameraX, ML Kit for barcode scanning
-- Price lookups via backend-api `/consultar/{codigo}`
-- 3 banner notification channels: WS (direct), Redis pub/sub, pending queue fallback
-
-### Updates
-- **Not served by any backend**. Goes through **GitHub Pages**: `https://tavorl25.github.io/VerificadorDePreciosLuz/version.json`
-- CI builds `assembleRelease` APK daily at 9 AM UTC (GitHub Actions), signs with keystore from secrets, pushes `luzapp.apk` + `version.json` to `main` (GitHub Pages)
-- App checks for updates on launch (`UpdateChecker`) and daily via WorkManager at 6 AM Caracas
-- 3 update modes: `DIALOG` (user confirms via `FileProvider`), `SILENT` (notification), `AUTO` (silent install via `PackageInstaller` + Device Owner)
-- Keystore defined in `app/build.gradle.kts` via env vars: `KEYSTORE_PATH`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` — same for debug and release builds
-- **Critical**: both `debug` and `release` build types use the same release signing config. If a device has a debug APK from local dev, automated updates will **fail** (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`). Desinstall and reinstall via CI-built APK once.
-- `versionName` in `app/build.gradle.kts` is the source of truth for version comparison (supports both semver like "1.2.0" and date like "20260429")
-- CI pushes `version.json` + `luzapp.apk` to `main` with `--force` (build-apk.yml:67)
+- `ALLOWED_ORIGINS` env var — comma-separated origins. `*` raises `RuntimeError` at startup (`main.py:36-37`).
 
 ## Frontend (dashboard/)
 
 - React 18 + TypeScript + Vite 6 + Tailwind CSS
-- Axios for API calls (axios instance at `services/axiosInstance.ts`)
-- No lint/typecheck scripts configured in package.json
-- `VITE_API_URL` in `.env.local` — in Docker it's `/api` (nginx proxy); locally defaults to `http://192.168.0.104:8001` (vite.config.ts:7)
+- Axios at `services/axiosInstance.ts`
+- No lint/typecheck scripts in `package.json`
+- Vite PWA plugin (Workbox for caching)
+- `VITE_API_URL` in `.env.local` — Docker: `/api` (nginx proxy); local dev defaults to `http://192.168.0.104:8001` (`vite.config.ts:8`)
 
-## Useful Gotchas
+## Android App (luzapp/)
 
-### Deletion errors (2026-05 fix context)
-When deleting a banner assigned to multiple servers, `Borrado_api` now treats 404 as success. A server that never had the banner responds 404 (not an error). Before the fix, this caused a 500 response. The frontend re-fetches the video list on any delete outcome (success or error) via `getVideos()` in the `finally` block of `handleDeleteConfirm`.
+### Overview
+- Kotlin, CameraX, ML Kit barcode scanning, Retrofit + OkHttp
+- Price lookups via backend-api `/consultar/{codigo}`
+- 3 notification channels: WS direct, Redis pub/sub, pending queue fallback
+- Current: `versionCode = 17`, `versionName = "2.4.0"` (source of truth at `luzapp/app/build.gradle.kts:16-17`)
+- Signing: **same release keystore for debug & release**. If a device has a locally-built debug APK, CI updates fail (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`). Reinstall from CI APK once.
 
-### nginx
-- Nginx config + SSL certs (`dashboard.crt`, `dashboard.key`, `dashboard.pfx`) in `nginx/` and `nginx/ssl/`
+### Updates
+- **Not served by any backend**. Delivered via **GitHub Pages**: `https://tavorl25.github.io/VerificadorDePreciosLuz/version.json`
+- CI builds `assembleRelease` daily at 9 AM UTC, signs via secrets, commits `luzapp.apk` + `version.json` to `main` with `--force` (build-apk.yml:67). Falls back to pull+rebase if force-push fails.
+- 3 update modes: `DIALOG` (user confirms via FileProvider), `SILENT` (notification), `AUTO` (silent install via PackageInstaller + Device Owner)
 
-### `dashboard/README.md`
-- **Ignore it** — leftover AI Studio template. The real frontend setup is in `AGENTS.md` commands above. No `GEMINI_API_KEY` needed.
+## Gotchas
 
-### `.env` files
-| File | Component |
-|------|-----------|
-| `backend-dashboard/.env.dashboard` | backend-dashboard |
-| `backend-api/.env` | backend-api |
-| `dashboard/.env.local` | Vite proxy target (`VITE_API_URL`) |
-| No `.env.dashboard` or `.env.local` in repo — tracked files are examples only |
-| All `.jks`/`.keystore` files are gitignored |
-
-### Tests
-- 15 test files in `backend-dashboard/tests/`, pytest
-- Run via `pytest tests/`
+- **`dashboard/README.md`**: Ignore it — leftover AI Studio template. No `GEMINI_API_KEY` needed.
+- **Env files**: `backend-dashboard/.env.dashboard`, `backend-api/.env`, `dashboard/.env.local` — all `.example` files in repo; real ones are gitignored.
+- **Deletion**: Frontend re-fetches video list on any delete outcome via `getVideos()` in `finally` block of `handleDeleteConfirm`.
+- **PWA caching**: Service worker may cache stale banner data during development. Hard refresh or disable cache in DevTools.

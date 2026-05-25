@@ -1,18 +1,23 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { RefreshCw, Server, Smartphone, Film, Users, AlertCircle } from 'lucide-react';
-import { fetchResumen, ResumenData } from '../services/resumenService';
+import { RefreshCw, Server, Smartphone, Film, Users, AlertCircle, ChevronDown, ChevronRight, BarChart3 } from 'lucide-react';
+import { fetchResumen, fetchReproduccionesResumenDiario, ResumenData, ReproduccionesResponse } from '../services/resumenService';
 import { getUserRole } from '../services/tokenUtils';
 import KpiCard from '../components/resumen/KpiCard';
 import ServerStorageChart from '../components/resumen/ServerStorageChart';
 import DeviceStatusChart from '../components/resumen/DeviceStatusChart';
 import BannersTimeline from '../components/resumen/BannersTimeline';
 import ServerMiniTable from '../components/resumen/ServerMiniTable';
+import ReproductionTrendChart from '../components/resumen/ReproductionTrendChart';
+import BannerMetricsTable from '../components/resumen/BannerMetricsTable';
 
 export const ResumenScreen: React.FC = () => {
   const [data, setData] = useState<ResumenData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [reproOpen, setReproOpen] = useState(false);
+  const [reproData, setReproData] = useState<ReproduccionesResponse | null>(null);
+  const [reproLoading, setReproLoading] = useState(false);
   const role = getUserRole();
 
   const load = useCallback(async () => {
@@ -148,6 +153,62 @@ export const ResumenScreen: React.FC = () => {
 
           <div className="stagger-4">
             <ServerMiniTable data={data.servidores_detalle} />
+          </div>
+
+          {/* Sección de Reproducciones - colapsable con carga lazy */}
+          <div className="stagger-5">
+            <div
+              className="bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden cursor-pointer"
+              onClick={async () => {
+                if (reproOpen) { setReproOpen(false); return; }
+                setReproOpen(true);
+                if (!reproData && !reproLoading) {
+                  setReproLoading(true);
+                  try {
+                    const result = await fetchReproduccionesResumenDiario();
+                    setReproData(result);
+                  } catch (e) {
+                    console.error('Error cargando reproducciones', e);
+                  } finally {
+                    setReproLoading(false);
+                  }
+                }
+              }}
+            >
+              <div className="h-1 bg-gradient-to-r from-violet-500 to-cyan-500" />
+              <div className="p-5">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    {reproOpen ? <ChevronDown size={18} className="text-slate-500" /> : <ChevronRight size={18} className="text-slate-500" />}
+                    <BarChart3 size={18} className="text-violet-500" />
+                    <h3 className="text-slate-900 dark:text-white font-semibold text-sm">Reproducciones</h3>
+                    {reproData && (
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                        {reproData.resumen.total_eventos} eventos hoy
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {reproOpen && (
+                  <div className="space-y-4 mt-4" onClick={e => e.stopPropagation()}>
+                    {reproLoading ? (
+                      <div className="animate-pulse space-y-4">
+                        <div className="h-48 bg-slate-200 dark:bg-[#253247] rounded" />
+                        <div className="h-32 bg-slate-200 dark:bg-[#253247] rounded" />
+                      </div>
+                    ) : reproData ? (
+                      <>
+                        <ReproductionTrendChart data={reproData.tendencia_14d} />
+                        <BannerMetricsTable data={reproData.resumen.banners} />
+                      </>
+                    ) : (
+                      <p className="text-slate-500 dark:text-slate-400 text-sm">Error al cargar datos</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </>
       )}

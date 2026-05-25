@@ -236,6 +236,7 @@ async def status_detalle(
                     "ultima_duracion": ultima_duracion,
                     "tiempo_acumulado": tiempo_acumulado,
                     "server_id": runtime_info.get("server_id"),
+                    "tipo": getattr(dispositivo, 'tipo', 'verificador'),
                     "hora_reinicio": getattr(dispositivo, 'hora_reinicio', None),
                     "reinicio_recurrente": getattr(dispositivo, 'reinicio_recurrente', False),
                 }

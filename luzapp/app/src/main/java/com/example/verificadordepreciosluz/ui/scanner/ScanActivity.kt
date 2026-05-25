@@ -41,10 +41,12 @@ import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import android.provider.Settings
+import android.media.MediaMetadataRetriever
 import com.example.verificadordepreciosluz.MainActivity
 import com.example.verificadordepreciosluz.BuildConfig
 import com.example.verificadordepreciosluz.data.network.ApiClient
 import com.example.verificadordepreciosluz.data.network.ApiService
+import com.example.verificadordepreciosluz.data.network.PlaybackProgressRequest
 import com.example.verificadordepreciosluz.data.network.PlaybackStatusRequest
 import com.example.verificadordepreciosluz.data.network.ProductoResponse
 import com.example.verificadordepreciosluz.data.local.BackupRepository
@@ -55,6 +57,7 @@ import com.example.verificadordepreciosluz.data.local.BannerRepository
 import com.example.verificadordepreciosluz.data.local.BannerCacheItem
 import com.example.verificadordepreciosluz.databinding.ActivityScanBinding
 import com.example.verificadordepreciosluz.R
+import com.example.verificadordepreciosluz.util.DeviceTypeHelper
 import com.example.verificadordepreciosluz.util.NetworkUtils
 import com.example.verificadordepreciosluz.util.UpdateChecker
 import com.example.verificadordepreciosluz.util.BackupWorker
@@ -147,6 +150,12 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private var resultHideRunnable: Runnable? = null
     private var currentStandbyBitmap: Bitmap? = null
     private var isPurging = false
+    private var reproduccionIdActual: String? = null
+    private var progresoRunnable: Runnable? = null
+    private var ultimoBannerId: Int? = null
+    private var ultimoTitulo: String? = null
+    private var ultimoTipoReproduccion: String? = null
+    private var ultimoCuartilReportado: Int = 0
     private val PURGE_INTERVAL_MS = 30L * 24 * 60 * 60 * 1000  // 30 días
     private var purgeTimerRunnable: Runnable? = null
     private val deviceId: String by lazy {
@@ -297,7 +306,10 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
         ensurePermissionAndStart()
 
-        if (Build.MANUFACTURER.equals("amazon", ignoreCase = true)) {
+        val deviceType = DeviceTypeHelper.detectDeviceType(this)
+        Log.d(TAG, "Tipo de dispositivo detectado: $deviceType")
+        Log.d(TAG, "Build: MANUFACTURER=${Build.MANUFACTURER}, MODEL=${Build.MODEL}, PRODUCT=${Build.PRODUCT}, BOARD=${Build.BOARD}")
+        if (deviceType == DeviceTypeHelper.DeviceType.TELEVISOR) {
             binding.tvTituloScanner.text = getString(R.string.title_tv_mode)
             Log.d(TAG, "FireTV detectado, título cambiado a 'AUTOMERCADOS LUZ'")
         }
@@ -1175,6 +1187,53 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         binding.standbyVideo.visibility = View.GONE
         releaseStandbyBitmap()
         
+        // Finalizar reproducción anterior si existe
+        if (reproduccionIdActual != null && ultimoBannerId != null) {
+            val tipoAnterior = ultimoTipoReproduccion ?: "image"
+            if (tipoAnterior == "image") {
+                sendPlaybackEvent(
+                    bannerId = ultimoBannerId!!,
+                    titulo = ultimoTitulo,
+                    tipoEvento = "COMPLETED",
+                    completo = true,
+                    cuartil50 = true,
+                    cuartil75 = true,
+                    cuartil100 = true,
+                    motivoFin = "completion"
+                )
+            } else {
+                sendPlaybackEvent(
+                    bannerId = ultimoBannerId!!,
+                    titulo = ultimoTitulo,
+                    tipoEvento = "INTERRUPTED",
+                    completo = false,
+                    motivoFin = "skip"
+                )
+            }
+            reproduccionIdActual = null
+        }
+
+        // Generar ID único para esta reproducción
+        val fallbackDur = item.duracionSeg?.toDouble() ?: 10.0
+        val durSeg = if (item.tipo == "video") {
+            getVideoDurationSeconds(item.localPath) ?: fallbackDur
+        } else {
+            fallbackDur
+        }
+        reproduccionIdActual = "${deviceId}_${item.id}_${System.currentTimeMillis()}"
+        ultimoBannerId = item.id
+        ultimoTitulo = item.titulo
+        ultimoTipoReproduccion = item.tipo
+        ultimoCuartilReportado = 0
+        
+        // Reportar inicio de reproducción
+        sendPlaybackEvent(
+            bannerId = item.id,
+            titulo = item.titulo,
+            tipoEvento = "START",
+            duracionTotalSeg = durSeg
+        )
+        
         // Notificar al servidor qué contenido se está reproduciendo
         notifyPlayingNow(item)
         
@@ -1182,6 +1241,22 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             binding.standbyVideo.visibility = View.VISIBLE
             
             binding.standbyVideo.setOnCompletionListener {
+                sendPlaybackEvent(
+                    bannerId = item.id,
+                    titulo = item.titulo,
+                    tipoEvento = "COMPLETED",
+                    duracionTotalSeg = durSeg,
+                    segundosReproducidos = durSeg,
+                    porcentajeCompletado = 100.0,
+                    cuartil50 = true,
+                    cuartil75 = true,
+                    cuartil100 = true,
+                    completo = true,
+                    motivoFin = "completion"
+                )
+                stopVideoProgressTracker()
+                reproduccionIdActual = null
+                ultimoTipoReproduccion = null
                 resetVideoView()
                 nextStandbyItem()
             }
@@ -1232,6 +1307,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             uiHandler.postDelayed({
                 binding.standbyVideo.setVideoURI(videoUri)
                 binding.standbyVideo.start()
+                startVideoProgressTracker(item.id, durSeg)
             }, 100)
         } else {
             binding.standbyImage.visibility = View.VISIBLE
@@ -1266,8 +1342,47 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     }
 
     // Detiene el carrusel y limpia el overlay
-    private fun stopStandbyCarousel() {
+    private fun stopStandbyCarousel(motivo: String = "scan") {
         if (!standbyActive) return
+        val lastBanner = ultimoBannerId
+        stopVideoProgressTracker()
+        if (lastBanner != null && reproduccionIdActual != null) {
+            val tipoAnterior = ultimoTipoReproduccion ?: "image"
+            try {
+                if (tipoAnterior == "image") {
+                    sendPlaybackEvent(
+                        bannerId = lastBanner,
+                        titulo = ultimoTitulo,
+                        tipoEvento = "COMPLETED",
+                        completo = true,
+                        cuartil50 = true,
+                        cuartil75 = true,
+                        cuartil100 = true,
+                        motivoFin = motivo
+                    )
+                } else {
+                    val currentPos = binding.standbyVideo.currentPosition.toDouble()
+                    val duration = binding.standbyVideo.duration.toDouble()
+                    val pct = if (duration > 0) (currentPos / duration) * 100.0 else 0.0
+                    sendPlaybackEvent(
+                        bannerId = lastBanner,
+                        titulo = ultimoTitulo,
+                        tipoEvento = "INTERRUPTED",
+                        segundosReproducidos = currentPos / 1000.0,
+                        porcentajeCompletado = pct,
+                        cuartil50 = pct >= 50,
+                        cuartil75 = pct >= 75,
+                        cuartil100 = false,
+                        completo = false,
+                        motivoFin = motivo
+                    )
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error enviando ${if (tipoAnterior == "image") "COMPLETED" else "INTERRUPTED"}: ${e.message}")
+            }
+        }
+        reproduccionIdActual = null
+        ultimoTipoReproduccion = null
         standbyActive = false
         standbySlideRunnable?.let { uiHandler.removeCallbacks(it) }
         binding.standbyVideo.stopPlayback()
@@ -1578,6 +1693,108 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 Log.w(TAG, "No se pudo reportar playback error al backend-api: ${e.message}")
             }
         }
+    }
+
+    private fun getVideoDurationSeconds(localPath: String): Double? {
+        return try {
+            val retriever = MediaMetadataRetriever()
+            retriever.setDataSource(localPath)
+            val durMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+            retriever.release()
+            durMs?.toDoubleOrNull()?.let { it / 1000.0 }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error obteniendo duración real del video: ${e.message}")
+            null
+        }
+    }
+
+    private fun sendPlaybackEvent(
+        bannerId: Int,
+        titulo: String? = null,
+        tipoEvento: String,
+        duracionTotalSeg: Double? = null,
+        segundosReproducidos: Double? = null,
+        porcentajeCompletado: Double? = null,
+        cuartil50: Boolean? = null,
+        cuartil75: Boolean? = null,
+        cuartil100: Boolean? = null,
+        completo: Boolean? = null,
+        motivoFin: String? = null
+    ) {
+        val service = api ?: return
+        val rid = reproduccionIdActual ?: return
+        scope.launch {
+            try {
+                service.reportarProgresoReproduccion(
+                    PlaybackProgressRequest(
+                        reproduccionId = rid,
+                        dispositivoId = deviceId,
+                        bannerId = bannerId,
+                        titulo = titulo,
+                        tipoEvento = tipoEvento,
+                        duracionTotalSeg = duracionTotalSeg,
+                        segundosReproducidos = segundosReproducidos,
+                        porcentajeCompletado = porcentajeCompletado,
+                        cuartil50 = cuartil50,
+                        cuartil75 = cuartil75,
+                        cuartil100 = cuartil100,
+                        completo = completo,
+                        motivoFin = motivoFin
+                    )
+                )
+                Log.d(TAG, "Playback event $tipoEvento enviado para banner $bannerId")
+            } catch (e: Exception) {
+                Log.w(TAG, "Error enviando playback event $tipoEvento: ${e.message}")
+            }
+        }
+    }
+
+    private fun startVideoProgressTracker(bannerId: Int, duracionTotalSeg: Double) {
+        stopVideoProgressTracker()
+        ultimoCuartilReportado = 0
+        ultimoBannerId = bannerId
+        progresoRunnable = Runnable {
+            try {
+                val currentPos = binding.standbyVideo.currentPosition.toDouble()
+                val duration = binding.standbyVideo.duration.toDouble()
+                if (duration <= 0) return@Runnable
+
+                val pct = (currentPos / duration) * 100.0
+                val cuartil = when {
+                    pct >= 100 -> 100
+                    pct >= 75 -> 75
+                    pct >= 50 -> 50
+                    else -> 25
+                }
+
+                if (cuartil > ultimoCuartilReportado) {
+                    ultimoCuartilReportado = cuartil
+                    sendPlaybackEvent(
+                        bannerId = bannerId,
+                        titulo = ultimoTitulo,
+                        tipoEvento = "PROGRESS",
+                        duracionTotalSeg = duracionTotalSeg,
+                        segundosReproducidos = currentPos / 1000.0,
+                        porcentajeCompletado = pct,
+                        cuartil50 = cuartil >= 50,
+                        cuartil75 = cuartil >= 75,
+                        cuartil100 = cuartil >= 100
+                    )
+                }
+
+                if (standbyActive) {
+                    uiHandler.postDelayed(progresoRunnable!!, 1000)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error en videoProgressTracker: ${e.message}")
+            }
+        }
+        uiHandler.postDelayed(progresoRunnable!!, 1000)
+    }
+
+    private fun stopVideoProgressTracker() {
+        progresoRunnable?.let { uiHandler.removeCallbacks(it) }
+        progresoRunnable = null
     }
 
     private fun startPingMonitor() {
@@ -1966,6 +2183,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                         val identifyMsg = org.json.JSONObject()
                         identifyMsg.put("type", "IDENTIFY")
                         identifyMsg.put("device_id", deviceId)
+                        identifyMsg.put("device_type", DeviceTypeHelper.detectDeviceType(this@ScanActivity).name.lowercase(Locale.ROOT))
                         webSocket.send(identifyMsg.toString())
                         Log.i(TAG, "[WebSocket] Identificación enviada: device_id=$deviceId")
                     } catch (e: Exception) {

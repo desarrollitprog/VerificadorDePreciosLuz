@@ -24,6 +24,7 @@ def iniciar_scheduler() -> AsyncIOScheduler:
     from app.services.monitoreo_service import actualizar_sesiones_dispositivos
     from app.services.publicidad_service import expirar_banners_vencidos
     from app.cleanup_service import cleanup_old_sessions, cleanup_old_notifications, cleanup_orphan_files
+    from app.services.metricas_service import consolidar_por_hora, limpiar_metricas_antiguas, agregar_metricas_diarias
 
     _scheduler = AsyncIOScheduler()
 
@@ -69,6 +70,48 @@ def iniciar_scheduler() -> AsyncIOScheduler:
         'interval',
         hours=24,
         id='limpiar_archivos_huérfanos',
+        replace_existing=True
+    )
+
+    # Job 6: Consolidar métricas de reproducción cada hora
+    async def _consolidar_metricas():
+        from app.database import AsyncSessionLocalUsuarios
+        async with AsyncSessionLocalUsuarios() as db:
+            await consolidar_por_hora(db)
+
+    _scheduler.add_job(
+        _consolidar_metricas,
+        'interval',
+        hours=1,
+        id='consolidar_reproducciones',
+        replace_existing=True
+    )
+
+    # Job 7: Limpiar métricas antiguas cada 24 horas
+    async def _limpiar_metricas():
+        from app.database import AsyncSessionLocalUsuarios
+        async with AsyncSessionLocalUsuarios() as db:
+            await limpiar_metricas_antiguas(db)
+
+    _scheduler.add_job(
+        _limpiar_metricas,
+        'interval',
+        hours=24,
+        id='limpiar_metricas_antiguas',
+        replace_existing=True
+    )
+
+    # Job 8: Agregar métricas diarias (ayer → metricas_diarias) cada 24 horas
+    async def _agregar_metricas():
+        from app.database import AsyncSessionLocalUsuarios
+        async with AsyncSessionLocalUsuarios() as db:
+            await agregar_metricas_diarias(db)
+
+    _scheduler.add_job(
+        _agregar_metricas,
+        'interval',
+        hours=24,
+        id='agregar_metricas_diarias',
         replace_existing=True
     )
 

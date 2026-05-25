@@ -38,8 +38,12 @@ async def obtener_resumen(
         # Dispositivos
         stmt_disp_total = select(func.count(Dispositivo.id))
         stmt_disp_online = select(func.count(Dispositivo.id)).where(Dispositivo.online == True)
+        stmt_ver = select(func.count(Dispositivo.id)).where(Dispositivo.tipo == "verificador")
+        stmt_tv = select(func.count(Dispositivo.id)).where(Dispositivo.tipo == "televisor")
         dispositivos_total = (await db.execute(stmt_disp_total)).scalar() or 0
         dispositivos_online = (await db.execute(stmt_disp_online)).scalar() or 0
+        total_ver = (await db.execute(stmt_ver)).scalar() or 0
+        total_tv = (await db.execute(stmt_tv)).scalar() or 0
 
         # Banners
         stmt_banners_total = select(func.count(Publicidad.IdPublicidad))
@@ -129,6 +133,8 @@ async def obtener_resumen(
                 "total": dispositivos_total,
                 "online": dispositivos_online,
                 "offline": dispositivos_total - dispositivos_online,
+                "verificadores": total_ver,
+                "televisores": total_tv,
             },
             "banners": {
                 "total": banners_total,

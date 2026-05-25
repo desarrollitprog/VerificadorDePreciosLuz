@@ -310,41 +310,50 @@ async def _send_banner_notification(banner: Publicidad, target_device_ids: List[
 
 async def _send_to_device_robust(device_id: str, banner_info: dict) -> bool:
     sent_via = None
-    
+    command = banner_info.get("command", "")
+
     if device_command_bus is not None:
         try:
             await device_command_bus.publish_command(
                 device_id=device_id,
-                command=banner_info.get("command", ""),
+                command=command,
                 payload=banner_info,
             )
             sent_via = "Redis"
-            logger.info(f"[BANNER_ROBUST] Enviado {banner_info.get('command')} via Redis a {device_id}")
+            logger.info(f"[BANNER_ROBUST] Enviado {command} via Redis a {device_id}")
         except Exception as e:
             logger.warning(f"[BANNER_ROBUST] Redis falló para {device_id}: {e}")
-    
+
     ws = tablet_ws_manager.device_map.get(device_id)
     if ws:
         try:
             await ws.send_json(banner_info)
             sent_via = "WS"
-            logger.info(f"[BANNER_ROBUST] Enviado {banner_info.get('command')} via WS a {device_id}")
+            logger.info(f"[BANNER_ROBUST] Enviado {command} via WS a {device_id}")
         except Exception as e:
             logger.warning(f"[BANNER_ROBUST] WS falló para {device_id}: {e}")
-    
+
     if sent_via:
         return True
-    
+
+    # Fallback 1: key legacy pending:banner con TTL 24h
     try:
-        from app.services.device_state import DeviceStateStore
         key = f"device:pending:banner:{device_id}"
         import json
-        await device_state_store.redis.set(key, json.dumps(banner_info), ex=300)
-        logger.info(f"[BANNER_ROBUST] Guardado en cola Redis para {device_id}")
+        await device_state_store.redis.set(key, json.dumps(banner_info), ex=86400)
+        logger.info(f"[BANNER_ROBUST] Guardado en pending:banner para {device_id} (24h TTL)")
     except Exception as e:
-        logger.warning(f"[BANNER_ROBUST] Cola Redis falló para {device_id}: {e}")
-    
-    return sent_via is not None
+        logger.warning(f"[BANNER_ROBUST] pending:banner falló para {device_id}: {e}")
+
+    # Fallback 2: cola persistente Redis (se entrega en reconexión)
+    if command in ("BANNER_INICIADO", "BANNER_FINALIZADO") and pending_queue is not None:
+        try:
+            await pending_queue.enqueue(device_id, banner_info)
+            logger.info(f"[BANNER_ROBUST] Encolado en pending_queue para {device_id}")
+        except Exception as e:
+            logger.warning(f"[BANNER_ROBUST] pending_queue falló para {device_id}: {e}")
+
+    return False
 
 
 async def send_banner_notification_robust(banner: Publicidad, target_device_ids: List[str] | None, command: str):
@@ -357,27 +366,26 @@ async def send_banner_notification_robust(banner: Publicidad, target_device_ids:
         "fecha_inicio": banner.fecha_inicio.isoformat() if banner.fecha_inicio else None,
         "fecha_fin": banner.fecha_fin.isoformat() if banner.fecha_fin else None,
     }
-    
+
     if target_device_ids:
         for device_id in target_device_ids:
             await _send_to_device_robust(device_id, banner_info)
     else:
+        all_device_ids: set[str] = set()
         if device_state_store is not None:
             try:
                 status_map = await device_state_store.get_all_status()
-                online_devices = [d for d, info in status_map.items() if info.get("online")]
+                all_device_ids = set(status_map.keys())
             except Exception as e:
                 logger.warning(f"[BANNER_ROBUST] Error obteniendo estado de Redis: {e}")
-                online_devices = []
-        else:
-            online_devices = []
-        
-        if not online_devices:
-            online_devices = [d for d, _ in tablet_ws_manager.get_connected_targets() if d]
-        
-        logger.info(f"[BANNER_ROBUST] {command} para banner {banner.id}: {len(online_devices)} dispositivos")
-        
-        for device_id in online_devices:
+
+        if not all_device_ids:
+            all_device_ids = set(d for d, _ in tablet_ws_manager.get_connected_targets() if d)
+
+        online_count = sum(1 for d in all_device_ids if d in tablet_ws_manager.device_map)
+        logger.info(f"[BANNER_ROBUST] {command} para banner {banner.id}: {len(all_device_ids)} disp. ({online_count} online)")
+
+        for device_id in all_device_ids:
             await _send_to_device_robust(device_id, banner_info)
 
 
@@ -527,8 +535,41 @@ async def _delayed_batch_flush():
                     logger.warning("[BANNER_BATCH] Redis bus falló: %s", e)
 
         banners = await banner_batch_manager.flush(_send)
-        if banners:
-            logger.info("[BANNER_BATCH] Lote enviado con %d banners", len(banners))
+        if not banners:
+            return
+
+        logger.info("[BANNER_BATCH] Lote enviado con %d banners", len(banners))
+
+        # Encolar BANNER_LIST a dispositivos offline
+        if pending_queue is not None and device_state_store is not None:
+            try:
+                status_map = await device_state_store.get_all_status()
+                offline_ids = set(status_map.keys()) - set(tablet_ws_manager.device_map.keys())
+                if not offline_ids:
+                    return
+
+                target: set[str] = set()
+                is_broadcast = any(b.get("device_ids") is None for b in banners)
+                if is_broadcast:
+                    target = offline_ids
+                else:
+                    for b in banners:
+                        dids = b.get("device_ids")
+                        if dids:
+                            target.update(d.strip() for d in dids if d.strip())
+                    target &= offline_ids
+
+                if not target:
+                    return
+
+                msg = {"command": "BANNER_LIST", "banners": banners}
+                for device_id in target:
+                    await pending_queue.enqueue(device_id, msg)
+                logger.info("[BANNER_BATCH] BANNER_LIST encolado para %d disp. offline", len(target))
+
+            except Exception as e:
+                logger.error("[BANNER_BATCH] Error encolando para offline: %s", e)
+
     except asyncio.CancelledError:
         pass
     except Exception as e:
@@ -664,9 +705,9 @@ async def start_device_monitor():
         from app.services.scheduler_notifications import SchedulerNotifications
         import app.services.scheduler_notifications as sn_mod
         global scheduler_notifications
-        scheduler_notifications = await SchedulerNotifications.create(ttl_seconds=7200)
+        scheduler_notifications = await SchedulerNotifications.create(ttl_seconds=86400)
         sn_mod.scheduler_notifications = scheduler_notifications
-        logger.info("SchedulerNotifications inicializado con Redis (TTL=2h)")
+        logger.info("SchedulerNotifications inicializado con Redis (TTL=24h)")
     except Exception as e:
         logger.warning(f"SchedulerNotifications no disponible: {e}")
 
@@ -707,6 +748,19 @@ async def start_device_monitor():
                         command="BANNER_LIST",
                         payload=msg,
                     )
+
+                # Encolar BANNER_LIST a dispositivos offline
+                if pending_queue is not None and device_state_store is not None:
+                    try:
+                        status_map = await device_state_store.get_all_status()
+                        offline_ids = set(status_map.keys()) - set(tablet_ws_manager.device_map.keys())
+                        if offline_ids:
+                            for device_id in offline_ids:
+                                await pending_queue.enqueue(device_id, msg)
+                            logger.info(f"[RECOVERY] BANNER_LIST encolado para {len(offline_ids)} disp. offline")
+                    except Exception as e:
+                        logger.error(f"[RECOVERY] Error encolando batch recuperado: {e}")
+
                 logger.info(f"[RECOVERY] Batch pendiente recuperado: {len(stale_banners)} banners")
         except Exception as e:
             logger.error(f"[RECOVERY] Error recuperando batch pendiente: {e}")

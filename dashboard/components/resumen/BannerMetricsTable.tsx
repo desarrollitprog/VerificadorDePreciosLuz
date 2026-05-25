@@ -40,18 +40,15 @@ const BannerMetricsTable: React.FC<Props> = ({ data, loading }) => {
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const pageData = sorted.slice(page * pageSize, (page + 1) * pageSize);
 
-  const maxInicios = useMemo(() => Math.max(...data.map(b => b.inicios), 1), [data]);
-  const maxValidas = useMemo(() => Math.max(...data.map(b => b.validas_50), 1), [data]);
-
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortKey(key); setSortDir('desc'); }
     setPage(0);
   };
 
-  const SortHeader = ({ label, sortKey: sk, hide }: { label: string; sortKey: SortKey; hide?: string }) => (
+  const SortHeader = ({ label, sortKey: sk }: { label: string; sortKey: SortKey }) => (
     <th
-      className={`${hide || ''} px-3 py-2 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider cursor-pointer hover:text-slate-700 dark:hover:text-slate-300 select-none`}
+      className="px-3 py-2.5 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider cursor-pointer hover:text-slate-700 dark:hover:text-slate-300 select-none border-r border-slate-200 dark:border-slate-700 last:border-r-0"
       onClick={() => toggleSort(sk)}
     >
       <div className="flex items-center gap-1">
@@ -97,8 +94,8 @@ const BannerMetricsTable: React.FC<Props> = ({ data, loading }) => {
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-slate-200 dark:border-slate-700">
-                <th className="px-3 py-2 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-left">
+              <tr className="border-b-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40">
+                <th className="px-3 py-2.5 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-left border-r border-slate-200 dark:border-slate-700 last:border-r-0">
                   #
                 </th>
                 <SortHeader label="Banner" sortKey="titulo" />
@@ -108,48 +105,25 @@ const BannerMetricsTable: React.FC<Props> = ({ data, loading }) => {
               </tr>
             </thead>
             <tbody>
-              {pageData.map((b, i) => {
-                const barInicio = (b.inicios / maxInicios) * 100;
-                const barValidas = (b.validas_50 / maxValidas) * 100;
-                return (
+              {pageData.map((b, i) => (
                   <tr
                     key={b.banner_id}
-                    className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all duration-300"
+                    className="border-b border-slate-100 dark:border-slate-800 even:bg-slate-50/50 dark:even:bg-slate-800/20 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all duration-300"
                     style={{ animationDelay: `${i * 40}ms` }}
                   >
-                    <td className="px-3 py-2 text-slate-400 dark:text-slate-500 font-mono text-[10px]">
+                    <td className="px-3 py-2.5 text-slate-400 dark:text-slate-500 font-mono text-[10px] border-r border-slate-100 dark:border-slate-800 last:border-r-0">
                       {page * pageSize + i + 1}
                     </td>
-                    <td className="px-3 py-2 text-slate-900 dark:text-white font-medium max-w-[180px] truncate" title={b.titulo || `Banner #${b.banner_id}`}>
+                    <td className="px-3 py-2.5 text-slate-900 dark:text-white font-medium max-w-[180px] truncate border-r border-slate-100 dark:border-slate-800 last:border-r-0" title={b.titulo || `Banner #${b.banner_id}`}>
                       {b.titulo || `Banner #${b.banner_id}`}
                     </td>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-2 w-28">
-                        <span className="text-slate-700 dark:text-slate-300 font-medium w-12 text-right shrink-0">
-                          {b.inicios.toLocaleString()}
-                        </span>
-                        <div className="flex-1 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-cyan-500/60 dark:bg-cyan-400/50 transition-all duration-500"
-                            style={{ width: `${barInicio}%` }}
-                          />
-                        </div>
-                      </div>
+                    <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300 font-medium tabular-nums border-r border-slate-100 dark:border-slate-800 last:border-r-0">
+                      {b.inicios.toLocaleString()}
                     </td>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-2 w-28">
-                        <span className="text-slate-700 dark:text-slate-300 font-medium w-12 text-right shrink-0">
-                          {b.validas_50.toLocaleString()}
-                        </span>
-                        <div className="flex-1 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-emerald-500/60 dark:bg-emerald-400/50 transition-all duration-500"
-                            style={{ width: `${barValidas}%` }}
-                          />
-                        </div>
-                      </div>
+                    <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300 font-medium tabular-nums border-r border-slate-100 dark:border-slate-800 last:border-r-0">
+                      {b.validas_50.toLocaleString()}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2.5 border-r-0">
                       <div className="flex items-center gap-2 w-28">
                         <div className="flex-1 h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
                           <div
@@ -162,9 +136,8 @@ const BannerMetricsTable: React.FC<Props> = ({ data, loading }) => {
                         </span>
                       </div>
                     </td>
-                  </tr>
-                );
-              })}
+                    </tr>
+                  ))}
             </tbody>
           </table>
         </div>

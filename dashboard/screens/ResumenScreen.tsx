@@ -160,7 +160,6 @@ export const ResumenScreen: React.FC = () => {
           {/* Sección de Reproducciones - siempre visible */}
           <div className="stagger-4">
             <div className="bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
-              <div className="h-1 bg-gradient-to-r from-violet-500 to-cyan-500" />
               <div className="p-5">
                 <div className="flex items-center gap-2 mb-4">
                   <BarChart3 size={18} className="text-violet-500" />

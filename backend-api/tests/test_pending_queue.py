@@ -142,8 +142,10 @@ class TestPendingCommandQueue:
 
         dequeued = await q.dequeue(self.device_id)
         assert dequeued is not None
-        assert dequeued["command"] == "WIPE_AND_RESYNC"
-        assert "enqueued_at" in dequeued
+        msg, raw = dequeued
+        assert msg["command"] == "WIPE_AND_RESYNC"
+        assert "enqueued_at" in msg
+        assert json.loads(raw) == msg
 
         inflight_key = f"{q.QUEUE_PREFIX}:{self.device_id}:{q.INFLIGHT_SUFFIX}"
         assert await fake.llen(inflight_key) == 1

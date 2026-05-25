@@ -82,9 +82,13 @@ class BannerRepository(
         val ext = absoluteUrl.substringAfterLast('.', "")
         val safeExt = ext.ifBlank { "bin" }
         val fileName = "banner_${item.id}.$safeExt"
+        val tmpFileName = "${fileName}.tmp"
         val dir = File(context.filesDir, DIR_BANNERS)
         if (!dir.exists()) dir.mkdirs()
         val outFile = File(dir, fileName)
+        val tmpFile = File(dir, tmpFileName)
+
+        if (tmpFile.exists()) tmpFile.delete()
 
         val request = Request.Builder().url(safeUrl).build()
         client.newCall(request).execute().use { response ->
@@ -93,51 +97,58 @@ class BannerRepository(
                 return null
             }
             val body = response.body ?: return null
-            outFile.outputStream().use { output ->
+            tmpFile.outputStream().use { output ->
                 body.byteStream().copyTo(output)
             }
         }
 
-        // Verificación robusta tras descarga
-        if (!outFile.exists()) {
-            Log.w(TAG, "Archivo descargado no existe: ${outFile.absolutePath} (id=${item.id})")
+        // Verificación robusta tras descarga (sobre archivo temporal)
+        if (!tmpFile.exists()) {
+            Log.w(TAG, "Archivo descargado no existe: ${tmpFile.absolutePath} (id=${item.id})")
             return null
         }
-        val fileSize = outFile.length()
+        val fileSize = tmpFile.length()
         if (fileSize == 0L) {
-            Log.w(TAG, "Archivo descargado tiene tamaño 0: ${outFile.absolutePath} (id=${item.id}) - Eliminando archivo")
-            outFile.delete()
+            Log.w(TAG, "Archivo descargado tiene tamaño 0: ${tmpFile.absolutePath} (id=${item.id}) - Eliminando archivo")
+            tmpFile.delete()
             return null
         }
-        if (!outFile.canRead()) {
-            Log.w(TAG, "Archivo descargado no es legible: ${outFile.absolutePath} (id=${item.id}) - Eliminando archivo")
-            outFile.delete()
+        if (!tmpFile.canRead()) {
+            Log.w(TAG, "Archivo descargado no es legible: ${tmpFile.absolutePath} (id=${item.id}) - Eliminando archivo")
+            tmpFile.delete()
             return null
         }
         // Verificación de tamaño mínimo para videos (al menos 10KB)
         if (item.tipo == "video" && fileSize < 10000) {
-            Log.w(TAG, "Video demasiado pequeño (${fileSize} bytes), probablemente incompleto: ${outFile.absolutePath} (id=${item.id}) - Eliminando archivo")
-            outFile.delete()
+            Log.w(TAG, "Video demasiado pequeño (${fileSize} bytes), probablemente incompleto: ${tmpFile.absolutePath} (id=${item.id}) - Eliminando archivo")
+            tmpFile.delete()
             return null
         }
         // Verificación adicional con MediaMetadataRetriever para videos
         if (item.tipo == "video") {
             try {
                 val retriever = android.media.MediaMetadataRetriever()
-                retriever.setDataSource(outFile.absolutePath)
+                retriever.setDataSource(tmpFile.absolutePath)
                 val duration = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
                 retriever.release()
                 if (duration == null) {
-                    Log.w(TAG, "Video sin duración válida, probablemente corrupto: ${outFile.absolutePath} (id=${item.id}) - Eliminando archivo")
-                    outFile.delete()
+                    Log.w(TAG, "Video sin duración válida, probablemente corrupto: ${tmpFile.absolutePath} (id=${item.id}) - Eliminando archivo")
+                    tmpFile.delete()
                     return null
                 }
-                Log.d(TAG, "Video verificado OK: ${outFile.absolutePath} (id=${item.id}) duration=${duration}ms")
+                Log.d(TAG, "Video verificado OK: ${tmpFile.absolutePath} (id=${item.id}) duration=${duration}ms")
             } catch (e: Exception) {
-                Log.w(TAG, "No se pudo leer metadata del video: ${e.message} - ${outFile.absolutePath} (id=${item.id}) - Eliminando archivo")
-                outFile.delete()
+                Log.w(TAG, "No se pudo leer metadata del video: ${e.message} - ${tmpFile.absolutePath} (id=${item.id}) - Eliminando archivo")
+                tmpFile.delete()
                 return null
             }
+        }
+
+        // Renombrar .tmp → archivo final (atómico en mismo filesystem)
+        if (outFile.exists()) outFile.delete()
+        if (!tmpFile.renameTo(outFile)) {
+            Log.w(TAG, "No se pudo renombrar archivo temporal: ${tmpFile.absolutePath} -> ${outFile.absolutePath} (id=${item.id})")
+            return null
         }
         Log.d(TAG, "Banner descargado OK: ${outFile.absolutePath} (id=${item.id}) size=${fileSize}")
 

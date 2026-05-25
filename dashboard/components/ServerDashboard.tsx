@@ -403,6 +403,7 @@ export function ServerDashboard() {
         codigo_kiosko: d.device_id,
         nombre_amigable: d.nombre_amigable || null,
         online: d.online,
+        tipo: d.tipo ?? 'verificador',
       })),
     })),
   [servidores]);

@@ -2414,6 +2414,13 @@ async def _on_bus_command(device_id: str, command: str, payload: dict):
                 message.update(payload)
             await tablet_ws_manager.send_to_device(device_id, message)
         elif command in ("BANNER_INICIADO", "BANNER_FINALIZADO"):
+            banner_id = payload.get("banner_id") if payload else None
+            if banner_id is not None and banner_batch_manager is not None:
+                dedup_key = f"bus:notif:{device_id}:{command}:{banner_id}"
+                added = await banner_batch_manager.redis.set(dedup_key, "1", nx=True, ex=60)
+                if not added:
+                    logger.debug(f"[BUS] {command} banner {banner_id} para {device_id} ya procesado, saltando")
+                    return
             await tablet_ws_manager.send_to_device(device_id, payload)
         elif command == "BANNER_LIST":
             broadcast_id = payload.get("_broadcast_id") if payload else None

@@ -70,6 +70,20 @@ class PendingCommandQueue:
                     f"(SADD dedup), omitiendo duplicado"
                 )
                 return True
+
+        # Dedup para notificaciones de banner (mismo device+command+banner_id)
+        if command in ("BANNER_INICIADO", "BANNER_FINALIZADO"):
+            banner_id = message.get("banner_id")
+            if banner_id is not None:
+                dedup_key = f"device:dedup:{device_id}:{command}:{banner_id}"
+                added = await self.redis.sadd(dedup_key, command)
+                await self.redis.expire(dedup_key, 60)
+                if not added:
+                    logger.info(
+                        f"[QUEUE] {command} banner {banner_id} ya existe para {device_id}, "
+                        f"omitiendo duplicado"
+                    )
+                    return True
         
         key = self._queue_key(device_id)
         inflight_key = self._inflight_key(device_id)

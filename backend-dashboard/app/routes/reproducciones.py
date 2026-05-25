@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select, func, cast, Date
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 from app.database import get_db_usuarios
 from app.dependencies import get_current_cliente
 from app.models.reproduccion_metrica import ReproduccionMetrica
@@ -35,14 +36,45 @@ class BatchProgresoBody(BaseModel):
     eventos: list[EventoProgreso]
 
 
+def _apply_evento(row: ReproduccionMetrica, ev: EventoProgreso, now: datetime):
+    if ev.tipo_evento == "START" and row.inicio_reproduccion is None:
+        row.inicio_reproduccion = now
+    if ev.titulo and not row.titulo:
+        row.titulo = ev.titulo
+    if ev.duracion_total_seg is not None:
+        row.duracion_total_seg = ev.duracion_total_seg
+    if ev.segundos_reproducidos is not None and (row.segundos_reproducidos is None or ev.segundos_reproducidos > row.segundos_reproducidos):
+        row.segundos_reproducidos = ev.segundos_reproducidos
+    if ev.porcentaje_completado is not None and (row.porcentaje_completado is None or ev.porcentaje_completado > row.porcentaje_completado):
+        row.porcentaje_completado = ev.porcentaje_completado
+    if ev.cuartil_50:
+        row.cuartil_50 = True
+    if ev.cuartil_75:
+        row.cuartil_75 = True
+    if ev.cuartil_100:
+        row.cuartil_100 = True
+    if ev.completo:
+        row.completo = True
+    if ev.motivo_fin:
+        row.motivo_fin = ev.motivo_fin
+    if ev.tipo_evento in ("COMPLETED", "INTERRUPTED"):
+        row.fin_reproduccion = now
+
+
 @router.post("/batch")
 async def recibir_batch_reproducciones(
     body: BatchProgresoBody,
     db: AsyncSession = Depends(get_db_usuarios),
 ):
     try:
-        count = 0
+        # Dedup: keep last event per reproduccion_id (most complete)
+        dedup: dict[str, EventoProgreso] = {}
         for ev in body.eventos:
+            dedup[ev.reproduccion_id] = ev
+        eventos = list(dedup.values())
+
+        count = 0
+        for ev in eventos:
             now = datetime.utcnow()
             stmt = select(ReproduccionMetrica).where(
                 ReproduccionMetrica.reproduccion_id == ev.reproduccion_id
@@ -53,49 +85,40 @@ async def recibir_batch_reproducciones(
             if existing is None:
                 if ev.tipo_evento not in ("START", "COMPLETED", "INTERRUPTED"):
                     continue
-                nueva = ReproduccionMetrica(
-                    reproduccion_id=ev.reproduccion_id,
-                    dispositivo_id=ev.dispositivo_id,
-                    banner_id=ev.banner_id,
-                    titulo=ev.titulo,
-                    duracion_total_seg=ev.duracion_total_seg,
-                    inicio_reproduccion=now if ev.tipo_evento == "START" else None,
-                    segundos_reproducidos=ev.segundos_reproducidos,
-                    porcentaje_completado=ev.porcentaje_completado,
-                    cuartil_50=ev.cuartil_50 or False,
-                    cuartil_75=ev.cuartil_75 or False,
-                    cuartil_100=ev.cuartil_100 or False,
-                    completo=ev.completo or False,
-                    motivo_fin=ev.motivo_fin,
-                    fecha_creacion=now,
-                )
-                if ev.tipo_evento in ("COMPLETED", "INTERRUPTED"):
-                    nueva.fin_reproduccion = now
-                db.add(nueva)
-                count += 1
+                try:
+                    async with db.begin_nested():
+                        nueva = ReproduccionMetrica(
+                            reproduccion_id=ev.reproduccion_id,
+                            dispositivo_id=ev.dispositivo_id,
+                            banner_id=ev.banner_id,
+                            titulo=ev.titulo,
+                            duracion_total_seg=ev.duracion_total_seg,
+                            inicio_reproduccion=now if ev.tipo_evento == "START" else None,
+                            segundos_reproducidos=ev.segundos_reproducidos,
+                            porcentaje_completado=ev.porcentaje_completado,
+                            cuartil_50=ev.cuartil_50 or False,
+                            cuartil_75=ev.cuartil_75 or False,
+                            cuartil_100=ev.cuartil_100 or False,
+                            completo=ev.completo or False,
+                            motivo_fin=ev.motivo_fin,
+                            fecha_creacion=now,
+                        )
+                        if ev.tipo_evento in ("COMPLETED", "INTERRUPTED"):
+                            nueva.fin_reproduccion = now
+                        db.add(nueva)
+                        await db.flush()
+                    count += 1
+                except IntegrityError:
+                    stmt = select(ReproduccionMetrica).where(
+                        ReproduccionMetrica.reproduccion_id == ev.reproduccion_id
+                    )
+                    result = await db.execute(stmt)
+                    existing = result.scalars().first()
+                    if existing is not None:
+                        _apply_evento(existing, ev, now)
+                        count += 1
             else:
-                if ev.tipo_evento == "START" and existing.inicio_reproduccion is None:
-                    existing.inicio_reproduccion = now
-                if ev.titulo and not existing.titulo:
-                    existing.titulo = ev.titulo
-                if ev.duracion_total_seg is not None:
-                    existing.duracion_total_seg = ev.duracion_total_seg
-                if ev.segundos_reproducidos is not None and (existing.segundos_reproducidos is None or ev.segundos_reproducidos > existing.segundos_reproducidos):
-                    existing.segundos_reproducidos = ev.segundos_reproducidos
-                if ev.porcentaje_completado is not None and (existing.porcentaje_completado is None or ev.porcentaje_completado > existing.porcentaje_completado):
-                    existing.porcentaje_completado = ev.porcentaje_completado
-                if ev.cuartil_50:
-                    existing.cuartil_50 = True
-                if ev.cuartil_75:
-                    existing.cuartil_75 = True
-                if ev.cuartil_100:
-                    existing.cuartil_100 = True
-                if ev.completo:
-                    existing.completo = True
-                if ev.motivo_fin:
-                    existing.motivo_fin = ev.motivo_fin
-                if ev.tipo_evento in ("COMPLETED", "INTERRUPTED"):
-                    existing.fin_reproduccion = now
+                _apply_evento(existing, ev, now)
                 count += 1
 
         await db.commit()

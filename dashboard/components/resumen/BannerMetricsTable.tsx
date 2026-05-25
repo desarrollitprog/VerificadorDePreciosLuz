@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ArrowUpDown } from 'lucide-react';
+import { ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { BannerMetrica } from '../../services/resumenService';
 
 interface Props {
@@ -8,6 +8,14 @@ interface Props {
 }
 
 type SortKey = 'banner_id' | 'titulo' | 'inicios' | 'validas_50' | 'vcr';
+
+const vcrColor = (v: number) =>
+  v >= 80 ? '#10b981' : v >= 50 ? '#f59e0b' : '#ef4444';
+
+const vcrBgClass = (v: number) =>
+  v >= 80 ? 'text-emerald-600 dark:text-emerald-400' :
+  v >= 50 ? 'text-amber-600 dark:text-amber-400' :
+  'text-red-600 dark:text-red-400';
 
 const BannerMetricsTable: React.FC<Props> = ({ data, loading }) => {
   const [sortKey, setSortKey] = useState<SortKey>('inicios');
@@ -32,15 +40,18 @@ const BannerMetricsTable: React.FC<Props> = ({ data, loading }) => {
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const pageData = sorted.slice(page * pageSize, (page + 1) * pageSize);
 
+  const maxInicios = useMemo(() => Math.max(...data.map(b => b.inicios), 1), [data]);
+  const maxValidas = useMemo(() => Math.max(...data.map(b => b.validas_50), 1), [data]);
+
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortKey(key); setSortDir('desc'); }
     setPage(0);
   };
 
-  const SortHeader = ({ label, sortKey: sk }: { label: string; sortKey: SortKey }) => (
+  const SortHeader = ({ label, sortKey: sk, hide }: { label: string; sortKey: SortKey; hide?: string }) => (
     <th
-      className="px-3 py-2 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider cursor-pointer hover:text-slate-700 dark:hover:text-slate-300 select-none"
+      className={`${hide || ''} px-3 py-2 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider cursor-pointer hover:text-slate-700 dark:hover:text-slate-300 select-none`}
       onClick={() => toggleSort(sk)}
     >
       <div className="flex items-center gap-1">
@@ -80,58 +91,106 @@ const BannerMetricsTable: React.FC<Props> = ({ data, loading }) => {
 
   return (
     <div className="bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
-      <div className="h-1 bg-cyan-500" />
+      <div className="h-1 bg-gradient-to-r from-cyan-500 to-blue-500" />
       <div className="p-5">
         <h3 className="text-slate-900 dark:text-white font-semibold text-sm mb-3">Métricas por Banner</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-700">
-                <SortHeader label="ID" sortKey="banner_id" />
+                <th className="px-3 py-2 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-left">
+                  #
+                </th>
                 <SortHeader label="Banner" sortKey="titulo" />
                 <SortHeader label="Inicios" sortKey="inicios" />
-                <SortHeader label="Válidas >50%" sortKey="validas_50" />
+                <SortHeader label=">50%" sortKey="validas_50" />
                 <SortHeader label="VCR" sortKey="vcr" />
               </tr>
             </thead>
             <tbody>
-              {pageData.map((b) => (
-                <tr key={b.banner_id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
-                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{b.banner_id}</td>
-                  <td className="px-3 py-2 text-slate-900 dark:text-white font-medium max-w-[200px] truncate">
-                    {b.titulo || `Banner #${b.banner_id}`}
-                  </td>
-                  <td className="px-3 py-2 text-slate-700 dark:text-slate-300">{b.inicios.toLocaleString()}</td>
-                  <td className="px-3 py-2 text-slate-700 dark:text-slate-300">{b.validas_50.toLocaleString()}</td>
-                  <td className="px-3 py-2">
-                    <span className={`font-semibold ${b.vcr >= 80 ? 'text-emerald-600 dark:text-emerald-400' : b.vcr >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>
-                      {b.vcr}%
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {pageData.map((b, i) => {
+                const barInicio = (b.inicios / maxInicios) * 100;
+                const barValidas = (b.validas_50 / maxValidas) * 100;
+                return (
+                  <tr
+                    key={b.banner_id}
+                    className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all duration-300"
+                    style={{ animationDelay: `${i * 40}ms` }}
+                  >
+                    <td className="px-3 py-2 text-slate-400 dark:text-slate-500 font-mono text-[10px]">
+                      {page * pageSize + i + 1}
+                    </td>
+                    <td className="px-3 py-2 text-slate-900 dark:text-white font-medium max-w-[180px] truncate" title={b.titulo || `Banner #${b.banner_id}`}>
+                      {b.titulo || `Banner #${b.banner_id}`}
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2 w-28">
+                        <span className="text-slate-700 dark:text-slate-300 font-medium w-12 text-right shrink-0">
+                          {b.inicios.toLocaleString()}
+                        </span>
+                        <div className="flex-1 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-cyan-500/60 dark:bg-cyan-400/50 transition-all duration-500"
+                            style={{ width: `${barInicio}%` }}
+                          />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2 w-28">
+                        <span className="text-slate-700 dark:text-slate-300 font-medium w-12 text-right shrink-0">
+                          {b.validas_50.toLocaleString()}
+                        </span>
+                        <div className="flex-1 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-emerald-500/60 dark:bg-emerald-400/50 transition-all duration-500"
+                            style={{ width: `${barValidas}%` }}
+                          />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2 w-28">
+                        <div className="flex-1 h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-700 ease-out"
+                            style={{ width: `${Math.min(b.vcr, 100)}%`, backgroundColor: vcrColor(b.vcr) }}
+                          />
+                        </div>
+                        <span className={`text-xs font-semibold w-10 text-right shrink-0 ${vcrBgClass(b.vcr)}`}>
+                          {b.vcr}%
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
         {totalPages > 1 && (
           <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
             <span className="text-xs text-slate-500 dark:text-slate-400">
-              {sorted.length} banners · Página {page + 1} de {totalPages}
+              <span className="font-medium text-slate-700 dark:text-slate-300">{sorted.length}</span> banners
+              <span className="mx-1.5 text-slate-400">·</span>
+              <span className="bg-slate-100 dark:bg-[#253247] px-2 py-0.5 rounded text-[10px]">
+                {page * pageSize + 1}–{Math.min((page + 1) * pageSize, sorted.length)} de {sorted.length}
+              </span>
             </span>
             <div className="flex gap-1">
               <button
                 onClick={() => setPage(p => Math.max(0, p - 1))}
                 disabled={page === 0}
-                className="px-3 py-1 text-xs rounded bg-slate-100 dark:bg-[#253247] text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40 transition"
+                className="p-1.5 rounded bg-slate-100 dark:bg-[#253247] text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition"
               >
-                Anterior
+                <ChevronLeft size={14} />
               </button>
               <button
                 onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
                 disabled={page >= totalPages - 1}
-                className="px-3 py-1 text-xs rounded bg-slate-100 dark:bg-[#253247] text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40 transition"
+                className="p-1.5 rounded bg-slate-100 dark:bg-[#253247] text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition"
               >
-                Siguiente
+                <ChevronRight size={14} />
               </button>
             </div>
           </div>

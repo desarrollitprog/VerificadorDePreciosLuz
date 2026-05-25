@@ -94,8 +94,8 @@ class PendingCommandQueue:
         )
         return True
 
-    async def dequeue(self, device_id: str) -> dict | None:
-        """LMOVE atómico: saca de pendiente → pasa a inflight. Retorna el mensaje o None."""
+    async def dequeue(self, device_id: str) -> tuple[dict, str] | None:
+        """LMOVE atómico: saca de pendiente → pasa a inflight. Retorna (mensaje, raw_string) o None."""
         key = self._queue_key(device_id)
         inflight_key = self._inflight_key(device_id)
 
@@ -104,7 +104,7 @@ class PendingCommandQueue:
             return None
 
         try:
-            return json.loads(data)
+            return json.loads(data), data
         except Exception as e:
             logger.error(f"[QUEUE] Error parseando mensaje de cola para {device_id}: {e}")
             # Si el mensaje está corrupto, removerlo de inflight
@@ -292,12 +292,12 @@ class PendingCommandQueue:
         failed_raws = []
 
         while True:
-            msg = await self.dequeue(device_id)
-            if msg is None:
+            result = await self.dequeue(device_id)
+            if result is None:
                 break
 
+            msg, raw = result
             retry_count = msg.get("retry_count", 0)
-            raw = json.dumps(msg)
             try:
                 success = await send_fn(msg)
                 if success:

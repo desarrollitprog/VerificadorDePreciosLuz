@@ -199,7 +199,7 @@ class FakePendingQueue:
         self.queues[device_id].append(message)
         return True
 
-    async def dequeue(self, device_id: str) -> dict | None:
+    async def dequeue(self, device_id: str) -> tuple[dict, str] | None:
         q = self.queues.get(device_id, [])
         if not q:
             return None
@@ -207,24 +207,22 @@ class FakePendingQueue:
         if device_id not in self.inflight:
             self.inflight[device_id] = []
         self.inflight[device_id].append(msg)
-        return msg
+        return msg, json.dumps(msg)
 
     async def confirm(self, device_id: str, raw_message: str) -> bool:
-        if device_id in self.inflight and self.inflight[device_id]:
-            self.inflight[device_id].pop(0)
-            return True
-        return False
+        return True
 
     async def flush_all_to_device(self, device_id: str, send_fn) -> int:
         delivered = 0
         while True:
-            msg = await self.dequeue(device_id)
-            if msg is None:
+            result = await self.dequeue(device_id)
+            if result is None:
                 break
+            msg, raw = result
             try:
                 success = await send_fn(msg)
                 if success:
-                    await self.confirm(device_id, "raw")
+                    await self.confirm(device_id, raw)
                     delivered += 1
                 else:
                     self.queues.setdefault(device_id, []).insert(0, msg)

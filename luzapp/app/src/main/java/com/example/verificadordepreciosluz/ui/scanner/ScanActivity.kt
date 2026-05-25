@@ -761,6 +761,12 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                 playStandbyItem()
                                 Log.i(TAG, "[WebSocket] Banner $newBannerId ya en índice 0, reproduciendo")
                             }
+                        } else if (!standbyActive) {
+                            Log.i(TAG, "[WebSocket] Carrusel detenido, reactivando con ${standbyItems.size} banners")
+                            standbyActive = true
+                            standbyIndex = 0
+                            binding.standbyOverlay.visibility = View.VISIBLE
+                            playStandbyItem()
                         }
                     }
                 }
@@ -2531,8 +2537,16 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                             "WIPE_AND_RESYNC" -> {
                                 Log.i(
                                     TAG,
-                                    "[WebSocket] Comando WIPE_AND_RESYNC recibido (binario). Ejecutando purga total..."
+                                    "[WebSocket] Comando WIPE_AND_RESYNC recibido (binario). Pausando carrusel antes de purga..."
                                 )
+
+                                // 1. PAUSAR el carrusel INMEDIATAMENTE antes de borrar archivos
+                                uiHandler.post {
+                                    stopStandbyCarousel()
+                                    binding.standbyOverlay.visibility = View.GONE
+                                    Log.d(TAG, "[WebSocket] Carrusel detenido y overlay ocultado (binario)")
+                                }
+
                                 scope.launch {
                                     val apiService = api
                                     if (apiService == null) {
@@ -2540,10 +2554,25 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                         return@launch
                                     }
 
+                                    // 2. Ejecutar purga SIN callback de inicio de carrusel
                                     val purgeResult = ejecutarPurgaTotal(this@ScanActivity, apiService, baseUrl, deviceId) {
-                                        uiHandler.post {
-                                            stopStandbyCarousel()
+                                        // Callback vacío - controlamos el inicio manualmente
+                                    }
+
+                                    // 3. Solo iniciar carrusel DESPUÉS de que la purga termine exitosamente
+                                    uiHandler.post {
+                                        if (purgeResult.success) {
+                                            Log.i(TAG, "[WebSocket] Purga exitosa (binario), iniciando carrusel...")
                                             startStandbyCarousel()
+                                        } else {
+                                            Log.w(TAG, "[WebSocket] Purga fallida (binario), no se inicia carrusel")
+                                            sendSyncConfirmation(
+                                                webSocket,
+                                                command,
+                                                "FAILED",
+                                                purgeResult.reason ?: "Purga fallida",
+                                                commandId
+                                            )
                                         }
                                     }
 

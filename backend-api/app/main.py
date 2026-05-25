@@ -309,9 +309,19 @@ async def _send_banner_notification(banner: Publicidad, target_device_ids: List[
 
 
 async def _send_to_device_robust(device_id: str, banner_info: dict) -> bool:
-    sent_via = None
     command = banner_info.get("command", "")
 
+    # Si el dispositivo está conectado a este worker, enviar directo vía WS (evitar bus)
+    ws = tablet_ws_manager.device_map.get(device_id)
+    if ws:
+        try:
+            await ws.send_json(banner_info)
+            logger.info(f"[BANNER_ROBUST] Enviado {command} via WS a {device_id}")
+            return True
+        except Exception as e:
+            logger.warning(f"[BANNER_ROBUST] WS falló para {device_id}: {e}")
+
+    # Dispositivo NO conectado aquí → publicar al bus para otros workers
     if device_command_bus is not None:
         try:
             await device_command_bus.publish_command(
@@ -319,22 +329,10 @@ async def _send_to_device_robust(device_id: str, banner_info: dict) -> bool:
                 command=command,
                 payload=banner_info,
             )
-            sent_via = "Redis"
             logger.info(f"[BANNER_ROBUST] Enviado {command} via Redis a {device_id}")
+            return True
         except Exception as e:
             logger.warning(f"[BANNER_ROBUST] Redis falló para {device_id}: {e}")
-
-    ws = tablet_ws_manager.device_map.get(device_id)
-    if ws:
-        try:
-            await ws.send_json(banner_info)
-            sent_via = "WS"
-            logger.info(f"[BANNER_ROBUST] Enviado {command} via WS a {device_id}")
-        except Exception as e:
-            logger.warning(f"[BANNER_ROBUST] WS falló para {device_id}: {e}")
-
-    if sent_via:
-        return True
 
     # Fallback 1: key legacy pending:banner con TTL 24h
     try:
@@ -523,6 +521,8 @@ async def _delayed_batch_flush():
             return
 
         async def _send(msg: dict):
+            broadcast_id = str(uuid.uuid4())
+            msg["_broadcast_id"] = broadcast_id
             await tablet_ws_manager.broadcast(msg)
             if device_command_bus is not None:
                 try:
@@ -2416,6 +2416,13 @@ async def _on_bus_command(device_id: str, command: str, payload: dict):
         elif command in ("BANNER_INICIADO", "BANNER_FINALIZADO"):
             await tablet_ws_manager.send_to_device(device_id, payload)
         elif command == "BANNER_LIST":
+            broadcast_id = payload.get("_broadcast_id") if payload else None
+            if broadcast_id and banner_batch_manager is not None:
+                dedup_key = f"bus:broadcast:{broadcast_id}"
+                added = await banner_batch_manager.redis.set(dedup_key, "1", nx=True, ex=30)
+                if not added:
+                    logger.debug(f"[BUS] BANNER_LIST {broadcast_id} ya procesado, saltando")
+                    return
             await tablet_ws_manager.broadcast(payload)
     except Exception as e:
         logger.error(f"[BUS] Error procesando comando '{command}' para {device_id}: {e}")
@@ -2743,13 +2750,19 @@ async def process_sync_confirmation(websocket: WebSocket, msg: dict):
     # Manejar confirmación de BANNER_INICIADO
     if command == "BANNER_INICIADO" and status == "SUCCESS":
         banner_id = msg.get("banner_id")
-        await notify_dashboard_banner_iniciado(device_id, banner_id)
+        if banner_id is not None:
+            await notify_dashboard_banner_iniciado(device_id, banner_id)
+        else:
+            logger.info(f"[CONFIRM] BANNER_INICIADO sin banner_id de {device_id}, omitiendo dashboard")
         return
     
     # Manejar confirmación de BANNER_FINALIZADO
     if command == "BANNER_FINALIZADO" and status == "SUCCESS":
         banner_id = msg.get("banner_id")
-        await notify_dashboard_banner_finalizado(device_id, banner_id)
+        if banner_id is not None:
+            await notify_dashboard_banner_finalizado(device_id, banner_id)
+        else:
+            logger.info(f"[CONFIRM] BANNER_FINALIZADO sin banner_id de {device_id}, omitiendo dashboard")
         return
     
     # Manejar confirmación de REINICIAR

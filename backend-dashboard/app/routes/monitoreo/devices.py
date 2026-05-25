@@ -58,12 +58,12 @@ async def cambiar_tipo_dispositivo(
     dispositivo.tipo = body.tipo
     await db.commit()
     user_id = current_user.get("user_id") if current_user else None
-    from app.services.notificacion_service import registrar_notificacion
-    await registrar_notificacion(
+    from app.services.notificacion_service import registrar_accion
+    await registrar_accion(
         db,
+        usuario_id=user_id,
         tipo="auditoria",
         descripcion=f"Tipo de dispositivo {device_id} cambiado a {body.tipo}",
-        user_id=user_id,
     )
     return {"success": True, "device_id": device_id, "tipo": body.tipo}
 

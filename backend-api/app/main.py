@@ -548,6 +548,19 @@ async def _delayed_batch_flush():
                 if not offline_ids:
                     return
 
+                # Excluir dispositivos vivos en otro worker (el bus ya les entregó)
+                from app.services import device_registry as dr
+                if dr.device_registry is not None:
+                    try:
+                        for did in list(offline_ids):
+                            if await dr.device_registry.is_device_registered(did):
+                                offline_ids.discard(did)
+                    except Exception:
+                        pass
+
+                if not offline_ids:
+                    return
+
                 target: set[str] = set()
                 is_broadcast = any(b.get("device_ids") is None for b in banners)
                 if is_broadcast:

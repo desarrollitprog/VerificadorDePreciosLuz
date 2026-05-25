@@ -20,5 +20,5 @@ class Dispositivo(Base):
         ForeignKey("servidores_secundarios.id", ondelete="SET NULL"),
         nullable=True,
     )
-    servidor = relationship("ServidorSecundario", backref="dispositivos")
+    servidor = relationship("ServidorSecundario", back_populates="dispositivos")
 

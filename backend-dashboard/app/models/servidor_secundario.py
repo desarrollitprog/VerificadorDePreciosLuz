@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import Column, DateTime, Integer, String, BigInteger
+from sqlalchemy.orm import relationship
 
 from ..database import Base
 
@@ -14,4 +15,5 @@ class ServidorSecundario(Base):
     almacenamiento_total = Column(BigInteger, nullable=False)
     almacenamiento_usado = Column(BigInteger, nullable=False, default=0)
     ultimo_heartbeat = Column(DateTime, nullable=True, default=None)
+    dispositivos = relationship("Dispositivo", back_populates="servidor")
 

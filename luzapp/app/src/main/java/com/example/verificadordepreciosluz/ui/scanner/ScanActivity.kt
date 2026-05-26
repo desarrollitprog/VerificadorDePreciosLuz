@@ -1783,6 +1783,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             }
             try {
                 val currentPos = binding.standbyVideo.currentPosition.toDouble()
+                videoManager?.updateTrackedPosition(currentPos.toInt())
                 val duration = binding.standbyVideo.duration.toDouble()
                 if (duration <= 0) return@Runnable
 

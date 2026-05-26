@@ -532,11 +532,13 @@
             android:contentDescription="@null"
             android:visibility="gone" />
 
-        <VideoView
-            android:id="@+id/standbyVideo"
+        <androidx.media3.ui.PlayerView
+            android:id="@+id/standbyPlayer"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:visibility="gone" />
+            android:visibility="gone"
+            app:resize_mode="fit"
+            app:use_controller="false" />
 
     </FrameLayout>
 

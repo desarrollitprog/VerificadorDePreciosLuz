@@ -8,6 +8,7 @@ import com.google.gson.Gson
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 class BannerRepository(
@@ -89,6 +90,15 @@ class BannerRepository(
     )
 
     public fun downloadBanner(item: BannerResponse): BannerCacheItem? {
+        // Mutex por bannerId: evita race cuando PurgaTotal y refreshIfStale
+        // descargan el mismo banner concurrentemente (ambos escriben/renombran .tmp)
+        val lock = downloadLocks.getOrPut(item.id) { Any() }
+        synchronized(lock) {
+            return downloadBannerInternal(item)
+        }
+    }
+
+    private fun downloadBannerInternal(item: BannerResponse): BannerCacheItem? {
         val absoluteUrl = if (item.url.startsWith("http")) item.url else baseUrl.trimEnd('/') + "/" + item.url.trimStart('/')
         val safeUrl = absoluteUrl.replace(" ", "%20")
         val ext = absoluteUrl.substringAfterLast('.', "")
@@ -199,5 +209,6 @@ class BannerRepository(
         private const val TAG = "BannerRepository"
         private const val FILE_META = "banners_meta.json"
         private const val DIR_BANNERS = "banners"
+        private val downloadLocks = ConcurrentHashMap<Int, Any>()
     }
 }

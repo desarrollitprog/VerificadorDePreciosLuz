@@ -58,7 +58,7 @@ import com.example.verificadordepreciosluz.data.local.BannerCacheItem
 import com.example.verificadordepreciosluz.databinding.ActivityScanBinding
 import com.example.verificadordepreciosluz.R
 import com.example.verificadordepreciosluz.util.DeviceTypeHelper
-import com.example.verificadordepreciosluz.util.FireTvVideoManager
+import com.example.verificadordepreciosluz.util.PlayerManager
 import com.example.verificadordepreciosluz.util.NetworkUtils
 import com.example.verificadordepreciosluz.util.UpdateChecker
 import com.example.verificadordepreciosluz.util.BackupWorker
@@ -157,7 +157,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private var ultimoTitulo: String? = null
     private var ultimoTipoReproduccion: String? = null
     private var ultimoCuartilReportado: Int = 0
-    private var videoManager: FireTvVideoManager? = null
+    private lateinit var playerManager: PlayerManager
     private val PURGE_INTERVAL_MS = 30L * 24 * 60 * 60 * 1000  // 30 días
     private var purgeTimerRunnable: Runnable? = null
     private val deviceId: String by lazy {
@@ -314,9 +314,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         if (deviceType == DeviceTypeHelper.DeviceType.TELEVISOR) {
             binding.tvTituloScanner.text = getString(R.string.title_tv_mode)
             Log.d(TAG, "FireTV detectado, título cambiado a 'AUTOMERCADOS LUZ'")
-            videoManager = FireTvVideoManager(binding.standbyVideo).apply { register() }
-            Log.d(TAG, "FireTvVideoManager inicializado para manejo de superficie")
         }
+        playerManager = PlayerManager(binding.standbyPlayer)
+        Log.d(TAG, "PlayerManager inicializado con ExoPlayer")
 
         // Toggle del panel de prueba tocando el título (para emulador/técnico)
         binding.tvTituloScanner.setOnClickListener {
@@ -817,6 +817,11 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private fun startBannerPolling() {
         val runnable = object : Runnable {
             override fun run() {
+                if (isPurging) {
+                    Log.d(TAG, "Banner polling: skipping during purge")
+                    bannerPollHandler.postDelayed(this, bannerPollIntervalMs)
+                    return
+                }
                 Log.d(TAG, "Banner polling: refreshing banners")
                 val service = api
                 val baseUrl = backendBaseUrl
@@ -1098,18 +1103,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         standbyActive = true
         binding.standbyOverlay.visibility = View.VISIBLE
         
-        resetVideoView()
+        playerManager.release()
         playStandbyItem()
-    }
-
-    private fun resetVideoView() {
-        videoManager?.release()
-        try {
-            binding.standbyVideo.stopPlayback()
-        } catch (e: Exception) {
-            Log.w(TAG, "Error en stopPlayback: ${e.message}")
-        }
-        binding.standbyVideo.setVideoURI(null)
     }
 
     // Reproduce un item del carrusel (imagen o video)
@@ -1195,7 +1190,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         Log.i(TAG, "Standby: item idx=$standbyIndex tipo=${item.tipo} path=${item.localPath} exists=true")
         standbySlideRunnable?.let { uiHandler.removeCallbacks(it) }
         binding.standbyImage.visibility = View.GONE
-        binding.standbyVideo.visibility = View.GONE
+        binding.standbyPlayer.visibility = View.GONE
         releaseStandbyBitmap()
         
         // Finalizar reproducción anterior si existe
@@ -1249,7 +1244,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         notifyPlayingNow(item)
         
         if (item.tipo == "video") {
-            binding.standbyVideo.visibility = View.VISIBLE
+            binding.standbyPlayer.visibility = View.VISIBLE
             playVideo(item, durSeg)
         } else {
             binding.standbyImage.visibility = View.VISIBLE
@@ -1296,24 +1291,20 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             stopVideoProgressTracker()
             reproduccionIdActual = null
             ultimoTipoReproduccion = null
-            resetVideoView()
+            playerManager.release()
             nextStandbyItem()
-        }
-
-        val onVideoPrepared: (android.media.MediaPlayer) -> Unit = { mp ->
-            mp.setVideoScalingMode(android.media.MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT)
         }
 
         val onVideoError: (Int, Int) -> Boolean = { what, extra ->
             Log.w(TAG, "Standby: error video what=$what extra=$extra para ${item.localPath}")
-            resetVideoView()
+            playerManager.release()
             val currentRetry = retryCountMap.getOrDefault(item.localPath, 0)
             val newRetry = currentRetry + 1
             retryCountMap[item.localPath] = newRetry
             if (newRetry >= maxRetryBeforeReport) {
                 reportPlaybackFailure(
                     localPath = item.localPath,
-                    reason = "VideoView error what=$what extra=$extra tras $newRetry intentos"
+                    reason = "ExoPlayer error what=$what extra=$extra tras $newRetry intentos"
                 )
                 retryCountMap.remove(item.localPath)
             } else {
@@ -1335,24 +1326,10 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             true
         }
 
-        val vm = videoManager
-        if (vm != null) {
-            vm.onCompletion = onVideoCompletion
-            vm.onPrepared = onVideoPrepared
-            vm.onError = onVideoError
-            vm.play(videoUri)
-            startVideoProgressTracker(item.id, durSeg)
-        } else {
-            binding.standbyVideo.setOnCompletionListener { onVideoCompletion() }
-            binding.standbyVideo.setOnPreparedListener { mp -> onVideoPrepared(mp) }
-            binding.standbyVideo.setOnErrorListener { _, what, extra -> onVideoError(what, extra) }
-            resetVideoView()
-            uiHandler.postDelayed({
-                binding.standbyVideo.setVideoURI(videoUri)
-                binding.standbyVideo.start()
-                startVideoProgressTracker(item.id, durSeg)
-            }, 100)
-        }
+        playerManager.onCompletion = onVideoCompletion
+        playerManager.onError = onVideoError
+        playerManager.play(videoUri)
+        startVideoProgressTracker(item.id, durSeg)
     }
 
     // Avanza al siguiente elemento del carrusel
@@ -1382,8 +1359,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                         motivoFin = motivo
                     )
                 } else {
-                    val currentPos = binding.standbyVideo.currentPosition.toDouble()
-                    val duration = binding.standbyVideo.duration.toDouble()
+                    val currentPos = playerManager.currentPosition().toDouble()
+                    val duration = playerManager.duration().toDouble()
                     val pct = if (duration > 0) (currentPos / duration) * 100.0 else 0.0
                     sendPlaybackEvent(
                         bannerId = lastBanner,
@@ -1406,7 +1383,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         ultimoTipoReproduccion = null
         standbyActive = false
         standbySlideRunnable?.let { uiHandler.removeCallbacks(it) }
-        videoManager?.release() ?: binding.standbyVideo.stopPlayback()
+        playerManager.release()
         binding.standbyOverlay.visibility = View.GONE
         releaseStandbyBitmap()
         Log.d(TAG, "Standby: detenido")
@@ -1775,16 +1752,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         ultimoCuartilReportado = 0
         ultimoBannerId = bannerId
         progresoRunnable = Runnable {
-            if (!(videoManager?.isSurfaceAlive ?: true)) {
-                if (standbyActive) {
-                    uiHandler.postDelayed(progresoRunnable!!, 1000)
-                }
-                return@Runnable
-            }
             try {
-                val currentPos = binding.standbyVideo.currentPosition.toDouble()
-                videoManager?.updateTrackedPosition(currentPos.toInt())
-                val duration = binding.standbyVideo.duration.toDouble()
+                val currentPos = playerManager.currentPosition().toDouble()
+                val duration = playerManager.duration().toDouble()
                 if (duration <= 0) return@Runnable
 
                 val pct = (currentPos / duration) * 100.0
@@ -2116,8 +2086,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     }
 
     override fun onDestroy() {
-        videoManager?.release()
-        videoManager = null
+        playerManager.release()
         super.onDestroy()
         stopBannerPolling()
         cameraProvider?.unbindAll()
@@ -2139,7 +2108,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
     override fun onPause() {
         super.onPause()
-        videoManager?.pause()
+        playerManager.pause()
         cameraProvider?.unbindAll()
     }
 
@@ -2157,7 +2126,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             }, 500) // 500 ms de delay
         }
         
-        videoManager?.resume()
+        playerManager.resume()
         resumeCameraIfAvailable()  // Solo reiniciar cámara si está disponible
         binding.etMockCode.requestFocus()
     }
@@ -2270,9 +2239,11 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                     Log.d(TAG, "[WebSocket] Carrusel detenido y overlay ocultado")
                                 }
 
+                                isPurging = true
                                 scope.launch {
                                     val apiService = api
                                     if (apiService == null) {
+                                        isPurging = false
                                         sendSyncConfirmation(webSocket, command, "FAILED", "ApiService no inicializado", commandId = commandId)
                                         return@launch
                                     }
@@ -2284,6 +2255,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
                                     // 3. Solo iniciar carrusel DESPUÉS de que la purga termine exitosamente
                                     uiHandler.post {
+                                        isPurging = false
                                         if (purgeResult.success) {
                                             Log.i(TAG, "[WebSocket] Purga exitosa, iniciando carrusel...")
                                             startStandbyCarousel()
@@ -2573,9 +2545,11 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                                     Log.d(TAG, "[WebSocket] Carrusel detenido y overlay ocultado (binario)")
                                 }
 
+                                isPurging = true
                                 scope.launch {
                                     val apiService = api
                                     if (apiService == null) {
+                                        isPurging = false
                                         sendSyncConfirmation(webSocket, command, "FAILED", "ApiService no inicializado", commandId = commandId)
                                         return@launch
                                     }
@@ -2587,6 +2561,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
                                     // 3. Solo iniciar carrusel DESPUÉS de que la purga termine exitosamente
                                     uiHandler.post {
+                                        isPurging = false
                                         if (purgeResult.success) {
                                             Log.i(TAG, "[WebSocket] Purga exitosa (binario), iniciando carrusel...")
                                             startStandbyCarousel()

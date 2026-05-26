@@ -548,7 +548,7 @@ async def _delayed_batch_flush():
                 if not offline_ids:
                     return
 
-                # Excluir dispositivos vivos en otro worker (el bus ya les entregó)
+                # Capa 3: Excluir dispositivos vivos en otro worker (el bus ya les entregó)
                 from app.services import device_registry as dr
                 if dr.device_registry is not None:
                     try:
@@ -2436,13 +2436,6 @@ async def _on_bus_command(device_id: str, command: str, payload: dict):
                     return
             await tablet_ws_manager.send_to_device(device_id, payload)
         elif command == "BANNER_LIST":
-            broadcast_id = payload.get("_broadcast_id") if payload else None
-            if broadcast_id and banner_batch_manager is not None:
-                dedup_key = f"bus:broadcast:{broadcast_id}"
-                added = await banner_batch_manager.redis.set(dedup_key, "1", nx=True, ex=30)
-                if not added:
-                    logger.debug(f"[BUS] BANNER_LIST {broadcast_id} ya procesado, saltando")
-                    return
             await tablet_ws_manager.broadcast(payload)
     except Exception as e:
         logger.error(f"[BUS] Error procesando comando '{command}' para {device_id}: {e}")

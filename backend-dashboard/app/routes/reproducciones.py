@@ -9,7 +9,7 @@ from app.database import get_db_usuarios
 from app.dependencies import get_current_cliente
 from app.models.reproduccion_metrica import ReproduccionMetrica
 from app.models.dispositivo import Dispositivo
-from app.services.metricas_service import resumen_diario, tendencia_14d
+from app.services.metricas_service import resumen_diario, tendencia_14d, get_venezuela_now
 
 router = APIRouter(prefix="/reproducciones", tags=["reproducciones"])
 logger = logging.getLogger("uvicorn.error")
@@ -131,7 +131,7 @@ async def obtener_resumen_diario(
     current_user: dict = Depends(get_current_cliente),
 ):
     try:
-        target_date = date.fromisoformat(fecha) if fecha else date.today()
+        target_date = date.fromisoformat(fecha) if fecha else get_venezuela_now().date()
         resumen = await resumen_diario(db, target_date)
         tendencia = await tendencia_14d(db, target_date)
         return {

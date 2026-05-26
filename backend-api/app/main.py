@@ -1621,16 +1621,7 @@ async def enviar_comando_a_dispositivo(
         for _ in range(COMMAND_TIMEOUT):
             await asyncio.sleep(1)
             
-            # 0. Detectar zombie: bus listener ya gestionó el comando vía send_to_device
-            if tablet_ws_manager.device_map.get(device_id) is None:
-                logger.warning(f"[COMMAND] WebSocket de {device_id} se desconectó durante la espera")
-                return {
-                    "success": True,
-                    "status": "QUEUED",
-                    "message": f"Dispositivo {device_id} se desconectó, comando {comando} será entregado cuando reconecte",
-                }
-            
-            # 1. Intentar obtener de Redis
+            # 1. Intentar obtener ack de Redis (prioridad máxima — funciona para local y remoto)
             if command_acker:
                 redis_ack = await command_acker.get_confirmation(device_id, comando)
                 if redis_ack:
@@ -1645,7 +1636,16 @@ async def enviar_comando_a_dispositivo(
                     await command_acker.delete_confirmation(device_id, comando)
                     break
             
-            # 2. Verificar dict local (backward compatibility)
+            # 2. Detectar solo dispositivos que estaban local y se desconectaron
+            if ws is not None and tablet_ws_manager.device_map.get(device_id) is None:
+                logger.warning(f"[COMMAND] WebSocket de {device_id} se desconectó durante la espera")
+                return {
+                    "success": True,
+                    "status": "QUEUED",
+                    "message": f"Dispositivo {device_id} se desconectó, comando {comando} será entregado cuando reconecte",
+                }
+            
+            # 3. Verificar dict local (backward compatibility)
             local_ack = command_ack_payloads.get(ack_key)
             if local_ack:
                 logger.info(f"[COMMAND] Confirmación recibida del dict local para {device_id}: {local_ack.get('status')}")
@@ -1653,7 +1653,7 @@ async def enviar_comando_a_dispositivo(
                 command_ack_payloads.pop(ack_key, None)
                 break
                 
-            # 3. Verificar si hay waiter seteado (trabaja con el mecanismo original)
+            # 4. Verificar si hay waiter seteado (trabaja con el mecanismo original)
             if command_ack_waiters.get(ack_key) and command_ack_payloads.get(ack_key):
                 ack = command_ack_payloads.pop(ack_key, {})
                 logger.info(f"[COMMAND] Confirmación via waiter para {device_id}: {ack.get('status')}")

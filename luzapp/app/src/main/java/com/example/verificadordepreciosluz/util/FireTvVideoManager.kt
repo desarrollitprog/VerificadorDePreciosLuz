@@ -11,7 +11,7 @@ import android.widget.VideoView
  * Detecta destrucción/recreación de la Surface nativa (ocurre cuando
  * el HDMI entra en standby) y recupera la reproducción automáticamente.
  *
- * Solo de instancia cuando DeviceTypeHelper.detectDeviceType() == TELEVISOR.
+ * Solo se instancia cuando DeviceTypeHelper.detectDeviceType() == TELEVISOR.
  */
 class FireTvVideoManager(
     private val videoView: VideoView,
@@ -28,6 +28,7 @@ class FireTvVideoManager(
     private var savedPosition: Int = 0
     private var pendingUri: Uri? = null
     private var callbackRegistered = false
+    private var trackedPosition: Int = 0
 
     fun register() {
         if (callbackRegistered) return
@@ -36,9 +37,14 @@ class FireTvVideoManager(
     }
 
     fun play(uri: Uri) {
+        videoView.stopPlayback()
         pendingUri = uri
         savedPosition = 0
-        videoView.setOnCompletionListener { onCompletion?.invoke() }
+        trackedPosition = 0
+        videoView.setOnCompletionListener {
+            pendingUri = null
+            onCompletion?.invoke()
+        }
         videoView.setOnPreparedListener { mp ->
             mp.setVideoScalingMode(MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT)
             onPrepared?.invoke(mp)
@@ -78,11 +84,16 @@ class FireTvVideoManager(
         videoView.setOnErrorListener(null)
         pendingUri = null
         savedPosition = 0
+        trackedPosition = 0
     }
 
     fun currentPosition(): Int = if (isSurfaceAlive) videoView.currentPosition.coerceAtLeast(0) else savedPosition
 
     fun duration(): Int = if (isSurfaceAlive) videoView.duration.coerceAtLeast(0) else 0
+
+    fun updateTrackedPosition(pos: Int) {
+        trackedPosition = pos
+    }
 
     private val surfaceCallback = object : SurfaceHolder.Callback {
         override fun surfaceCreated(holder: SurfaceHolder) {
@@ -100,7 +111,9 @@ class FireTvVideoManager(
 
         override fun surfaceDestroyed(holder: SurfaceHolder) {
             Log.w(tag, "surfaceDestroyed — salvando posicion")
-            savedPosition = videoView.currentPosition.coerceAtLeast(0)
+            val pos = try { videoView.currentPosition.coerceAtLeast(0) } catch (e: Exception) { 0 }
+            savedPosition = if (pos > 0) pos else trackedPosition
+            Log.d(tag, "surfaceDestroyed: savedPosition=$savedPosition (current=$pos, tracked=$trackedPosition)")
             isSurfaceAlive = false
             videoView.stopPlayback()
         }

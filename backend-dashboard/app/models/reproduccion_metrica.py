@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, Index
 from ..database import Base
 
 
@@ -22,3 +22,7 @@ class ReproduccionMetrica(Base):
     completo = Column(Boolean, default=False)
     motivo_fin = Column(String(20), nullable=True)
     fecha_creacion = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_reproducciones_fecha_banner", "fecha_creacion", "banner_id"),
+    )

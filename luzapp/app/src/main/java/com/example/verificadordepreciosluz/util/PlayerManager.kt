@@ -1,6 +1,8 @@
 package com.example.verificadordepreciosluz.util
 
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
@@ -10,6 +12,8 @@ import androidx.media3.ui.PlayerView
 
 class PlayerManager(
     private val playerView: PlayerView,
+    private val enableRecoveryTimeout: Boolean = false,
+    private val recoveryCheckMs: Long = 5_000L,
     private val tag: String = "PlayerManager"
 ) {
 
@@ -19,10 +23,31 @@ class PlayerManager(
     private var exoPlayer: ExoPlayer? = null
     private var currentUri: Uri? = null
 
+    private val recoveryHandler = Handler(Looper.getMainLooper())
+    private var lastCheckedPosition: Int = 0
+    private val recoveryRunnable = object : Runnable {
+        override fun run() {
+            val player = exoPlayer ?: return
+            if (!player.isPlaying) {
+                recoveryHandler.postDelayed(this, recoveryCheckMs)
+                return
+            }
+            val currentPos = player.currentPosition.toInt()
+            if (currentPos <= lastCheckedPosition) {
+                Log.w(tag, "Recovery: reproducción estancada en pos=$currentPos, forzando error")
+                onError?.invoke(1, PlaybackException.ERROR_CODE_TIMEOUT) ?: true
+            } else {
+                lastCheckedPosition = currentPos
+                recoveryHandler.postDelayed(this, recoveryCheckMs)
+            }
+        }
+    }
+
     private val playerListener = object : Player.Listener {
         override fun onPlaybackStateChanged(state: Int) {
             when (state) {
                 Player.STATE_ENDED -> {
+                    cancelRecoveryWatchdog()
                     Log.d(tag, "Reproducción finalizada naturalmente")
                     onCompletion?.invoke()
                 }
@@ -30,6 +55,7 @@ class PlayerManager(
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            cancelRecoveryWatchdog()
             Log.w(tag, "Error de reproducción: errorCode=${error.errorCode} ${error.message}")
             onError?.invoke(1, error.errorCode) ?: true
         }
@@ -48,20 +74,33 @@ class PlayerManager(
         player.addListener(playerListener)
         playerView.player = player
 
+        if (enableRecoveryTimeout) {
+            lastCheckedPosition = 0
+            recoveryHandler.removeCallbacks(recoveryRunnable)
+            recoveryHandler.postDelayed(recoveryRunnable, recoveryCheckMs)
+        }
+
         Log.d(tag, "play: $uri")
     }
 
     fun pause() {
+        cancelRecoveryWatchdog()
         exoPlayer?.pause()
         Log.d(tag, "pause")
     }
 
     fun resume() {
         exoPlayer?.play()
+        if (enableRecoveryTimeout) {
+            lastCheckedPosition = exoPlayer?.currentPosition?.toInt() ?: 0
+            recoveryHandler.removeCallbacks(recoveryRunnable)
+            recoveryHandler.postDelayed(recoveryRunnable, recoveryCheckMs)
+        }
         Log.d(tag, "resume")
     }
 
     fun release() {
+        cancelRecoveryWatchdog()
         exoPlayer?.stop()
         exoPlayer?.removeListener(playerListener)
         exoPlayer?.release()
@@ -76,4 +115,8 @@ class PlayerManager(
     fun duration(): Int = exoPlayer?.duration?.toInt() ?: 0
 
     fun isPlaying(): Boolean = exoPlayer?.isPlaying ?: false
+
+    private fun cancelRecoveryWatchdog() {
+        recoveryHandler.removeCallbacks(recoveryRunnable)
+    }
 }

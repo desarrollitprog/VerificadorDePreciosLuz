@@ -33,9 +33,9 @@ DB_NAME_USUARIOS = _required("DB_NAME_USUARIOS")
 DB_PORT_USUARIOS = os.getenv("DB_PORT_USUARIOS", "1433")
 DB_DRIVER_USUARIOS = os.getenv("DB_DRIVER_USUARIOS", "ODBC Driver 18 for SQL Server")
 
-DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "100"))
-DB_POOL_OVERFLOW = int(os.getenv("DB_POOL_OVERFLOW", "50"))
-DB_POOL_TIMEOUT = int(os.getenv("DB_POOL_TIMEOUT", "10"))
+DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "300"))
+DB_POOL_OVERFLOW = int(os.getenv("DB_POOL_OVERFLOW", "200"))
+DB_POOL_TIMEOUT = int(os.getenv("DB_POOL_TIMEOUT", "5"))
 
 engine_usuarios = create_async_engine(
     _build_async_connection_string(

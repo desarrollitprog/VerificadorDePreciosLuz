@@ -33,6 +33,9 @@ DB_NAME_USUARIOS = _required("DB_NAME_USUARIOS")
 DB_PORT_USUARIOS = os.getenv("DB_PORT_USUARIOS", "1433")
 DB_DRIVER_USUARIOS = os.getenv("DB_DRIVER_USUARIOS", "ODBC Driver 18 for SQL Server")
 
+DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "30"))
+DB_POOL_OVERFLOW = int(os.getenv("DB_POOL_OVERFLOW", "30"))
+
 engine_usuarios = create_async_engine(
     _build_async_connection_string(
         server=DB_SERVER_USUARIOS,
@@ -43,6 +46,10 @@ engine_usuarios = create_async_engine(
         driver=DB_DRIVER_USUARIOS,
     ),
     echo=False,
+    pool_size=DB_POOL_SIZE,
+    max_overflow=DB_POOL_OVERFLOW,
+    pool_pre_ping=True,
+    pool_recycle=1800,
 )
 
 AsyncSessionLocalUsuarios = sessionmaker(

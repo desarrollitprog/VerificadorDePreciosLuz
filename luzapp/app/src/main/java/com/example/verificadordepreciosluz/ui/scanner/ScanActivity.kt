@@ -315,7 +315,10 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             binding.tvTituloScanner.text = getString(R.string.title_tv_mode)
             Log.d(TAG, "FireTV detectado, título cambiado a 'AUTOMERCADOS LUZ'")
         }
-        playerManager = PlayerManager(binding.standbyPlayer)
+        playerManager = PlayerManager(
+            binding.standbyPlayer,
+            enableRecoveryTimeout = deviceType == DeviceTypeHelper.DeviceType.TELEVISOR
+        )
         Log.d(TAG, "PlayerManager inicializado con ExoPlayer")
 
         // Toggle del panel de prueba tocando el título (para emulador/técnico)

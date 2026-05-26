@@ -14,6 +14,8 @@ from app.services.metricas_service import resumen_diario, tendencia_14d, get_ven
 router = APIRouter(prefix="/reproducciones", tags=["reproducciones"])
 logger = logging.getLogger("uvicorn.error")
 
+_SUB_BATCH_SIZE = 25
+
 
 class EventoProgreso(BaseModel):
     reproduccion_id: str
@@ -66,62 +68,70 @@ async def recibir_batch_reproducciones(
     body: BatchProgresoBody,
     db: AsyncSession = Depends(get_db_usuarios),
 ):
-    try:
-        count = 0
-        for ev in body.eventos:
-            now = datetime.utcnow()
-            stmt = select(ReproduccionMetrica).where(
-                ReproduccionMetrica.reproduccion_id == ev.reproduccion_id
-            )
-            result = await db.execute(stmt)
-            existing = result.scalars().first()
+    total_count = 0
+    sub_errores = 0
+    eventos = body.eventos
 
-            if existing is None:
-                if ev.tipo_evento not in ("START", "COMPLETED", "INTERRUPTED"):
-                    continue
-                try:
-                    async with db.begin_nested():
-                        nueva = ReproduccionMetrica(
-                            reproduccion_id=ev.reproduccion_id,
-                            dispositivo_id=ev.dispositivo_id,
-                            banner_id=ev.banner_id,
-                            titulo=ev.titulo,
-                            duracion_total_seg=ev.duracion_total_seg,
-                            inicio_reproduccion=now if ev.tipo_evento == "START" else None,
-                            segundos_reproducidos=ev.segundos_reproducidos,
-                            porcentaje_completado=ev.porcentaje_completado,
-                            cuartil_50=ev.cuartil_50 or False,
-                            cuartil_75=ev.cuartil_75 or False,
-                            cuartil_100=ev.cuartil_100 or False,
-                            completo=ev.completo or False,
-                            motivo_fin=ev.motivo_fin,
-                            fecha_creacion=now,
+    for i in range(0, len(eventos), _SUB_BATCH_SIZE):
+        sub_batch = eventos[i:i + _SUB_BATCH_SIZE]
+        try:
+            for ev in sub_batch:
+                now = datetime.utcnow()
+                stmt = select(ReproduccionMetrica).where(
+                    ReproduccionMetrica.reproduccion_id == ev.reproduccion_id
+                )
+                result = await db.execute(stmt)
+                existing = result.scalars().first()
+
+                if existing is None:
+                    if ev.tipo_evento not in ("START", "COMPLETED", "INTERRUPTED"):
+                        continue
+                    try:
+                        async with db.begin_nested():
+                            nueva = ReproduccionMetrica(
+                                reproduccion_id=ev.reproduccion_id,
+                                dispositivo_id=ev.dispositivo_id,
+                                banner_id=ev.banner_id,
+                                titulo=ev.titulo,
+                                duracion_total_seg=ev.duracion_total_seg,
+                                inicio_reproduccion=now if ev.tipo_evento == "START" else None,
+                                segundos_reproducidos=ev.segundos_reproducidos,
+                                porcentaje_completado=ev.porcentaje_completado,
+                                cuartil_50=ev.cuartil_50 or False,
+                                cuartil_75=ev.cuartil_75 or False,
+                                cuartil_100=ev.cuartil_100 or False,
+                                completo=ev.completo or False,
+                                motivo_fin=ev.motivo_fin,
+                                fecha_creacion=now,
+                            )
+                            if ev.tipo_evento in ("COMPLETED", "INTERRUPTED"):
+                                nueva.fin_reproduccion = now
+                            db.add(nueva)
+                            await db.flush()
+                        total_count += 1
+                    except IntegrityError:
+                        db.expunge(nueva)
+                        stmt = select(ReproduccionMetrica).where(
+                            ReproduccionMetrica.reproduccion_id == ev.reproduccion_id
                         )
-                        if ev.tipo_evento in ("COMPLETED", "INTERRUPTED"):
-                            nueva.fin_reproduccion = now
-                        db.add(nueva)
-                        await db.flush()
-                    count += 1
-                except IntegrityError:
-                    db.expunge(nueva)
-                    stmt = select(ReproduccionMetrica).where(
-                        ReproduccionMetrica.reproduccion_id == ev.reproduccion_id
-                    )
-                    result = await db.execute(stmt)
-                    existing = result.scalars().first()
-                    if existing is not None:
-                        _apply_evento(existing, ev, now)
-                        count += 1
-            else:
-                _apply_evento(existing, ev, now)
-                count += 1
+                        result = await db.execute(stmt)
+                        existing = result.scalars().first()
+                        if existing is not None:
+                            _apply_evento(existing, ev, now)
+                            total_count += 1
+                else:
+                    _apply_evento(existing, ev, now)
+                    total_count += 1
 
-        await db.commit()
-        return {"success": True, "procesados": count}
-    except Exception as e:
-        await db.rollback()
-        logger.error(f"Error procesando batch reproducciones: {e}")
-        raise HTTPException(status_code=500, detail=f"Error procesando batch: {e}")
+            await db.commit()
+        except Exception as e:
+            await db.rollback()
+            sub_errores += 1
+            logger.warning(f"Sub-batch {i}-{i+len(sub_batch)} falló: {e}")
+
+    if sub_errores > 0:
+        logger.warning(f"Batch completado con {sub_errores} sub-batches fallidos, {total_count} ok")
+    return {"success": True, "procesados": total_count}
 
 
 @router.get("/resumen-diario")

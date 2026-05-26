@@ -81,13 +81,13 @@ def iniciar_scheduler() -> AsyncIOScheduler:
 
     _scheduler.add_job(
         _consolidar_metricas,
-        'interval',
-        hours=1,
+        'cron',
+        minute=5,
         id='consolidar_reproducciones',
         replace_existing=True
     )
 
-    # Job 7: Limpiar métricas antiguas cada 24 horas
+    # Job 7: Limpiar métricas antiguas (12:05 AM Venezuela = 4:05 AM UTC)
     async def _limpiar_metricas():
         from app.database import AsyncSessionLocalUsuarios
         async with AsyncSessionLocalUsuarios() as db:
@@ -95,13 +95,14 @@ def iniciar_scheduler() -> AsyncIOScheduler:
 
     _scheduler.add_job(
         _limpiar_metricas,
-        'interval',
-        hours=24,
+        'cron',
+        hour=4,
+        minute=5,
         id='limpiar_metricas_antiguas',
         replace_existing=True
     )
 
-    # Job 8: Agregar métricas diarias (ayer → metricas_diarias) cada 24 horas
+    # Job 8: Agregar métricas diarias (12:00 AM Venezuela = 4:00 AM UTC)
     async def _agregar_metricas():
         from app.database import AsyncSessionLocalUsuarios
         async with AsyncSessionLocalUsuarios() as db:
@@ -109,8 +110,9 @@ def iniciar_scheduler() -> AsyncIOScheduler:
 
     _scheduler.add_job(
         _agregar_metricas,
-        'interval',
-        hours=24,
+        'cron',
+        hour=4,
+        minute=0,
         id='agregar_metricas_diarias',
         replace_existing=True
     )

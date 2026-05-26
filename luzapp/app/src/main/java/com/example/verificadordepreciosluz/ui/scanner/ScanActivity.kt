@@ -58,6 +58,7 @@ import com.example.verificadordepreciosluz.data.local.BannerCacheItem
 import com.example.verificadordepreciosluz.databinding.ActivityScanBinding
 import com.example.verificadordepreciosluz.R
 import com.example.verificadordepreciosluz.util.DeviceTypeHelper
+import com.example.verificadordepreciosluz.util.FireTvVideoManager
 import com.example.verificadordepreciosluz.util.NetworkUtils
 import com.example.verificadordepreciosluz.util.UpdateChecker
 import com.example.verificadordepreciosluz.util.BackupWorker
@@ -156,6 +157,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private var ultimoTitulo: String? = null
     private var ultimoTipoReproduccion: String? = null
     private var ultimoCuartilReportado: Int = 0
+    private var videoManager: FireTvVideoManager? = null
     private val PURGE_INTERVAL_MS = 30L * 24 * 60 * 60 * 1000  // 30 días
     private var purgeTimerRunnable: Runnable? = null
     private val deviceId: String by lazy {
@@ -312,6 +314,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         if (deviceType == DeviceTypeHelper.DeviceType.TELEVISOR) {
             binding.tvTituloScanner.text = getString(R.string.title_tv_mode)
             Log.d(TAG, "FireTV detectado, título cambiado a 'AUTOMERCADOS LUZ'")
+            videoManager = FireTvVideoManager(binding.standbyVideo).apply { register() }
+            Log.d(TAG, "FireTvVideoManager inicializado para manejo de superficie")
         }
 
         // Toggle del panel de prueba tocando el título (para emulador/técnico)
@@ -1099,6 +1103,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     }
 
     private fun resetVideoView() {
+        videoManager?.release()
         try {
             binding.standbyVideo.stopPlayback()
         } catch (e: Exception) {
@@ -1245,76 +1250,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         
         if (item.tipo == "video") {
             binding.standbyVideo.visibility = View.VISIBLE
-            
-            binding.standbyVideo.setOnCompletionListener {
-                sendPlaybackEvent(
-                    bannerId = item.id,
-                    titulo = item.titulo,
-                    tipoEvento = "COMPLETED",
-                    duracionTotalSeg = durSeg,
-                    segundosReproducidos = durSeg,
-                    porcentajeCompletado = 100.0,
-                    cuartil50 = true,
-                    cuartil75 = true,
-                    cuartil100 = true,
-                    completo = true,
-                    motivoFin = "completion"
-                )
-                stopVideoProgressTracker()
-                reproduccionIdActual = null
-                ultimoTipoReproduccion = null
-                resetVideoView()
-                nextStandbyItem()
-            }
-            binding.standbyVideo.setOnPreparedListener { mp ->
-                mp.setVideoScalingMode(android.media.MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT)
-            }
-            binding.standbyVideo.setOnErrorListener { _, what, extra ->
-                Log.w(TAG, "Standby: error video what=$what extra=$extra para ${item.localPath}")
-                
-                resetVideoView()
-                
-                val currentRetry = retryCountMap.getOrDefault(item.localPath, 0)
-                val newRetry = currentRetry + 1
-                retryCountMap[item.localPath] = newRetry
-                
-                if (newRetry >= maxRetryBeforeReport) {
-                    reportPlaybackFailure(
-                        localPath = item.localPath,
-                        reason = "VideoView error what=$what extra=$extra tras $newRetry intentos"
-                    )
-                    retryCountMap.remove(item.localPath)
-                } else {
-                    Log.w(TAG, "Standby: error video (intento $newRetry/$maxRetryBeforeReport), reintentando...")
-                }
-                
-                if (standbyItems.size == 1) {
-                    stopStandbyCarousel()
-                } else {
-                    if (standbyItems.isNotEmpty()) {
-                        standbyItems.removeAt(standbyIndex)
-                    }
-                    if (standbyItems.isEmpty()) {
-                        stopStandbyCarousel()
-                    } else {
-                        if (standbyIndex >= standbyItems.size) standbyIndex = 0
-                        uiHandler.postDelayed({
-                            playStandbyItem()
-                        }, 150)
-                    }
-                }
-                true
-            }
-            
-            val videoFile = File(item.localPath)
-            val videoUri = android.net.Uri.fromFile(videoFile)
-            
-            resetVideoView()
-            uiHandler.postDelayed({
-                binding.standbyVideo.setVideoURI(videoUri)
-                binding.standbyVideo.start()
-                startVideoProgressTracker(item.id, durSeg)
-            }, 100)
+            playVideo(item, durSeg)
         } else {
             binding.standbyImage.visibility = View.VISIBLE
             val reqWidth = if (binding.standbyImage.width > 0) binding.standbyImage.width else resources.displayMetrics.widthPixels
@@ -1337,6 +1273,85 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             val durationMs = ((item.duracionSeg ?: 10) * 1000L)
             standbySlideRunnable = Runnable { nextStandbyItem() }
             uiHandler.postDelayed(standbySlideRunnable!!, durationMs)
+        }
+    }
+
+    private fun playVideo(item: BannerCacheItem, durSeg: Double) {
+        val videoUri = android.net.Uri.fromFile(File(item.localPath))
+
+        val onVideoCompletion = {
+            sendPlaybackEvent(
+                bannerId = item.id,
+                titulo = item.titulo,
+                tipoEvento = "COMPLETED",
+                duracionTotalSeg = durSeg,
+                segundosReproducidos = durSeg,
+                porcentajeCompletado = 100.0,
+                cuartil50 = true,
+                cuartil75 = true,
+                cuartil100 = true,
+                completo = true,
+                motivoFin = "completion"
+            )
+            stopVideoProgressTracker()
+            reproduccionIdActual = null
+            ultimoTipoReproduccion = null
+            resetVideoView()
+            nextStandbyItem()
+        }
+
+        val onVideoPrepared: (android.media.MediaPlayer) -> Unit = { mp ->
+            mp.setVideoScalingMode(android.media.MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT)
+        }
+
+        val onVideoError: (Int, Int) -> Boolean = { what, extra ->
+            Log.w(TAG, "Standby: error video what=$what extra=$extra para ${item.localPath}")
+            resetVideoView()
+            val currentRetry = retryCountMap.getOrDefault(item.localPath, 0)
+            val newRetry = currentRetry + 1
+            retryCountMap[item.localPath] = newRetry
+            if (newRetry >= maxRetryBeforeReport) {
+                reportPlaybackFailure(
+                    localPath = item.localPath,
+                    reason = "VideoView error what=$what extra=$extra tras $newRetry intentos"
+                )
+                retryCountMap.remove(item.localPath)
+            } else {
+                Log.w(TAG, "Standby: error video (intento $newRetry/$maxRetryBeforeReport), reintentando...")
+            }
+            if (standbyItems.size == 1) {
+                stopStandbyCarousel()
+            } else {
+                if (standbyItems.isNotEmpty()) {
+                    standbyItems.removeAt(standbyIndex)
+                }
+                if (standbyItems.isEmpty()) {
+                    stopStandbyCarousel()
+                } else {
+                    if (standbyIndex >= standbyItems.size) standbyIndex = 0
+                    uiHandler.postDelayed({ playStandbyItem() }, 150)
+                }
+            }
+            true
+        }
+
+        val vm = videoManager
+        if (vm != null) {
+            vm.onCompletion = onVideoCompletion
+            vm.onPrepared = onVideoPrepared
+            vm.onError = onVideoError
+            vm.play(videoUri)
+            startVideoProgressTracker(item.id, durSeg)
+        } else {
+            binding.standbyVideo.setOnCompletionListener { onVideoCompletion() }
+            binding.standbyVideo.setOnPreparedListener { mp -> onVideoPrepared(mp) }
+            binding.standbyVideo.setOnErrorListener { _, what, extra -> onVideoError(what, extra) }
+            resetVideoView()
+            uiHandler.postDelayed({
+                binding.standbyVideo.setVideoURI(videoUri)
+                binding.standbyVideo.start()
+                startVideoProgressTracker(item.id, durSeg)
+            }, 100)
         }
     }
 
@@ -1391,7 +1406,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         ultimoTipoReproduccion = null
         standbyActive = false
         standbySlideRunnable?.let { uiHandler.removeCallbacks(it) }
-        binding.standbyVideo.stopPlayback()
+        videoManager?.release() ?: binding.standbyVideo.stopPlayback()
         binding.standbyOverlay.visibility = View.GONE
         releaseStandbyBitmap()
         Log.d(TAG, "Standby: detenido")
@@ -1760,6 +1775,12 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         ultimoCuartilReportado = 0
         ultimoBannerId = bannerId
         progresoRunnable = Runnable {
+            if (!(videoManager?.isSurfaceAlive ?: true)) {
+                if (standbyActive) {
+                    uiHandler.postDelayed(progresoRunnable!!, 1000)
+                }
+                return@Runnable
+            }
             try {
                 val currentPos = binding.standbyVideo.currentPosition.toDouble()
                 val duration = binding.standbyVideo.duration.toDouble()
@@ -2094,6 +2115,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     }
 
     override fun onDestroy() {
+        videoManager?.release()
+        videoManager = null
         super.onDestroy()
         stopBannerPolling()
         cameraProvider?.unbindAll()
@@ -2115,6 +2138,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
     override fun onPause() {
         super.onPause()
+        videoManager?.pause()
         cameraProvider?.unbindAll()
     }
 
@@ -2132,6 +2156,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             }, 500) // 500 ms de delay
         }
         
+        videoManager?.resume()
         resumeCameraIfAvailable()  // Solo reiniciar cámara si está disponible
         binding.etMockCode.requestFocus()
     }

@@ -1,5 +1,5 @@
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from sqlalchemy import select, func, cast, case, Date, Integer, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.reproduccion_metrica import ReproduccionMetrica
@@ -10,18 +10,31 @@ logger = logging.getLogger("uvicorn.error")
 
 TABLA_LIVE_DAYS = 1
 
+TZ_VENEZUELA = timezone(timedelta(hours=-4))
+
+
+def get_venezuela_now() -> datetime:
+    return datetime.now(TZ_VENEZUELA).replace(tzinfo=None)
+
+
+def _venezuela_date_to_utc_range(vz_date: date) -> tuple[datetime, datetime]:
+    day_start_vz = datetime(vz_date.year, vz_date.month, vz_date.day, tzinfo=TZ_VENEZUELA)
+    day_end_vz = day_start_vz + timedelta(days=1)
+    day_start_utc = day_start_vz.astimezone(timezone.utc).replace(tzinfo=None)
+    day_end_utc = day_end_vz.astimezone(timezone.utc).replace(tzinfo=None)
+    return day_start_utc, day_end_utc
+
 
 def _tabla(target_date: date, today: date | None = None):
     if today is None:
-        today = date.today()
+        today = get_venezuela_now().date()
     if target_date >= today - timedelta(days=TABLA_LIVE_DAYS):
         return ReproduccionMetrica
     return MetricasDiarias
 
 
 async def resumen_diario(db: AsyncSession, target_date: date) -> dict:
-    day_start = datetime.combine(target_date, datetime.min.time())
-    day_end = datetime.combine(target_date, datetime.max.time())
+    day_start, day_end = _venezuela_date_to_utc_range(target_date)
     tabla = _tabla(target_date)
 
     if tabla is ReproduccionMetrica:
@@ -152,8 +165,7 @@ async def tendencia_14d(db: AsyncSession, hasta: date) -> list[dict]:
         tabla = _tabla(dia)
 
         if tabla is ReproduccionMetrica:
-            day_start = datetime.combine(dia, datetime.min.time())
-            day_end = datetime.combine(dia, datetime.max.time())
+            day_start, day_end = _venezuela_date_to_utc_range(dia)
 
             ver_ids = select(Dispositivo.codigo_kiosko).where(Dispositivo.tipo == "verificador")
 
@@ -196,9 +208,8 @@ async def tendencia_14d(db: AsyncSession, hasta: date) -> list[dict]:
 
 async def agregar_metricas_diarias(db: AsyncSession, target_date: date | None = None):
     if target_date is None:
-        target_date = date.today() - timedelta(days=1)
-    day_start = datetime.combine(target_date, datetime.min.time())
-    day_end = datetime.combine(target_date, datetime.max.time())
+        target_date = get_venezuela_now().date() - timedelta(days=1)
+    day_start, day_end = _venezuela_date_to_utc_range(target_date)
 
     ver_ids = select(Dispositivo.codigo_kiosko).where(Dispositivo.tipo == "verificador")
     tv_ids = select(Dispositivo.codigo_kiosko).where(Dispositivo.tipo == "televisor")
@@ -312,8 +323,8 @@ async def consolidar_por_hora(db: AsyncSession) -> dict:
 
 
 async def limpiar_metricas_antiguas(db: AsyncSession) -> int:
-    corte = date.today() - timedelta(days=TABLA_LIVE_DAYS)
-    corte_dt = datetime.combine(corte, datetime.min.time())
+    corte_vz = get_venezuela_now().date() - timedelta(days=TABLA_LIVE_DAYS)
+    corte_dt = _venezuela_date_to_utc_range(corte_vz)[0]
     stmt = select(func.count(ReproduccionMetrica.id)).where(
         ReproduccionMetrica.fecha_creacion < corte_dt
     )
@@ -325,5 +336,5 @@ async def limpiar_metricas_antiguas(db: AsyncSession) -> int:
         )
         await db.execute(d_stmt)
         await db.commit()
-        logger.info(f"Limpieza de métricas: {total} registros eliminados (anteriores a {corte})")
+        logger.info(f"Limpieza de métricas: {total} registros eliminados (anteriores a {corte_vz})")
     return total

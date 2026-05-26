@@ -45,7 +45,7 @@ export interface Servidor {
 }
 
 export interface Dispositivo {
-  id: number;
+  id: string | number;
   codigo_kiosko: string;
   nombre_amigable: string | null;
   online: boolean;

@@ -548,6 +548,19 @@ async def _delayed_batch_flush():
                 if not offline_ids:
                     return
 
+                # Capa 3: Excluir dispositivos vivos en otro worker (el bus ya les entregó)
+                from app.services import device_registry as dr
+                if dr.device_registry is not None:
+                    try:
+                        for did in list(offline_ids):
+                            if await dr.device_registry.is_device_registered(did):
+                                offline_ids.discard(did)
+                    except Exception:
+                        pass
+
+                if not offline_ids:
+                    return
+
                 target: set[str] = set()
                 is_broadcast = any(b.get("device_ids") is None for b in banners)
                 if is_broadcast:
@@ -1608,16 +1621,7 @@ async def enviar_comando_a_dispositivo(
         for _ in range(COMMAND_TIMEOUT):
             await asyncio.sleep(1)
             
-            # 0. Detectar zombie: bus listener ya gestionó el comando vía send_to_device
-            if tablet_ws_manager.device_map.get(device_id) is None:
-                logger.warning(f"[COMMAND] WebSocket de {device_id} se desconectó durante la espera")
-                return {
-                    "success": True,
-                    "status": "QUEUED",
-                    "message": f"Dispositivo {device_id} se desconectó, comando {comando} será entregado cuando reconecte",
-                }
-            
-            # 1. Intentar obtener de Redis
+            # 1. Intentar obtener ack de Redis (prioridad máxima — funciona para local y remoto)
             if command_acker:
                 redis_ack = await command_acker.get_confirmation(device_id, comando)
                 if redis_ack:
@@ -1632,7 +1636,16 @@ async def enviar_comando_a_dispositivo(
                     await command_acker.delete_confirmation(device_id, comando)
                     break
             
-            # 2. Verificar dict local (backward compatibility)
+            # 2. Detectar solo dispositivos que estaban local y se desconectaron
+            if ws is not None and tablet_ws_manager.device_map.get(device_id) is None:
+                logger.warning(f"[COMMAND] WebSocket de {device_id} se desconectó durante la espera")
+                return {
+                    "success": True,
+                    "status": "QUEUED",
+                    "message": f"Dispositivo {device_id} se desconectó, comando {comando} será entregado cuando reconecte",
+                }
+            
+            # 3. Verificar dict local (backward compatibility)
             local_ack = command_ack_payloads.get(ack_key)
             if local_ack:
                 logger.info(f"[COMMAND] Confirmación recibida del dict local para {device_id}: {local_ack.get('status')}")
@@ -1640,7 +1653,7 @@ async def enviar_comando_a_dispositivo(
                 command_ack_payloads.pop(ack_key, None)
                 break
                 
-            # 3. Verificar si hay waiter seteado (trabaja con el mecanismo original)
+            # 4. Verificar si hay waiter seteado (trabaja con el mecanismo original)
             if command_ack_waiters.get(ack_key) and command_ack_payloads.get(ack_key):
                 ack = command_ack_payloads.pop(ack_key, {})
                 logger.info(f"[COMMAND] Confirmación via waiter para {device_id}: {ack.get('status')}")
@@ -2414,15 +2427,15 @@ async def _on_bus_command(device_id: str, command: str, payload: dict):
                 message.update(payload)
             await tablet_ws_manager.send_to_device(device_id, message)
         elif command in ("BANNER_INICIADO", "BANNER_FINALIZADO"):
+            banner_id = payload.get("banner_id") if payload else None
+            if banner_id is not None and banner_batch_manager is not None:
+                dedup_key = f"bus:notif:{device_id}:{command}:{banner_id}"
+                added = await banner_batch_manager.redis.set(dedup_key, "1", nx=True, ex=60)
+                if not added:
+                    logger.debug(f"[BUS] {command} banner {banner_id} para {device_id} ya procesado, saltando")
+                    return
             await tablet_ws_manager.send_to_device(device_id, payload)
         elif command == "BANNER_LIST":
-            broadcast_id = payload.get("_broadcast_id") if payload else None
-            if broadcast_id and banner_batch_manager is not None:
-                dedup_key = f"bus:broadcast:{broadcast_id}"
-                added = await banner_batch_manager.redis.set(dedup_key, "1", nx=True, ex=30)
-                if not added:
-                    logger.debug(f"[BUS] BANNER_LIST {broadcast_id} ya procesado, saltando")
-                    return
             await tablet_ws_manager.broadcast(payload)
     except Exception as e:
         logger.error(f"[BUS] Error procesando comando '{command}' para {device_id}: {e}")

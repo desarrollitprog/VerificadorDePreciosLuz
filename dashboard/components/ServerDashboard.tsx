@@ -399,7 +399,7 @@ export function ServerDashboard() {
       api_url: '',
       online: s.online,
       dispositivos: (s.dispositivos || []).map(d => ({
-        id: Number(d.device_id),
+        id: d.device_id,
         codigo_kiosko: d.device_id,
         nombre_amigable: d.nombre_amigable || null,
         online: d.online,

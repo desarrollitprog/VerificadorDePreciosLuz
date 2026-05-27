@@ -95,7 +95,7 @@ const MetricasTable: React.FC<Props> = ({ data, loading }) => {
       <div className="h-1 bg-gradient-to-r from-violet-500 to-purple-500" />
       <div className="p-5">
         <h3 className="text-slate-900 dark:text-white font-semibold text-sm mb-3">Métricas por Sede</h3>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40">

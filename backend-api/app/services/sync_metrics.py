@@ -13,7 +13,7 @@ from ..models.reproduccion_metrica import ReproduccionMetricaSede
 
 logger = logging.getLogger("uvicorn.error")
 
-INTERVALO_HORAS = 5
+INTERVALO_HORAS = 5 / 60  # 5 minutos para pruebas
 STAGGER_MAX_SEGUNDOS = 300
 DASHBOARD_URL = os.getenv("DASHBOARD_URL", "http://localhost:8001").rstrip("/")
 SYNC_URL = f"{DASHBOARD_URL}/api/reproducciones/sincronizar"

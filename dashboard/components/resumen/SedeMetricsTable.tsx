@@ -61,7 +61,7 @@ const SedeMetricsTable: React.FC<Props> = ({ data, loading }) => {
                 <th className="px-3 py-2.5 w-8" />
                 <th className="px-3 py-2.5 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-left">Sede</th>
                 <th className="px-3 py-2.5 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Inicios</th>
-                <th className="px-3 py-2.5 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">>50%</th>
+                <th className="px-3 py-2.5 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">&gt;50%</th>
                 <th className="px-3 py-2.5 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">VCR</th>
               </tr>
             </thead>
@@ -123,3 +123,4 @@ const SedeMetricsTable: React.FC<Props> = ({ data, loading }) => {
 };
 
 export default SedeMetricsTable;
+

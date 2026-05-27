@@ -25,14 +25,14 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
   onDispositivoChange,
   expandedServidores,
   onToggleExpand,
-  label = 'Seleccionar servidores:',
+  label = 'Seleccionar sedes:',
   maxHeight = 'max-h-32',
   accentColor = '#3b82f6',
 }) => {
   const [tipoFilter, setTipoFilter] = useState<TipoFilter>('todos');
 
   if (servidores.length === 0) {
-    return <p className="text-sm text-slate-500">No hay servidores disponibles</p>;
+    return <p className="text-sm text-slate-500">No hay sedes disponibles</p>;
   }
 
   const filteredServidores = servidores

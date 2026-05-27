@@ -122,7 +122,7 @@ const MetricasTable: React.FC<Props> = ({ data, loading }) => {
                 <th className="px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-left border-r border-slate-200 dark:border-slate-700">Banner</th>
                 <th className="px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right border-r border-slate-200 dark:border-slate-700">Inicios</th>
                 <th className="px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right border-r border-slate-200 dark:border-slate-700">{'>'}50%</th>
-                <th className="px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">VCR</th>
+                <th className="px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">TASA DE EXITO</th>
               </tr>
             </thead>
             <tbody>

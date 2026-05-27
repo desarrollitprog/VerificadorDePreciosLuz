@@ -1028,7 +1028,7 @@ export const DashboardScreen: React.FC = () => {
                                     if (isExpanding) {
                                       const btn = e.currentTarget;
                                       setTimeout(() => {
-                                        btn.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                                        btn.scrollIntoView({ behavior: 'smooth', block: 'end' });
                                       }, 100);
                                     }
                                   }}

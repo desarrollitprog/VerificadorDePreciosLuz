@@ -42,8 +42,7 @@ export interface ResumenData {
 }
 
 export interface BannerMetrica {
-  banner_id: number;
-  titulo: string | null;
+  titulo: string;
   inicios: number;
   validas_50: number;
   vcr: number;
@@ -69,6 +68,36 @@ export interface ReproduccionesResponse {
   fecha: string;
   resumen: ResumenReproducciones;
   tendencia_14d: TendenciaDiaria[];
+}
+
+export interface BannerPorSede {
+  banner_id: number;
+  titulo: string;
+  reproducciones: number;
+  validas_50: number;
+  vcr: number;
+}
+
+export interface SedeMetrica {
+  servidor_id: number;
+  nombre: string;
+  total_reproducciones: number;
+  total_validas_50: number;
+  vcr_general: number;
+  banners: BannerPorSede[];
+}
+
+export interface ReproduccionesPorSedeResponse {
+  success: boolean;
+  fecha: string;
+  sedes: SedeMetrica[];
+}
+
+export async function fetchReproduccionesPorSede(fecha?: string): Promise<ReproduccionesPorSedeResponse> {
+  const params: any = {};
+  if (fecha) params.fecha = fecha;
+  const response = await api.get('/reproducciones/por-sede', { params });
+  return response.data as ReproduccionesPorSedeResponse;
 }
 
 export async function fetchReproduccionesResumenDiario(fecha?: string): Promise<ReproduccionesResponse> {

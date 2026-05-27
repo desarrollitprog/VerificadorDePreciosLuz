@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { RefreshCw, Server, Smartphone, Film, Users, AlertCircle, BarChart3 } from 'lucide-react';
-import { fetchResumen, fetchReproduccionesResumenDiario, ResumenData, ReproduccionesResponse } from '../services/resumenService';
+import { fetchResumen, fetchReproduccionesResumenDiario, fetchReproduccionesPorSede, ResumenData, ReproduccionesResponse, ReproduccionesPorSedeResponse } from '../services/resumenService';
 import { getUserRole } from '../services/tokenUtils';
 import KpiCard from '../components/resumen/KpiCard';
 import ServerStorageChart from '../components/resumen/ServerStorageChart';
@@ -8,7 +8,7 @@ import DeviceStatusChart from '../components/resumen/DeviceStatusChart';
 import BannersTimeline from '../components/resumen/BannersTimeline';
 import ServerMiniTable from '../components/resumen/ServerMiniTable';
 import ReproductionTrendChart from '../components/resumen/ReproductionTrendChart';
-import BannerMetricsTable from '../components/resumen/BannerMetricsTable';
+import MetricasTable from '../components/resumen/MetricasTable';
 
 export const ResumenScreen: React.FC = () => {
   const [data, setData] = useState<ResumenData | null>(null);
@@ -16,6 +16,7 @@ export const ResumenScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [reproData, setReproData] = useState<ReproduccionesResponse | null>(null);
+  const [porSedeData, setPorSedeData] = useState<ReproduccionesPorSedeResponse | null>(null);
   const role = getUserRole();
 
   const load = useCallback(async () => {
@@ -36,11 +37,17 @@ export const ResumenScreen: React.FC = () => {
     } catch (e) {
       console.error('Error cargando reproducciones', e);
     }
+    try {
+      const porSedeResult = await fetchReproduccionesPorSede();
+      setPorSedeData(porSedeResult);
+    } catch (e) {
+      console.error('Error cargando métricas por sede', e);
+    }
   }, []);
 
   useEffect(() => {
     load();
-    const id = setInterval(load, 60000);
+    const id = setInterval(load, 600000);
     return () => clearInterval(id);
   }, [load]);
 
@@ -170,14 +177,14 @@ export const ResumenScreen: React.FC = () => {
                     </span>
                   )}
                 </div>
-                {reproData ? (
-                  <div className="space-y-4">
-                    <ReproductionTrendChart data={reproData.tendencia_14d} />
-                    <BannerMetricsTable data={reproData.resumen.banners} />
-                  </div>
-                ) : (
-                  <p className="text-slate-500 dark:text-slate-400 text-sm">Error al cargar datos</p>
-                )}
+                <div className="space-y-4">
+                  {reproData && <ReproductionTrendChart data={reproData.tendencia_14d} />}
+                  {porSedeData ? (
+                    <MetricasTable data={porSedeData.sedes} />
+                  ) : (
+                    <p className="text-slate-500 dark:text-slate-400 text-sm">Error al cargar métricas por sede</p>
+                  )}
+                </div>
               </div>
             </div>
           </div>

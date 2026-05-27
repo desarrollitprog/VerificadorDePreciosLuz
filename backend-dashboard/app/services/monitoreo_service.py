@@ -4,6 +4,7 @@ Ejecutado cada 3.5 minutos por el scheduler.
 """
 from datetime import datetime, timedelta
 import time
+import asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import AsyncSessionLocalUsuarios
@@ -21,6 +22,7 @@ async def actualizar_sesiones_dispositivos() -> None:
     Función que se ejecuta cada 3.5 minutos.
     Consulta /devices/status de cada servidor secundario
     y actualiza sesiones en BD (DispositivoSesion).
+    Las llamadas HTTP a servidores online se hacen EN PARALELO.
     """
     start_time = time.perf_counter()
     log.info("monitoreo_inicio")
@@ -46,11 +48,39 @@ async def actualizar_sesiones_dispositivos() -> None:
                 d.codigo_kiosko: d for d in dispositivos_db
             }
 
+            # Paso 1: Separar servidores online/offline
+            servidores_online = []
+            servidores_offline = []
             for s in servidores:
-                servidores_procesados += 1
-                online = s.ultimo_heartbeat is not None and s.ultimo_heartbeat >= umbral
+                if s.ultimo_heartbeat is not None and s.ultimo_heartbeat >= umbral:
+                    servidores_online.append(s)
+                else:
+                    servidores_offline.append(s)
 
-                if not online:
+            # Paso 2: Procesar servidores offline (sin HTTP)
+            for s in servidores_offline:
+                servidores_procesados += 1
+                for dispositivo in dispositivo_por_codigo.values():
+                    if dispositivo.servidor_id == s.id:
+                        if dispositivo.online:
+                            await _cerrar_sesion_activa(db, dispositivo.codigo_kiosko, now)
+                            sesiones_cerradas += 1
+                        dispositivo.online = False
+                        dispositivos_actualizados += 1
+
+            # Paso 3: Llamar a todos los servidores online EN PARALELO
+            resultados = await asyncio.gather(
+                *[_obtener_dispositivos_de_servidor(s.ip) for s in servidores_online],
+                return_exceptions=True
+            )
+
+            # Paso 4: Procesar cada servidor online con su resultado pre-fetch
+            for s, dispositivos_runtime in zip(servidores_online, resultados):
+                servidores_procesados += 1
+
+                if isinstance(dispositivos_runtime, Exception) or not dispositivos_runtime:
+                    errores += 1
+                    # Si falló la consulta, tratar todos sus dispositivos como offline
                     for dispositivo in dispositivo_por_codigo.values():
                         if dispositivo.servidor_id == s.id:
                             if dispositivo.online:
@@ -60,10 +90,6 @@ async def actualizar_sesiones_dispositivos() -> None:
                             dispositivos_actualizados += 1
                     continue
 
-                dispositivos_runtime = await _obtener_dispositivos_de_servidor(s.ip)
-                if not dispositivos_runtime:
-                    errores += 1
-                    
                 runtime_por_codigo = {d["device_id"]: d for d in dispositivos_runtime}
                 vistos = set(runtime_por_codigo.keys())
 

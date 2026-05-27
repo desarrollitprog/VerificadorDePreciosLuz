@@ -68,7 +68,8 @@ if os.path.isdir(static_dir):
 device_state_store: DeviceStateStore | None = None
 device_command_bus: DeviceCommandBus | None = None
 device_bus_listener_task: asyncio.Task | None = None
-reproducciones_forward_task: asyncio.Task | None = None
+reproducciones_local_task: asyncio.Task | None = None
+reproducciones_sync_task: asyncio.Task | None = None
 reproducciones_redis: redis.asyncio.Redis | None = None
 command_acker: Any = None
 pending_queue: Any = None
@@ -196,33 +197,11 @@ async def _periodic_banner_cleanup():
             await asyncio.sleep(86400)
 
 
-async def _forward_reproducciones_batch():
-    DASHBOARD_URL = os.getenv("DASHBOARD_URL", "http://localhost:8001").rstrip("/")
-    BATCH_URL = f"{DASHBOARD_URL}/api/reproducciones/batch"
-    while True:
-        try:
-            await asyncio.sleep(60)
-            global reproducciones_redis
-            if reproducciones_redis is None:
-                continue
-            import json
-            items = await reproducciones_redis.lrange("reproducciones:pending", 0, -1)
-            if not items:
-                continue
-            eventos = [json.loads(i) for i in items]
-            async with httpx.AsyncClient(timeout=15) as client:
-                resp = await client.post(BATCH_URL, json={"eventos": eventos})
-                if resp.status_code == 200:
-                    await reproducciones_redis.ltrim("reproducciones:pending", len(items), -1)
-                    logger.info(f"[Reproducciones] Batch enviado: {len(eventos)} eventos")
-                else:
-                    logger.warning(f"[Reproducciones] Dashboard respondió {resp.status_code}, reintentando en 60s")
-        except httpx.ConnectError:
-            logger.warning("[Reproducciones] Dashboard no disponible, reintentando en 60s")
-        except asyncio.CancelledError:
-            break
-        except Exception as e:
-            logger.error(f"[Reproducciones] Error en forward batch: {e}")
+async def _run_local_insert():
+    """Wrapper que pasa la referencia de reproducciones_redis al worker local."""
+    from app.services.metricas_locales import insertar_reproducciones_locales
+    global reproducciones_redis
+    await insertar_reproducciones_locales(reproducciones_redis)
 
 
 async def _notify_banners_started():
@@ -706,11 +685,21 @@ async def start_device_monitor():
 
     try:
         redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-        global reproducciones_redis
+        global reproducciones_redis, reproducciones_local_task, reproducciones_sync_task
         reproducciones_redis = Redis.from_url(redis_url, decode_responses=True)
         await reproducciones_redis.ping()
-        reproducciones_forward_task = asyncio.create_task(_forward_reproducciones_batch())
-        logger.info("[Reproducciones] Redis buffer + forward task iniciados")
+        reproducciones_local_task = asyncio.create_task(_run_local_insert())
+        logger.info("[Reproducciones] Worker local de metricas iniciado")
+
+        from app.services.sync_metrics import sincronizar_metricas
+        servidor_id_env = os.getenv("SERVIDOR_ID")
+        if servidor_id_env:
+            reproducciones_sync_task = asyncio.create_task(
+                sincronizar_metricas(int(servidor_id_env))
+            )
+            logger.info(f"[Reproducciones] Worker sync cada 5h iniciado (servidor_id={servidor_id_env})")
+        else:
+            logger.warning("[Reproducciones] SERVIDOR_ID no configurado, sync deshabilitado")
     except Exception as e:
         logger.warning(f"[Reproducciones] No se pudo inicializar buffer Redis: {e}")
 
@@ -832,9 +821,14 @@ async def shutdown_device_state_store():
         await device_command_bus.close()
         device_command_bus = None
 
-    if reproducciones_forward_task is not None:
-        reproducciones_forward_task.cancel()
-        reproducciones_forward_task = None
+    global reproducciones_local_task, reproducciones_sync_task
+    if reproducciones_local_task is not None:
+        reproducciones_local_task.cancel()
+        reproducciones_local_task = None
+
+    if reproducciones_sync_task is not None:
+        reproducciones_sync_task.cancel()
+        reproducciones_sync_task = None
 
     global reproducciones_redis
     if reproducciones_redis is not None:
@@ -3066,13 +3060,6 @@ async def websocket_tablet(websocket: WebSocket):
                         await device_state_store.update_playing_content(device_id, content)
                     except Exception as e:
                         logger.error(f"[PLAYING_NOW] Error guardando contenido: {e}")
-                # Notificar al dashboard si el mensaje incluye banner_id
-                banner_id = msg.get("banner_id")
-                if banner_id is not None:
-                    try:
-                        await notify_dashboard_banner_iniciado(device_id, banner_id)
-                    except Exception as e:
-                        logger.error(f"[PLAYING_NOW] Error notificando dashboard: {e}")
                 continue
             
             device_id = msg.get("device_id") or tablet_ws_manager.get_device_id(websocket)

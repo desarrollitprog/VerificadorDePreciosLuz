@@ -144,12 +144,15 @@ Endpoint `POST /api/reproducciones/sincronizar`:
 - **Importar** `MetricasPorSede` en vez de `ReproduccionMetrica`
 - **Eliminar** `POST /batch` (ya no se usa)
 - **GET /resumen-diario**: leer de `MetricasPorSede`
-  - `SELECT servidor_id, SUM(reproducciones), SUM(completados), SUM(validas_50), SUM(segundos_totales) WHERE fecha=X GROUP BY servidor_id, banner_id, titulo`
+  - `SELECT SUM(reproducciones), SUM(completados), SUM(validas_50), SUM(segundos_totales) WHERE fecha=X GROUP BY banner_id, titulo`
+- **NUEVO** `GET /api/reproducciones/por-sede`:
+  - Retorna el desglose completo por servidor para visualizar en tabla
 
 ### 3. `backend-dashboard/app/services/metricas_service.py`
 
 - **Reescribir** `resumen_diario()` usando `MetricasPorSede`
 - **Reescribir** `tendencia_14d()` usando `MetricasPorSede`
+- **Agregar** `resumen_por_sede()` para el nuevo endpoint de desglose
 - **Eliminar** `consolidar_por_hora()`
 - **Eliminar** `limpiar_metricas_antiguas()`
 - **Eliminar** `agregar_metricas_diarias()`
@@ -198,7 +201,62 @@ Total máximo: **10 conexiones** (sobra ampliamente para ~50 requests/día de sy
 
 ## Frontend
 
-**Sin cambios.** `ResumenScreen.tsx:43` ya tiene `setInterval(load, 600000)` (10 min). Las primeras horas del día mostrará 0 eventos hasta que llegue el primer sync de cada sede (staggered cada 5h). El usuario aceptó "no hay apuro" con datos en tiempo real.
+**Sin cambios en el polling.** `ResumenScreen.tsx:43` ya tiene `setInterval(load, 600000)` (10 min). Las primeras horas del día mostrará 0 eventos hasta que llegue el primer sync de cada sede (staggered cada 5h). El usuario aceptó "no hay apuro" con datos en tiempo real.
+
+---
+
+## Visualización por Sede (Nuevo endpoint)
+
+### Endpoint de consulta
+
+`GET /api/reproducciones/por-sede?fecha=2026-05-27`
+
+Retorna el desglose completo para mostrar en tabla:
+
+```json
+{
+  "success": true,
+  "fecha": "2026-05-27",
+  "sedes": [
+    {
+      "servidor_id": 1042,
+      "nombre": "Sede Centro",
+      "banners": [
+        {"titulo": "Promo Especial", "reproducciones": 45, "completados": 44, "validas_50": 42, "vcr": 93.3},
+        {"titulo": "Sorteo Mayo",   "reproducciones": 20, "completados": 17, "validas_50": 17, "vcr": 85.0}
+      ]
+    },
+    {
+      "servidor_id": 1043,
+      "nombre": "Sede Oeste",
+      "banners": [
+        {"titulo": "Promo Especial", "reproducciones": 52, "completados": 48, "validas_50": 46, "vcr": 88.5},
+        {"titulo": "Sorteo Mayo",   "reproducciones": 25, "completados": 20, "validas_50": 18, "vcr": 72.0}
+      ]
+    }
+  ]
+}
+```
+
+### Visualización en tabla
+
+Cada fila = servidor + banner:
+
+```
+┌────────────┬──────────────────────┬──────────┬────────┬──────┐
+│ Sede       │ Banner               │ Inicios  │ >50%   │ VCR  │
+├────────────┼──────────────────────┼──────────┼────────┼──────┤
+│ Sede Centro│ Promo Especial       │ 45       │ 42     │ 93%  │
+│ Sede Centro│ Sorteo Mayo          │ 20       │ 17     │ 85%  │
+│ Sede Oeste │ Promo Especial       │ 52       │ 46     │ 89%  │
+│ Sede Oeste │ Sorteo Mayo          │ 25       │ 18     │ 72%  │
+├────────────┼──────────────────────┼──────────┼────────┼──────┤
+│ TOTAL      │ Promo Especial       │ 97       │ 88     │ 91%  │
+│ TOTAL      │ Sorteo Mayo          │ 45       │ 35     │ 78%  │
+└────────────┴──────────────────────┴──────────┴────────┴──────┘
+```
+
+Se puede agregar al `ResumenScreen.tsx` como una tabla adicional debajo del resumen actual, o como un modal que se abre al hacer clic en un banner. Queda a decisión del frontend.
 
 ---
 
@@ -242,5 +300,6 @@ Los datos existentes son incorrectos (confirmado por el usuario) y no se migran.
 9. Modificar `backend-dashboard/app/database.py` (pool 5/5/5)
 10. Modificar `backend-dashboard/app/scheduler.py` (eliminar jobs 6-9)
 11. Eliminar archivos huérfanos (bulk_metrics.py, metrics_redis.py, reproduccion_metrica.py, metricas_diarias.py)
-12. Ejecutar DROP TABLE en SQL Server dashboard
-13. Rebuildear docker-compose
+12. Ejecutar DROP TABLE + CREATE TABLE en SQL Server dashboard y sedes
+13. Agregar endpoint `GET /api/reproducciones/por-sede` + función `resumen_por_sede()` en metricas_service
+14. Rebuildear docker-compose

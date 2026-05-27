@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { RefreshCw, Server, Smartphone, Film, Users, AlertCircle, BarChart3 } from 'lucide-react';
-import { fetchResumen, fetchReproduccionesResumenDiario, ResumenData, ReproduccionesResponse } from '../services/resumenService';
+import { fetchResumen, fetchReproduccionesResumenDiario, fetchReproduccionesPorSede, ResumenData, ReproduccionesResponse, ReproduccionesPorSedeResponse } from '../services/resumenService';
 import { getUserRole } from '../services/tokenUtils';
 import KpiCard from '../components/resumen/KpiCard';
 import ServerStorageChart from '../components/resumen/ServerStorageChart';
@@ -9,6 +9,7 @@ import BannersTimeline from '../components/resumen/BannersTimeline';
 import ServerMiniTable from '../components/resumen/ServerMiniTable';
 import ReproductionTrendChart from '../components/resumen/ReproductionTrendChart';
 import BannerMetricsTable from '../components/resumen/BannerMetricsTable';
+import SedeMetricsTable from '../components/resumen/SedeMetricsTable';
 
 export const ResumenScreen: React.FC = () => {
   const [data, setData] = useState<ResumenData | null>(null);
@@ -16,6 +17,7 @@ export const ResumenScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [reproData, setReproData] = useState<ReproduccionesResponse | null>(null);
+  const [porSedeData, setPorSedeData] = useState<ReproduccionesPorSedeResponse | null>(null);
   const role = getUserRole();
 
   const load = useCallback(async () => {
@@ -35,6 +37,12 @@ export const ResumenScreen: React.FC = () => {
       setReproData(reproResult);
     } catch (e) {
       console.error('Error cargando reproducciones', e);
+    }
+    try {
+      const porSedeResult = await fetchReproduccionesPorSede();
+      setPorSedeData(porSedeResult);
+    } catch (e) {
+      console.error('Error cargando métricas por sede', e);
     }
   }, []);
 
@@ -184,6 +192,17 @@ export const ResumenScreen: React.FC = () => {
 
           <div className="stagger-5">
             <ServerMiniTable data={data.servidores_detalle} />
+          </div>
+
+          {/* Tabla por sede */}
+          <div className="stagger-5">
+            {porSedeData ? (
+              <SedeMetricsTable data={porSedeData.sedes} />
+            ) : (
+              <div className="bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden p-5">
+                <p className="text-slate-500 dark:text-slate-400 text-sm">Cargando métricas por sede...</p>
+              </div>
+            )}
           </div>
         </>
       )}

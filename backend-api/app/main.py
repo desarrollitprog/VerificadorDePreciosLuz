@@ -3060,13 +3060,6 @@ async def websocket_tablet(websocket: WebSocket):
                         await device_state_store.update_playing_content(device_id, content)
                     except Exception as e:
                         logger.error(f"[PLAYING_NOW] Error guardando contenido: {e}")
-                # Notificar al dashboard si el mensaje incluye banner_id
-                banner_id = msg.get("banner_id")
-                if banner_id is not None:
-                    try:
-                        await notify_dashboard_banner_iniciado(device_id, banner_id)
-                    except Exception as e:
-                        logger.error(f"[PLAYING_NOW] Error notificando dashboard: {e}")
                 continue
             
             device_id = msg.get("device_id") or tablet_ws_manager.get_device_id(websocket)

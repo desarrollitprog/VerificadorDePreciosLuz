@@ -265,6 +265,14 @@ export const DashboardScreen: React.FC = () => {
     setExpandedFiles([]);
   };
 
+  const getTodayAt22 = (): string => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}T22:00`;
+  };
+
   const handleUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
       setUploadStatuses([]);
     if (!event.target.files?.length) return;
@@ -282,8 +290,8 @@ export const DashboardScreen: React.FC = () => {
       validFiles.push(file);
       metadatas.push({
         titulo: decoratedDefault || file.name,
-        fechaInicio: '',
-        fechaFin: '',
+        fechaInicio: getTodayAt22(),
+        fechaFin: getTodayAt22(),
         activo: true,
         asignacionTodos: true,
         servidorIds: [],
@@ -1012,14 +1020,23 @@ export const DashboardScreen: React.FC = () => {
                                  </span>
                                </div>
                              ))}
-                             {video.asignaciones && video.asignaciones.length > 3 && (
-                               <button 
-                                 onClick={() => setExpandedCardId(expandedCardId === video.id ? null : video.id)}
-                                 className="text-xs text-primary hover:underline font-medium"
-                               >
-                                 {expandedCardId === video.id ? 'Ver menos' : `Ver más (${video.asignaciones.length - 3})`}
-                               </button>
-                             )}
+                              {video.asignaciones && video.asignaciones.length > 3 && (
+                                <button 
+                                  onClick={(e) => {
+                                    const isExpanding = expandedCardId !== video.id;
+                                    setExpandedCardId(isExpanding ? video.id : null);
+                                    if (isExpanding) {
+                                      const btn = e.currentTarget;
+                                      setTimeout(() => {
+                                        btn.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                                      }, 100);
+                                    }
+                                  }}
+                                  className="text-xs text-primary hover:underline font-medium"
+                                >
+                                  {expandedCardId === video.id ? 'Ver menos' : `Ver más (${video.asignaciones.length - 3})`}
+                                </button>
+                              )}
                              {expandedCardId === video.id && video.asignaciones && video.asignaciones.slice(3).map((asig: any, idx: number) => (
                                <div key={idx} className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1">
                                  <Smartphone size={10} />

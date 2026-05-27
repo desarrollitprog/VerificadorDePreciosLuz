@@ -42,8 +42,7 @@ export interface ResumenData {
 }
 
 export interface BannerMetrica {
-  banner_id: number;
-  titulo: string | null;
+  titulo: string;
   inicios: number;
   validas_50: number;
   vcr: number;

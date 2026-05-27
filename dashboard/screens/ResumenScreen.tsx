@@ -40,7 +40,7 @@ export const ResumenScreen: React.FC = () => {
 
   useEffect(() => {
     load();
-    const id = setInterval(load, 60000);
+    const id = setInterval(load, 600000);
     return () => clearInterval(id);
   }, [load]);
 

@@ -7,7 +7,7 @@ interface Props {
   loading?: boolean;
 }
 
-type SortKey = 'banner_id' | 'titulo' | 'inicios' | 'validas_50' | 'vcr';
+type SortKey = 'titulo' | 'inicios' | 'validas_50' | 'vcr';
 
 const vcrColor = (v: number) =>
   v >= 80 ? '#10b981' : v >= 50 ? '#f59e0b' : '#ef4444';
@@ -27,8 +27,7 @@ const BannerMetricsTable: React.FC<Props> = ({ data, loading }) => {
     const copy = [...data];
     copy.sort((a, b) => {
       let cmp = 0;
-      if (sortKey === 'banner_id') cmp = a.banner_id - b.banner_id;
-      else if (sortKey === 'titulo') cmp = (a.titulo || '').localeCompare(b.titulo || '');
+      if (sortKey === 'titulo') cmp = a.titulo.localeCompare(b.titulo);
       else if (sortKey === 'inicios') cmp = a.inicios - b.inicios;
       else if (sortKey === 'validas_50') cmp = a.validas_50 - b.validas_50;
       else if (sortKey === 'vcr') cmp = a.vcr - b.vcr;
@@ -106,16 +105,16 @@ const BannerMetricsTable: React.FC<Props> = ({ data, loading }) => {
             </thead>
             <tbody>
               {pageData.map((b, i) => (
-                  <tr
-                    key={b.banner_id}
+                    <tr
+                      key={b.titulo}
                     className="border-b border-slate-100 dark:border-slate-800 even:bg-slate-50/50 dark:even:bg-slate-800/20 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all duration-300"
                     style={{ animationDelay: `${i * 40}ms` }}
                   >
                     <td className="px-3 py-2.5 text-slate-400 dark:text-slate-500 font-mono text-[10px] border-r border-slate-100 dark:border-slate-800 last:border-r-0">
                       {page * pageSize + i + 1}
                     </td>
-                    <td className="px-3 py-2.5 text-slate-900 dark:text-white font-medium max-w-[180px] truncate border-r border-slate-100 dark:border-slate-800 last:border-r-0" title={b.titulo || `Banner #${b.banner_id}`}>
-                      {b.titulo || `Banner #${b.banner_id}`}
+                    <td className="px-3 py-2.5 text-slate-900 dark:text-white font-medium max-w-[180px] truncate border-r border-slate-100 dark:border-slate-800 last:border-r-0" title={b.titulo}>
+                      {b.titulo}
                     </td>
                     <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300 font-medium tabular-nums border-r border-slate-100 dark:border-slate-800 last:border-r-0">
                       {b.inicios.toLocaleString()}

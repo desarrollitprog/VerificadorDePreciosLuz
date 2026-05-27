@@ -84,7 +84,6 @@ async def resumen_diario(db: AsyncSession, target_date: date) -> dict:
 
         rows = (await db.execute(
             select(
-                ReproduccionMetrica.banner_id,
                 ReproduccionMetrica.titulo,
                 func.count(ReproduccionMetrica.id).label("inicios"),
                 func.sum(
@@ -93,29 +92,24 @@ async def resumen_diario(db: AsyncSession, target_date: date) -> dict:
                         else_=0
                     )
                 ).label("validas_50"),
-                func.avg(ReproduccionMetrica.porcentaje_completado).label("vcr_promedio"),
             ).where(
                 ReproduccionMetrica.fecha_creacion >= day_start,
                 ReproduccionMetrica.fecha_creacion <= day_end,
             ).group_by(
-                ReproduccionMetrica.banner_id,
                 ReproduccionMetrica.titulo,
             )
         )).all()
     else:
         rows = (await db.execute(
             select(
-                MetricasDiarias.banner_id,
                 MetricasDiarias.titulo,
-                MetricasDiarias.inicios,
-                MetricasDiarias.validas_50,
-                case(
-                    (MetricasDiarias.inicios > 0, func.round(MetricasDiarias.validas_50 * 100.0 / MetricasDiarias.inicios, 1)),
-                    else_=0.0
-                ).label("vcr_promedio"),
+                func.coalesce(func.sum(MetricasDiarias.inicios), 0).label("inicios"),
+                func.coalesce(func.sum(MetricasDiarias.validas_50), 0).label("validas_50"),
             ).where(
                 MetricasDiarias.fecha == target_date,
-            ).order_by(MetricasDiarias.banner_id)
+            ).group_by(
+                MetricasDiarias.titulo,
+            )
         )).all()
 
         totals = (await db.execute(
@@ -140,8 +134,7 @@ async def resumen_diario(db: AsyncSession, target_date: date) -> dict:
         validas_b = row.validas_50 or 0
         vcr = round((validas_b / inicios_b * 100), 1) if inicios_b > 0 else 0.0
         banners.append({
-            "banner_id": row.banner_id,
-            "titulo": row.titulo,
+            "titulo": row.titulo or "Sin título",
             "inicios": inicios_b,
             "validas_50": validas_b,
             "vcr": vcr,

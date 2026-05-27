@@ -117,6 +117,18 @@ def iniciar_scheduler() -> AsyncIOScheduler:
         replace_existing=True
     )
 
+    # Job 9: Bulk insert de reproducciones desde Redis cada 5 minutos
+    from app.services.bulk_metrics import bulk_insert_reproducciones
+    _scheduler.add_job(
+        bulk_insert_reproducciones,
+        'interval',
+        minutes=5,
+        id='bulk_insert_reproducciones',
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True
+    )
+
     def job_executed_listener(event):
         if event.exception:
             log.error("job_fallo", job_id=event.job_id, error=str(event.exception))

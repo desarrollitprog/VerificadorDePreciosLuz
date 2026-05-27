@@ -14,6 +14,7 @@ from .productos_x_impuestos import ProductosXImpuestos
 from .tasa_impuesto import TasaImpuesto
 from .publicidad import Publicidad
 from .barras_asociadas import BarrasAsociadas
+from .reproduccion_metrica import ReproduccionMetricaSede
 
 # Exportar todos los modelos
 __all__ = [
@@ -27,4 +28,5 @@ __all__ = [
     "TasaImpuesto",
     "Publicidad",
     "BarrasAsociadas",
+    "ReproduccionMetricaSede",
 ]

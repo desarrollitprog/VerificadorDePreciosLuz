@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from app.routes import publicidad, auth, monitoreo, usuarios, notificaciones, auditoria, resumen
 from app.routes.reproducciones import router as reproducciones_router
+from app.routes.reproducciones_sync import router as reproducciones_sync_router
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from app.utils.health import get_health_status
@@ -114,4 +115,5 @@ app.include_router(notificaciones.router, prefix="/api")
 app.include_router(auditoria.router, prefix="/api")
 app.include_router(resumen.router, prefix="/api")
 app.include_router(reproducciones_router, prefix="/api")
+app.include_router(reproducciones_sync_router, prefix="/api")
 app.mount("/static", StaticFiles(directory="static"), name="static")

@@ -24,8 +24,6 @@ def iniciar_scheduler() -> AsyncIOScheduler:
     from app.services.monitoreo_service import actualizar_sesiones_dispositivos
     from app.services.publicidad_service import expirar_banners_vencidos
     from app.cleanup_service import cleanup_old_sessions, cleanup_old_notifications, cleanup_orphan_files
-    from app.services.metricas_service import consolidar_por_hora, limpiar_metricas_antiguas, agregar_metricas_diarias
-
     _scheduler = AsyncIOScheduler()
 
     # Job 1: Monitoreo de sesiones de dispositivos
@@ -71,62 +69,6 @@ def iniciar_scheduler() -> AsyncIOScheduler:
         hours=24,
         id='limpiar_archivos_huérfanos',
         replace_existing=True
-    )
-
-    # Job 6: Consolidar métricas de reproducción cada hora
-    async def _consolidar_metricas():
-        from app.database import AsyncSessionLocalUsuarios
-        async with AsyncSessionLocalUsuarios() as db:
-            await consolidar_por_hora(db)
-
-    _scheduler.add_job(
-        _consolidar_metricas,
-        'cron',
-        minute=5,
-        id='consolidar_reproducciones',
-        replace_existing=True
-    )
-
-    # Job 7: Limpiar métricas antiguas (12:05 AM Venezuela = 4:05 AM UTC)
-    async def _limpiar_metricas():
-        from app.database import AsyncSessionLocalUsuarios
-        async with AsyncSessionLocalUsuarios() as db:
-            await limpiar_metricas_antiguas(db)
-
-    _scheduler.add_job(
-        _limpiar_metricas,
-        'cron',
-        hour=4,
-        minute=5,
-        id='limpiar_metricas_antiguas',
-        replace_existing=True
-    )
-
-    # Job 8: Agregar métricas diarias (12:00 AM Venezuela = 4:00 AM UTC)
-    async def _agregar_metricas():
-        from app.database import AsyncSessionLocalUsuarios
-        async with AsyncSessionLocalUsuarios() as db:
-            await agregar_metricas_diarias(db)
-
-    _scheduler.add_job(
-        _agregar_metricas,
-        'cron',
-        hour=4,
-        minute=0,
-        id='agregar_metricas_diarias',
-        replace_existing=True
-    )
-
-    # Job 9: Bulk insert de reproducciones desde Redis cada 5 minutos
-    from app.services.bulk_metrics import bulk_insert_reproducciones
-    _scheduler.add_job(
-        bulk_insert_reproducciones,
-        'interval',
-        minutes=5,
-        id='bulk_insert_reproducciones',
-        replace_existing=True,
-        max_instances=1,
-        coalesce=True
     )
 
     def job_executed_listener(event):

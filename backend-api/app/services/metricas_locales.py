@@ -1,0 +1,140 @@
+import asyncio
+import json
+import logging
+from datetime import datetime
+
+from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
+
+from ..database import AsyncSessionLocalPublicidad
+from ..models.reproduccion_metrica import ReproduccionMetricaSede
+
+logger = logging.getLogger("uvicorn.error")
+REDIS_KEY = "reproducciones:pending"
+INTERVALO_SEGUNDOS = 60
+SUB_BATCH_SIZE = 25
+
+
+def _merge_eventos(eventos: list[dict]) -> dict | None:
+    """Agrupa eventos por reproduccion_id y aplica en orden para obtener estado final."""
+    grupos: dict[str, list[dict]] = {}
+    for ev in eventos:
+        rid = ev.get("reproduccion_id")
+        if not rid:
+            continue
+        grupos.setdefault(rid, []).append(ev)
+
+    resultados = []
+    for rid, evs in grupos.items():
+        evs.sort(key=lambda x: x.get("_ts", ""))
+        row = None
+        for ev in evs:
+            tipo = ev.get("tipo_evento", "")
+            if row is None:
+                if tipo not in ("START", "COMPLETED", "INTERRUPTED"):
+                    continue
+                row = {
+                    "reproduccion_id": rid,
+                    "dispositivo_id": ev.get("dispositivo_id", ""),
+                    "banner_id": ev.get("banner_id", 0),
+                    "titulo": ev.get("titulo"),
+                    "completo": ev.get("completo") or tipo == "COMPLETED",
+                    "cuartil_50": ev.get("cuartil_50") or False,
+                    "segundos_reproducidos": ev.get("segundos_reproducidos"),
+                    "fecha_creacion": datetime.utcnow(),
+                }
+            else:
+                if ev.get("completo") or tipo == "COMPLETED":
+                    row["completo"] = True
+                if ev.get("cuartil_50"):
+                    row["cuartil_50"] = True
+                sr = ev.get("segundos_reproducidos")
+                if sr is not None and (
+                    row["segundos_reproducidos"] is None or sr > row["segundos_reproducidos"]
+                ):
+                    row["segundos_reproducidos"] = sr
+                if ev.get("titulo") and not row["titulo"]:
+                    row["titulo"] = ev["titulo"]
+        if row is not None:
+            resultados.append(row)
+    return resultados
+
+
+async def insertar_reproducciones_locales(reproducciones_redis):
+    """Worker que cada 60s lee Redis, mergea en memoria e INSERTA localmente."""
+    while True:
+        try:
+            await asyncio.sleep(INTERVALO_SEGUNDOS)
+
+            if reproducciones_redis is None:
+                continue
+
+            items = await reproducciones_redis.lrange(REDIS_KEY, 0, -1)
+            if not items:
+                continue
+
+            eventos_raw = []
+            for item in items:
+                try:
+                    eventos_raw.append(json.loads(item))
+                except json.JSONDecodeError:
+                    logger.warning("Evento malformado en Redis, saltando")
+
+            if not eventos_raw:
+                await reproducciones_redis.ltrim(REDIS_KEY, len(items), -1)
+                continue
+
+            rows = _merge_eventos(eventos_raw)
+            if not rows:
+                await reproducciones_redis.ltrim(REDIS_KEY, len(items), -1)
+                continue
+
+            ok = 0
+            failed = 0
+            async with AsyncSessionLocalPublicidad() as db:
+                for i in range(0, len(rows), SUB_BATCH_SIZE):
+                    sub = rows[i:i + SUB_BATCH_SIZE]
+                    for row in sub:
+                        try:
+                            db.add(ReproduccionMetricaSede(**row))
+                            await db.flush()
+                            ok += 1
+                        except IntegrityError:
+                            await db.rollback()
+                            try:
+                                stmt = (
+                                    update(ReproduccionMetricaSede)
+                                    .where(
+                                        ReproduccionMetricaSede.reproduccion_id
+                                        == row["reproduccion_id"]
+                                    )
+                                    .values(
+                                        completo=row["completo"],
+                                        cuartil_50=row["cuartil_50"],
+                                        segundos_reproducidos=row[
+                                            "segundos_reproducidos"
+                                        ],
+                                    )
+                                )
+                                await db.execute(stmt)
+                                await db.flush()
+                                ok += 1
+                            except Exception:
+                                await db.rollback()
+                                failed += 1
+                await db.commit()
+
+            await reproducciones_redis.ltrim(REDIS_KEY, len(items), -1)
+            if failed:
+                logger.info(
+                    f"[MetricasLocales] {ok} insertadas, {failed} fallaron"
+                )
+            else:
+                logger.info(
+                    f"[MetricasLocales] {ok} reproducciones insertadas"
+                )
+
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"[MetricasLocales] Error en ciclo: {e}")

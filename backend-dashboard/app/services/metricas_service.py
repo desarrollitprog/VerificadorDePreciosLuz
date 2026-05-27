@@ -1,15 +1,10 @@
 import logging
 from datetime import date, datetime, timedelta, timezone
-from sqlalchemy import select, func, cast, case, Date, Integer, and_
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.reproduccion_metrica import ReproduccionMetrica
-from app.models.metricas_diarias import MetricasDiarias
-from app.models.dispositivo import Dispositivo
+from app.models.metricas_por_sede import MetricasPorSede
 
 logger = logging.getLogger("uvicorn.error")
-
-TABLA_LIVE_DAYS = 1
-
 TZ_VENEZUELA = timezone(timedelta(hours=-4))
 
 
@@ -17,116 +12,28 @@ def get_venezuela_now() -> datetime:
     return datetime.now(TZ_VENEZUELA).replace(tzinfo=None)
 
 
-def _venezuela_date_to_utc_range(vz_date: date) -> tuple[datetime, datetime]:
-    day_start_vz = datetime(vz_date.year, vz_date.month, vz_date.day, tzinfo=TZ_VENEZUELA)
-    day_end_vz = day_start_vz + timedelta(days=1)
-    day_start_utc = day_start_vz.astimezone(timezone.utc).replace(tzinfo=None)
-    day_end_utc = day_end_vz.astimezone(timezone.utc).replace(tzinfo=None)
-    return day_start_utc, day_end_utc
-
-
-def _tabla(target_date: date, today: date | None = None):
-    if today is None:
-        today = get_venezuela_now().date()
-    if target_date >= today - timedelta(days=TABLA_LIVE_DAYS):
-        return ReproduccionMetrica
-    return MetricasDiarias
-
-
 async def resumen_diario(db: AsyncSession, target_date: date) -> dict:
-    day_start, day_end = _venezuela_date_to_utc_range(target_date)
-    tabla = _tabla(target_date)
+    stmt_totals = select(
+        func.coalesce(func.sum(MetricasPorSede.reproducciones), 0).label("total_eventos"),
+        func.coalesce(func.sum(MetricasPorSede.completados), 0).label("completados"),
+        func.coalesce(func.sum(MetricasPorSede.validas_50), 0).label("validas_50"),
+        func.coalesce(func.sum(MetricasPorSede.segundos_totales), 0).label("segundos_totales"),
+    ).where(MetricasPorSede.fecha == target_date)
+    totals = (await db.execute(stmt_totals)).one()
 
-    if tabla is ReproduccionMetrica:
-        total = (await db.execute(
-            select(func.count(ReproduccionMetrica.id)).where(
-                ReproduccionMetrica.fecha_creacion >= day_start,
-                ReproduccionMetrica.fecha_creacion <= day_end,
-            )
-        )).scalar() or 0
+    stmt_banners = select(
+        MetricasPorSede.titulo,
+        func.coalesce(func.sum(MetricasPorSede.reproducciones), 0).label("inicios"),
+        func.coalesce(func.sum(MetricasPorSede.validas_50), 0).label("validas_50"),
+    ).where(
+        MetricasPorSede.fecha == target_date
+    ).group_by(
+        MetricasPorSede.titulo,
+    )
+    rows = (await db.execute(stmt_banners)).all()
 
-        validas = (await db.execute(
-            select(func.count(ReproduccionMetrica.id)).where(
-                ReproduccionMetrica.fecha_creacion >= day_start,
-                ReproduccionMetrica.fecha_creacion <= day_end,
-                (ReproduccionMetrica.completo == True) | (ReproduccionMetrica.cuartil_50 == True),
-            )
-        )).scalar() or 0
-
-        inicios = (await db.execute(
-            select(func.count(ReproduccionMetrica.id)).where(
-                ReproduccionMetrica.fecha_creacion >= day_start,
-                ReproduccionMetrica.fecha_creacion <= day_end,
-                ReproduccionMetrica.motivo_fin == None,
-                ReproduccionMetrica.completo == False,
-                ReproduccionMetrica.fin_reproduccion == None,
-            )
-        )).scalar() or 0
-
-        ver_ids = select(Dispositivo.codigo_kiosko).where(Dispositivo.tipo == "verificador")
-        tv_ids = select(Dispositivo.codigo_kiosko).where(Dispositivo.tipo == "televisor")
-
-        ver_total = (await db.execute(
-            select(func.count(ReproduccionMetrica.id)).where(
-                ReproduccionMetrica.fecha_creacion >= day_start,
-                ReproduccionMetrica.fecha_creacion <= day_end,
-                ReproduccionMetrica.dispositivo_id.in_(ver_ids),
-            )
-        )).scalar() or 0
-
-        tv_total = (await db.execute(
-            select(func.count(ReproduccionMetrica.id)).where(
-                ReproduccionMetrica.fecha_creacion >= day_start,
-                ReproduccionMetrica.fecha_creacion <= day_end,
-                ReproduccionMetrica.dispositivo_id.in_(tv_ids),
-            )
-        )).scalar() or 0
-
-        rows = (await db.execute(
-            select(
-                ReproduccionMetrica.titulo,
-                func.count(ReproduccionMetrica.id).label("inicios"),
-                func.sum(
-                    case(
-                        ((ReproduccionMetrica.completo == True) | (ReproduccionMetrica.cuartil_50 == True), 1),
-                        else_=0
-                    )
-                ).label("validas_50"),
-            ).where(
-                ReproduccionMetrica.fecha_creacion >= day_start,
-                ReproduccionMetrica.fecha_creacion <= day_end,
-            ).group_by(
-                ReproduccionMetrica.titulo,
-            )
-        )).all()
-    else:
-        rows = (await db.execute(
-            select(
-                MetricasDiarias.titulo,
-                func.coalesce(func.sum(MetricasDiarias.inicios), 0).label("inicios"),
-                func.coalesce(func.sum(MetricasDiarias.validas_50), 0).label("validas_50"),
-            ).where(
-                MetricasDiarias.fecha == target_date,
-            ).group_by(
-                MetricasDiarias.titulo,
-            )
-        )).all()
-
-        totals = (await db.execute(
-            select(
-                func.coalesce(func.sum(MetricasDiarias.inicios), 0).label("inicios"),
-                func.coalesce(func.sum(MetricasDiarias.completados), 0).label("completados"),
-                func.coalesce(func.sum(MetricasDiarias.interrumpidos), 0).label("interrumpidos"),
-                func.coalesce(func.sum(MetricasDiarias.validas_50), 0).label("validas_50"),
-                func.coalesce(func.sum(MetricasDiarias.segundos_totales), 0).label("segundos_totales"),
-            ).where(MetricasDiarias.fecha == target_date)
-        )).one()
-
-        total = totals.inicios + totals.completados + totals.interrumpidos
-        inicios = totals.inicios
-        validas = totals.validas_50
-        ver_total = 0
-        tv_total = 0
+    total = totals.total_eventos or 0
+    validas = totals.validas_50 or 0
 
     banners = []
     for row in rows:
@@ -142,10 +49,10 @@ async def resumen_diario(db: AsyncSession, target_date: date) -> dict:
 
     return {
         "total_eventos": total,
-        "inicios": inicios,
+        "inicios": total,
         "validas_50": validas,
-        "ver_total": ver_total,
-        "tv_total": tv_total,
+        "ver_total": 0,
+        "tv_total": 0,
         "banners": banners,
     }
 
@@ -155,179 +62,13 @@ async def tendencia_14d(db: AsyncSession, hasta: date) -> list[dict]:
     results = []
     for i in range(14):
         dia = desde + timedelta(days=i)
-        tabla = _tabla(dia)
-
-        if tabla is ReproduccionMetrica:
-            day_start, day_end = _venezuela_date_to_utc_range(dia)
-
-            ver_ids = select(Dispositivo.codigo_kiosko).where(Dispositivo.tipo == "verificador")
-
-            ver_validas = (await db.execute(
-                select(func.count(ReproduccionMetrica.id)).where(
-                    ReproduccionMetrica.fecha_creacion >= day_start,
-                    ReproduccionMetrica.fecha_creacion <= day_end,
-                    (ReproduccionMetrica.completo == True) | (ReproduccionMetrica.cuartil_50 == True),
-                    ReproduccionMetrica.dispositivo_id.in_(ver_ids),
-                )
-            )).scalar() or 0
-
-            tv_ids = select(Dispositivo.codigo_kiosko).where(Dispositivo.tipo == "televisor")
-
-            tv_estimadas = (await db.execute(
-                select(func.count(ReproduccionMetrica.id)).where(
-                    ReproduccionMetrica.fecha_creacion >= day_start,
-                    ReproduccionMetrica.fecha_creacion <= day_end,
-                    ReproduccionMetrica.dispositivo_id.in_(tv_ids),
-                )
-            )).scalar() or 0
-        else:
-            totals = (await db.execute(
-                select(
-                    func.coalesce(func.sum(MetricasDiarias.ver_validas), 0).label("ver_validas"),
-                    func.coalesce(func.sum(MetricasDiarias.tv_total), 0).label("tv"),
-                ).where(MetricasDiarias.fecha == dia)
-            )).one()
-            ver_validas = totals.ver_validas
-            tv_estimadas = totals.tv
-
+        stmt = select(
+            func.coalesce(func.sum(MetricasPorSede.validas_50), 0).label("validas"),
+        ).where(MetricasPorSede.fecha == dia)
+        row = (await db.execute(stmt)).one()
         results.append({
             "fecha": dia.isoformat(),
-            "tv_estimadas": tv_estimadas,
-            "ver_validas": ver_validas,
+            "tv_estimadas": 0,
+            "ver_validas": row.validas or 0,
         })
-
     return results
-
-
-async def agregar_metricas_diarias(db: AsyncSession, target_date: date | None = None):
-    if target_date is None:
-        target_date = get_venezuela_now().date() - timedelta(days=1)
-    day_start, day_end = _venezuela_date_to_utc_range(target_date)
-
-    ver_ids = select(Dispositivo.codigo_kiosko).where(Dispositivo.tipo == "verificador")
-    tv_ids = select(Dispositivo.codigo_kiosko).where(Dispositivo.tipo == "televisor")
-
-    rows = (await db.execute(
-        select(
-            ReproduccionMetrica.banner_id,
-            ReproduccionMetrica.titulo,
-            ReproduccionMetrica.duracion_total_seg,
-            func.count(ReproduccionMetrica.id).label("total"),
-            func.sum(case((ReproduccionMetrica.completo == True, 1), else_=0)).label("completados"),
-            func.sum(case((ReproduccionMetrica.motivo_fin == "interruption", 1), else_=0)).label("interrumpidos"),
-            func.sum(case(
-                ((ReproduccionMetrica.completo == True) | (ReproduccionMetrica.cuartil_50 == True), 1),
-                else_=0
-            )).label("validas_50"),
-            func.sum(case(
-                (and_(
-                    ReproduccionMetrica.motivo_fin == None,
-                    ReproduccionMetrica.completo == False,
-                    ReproduccionMetrica.fin_reproduccion == None,
-                ), 1),
-                else_=0
-            )).label("inicios"),
-            func.coalesce(func.sum(ReproduccionMetrica.segundos_reproducidos), 0).label("segundos_totales"),
-            func.sum(case(
-                (and_(
-                    ReproduccionMetrica.dispositivo_id.in_(ver_ids),
-                    (ReproduccionMetrica.completo == True) | (ReproduccionMetrica.cuartil_50 == True),
-                ), 1),
-                else_=0
-            )).label("ver_validas"),
-            func.sum(case(
-                (ReproduccionMetrica.dispositivo_id.in_(tv_ids), 1),
-                else_=0
-            )).label("tv_total"),
-        ).where(
-            ReproduccionMetrica.fecha_creacion >= day_start,
-            ReproduccionMetrica.fecha_creacion <= day_end,
-        ).group_by(
-            ReproduccionMetrica.banner_id,
-            ReproduccionMetrica.titulo,
-            ReproduccionMetrica.duracion_total_seg,
-        )
-    )).all()
-
-    count = 0
-    for row in rows:
-        existing = (await db.execute(
-            select(MetricasDiarias).where(
-                MetricasDiarias.fecha == target_date,
-                MetricasDiarias.banner_id == row.banner_id,
-            )
-        )).scalars().first()
-
-        if existing:
-            existing.inicios = row.inicios
-            existing.completados = row.completados
-            existing.interrumpidos = row.interrumpidos
-            existing.validas_50 = row.validas_50
-            existing.segundos_totales = row.segundos_totales
-            existing.ver_validas = row.ver_validas
-            existing.tv_total = row.tv_total
-        else:
-            db.add(MetricasDiarias(
-                fecha=target_date,
-                banner_id=row.banner_id,
-                titulo=row.titulo,
-                duracion_total_seg=row.duracion_total_seg,
-                inicios=row.inicios,
-                completados=row.completados,
-                interrumpidos=row.interrumpidos,
-                validas_50=row.validas_50,
-                segundos_totales=row.segundos_totales,
-                ver_validas=row.ver_validas,
-                tv_total=row.tv_total,
-            ))
-        count += 1
-
-    await db.commit()
-    logger.info(f"Metricas diarias agregadas para {target_date}: {count} banners")
-    return count
-
-
-async def consolidar_por_hora(db: AsyncSession) -> dict:
-    now = datetime.utcnow()
-    hour_ago = now - timedelta(hours=1)
-    stmt = select(
-        ReproduccionMetrica.banner_id,
-        func.count(ReproduccionMetrica.id).label("eventos"),
-        func.sum(
-            case(
-                ((ReproduccionMetrica.completo == True) | (ReproduccionMetrica.cuartil_50 == True), 1),
-                else_=0
-            )
-        ).label("validas"),
-    ).where(
-        ReproduccionMetrica.fecha_creacion >= hour_ago,
-    ).group_by(ReproduccionMetrica.banner_id)
-
-    rows = (await db.execute(stmt)).all()
-    consolidado = []
-    for row in rows:
-        consolidado.append({
-            "banner_id": row.banner_id,
-            "eventos": row.eventos or 0,
-            "validas": row.validas or 0,
-            "hora": hour_ago.strftime("%Y-%m-%d %H:00"),
-        })
-    return {"hora": hour_ago.strftime("%Y-%m-%d %H:00"), "banners": consolidado}
-
-
-async def limpiar_metricas_antiguas(db: AsyncSession) -> int:
-    corte_vz = get_venezuela_now().date() - timedelta(days=TABLA_LIVE_DAYS)
-    corte_dt = _venezuela_date_to_utc_range(corte_vz)[0]
-    stmt = select(func.count(ReproduccionMetrica.id)).where(
-        ReproduccionMetrica.fecha_creacion < corte_dt
-    )
-    total = (await db.execute(stmt)).scalar() or 0
-    if total > 0:
-        from sqlalchemy import delete
-        d_stmt = delete(ReproduccionMetrica).where(
-            ReproduccionMetrica.fecha_creacion < corte_dt
-        )
-        await db.execute(d_stmt)
-        await db.commit()
-        logger.info(f"Limpieza de métricas: {total} registros eliminados (anteriores a {corte_vz})")
-    return total

@@ -1,1822 +1,246 @@
-# Plan de Mejoras
+# Plan de Mejoras — Métricas por Sede
 
-## 1. Análisis: ¿Por qué un verificador "deja de escribir" el serial en el input?
+## Problema Original
 
-**Realidad:** El escáner HID (USB) **siempre escribe** en `etMockCode` porque es un teclado y el input tiene foco constante (`requestFocus()` en 10+ lugares). El problema real es que el serial **se escribe pero se ignora** en estas barreras:
+Saturación del pool SQL en backend-dashboard causada por escrituras concurrentes del batch de reproducciones. Con ~10 servidores y ~20 dispositivos reportando cada 60s, SQL Server sufría lock contention, deadlocks y pool exhaustion (`QueuePool limit reached`).
 
-| Barrera | Archivo:Línea | Silencioso | Impacto |
-|---------|--------------|------------|---------|
-| `pauseUntil` (4s post-éxito) | ScanActivity.kt:547 | Sin log | Ignora TODO scan durante 4s |
-| `requestInFlight == true` | ScanActivity.kt:549 | Sin log | Ignora TODO scan mientras la API no responda |
-| Cooldown mismo código (1.5s) | ScanActivity.kt:550 | Sin log | Ignora scans repetidos |
-| `sanitizeCode` falla (no 8/12/13 dígitos) | ScanActivity.kt:537-543 | Toast | Serial visible en input pero no procesado |
-| Kiosk exit code | ScanActivity.kt:527-534 | Log | Limpia input, no procesa |
-| `code.isEmpty()` en mock | ScanActivity.kt:557 | Sin log | Submit ignorado |
-| Debounce 250ms mock | ScanActivity.kt:560 | Sin log | Multi-enter ignorado |
-| Cámara ML Kit | ScanActivity.kt:490-521 | Ignora | Nunca escribe en ningún input |
+## Solución Adoptada
 
-### Problemas de diseño detectados
-
-- Las 3 barreras principales (`pauseUntil`, `requestInFlight`, cooldown) no emiten **ningún log** — imposible diagnosticar en producción por qué un scan no se procesó
-- `pauseUntil` (4s) y `requestInFlight` son bloqueos **globales**: afectan a todos los escáneres (cámara + USB HID) indiscriminadamente
-- La cámara nunca escribe en el `EditText`, bypassa completamente el input
+Cada sede (backend-api) almacena localmente sus métricas con merge en memoria. El dashboard solo recibe datos agregados cada 5h. Sin merge SQL, sin deadlocks, sin pool saturation.
 
 ---
 
-## FASE 4: Code Quality
-
-### 4.1 Eliminar Prints ✅ COMPLETADO
-- ~~**Archivos**: `backend-dashboard/app/routes/publicidad.py`, `backend-dashboard/app/routes/monitoreo.py`, `backend-dashboard/app/utils/security.py`~~
-- ~~**Descripción**: Reemplazar todos los `print()` por logging estructurado~~
-- ~~**Impacto**: Logs van a sistema centralizado, no se pierden en Docker~~
-- ~~**Complejidad**: Baja~~
-- ~~**Dependencias**: Logging (ya implementado)~~
-
-### 4.2 Type Hints ✅ COMPLETADO
-- ~~**Archivos**: Varios~~
-- ~~**Descripción**: Agregar type hints a funciones sin ellos~~
-- ~~**Impacto**: Errores detectados en desarrollo, no producción~~
-- ~~**Complejidad**: Baja~~
-- ~~**Dependencias**: Ninguna~~
-
-### 4.3 Tests Unitarios ✅ COMPLETADO
-- ~~**Archivos**: `backend-dashboard/tests/`~~
-- ~~**Tests implementados**: 113 tests en 9 archivos~~
-- ~~**Tests nuevos en FASE 4**: 14 tests de Code Quality~~
-- ~~**Complejidad**: Alta~~
-- ~~**Dependencias**: pytest, pytest-asyncio~~
-
----
-
-## FASE 5: Infraestructura
-
-### 5.1 Backups Automatizados ⏳ PENDIENTE (Para implementar en servidor)
-- **Archivos a crear manualmente en servidor**:
-  - `scripts/backup_sqlserver.sh` - Script de backup
-  - `backups/` - Carpeta para guardar backups
-- **Descripción**: Script que ejecuta backup de SQL Server cada noche
-- **Impacto**: Recuperación ante desastres
-- **Complejidad**: Media
-- **Cómo se configura**:
-  ```
-  1. Crear carpetas scripts/ y backups/
-  2. Subir script backup_sqlserver.sh
-  3. chmod +x scripts/backup_sqlserver.sh
-  4. crontab -e → agregar: 0 3 * * * /ruta/scripts/backup_sqlserver.sh
-  ```
-- **NOTA**: Esta tarea se configura MANUALMENTE en el servidor, no en Git
-
-### 5.2 CI/CD Pipeline ❌ NO APLICA
-- **Razón**: Servidor propio con NOIP, no usa Vercel/Heroku
-- **Alternativa**: Deploy manual con `docker-compose pull && docker-compose up -d`
-
-### 5.3 Docker Multi-stage Build ✅ COMPLETADO
-- **Archivo**: `backend-dashboard/Dockerfile`
-- **Descripción**: Usar multi-stage para reducir tamaño de imagen (~900MB → ~250MB)
-- **Impacto**: Imágenes más pequeñas, builds más rápidos
-- **Complejidad**: Media
-- **Dependencias**: Ninguna
-- **Cambio**:
-  - Separar builder de runtime
-  - Solo copiar lo necesario a imagen final
-
----
-
-## Resumen de Progreso
-
-| Fase | Completado | Pendiente |
-|------|------------|-----------|
-| FASE 1 (Seguridad) | 3/3 ✅ | 0/3 |
-| FASE 2 (Observabilidad) | 3/3 ✅ | 0/3 |
-| FASE 3 (Performance) | 3/3 ✅ | 0/3 |
-| FASE 4 (Code Quality) | 3/3 ✅ | 0/3 |
-| FASE 5 (Infraestructura) | 1/2 | 1/2 |
-| FASE 6 (Cambio Asignación) | 1/1 ✅ | 0/1 |
-| FASE 7 (Fix Asignaciones + Vigencia) | 5/5 ✅ | 0/5 |
-| FASE 8 (Background Monitoring Sesiones) | 4/4 ✅ | 0/4 |
-| FASE 9 (Thumbnails Videos) | 6/6 ✅ | 0/6 |
-| FASE 10 (Limpieza Columnas) | 5/5 ✅ | 0/5 |
-| FASE 11 (Refactor Backend) | 3/3 ✅ | 0/3 |
-| FASE 12 (Frontend Base) | 2/2 ✅ | 0/2 |
-| FASE 13 (UX/UI) | 3/3 ✅ | 0/3 |
-| FASE 14 (Pulido Visual) | 2/2 ✅ | 0/2 |
-| FASE 15 (Blindaje WebSocket) | 17/17 ✅ | 0/17 |
-| FASE 17 (Cola Dashboard) | 17/17 ✅ | 0/17 |
-| FASE 18 (Bots Mantenimiento) | 5/5 ✅ | 0/5 |
-| FASE 19 (Limpieza Caché Luzapp) | 5/5 ✅ | 0/5 |
-| FASE 20 (Panel Resumen) | 6/6 ✅ | 0/6 |
-| FASE 21 (Responsividad Móvil) | 17/17 ✅ | 0/17 |
-| FASE 22 (Categorización Dispositivos) | 36/36 ✅ | 0/36 |
-| FASE 23 (Análisis Pronóstico vs Real) | 0/2 | 2/2 |
-
-**Total: 151/154 completados (98.1%) — solo faltan FASE 5.1 (backups manuales en servidor) y FASE 23 (pendiente de implementar)**
-
----
-
-## FASE 6: Cambio de Asignación con Cleanup ✅ COMPLETADO
-
-### Problema identificado
-Cuando se edita una publicidad cambiando la asignación (ej: de "todos" a específico), el sistema no elimina el banner de los servidores que deben perderlo. Esto causa que el banner aparezca en dispositivos incorrectos.
-
-### Descripción del problema (RESUELTO)
-- **Caso B** ("todos" → específico): ✅ Ahora elimina de srv que deben perder
-- **Caso D** (específico1 → específico2): ✅ Ahora elimina de srv removidos
-
-### Casos de asignación
-
-| Caso | Anterior | Nuevo | Estado |
-|------|----------|-------|--------|
-| A | "todos" → "todos" | ✅ Actualiza todos | ✅ Completado |
-| B | "todos" → específico | ❌/✅ Ahora elimina de srv que deben perder | ✅ Completado |
-| C | específico → "todos" | ✅ Agrega a srv que no lo tienen | ✅ Completado |
-| D | específico1 → específico2 | ✅ Elimina de srv removidos + agrega a nuevos | ✅ Completado |
-
-### Solución implementada
-
-1. **Verificar asignación ANTERIOR** del banner antes de cambiar (`/banners/{id}/exists`)
-2. **Consultar servidores** (paralelo) para ver quién tiene el banner actualmente
-3. **Calcular diferencias** usando operaciones de conjuntos
-4. **Ejecutar acciones**:
-   - srv_AGREGAR → POST /replicar-archivo
-   - srv_ELIMINAR → DELETE /banners/remoto/{id}
-   - srv_ACTUALIZAR → PUT actualizar datos
-   - **FALLBACK**: Si PUT retorna 404 → hacer POST automáticamente
-
-### Bug crítico corregido
-El endpoint `/exists` retornaba `true` pero PUT fallaba con 404. El fix:
-- Cuando PUT falla (404), detectar `needs_replicate: true`
-- Ejecutar POST `/replicar-archivo` automáticamente para crear el banner
-
-### Especificaciones técnicas
-
-| Parámetro | Valor |
-|----------|------|
-| Timeout consultas paralelo | 35 segundos |
-| Manejo de errores | Detener proceso y notificar |
-| Logging | Incluido para debugging |
-| Escalabilidad | ✅ Soporta 10+ servidores (paralelo) |
-
-### Funciones implementadas (PRIORIDAD 1)
-
-| Función | Archivo | Estado |
-|---------|--------|--------|
-| `limpiar_banner_de_servidor()` | replicacion_service.py | ✅ Completado |
-| `obtener_servidores_con_banner()` | replicacion_service.py | ✅ Completado |
-| `procesar_cambio_asignacion()` | replicacion_service.py | ✅ Completado |
-| Modificar endpoint publicidad.py | routes/publicidad.py | ✅ Completado |
-| Fallback PUT→POST | replicacion_service.py | ✅ Completado |
-| Debug logs | backend-api/routes/publicidad.py | ✅ Completado |
-
-### Pruebas realizadas
-
-| Test | Descripción | Resultado |
-|------|-----------|-----------|
-| Específico → Todos | PUT 404 → replicar automáticamente | ✅ PASS |
-| Todos → Específico | DELETE del srv removido + PUT asignar | ✅ PASS |
-| 2 servidores | Verificar comportamiento | ✅ PASS |
-
-### Logs de ejemplo
+## Arquitectura Final
 
 ```
-fase6_caso_a_resultado: banner_id=3561, exito=true, agregar=1, eliminar=0, actualizar=2
-fase6_resultado: banner_id=3561, exito=true, agregar=0, eliminar=2, actualizar=1
+┌─────────────────────────────────────────────────────┐
+│  SEDE (backend-api)                                  │
+│                                                       │
+│  Dispositivos → POST /api/reproducciones/progreso     │
+│       → Redis "reproducciones:pending" (TTL 8h)       │
+│                                                       │
+│  Worker LOCAL cada 60s:                               │
+│    LRANGE todos los eventos raw                       │
+│    Merge en MEMORIA (agrupa por reproduccion_id,      │
+│      aplica START→cuartil→COMPLETED en orden)         │
+│    INSERT del estado final                            │
+│    Si INTEGRITYERROR (duplicado, ~2%):               │
+│      → UPDATE por reproduccion_id (PK exacta)        │
+│    LTRIM                                              │
+│                                                       │
+│  Worker SYNC cada 5h (stagger aleatorio 0-300s):      │
+│    SELECT banner_id, titulo,                          │
+│      COUNT(*) as reproducciones,                      │
+│      SUM(completo) as completados,                    │
+│      SUM(cuartil_50) as validas_50,                   │
+│      SUM(segundos_reproducidos) as segundos           │
+│    FROM reproducciones_metricas_sede                  │
+│    WHERE fecha_creacion >= inicio_de_hoy              │
+│    GROUP BY banner_id, titulo                         │
+│    → POST /api/reproducciones/sincronizar              │
+│      Payload: {servidor_id, fecha, banners: [...]}    │
+│                                                       │
+└──────────────────────┬──────────────────────────────┘
+                       │ HTTP cada 5h (~50 requests/día)
+                       ▼
+┌─────────────────────────────────────────────────────┐
+│  DASHBOARD (backend-dashboard)                       │
+│                                                       │
+│  POST /api/reproducciones/sincronizar                  │
+│    DELETE FROM metricas_por_sede                      │
+│      WHERE servidor_id=X AND fecha=hoy               │
+│    INSERT INTO metricas_por_sede (bulk)               │
+│    COMMIT (atómico)                                   │
+│    → Response 200 OK                                  │
+│                                                       │
+│  GET /api/reproducciones/resumen-diario                │
+│    SELECT SUM de metricas_por_sede WHERE fecha=X      │
+│    (sin tocar reproducciones_metricas ni metricas_diarias)│
+│                                                       │
+└─────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## FASE 7: Fix Asignaciones + Control de Vigencia (Banners fechaInicio/fechaFin)
+## Archivos a Crear (5)
 
-### Problemas identificados
+### 1. `backend-api/app/models/reproduccion_metrica.py`
 
-#### 7.1 Bug Caso D (específico → específico)
-Cuando se cambia de un servidor específico a OTRO servidor específico:
-- El banner se elimina de AMBOS servidores
-- Queda marcado como "borrador" en el dashboard
-- **Causa**: Si el frontend no envía `servidor_ids`, la lógica asume "sin asignaciones" y pasa `srv_nuevos_ids = {}` → elimina de todos
-
-#### 7.2 Bug estado "borrador"
-Cuando se cambia asignación específica:
-- Si `asignacion_todos = false` + sin asignaciones → marca "borrador"
-- La lógica NO verifica si la replicación fue exitosa
-- **Causa**: Solo valida `len(asignaciones) == 0`, no valida el resultado de la replicación
-
-#### 7.3 Falta de validación de vigencia en luzapp
-- El sistema NO valida `fechaInicio/fechaFin` antes de reproducir un banner
-- Si el dispositivo no sincroniza después de expirar, **sigue reproduciendo** el banner vencido desde cache local
-- No hay validación "antes de reproducir" en la app
-
----
-
-### Soluciones propuestas
-
-#### 7.1 Fix Caso D (específico → específico)
-
-| Problema | Solución |
-|----------|----------|
-| No detecta servidores nuevos | Incluir servidores anteriores como fallback si no vienen nuevos |
-| Elimina de todos | Solo eliminar si hay nuevos servidores objetivo |
-| Queda "borrador" | Validar que haya servidores antes de marcar `asignacion_todos=false` |
-
-**Implementación sugerida**:
-- En `publicidad.py:1142` - agregar fallback: si `target_dispositivo_ids` está vacío, mantener asignaciones anteriores
-- Validar que `servidores_asignados_data` no esté vacío antes de ejecutar `procesar_cambio_asignacion`
-
-#### 7.2 Fix estado "borrador"
-
-| Problema | Solución |
-|----------|----------|
-| `asignacion_todos=false` + sin asignaciones → "borrador" | Mantener estado anterior si falla la replicación |
-| No detecta errores de replicación | Verificar resultado de `procesar_cambio_asignacion` antes de confirmar cambio |
-
-**Implementación sugerida**:
-- En `publicidad.py:1037` - no marcar `asignacion_todos=false` si no hay servidores objetivo
-- Verificar `update_result.get("exito")` antes de finalizar el cambio
-
-#### 7.3 Control de Vigencia (3 capas de protección)
-
-| # | Solución | Ubicación | Descripción |
-|---|---------|-----------|------------|
-| S1 | Pre-validation | luzapp | Validar `fechaFinMs` antes de reproducir (safety net) |
-| S2 | Cache cleanup | luzapp | Eliminar banners vencidos al sincronizar |
-| S3 | WebSocket push | backend-api | Invalidación inmediata cuando admin cambia |
-
-**Flujo propuesto**:
-
-```
-DASHBOARD                      BACKEND-API                   LUZAPP
-──────────────────────────────────────────────────────────────────
-1. Admin crea banner
-   fecha_inicio: 14/04/2026 08:00
-   fecha_fin:    14/04/2026 18:00
-   ─────────────────────────────────────────────────────────────▶
-2. POST /replicar-archivo
-   Guarda en tabla publicidad
-   (fecha_inicio, fecha_fin)
-   ─────────────────────────────────────────────────────────────
-3. GET /banners?device_id=xxx
-   Backend filtra por fecha:
-   WHERE fecha_fin >= ahora
-   Retorna lista vigente
-   ◀───────────────────────────────────────────────────────────
-4. luzapp descarga + guarda en cache
-   BannerCacheItem:
-   - id, url, localPath
-   - fechaFinMs: 1742055600000  ← NUEVO: guardar fechaFin
-```
-
-**Por qué NO implementar loop de report back**:
-- Backend ya conoce `fecha_fin` de la base de datos
-- Evita race conditions (admin cambia → dispositivo reporta inactivo → admin no puede reactivarlo)
-- Las 3 soluciones son independientes y no requieren report back
-
----
-
-### Tareas de FASE 7
-
-| # | Tarea | Estado | Ubicación |
-|---|-------|--------|-----------|
-| 7.1 | Fix caso específico→específico | ✅ Completado | backend-dashboard/publicidad.py |
-| 7.2 | Fix estado "borrador" | ✅ Completado | backend-dashboard/publicidad.py |
-| 7.3 | Pre-validation (S1) - validar fechaFin antes de reproducir | ✅ Completado | luzapp/ScanActivity.kt:1133-1147 |
-| 7.4 | Cache cleanup (S2) - eliminar banners vencidos | ✅ Completado | luzapp/BannerRepository.kt |
-| 7.5 | WebSocket push (S3) - invalidación inmediata | ✅ Completado | backend-api + luzapp |
-
----
-
-### Especificaciones técnicas para S1 (Pre-validation luzapp)
-
-```kotlin
-// En playStandbyItem() antes de reproducir:
-if (item.fechaFinMs != null && now > item.fechaFinMs) {
-    Log.w(TAG, "Banner vencido, skipping: ${item.id}")
-    nextStandbyItem()  // Skip banner vencido
-    return
-}
-```
-
-### Especificaciones técnicas para S2 (Cache cleanup luzapp)
-
-```kotlin
-// En BannerRepository - al sincronizar:
-fun cleanupExpiredBanners() {
-    val now = System.currentTimeMillis()
-    items.removeAll { 
-        it.fechaFinMs != null && now > it.fechaFinMs 
-    }
-    saveMetadata()
-}
-```
-
-### Especificaciones técnicas para S3 (WebSocket push)
+Modelo `ReproduccionMetricaSede` en `BasePublicidad` (DB `PublicidadSecundaria`).
 
 ```python
-# backend-api - cuando admin cambia banner:
-# Mensaje: { "type": "BANNER_EXPIRED", "banner_id": 123 }
-# luzapp lo elimina del cache
+class ReproduccionMetricaSede(Base):
+    __tablename__ = "reproducciones_metricas_sede"
+    id = Column(Integer, primary_key=True)
+    reproduccion_id = Column(String(255), unique=True, nullable=False)
+    dispositivo_id = Column(String(100), nullable=False)
+    banner_id = Column(Integer, nullable=False)
+    titulo = Column(String(255), nullable=True)
+    completo = Column(Boolean, default=False)
+    cuartil_50 = Column(Boolean, default=False)
+    segundos_reproducidos = Column(Float, nullable=True)
+    fecha_creacion = Column(DateTime, default=datetime.utcnow)
 ```
 
----
+### 2. `backend-api/app/services/metricas_locales.py`
 
-**Total: 18/19 completados (95%)** - FASE 7 suma 5 tareas adicionales
+Worker #1 (cada 60s):
+- `LRANGE reproducciones:pending 0 -1`
+- Merge en memoria por `reproduccion_id`
+- INSERT estado final por cada grupo
+- Catch `IntegrityError` → UPDATE solo por PK exacta
+- `LTRIM` luego de procesar
 
----
+### 3. `backend-api/app/services/sync_metrics.py`
 
-## Orden de Implementación Sugerido
+Worker #2 (cada 5h con stagger):
+- SELECT agregado: `COUNT(*) as reproducciones, SUM(completo) as completados, SUM(cuartil_50) as validas_50, SUM(segundos_reproducidos) as segundos`
+- GROUP BY `banner_id, titulo`
+- WHERE `fecha_creacion >= inicio_de_hoy`
+- POST HTTP a `DASHBOARD_URL/api/reproducciones/sincronizar`
+- Reintenta en el próximo ciclo si el dashboard no responde
 
-1. ~~✅ FASE 1 (Seguridad) - Completada~~
-2. ~~✅ FASE 2 (Observabilidad) - Completada~~
-3. ~~✅ FASE 3 (Performance) - Completada~~
-4. ~~✅ FASE 4 (Code Quality) - Completada~~
-5. ⏳ FASE 5 (Infra) - Backups y CI/CD
-
----
-
-## FASE 8: Background Monitoring de Sesiones de Dispositivos
-
-### Problema identificado
-
-El monitoreo de sesiones de dispositivos **solo se ejecuta cuando alguien accede al dashboard**. Esto causa que:
-- Si nadie entra al dashboard por un tiempo, los cronómetros de tiempo de actividad no se actualizan
-- Los dispositivos pueden desconectarse y conectarse sin que el sistema lo detecte si no hay actividad en el dashboard
-
-### Solución propuesta
-
-Ejecutar el monitoreo de sesiones automáticamente en **background** cada **3 minutos 30 segundos** (3.5 minutos).
-
-### Tareas de FASE 8
-
-| # | Tarea | Estado | Ubicación |
-|---|-------|--------|-----------|
-| 8.1 | Agregar APScheduler a requirements.txt | ✅ Completado | requirements.txt |
-| 8.2 | Extraer lógica de monitoreo | ✅ Completado | app/services/monitoreo_service.py |
-| 8.3 | Crear módulo de scheduler | ✅ Completado | app/scheduler.py |
-| 8.4 | Integrar scheduler en main.py | ✅ Completado | app/main.py |
-
-### Especificaciones técnicas
-
-**Nuevo servicio: app/services/monitoreo_service.py**
+### 4. `backend-dashboard/app/models/metricas_por_sede.py`
 
 ```python
-async def actualizar_sesiones_dispositivos():
-    """
-    Función que se ejecuta cada 3.5 minutos.
-    Consulta /devices/status de cada servidor secundario
-    y actualiza sesiones en BD (DispositivoSesion).
-    """
-    # 1. Obtener todos los servidores secundarios online
-    # 2. Para cada servidor: _obtener_dispositivos_de_servidor(ip)
-    # 3. Actualizar DispositivoSesion (inicio/fin/duracion)
-    # 4. Tolerancia a errores: si un servidor no responde, continuar
+class MetricasPorSede(Base):
+    __tablename__ = "metricas_por_sede"
+    id = Column(Integer, primary_key=True)
+    servidor_id = Column(Integer, nullable=False)
+    banner_id = Column(Integer, nullable=False)
+    titulo = Column(String(255), nullable=True)
+    fecha = Column(Date, nullable=False)
+    reproducciones = Column(Integer, default=0)
+    completados = Column(Integer, default=0)
+    validas_50 = Column(Integer, default=0)
+    segundos_totales = Column(Float, default=0)
+    __table_args__ = (
+        UniqueConstraint("servidor_id", "banner_id", "fecha", name="uq_metricas_sede"),
+    )
 ```
 
-**Scheduler en app/main.py:**
+### 5. `backend-dashboard/app/routes/reproducciones_sync.py`
+
+Endpoint `POST /api/reproducciones/sincronizar`:
+- Recibe `{servidor_id, fecha, banners: [...]}`
+- `DELETE FROM metricas_por_sede WHERE servidor_id=X AND fecha=Y`
+- `INSERT INTO metricas_por_sede` (bulk insert)
+- `COMMIT` — atómico, o todo o nada
+- Response 200
+
+---
+
+## Archivos a Modificar (3)
+
+### 1. `backend-api/app/main.py`
+
+- **Startup**: instanciar y registrar ambos workers como tareas asíncronas
+- **Shutdown**: cancelar workers
+- **Reemplazar** `_forward_reproducciones_batch()` (envío HTTP a dashboard) por `_insert_local_reproducciones()` (merge + INSERT local)
+- Mantener `POST /api/reproducciones/progreso` sin cambios
+
+### 2. `backend-dashboard/app/routes/reproducciones.py`
+
+- **Importar** `MetricasPorSede` en vez de `ReproduccionMetrica`
+- **Eliminar** `POST /batch` (ya no se usa)
+- **GET /resumen-diario**: leer de `MetricasPorSede`
+  - `SELECT servidor_id, SUM(reproducciones), SUM(completados), SUM(validas_50), SUM(segundos_totales) WHERE fecha=X GROUP BY servidor_id, banner_id, titulo`
+
+### 3. `backend-dashboard/app/services/metricas_service.py`
+
+- **Reescribir** `resumen_diario()` usando `MetricasPorSede`
+- **Reescribir** `tendencia_14d()` usando `MetricasPorSede`
+- **Eliminar** `consolidar_por_hora()`
+- **Eliminar** `limpiar_metricas_antiguas()`
+- **Eliminar** `agregar_metricas_diarias()`
+
+---
+
+## Archivos a Eliminar (5)
+
+| Archivo | Razón |
+|---------|--------|
+| `backend-dashboard/app/models/reproduccion_metrica.py` | Tabla `reproducciones_metricas` con data falsa |
+| `backend-dashboard/app/models/metricas_diarias.py` | Tabla `metricas_diarias` con data falsa |
+| `backend-dashboard/app/services/bulk_metrics.py` | Ya no hay merge en dashboard |
+| `backend-dashboard/app/services/metrics_redis.py` | Ya no hay Redis queue en dashboard para métricas |
+| `backend-dashboard/app/scheduler.py` | Eliminar jobs 6, 7, 8, 9. Mantener solo jobs 1-5 |
+
+### Jobs a mantener en scheduler.py
+
+- Job 1: `monitoreo_sesiones` (cada 3.5 min)
+- Job 2: `expirar_banners` (cada 3.5 min)
+- Job 3: `limpiar_sesiones` (cada 15 días)
+- Job 4: `limpiar_notificaciones` (cada 15 días)
+- Job 5: `limpiar_archivos_huérfanos` (cada 24h)
+
+Jobs a eliminar:
+- ~~Job 6: `consolidar_por_hora`~~
+- ~~Job 7: `limpiar_metricas_antiguas`~~
+- ~~Job 8: `agregar_metricas_diarias`~~
+- ~~Job 9: `bulk_insert_reproducciones`~~
+
+---
+
+## Pool SQL del Dashboard
+
+Reducir en `app/database.py`:
 
 ```python
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-
-scheduler = AsyncIOScheduler()
-scheduler.add_job(
-    actualizar_sesiones_dispositivos,
-    'interval',
-    minutes=3.5,  # 3 minutos 30 segundos
-    id='monitoreo_sesiones'
-)
-scheduler.start()
+DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "5"))
+DB_POOL_OVERFLOW = int(os.getenv("DB_POOL_OVERFLOW", "5"))
+DB_POOL_TIMEOUT = int(os.getenv("DB_POOL_TIMEOUT", "5"))
 ```
 
-### Consideraciones
-
-| Aspecto | Detalle |
-|---------|---------|
-| **Frecuencia** | 3.5 minutos (evita choque con desconexión de 8 min para servidores y 3 min para dispositivos) |
-| **Tolerancia a errores** | Si un servidor no responde, continuar con los demás |
-| **Logging** | Registrar inicio y fin de cada ejecución |
-| **Sesiones** | Se registrarán igual que ahora: inicio/fin/duración (sin notificaciones) |
+Total máximo: **10 conexiones** (sobra ampliamente para ~50 requests/día de sync + heartbeats + frontend cada 10 min).
 
 ---
 
-## Notas
-- Los datos sensibles (correo, claves) están cifrados o no son críticos
-- Redis ya está disponible en el stack actual (`dashboard-redis`)
-- Rate limiting persiste entre reinicios gracias a Redis
+## Frontend
 
-## Tareas Pendientes para FASE 5
-
-### Backups Automatizados (Manual en servidor)
-```bash
-# En tu servidor, crear estructura:
-mkdir -p scripts backups
-
-# Script: scripts/backup_sqlserver.sh
-# - Ejecuta backup SQL cada noche a las 3am
-# - Guarda .bak en carpeta backups/
-# - Mantiene últimos 7 días
-
-# Configurar cron:
-crontab -e
-# Agregar: 0 3 * * * /home/user/scripts/backup_sqlserver.sh >> /var/log/backup.log 2>&1
-```
-
-### Docker Multi-stage Build ✅ COMPLETADO
-- Reducir tamaño de imagen de ~900MB a ~250MB
-- Separar etapas de build y runtime
+**Sin cambios.** `ResumenScreen.tsx:43` ya tiene `setInterval(load, 600000)` (10 min). Las primeras horas del día mostrará 0 eventos hasta que llegue el primer sync de cada sede (staggered cada 5h). El usuario aceptó "no hay apuro" con datos en tiempo real.
 
 ---
 
-## Archivos Modificados en FASE 1-8
+## Migración en SQL Server
 
-| Archivo | Cambios |
-|---------|---------|
-| `docker-compose.yml` | ✅ Agregado `dashboard-redis` |
-| `backend-dashboard/app/routes/auth.py` | ✅ Rate limiting y 2FA en Redis |
-| `backend-dashboard/app/utils/__init__.py` | ✅ Sanitización y validación MIME |
-| `backend-dashboard/app/routes/publicidad.py` | ✅ Sanitización, paginación, fix N+1, sin prints, FASE 6, FASE 7 (parser, validación), logs estructurados |
-| `backend-dashboard/app/routes/monitoreo.py` | ✅ Logs estructurados (sin prints) |
-| `backend-dashboard/app/main.py` | ✅ Endpoint `/health`, lifespan scheduler |
-| `backend-dashboard/app/utils/health.py` | ✅ Funciones de health check |
-| `backend-dashboard/app/utils/twofa_redis.py` | ✅ Gestión de 2FA en Redis |
-| `backend-dashboard/app/utils/security.py` | ✅ Logging estructurado |
-| `backend-dashboard/app/services/replicacion_service.py` | ✅ Replicación paralela, Cleanup FASE 6, fallback PUT→POST |
-| `backend-dashboard/app/services/monitoreo_service.py` | ✅ Nuevo - lógica de monitoreo de sesiones |
-| `backend-dashboard/app/scheduler.py` | ✅ Nuevo - scheduler APScheduler |
-| `backend-dashboard/requirements.txt` | ✅ Agregado apscheduler |
-| `backend-api/app/routes/publicidad.py` | ✅ Debug logs para /exists y PUT |
-| `dashboard/services/videoService.ts` | ✅ Fix tipo dispositivoIds (string[]), mapeo thumbnail |
-| `dashboard/components/ServerDeviceSelector.tsx` | ✅ Props actualizadas |
-| `backend-dashboard/tests/test_rate_limiting.py` | ✅ 9 tests |
-| `backend-dashboard/tests/test_sanitization.py` | ✅ 17 tests |
-| `backend-dashboard/tests/test_mime_validation.py` | ✅ 6 tests |
-| `backend-dashboard/tests/test_health_check.py` | ✅ 15 tests |
-| `backend-dashboard/tests/test_2fa_redis.py` | ✅ 23 tests |
-| `backend-dashboard/tests/test_pagination.py` | ✅ 14 tests |
-| `backend-dashboard/tests/test_parallel_replication.py` | ✅ 14 tests |
-| `backend-dashboard/tests/test_code_quality.py` | ✅ 14 tests |
-| `PLAN_MEJORAS.md` | ✅ Documentación del plan |
-
-**Total tests: 127 (+ FASE 6 manual test)**
-
-## Tareas Pendientes (FASE 5)
-
-| Tarea | Ubicación | Cómo |
-|-------|-----------|------|
-| Backups SQL Server | Servidor (manual) | Script + cron |
-| Docker Multi-stage | `backend-dashboard/Dockerfile` | ✅ Completado |
-
----
-
-## FASE 9: Thumbnails de Videos ✅ COMPLETADA
-
-### Problema identificado
-
-Los videos en el dashboard no muestran miniatura (thumbnail) en el preview, lo cual dificulta identificar el contenido visualmente.
-
-### Solución implementada
-
-Generar thumbnails automáticamente al subir videos usando OpenCV, y mostrarlos en el atributo `poster` del elemento `<video>`.
-
-### Tareas de FASE 9
-
-| # | Tarea | Estado | Ubicación |
-|---|-------|--------|-----------|
-| 9.1 | Agregar campo ThumbnailUrl al modelo | ✅ Completado | app/models/publicidad.py |
-| 9.2 | Agregar campo al schema response | ✅ Completado | app/schemas/publicidad.py |
-| 9.3 | Agregar dependencia opencv | ✅ Completado | requirements.txt |
-| 9.4 | Implementar generación de thumbnail | ✅ Completado | app/routes/publicidad.py |
-| 9.5 | Mapear thumbnail en frontend | ✅ Completado | services/videoService.ts |
-| 9.6 | Usar poster en video player | ✅ Completado | screens/DashboardScreen.tsx |
-
----
-
-## FASE 10: Limpieza de Columnas No Utilizadas
-
-### Problema identificado
-
-Existen columnas legacy que ya no aportan valor funcional y generan complejidad de mantenimiento:
-- `DuracionSeg` en `Publicidad` (dashboard + api)
-- `api_url` en `servidores_secundarios` (dashboard)
-
-### Solución propuesta
-
-Eliminar el uso en código y luego eliminar físicamente las columnas en base de datos.
-
-### Tareas de FASE 10
-
-| # | Tarea | Estado | Ubicación |
-|---|-------|--------|-----------|
-| 10.1 | Eliminar `api_url` de modelo y uso en backend-dashboard | ✅ Completado | `backend-dashboard/app/models/servidor_secundario.py` + `backend-dashboard/app/routes/publicidad.py` |
-| 10.2 | Eliminar `DuracionSeg` en backend-dashboard (modelo/schemas/rutas/servicios) | ✅ Completado | `backend-dashboard/app/**` |
-| 10.3 | Eliminar `DuracionSeg` en backend-api (modelo/schemas/rutas) | ✅ Completado | `backend-api/app/**` |
-| 10.4 | Ajustar frontend para no depender de `DuracionSeg` | ✅ Completado | `dashboard/services/videoService.ts` |
-| 10.5 | Ejecutar migración SQL para dropear columnas en BD | ✅ Completado | SQL Server |
-
-### Query de migración SQL (pendiente ejecutar)
+Ejecutar en el SQL Server del dashboard:
 
 ```sql
-ALTER TABLE Publicidad DROP COLUMN DuracionSeg;
-ALTER TABLE servidores_secundarios DROP COLUMN api_url;
+DROP TABLE reproducciones_metricas;
+DROP TABLE metricas_diarias;
 ```
 
-### Especificaciones técnicas
-
-**Dependencia (requirements.txt):**
-```
-opencv-python-headless
-```
-
-**Modelo (app/models/publicidad.py):**
-```python
-ThumbnailUrl = Column("ThumbnailUrl", String(500), nullable=True)
-```
-
-**Generación de thumbnail (app/routes/publicidad.py):**
-```python
-if Tipo == "video":
-    thumbnail_filename = generar_thumbnail(file_location, banners_dir)
-    thumbnail_url = f"/static/banners/{thumbnail_filename}"
-else:
-    thumbnail_url = url  # Para imágenes, usar la misma URL
-
-nuevo_banner = Publicidad(..., ThumbnailUrl=thumbnail_url)
-```
-
-**Frontend (DashboardScreen.tsx):**
-```tsx
-<video 
-  poster={preview.thumbnail || preview.url}
-  src={preview.url}
-  controls
-/>
-```
+Los datos existentes son incorrectos (confirmado por el usuario) y no se migran.
 
 ---
 
-## Estado Actual: Progreso Total (FASES ORIGINALES)
+## Análisis de Riesgos
 
-**Total: 39/40 completados (98%)**
-
-- FASE 1-4: ✅ Completas
-- FASE 5: 🔄 Parcial (1/2 — Docker multi-stage ✅, backups manual ⏳)
-- FASE 6: ✅ Completada
-- FASE 7: ✅ Completada (5/5)
-- FASE 8: ✅ Completada
-- FASE 9: ✅ Completada
-- FASE 10: ✅ Completada
-- FASE 11: ✅ Completada
-- FASE 12: ✅ Completada
-- FASE 13: ✅ Completada
-- FASE 14: ✅ Completada
+| Riesgo | Mitigación | Status |
+|--------|-----------|--------|
+| UPDATE duplicado deadlockea | **Imposible**: 1 escritor, 1 UPDATE por PK exacta. No hay segundo proceso que forme ciclo | 🟢 |
+| SQL Server sede caído | Redis buffer 8h. Worker reintenta cada 60s sin pérdida | 🟢 |
+| Dashboard caído durante sync | Sede reintenta en próximo ciclo de 5h. Datos acumulados en SQL local | 🟢 |
+| Sede crashea entre INSERT y LTRIM | Mismo `reproduccion_id` reintenta en 60s → IntegrityError → UPDATE (idempotente) | 🟢 |
+| Pool SQL de dashboard saturado | Solo ~50 requests/día de sync + heartbeats + frontend. Pool 5/5/5 sobra | 🟢 |
+| Deadlock por SELECT+UPDATE previo | **Eliminado**: no hay SELECT+UPDATE en dashboard ni sedes. INSERT + UPDATE por PK | 🟢 |
+| Redis dashboard desbordado | **Eliminado**: no hay Redis queue en dashboard para métricas | 🟢 |
 
 ---
 
-## FASE 11: Refactorización y Estabilidad (Backend) ✅ COMPLETADA
-
-*Prioridad: Crítica | Objetivo: Eliminar deuda técnica y mejorar mantenibilidad.*
-
-### 11.1 Refactorización de `monitoreo.py` ✅ COMPLETADO
-- ~~**Descripción**: Dividir `monitoreo.py` en módulos independientes:~~
-  - ~~`servers.py` - Gestión de servidores secundarios~~
-  - ~~`devices.py` - Gestión de dispositivos~~
-  - ~~`sync.py` - Lógica de sincronización~~
-- ~~**Impacto**: Estructura modular y mantenible~~
-- ~~**Complejidad**: Media~~
-
-### 11.2 Implementación de `sync_service.py` y servicios ✅ COMPLETADO
-- ~~**Descripción**: Mover lógica de negocio de rutas a servicios~~
-- ~~**Impacto**: Permite pruebas unitarias y desacopla la API~~
-- ~~**Complejidad**: Media~~
-
-### 11.3 Manejador Global de Excepciones ✅ COMPLETADO
-- ~~**Descripción**: Reemplazar `try-except: pass` por respuestas estandarizadas y logging en 20 sitios silenciosos (9 archivos): `publicidad.py` (4x `ValueError: pass` + 4x bare `except`), `auth.py` (3 silent catches), `main.py` (1 `except: pass`), `sync_service.py` (4 silent fallbacks), `twofa_redis.py` (1), `health.py` (1), `utils/__init__.py` (1), `replicacion_service.py` (1), `notificaciones.py` (1)~~
-- ~~**Impacto**: Frontend recibe errores claros + visibilidad en logs~~
-- ~~**Complejidad**: Baja~~
-
----
-
-## FASE 12: Infraestructura de Navegación y Estado (Frontend) ✅ COMPLETADA
-
-*Prioridad: Alta | Objetivo: Crear una base sólida para la expansión de la UI.*
-
-### 12.1 Integración de `react-router-dom` ✅ COMPLETADO
-- ~~**Archivos**: `dashboard/App.tsx`, `dashboard/components/Sidebar.tsx`, `dashboard/components/DashboardHeader.tsx`, `dashboard/components/GeneralNotifications.tsx`, `dashboard/components/ProtectedLayout.tsx` (nuevo)~~
-- ~~**Descripción**: Migrado switch de `currentScreen` a rutas reales con react-router-dom v6~~
-- ~~**Rutas**: `/` (Mis Videos), `/servidores`, `/usuarios`, `/calendario`, `/auditoria`~~
-- ~~**Layout protegido**: `ProtectedLayout` con verificación de sesión + token expiry watcher + `<Outlet>`~~
-
-### 12.2 Implementación de `Zustand` ✅ COMPLETADO
-- ~~**Archivos**: `dashboard/stores/sessionStore.ts` (nuevo)~~
-- ~~**Descripción**: Store centralizada de sesión (`isAuthenticated`, `role`, `userName`, `login`, `logout`, `checkSession`)~~
-- ~~**Impacto**: Elimina prop-drilling de sesión, estado accesible desde cualquier componente~~
-
----
-
-## FASE 13: Experiencia de Usuario y Funcionalidades (UX/UI) ✅ COMPLETADA (parcial)
-
-*Prioridad: Media | Objetivo: Profesionalizar la interacción con el usuario.*
-
-### 13.1 Sistema de Feedback (Toasts y Modales) ✅ COMPLETADO
-- ~~**Descripción**: Implementar avisos descriptivos y confirmaciones. Añadido: botón X por toast, barra progreso auto-dismiss, removeAll, límite 5, modo persistent, animación slide-fade-out. Backwards-compatible (no rompe consumidores existentes).~~
-- ~~**Impacto**: Reduce errores accidentales del usuario~~
-- ~~**Complejidad**: Baja~~
-
-### 13.2 Vista de Auditoría Detallada + PDF ✅ COMPLETADO
-- ~~**Descripción**: Crear pantalla de logs con filtros avanzados. Backend: `GET /auditoria/exportar` genera PDF landscape con fpdf2, tabla word-wrap, header repetido. Frontend: botón "Exportar PDF", filtro servidor `<select>`, `<TableSkeleton>`.~~
-- ~~**Impacto**: Aprovecha robustez del backend (FASE 11)~~
-- ~~**Complejidad**: Media~~
-
-### 13.3 Visualización de Datos (`Recharts`) ✅ COMPLETADO
-- ~~**Descripción**: Implementar gráficas de almacenamiento y uptime~~
-- ~~**Impacto**: Transforma datos crudos en información visual~~
-- ~~**Complejidad**: Media~~
-- ~~**Dependencias**: recharts~~
-- ~~**Nota**: Implementado como parte de FASE 20 (Panel Resumen) con Recharts ^3.8.1~~
-
----
-
-### Mejora Adicional: Nombres Amigables en Notificaciones ✅ COMPLETADO
-- ~~**Descripción**: Las notificaciones ahora muestran `"NombreAmigable (device_id)"` en lugar de solo `device_id`. Aplicado en webhooks entrantes (`SYNC_FAILED`, `PLAYBACK_FAILED`, `BANNER_INICIADO/FINALIZADO`) y operaciones internas (`RENOMBRAR_DISPOSITIVO`, `REINICIAR_DISPOSITIVO`, `FALLO`).~~
-- ~~**Archivos**: `backend-dashboard/app/routes/notificaciones.py`, `backend-dashboard/app/services/device_service.py`~~
-- ~~**Helper**: `_get_device_name()` consulta `Dispositivo.nombre_amigable`~~
-- ~~**Complejidad**: Baja~~
-
-### Mejora Adicional: Nombres Amigables en Descripciones + Auditoría ✅ COMPLETADO
-- ~~**Descripción**: Descripciones de notificaciones (`SINCRONIZACION_SELECTIVA`, `BORRADO_MULTIMEDIA`, `EDICION_VIGENCIA_MULTIMEDIA`) ahora muestran `"NombreAmigable (id_disp)"` y `"id_srv - NombreServidor"`. Auditoría resuelve nombres vía JOIN para notificaciones. Columna servidor en frontend muestra nombre + ID secundario.~~
-- ~~**Archivos**: `backend-dashboard/app/services/sync_service.py`, `backend-dashboard/app/routes/publicidad.py`, `backend-dashboard/app/routes/auditoria.py`, `dashboard/screens/AuditoriaScreen.tsx`~~
-- ~~**Helper**: `_resolve_device_names()` en `sync_service.py`~~
-
-### Mejora Adicional: Cards Grid items-baseline ✅ COMPLETADO
-- ~~**Descripción**: Grid de tarjetas de video y servidores usa `items-baseline` para evitar que al expandir una tarjeta, las vecinas se estiren.~~
-- ~~**Archivos**: `dashboard/screens/DashboardScreen.tsx`, `dashboard/components/ServerDashboard.tsx`~~
-
----
-
-## FASE 14: Pulido Visual y Estética (Polishing) ✅ COMPLETADA
-
-*Prioridad: Baja | Objetivo: Lograr un acabado de producto final.*
-
-### 14.1 Sistemas de Carga (Skeleton Screens) ✅ COMPLETADO
-- ~~**Descripción**: Añadir estados de carga visuales. Creados: `Spinner.tsx`, `Skeleton.tsx`, `TableSkeleton.tsx`, `CardSkeleton.tsx`. Aplicados en `DashboardScreen.tsx`, `UsersScreen.tsx`, `AuditoriaScreen.tsx`, `CalendarScreen.tsx`.~~
-- ~~**Impacto**: Mejora la percepción de velocidad~~
-- ~~**Complejidad**: Baja~~
-
-### 14.2 Selector de Tema (Dark/Light Mode) ✅ COMPLETADO
-- ~~**Descripción**: Implementar persistencia con `localStorage`. Creado `stores/themeStore.ts` (Zustand), script anti-flash en `index.html`, quitado `class="dark"` hardcodeado, `DashboardHeader.tsx` migrado de `useState` a `useThemeStore`.~~
-- ~~**Impacto**: Mejora el confort visual del operador (tema persiste entre recargas)~~
-- ~~**Complejidad**: Baja~~
-
----
-
-## FASE 15: Blindaje de Entrega de Comandos WebSocket (Cola Persistente)
-
-*Prioridad: CRÍTICA | Objetivo: Garantizar que los comandos (WIPE_AND_RESYNC, REINICIAR, BANNER_INICIADO, BANNER_FINALIZADO) lleguen al dispositivo incluso en conexiones inestables.*
-
-### Problema Raíz
-
-Cuando un WebSocket se cae y reconecta múltiples veces al día, existen **7 puntos de fallo** identificados:
-
-| # | Problema | Impacto |
-|---|---------|---------|
-| P1 | Bus listener muere silenciosamente si `send_to_device()` raisea | Todos los comandos vía Redis pub/sub se pierden hasta reiniciar |
-| P2 | Socket zombie en `device_map` hasta 30s (pong timeout) | Comandos se envían al vacío sin encolar |
-| P3 | Race condition en `flush_message_queue`: cola se popea antes de enviar | Si el WS cae durante el flush, mensajes perdidos sin rollback |
-| P4 | `_message_queues` es `asyncio.Queue` en RAM | Se pierde al reiniciar servidor; límite 10 msg, TTL 5 min |
-| P5 | `device:pending:banner:*` se escribe pero **nunca se consume** | Dead-end: datos que nadie lee |
-| P6 | No hay `pending_sync` flag en Redis | No se puede detectar que un sync falta al reconectar |
-| P7 | REINICIAR sin reintentos (solo timeout 60s) | Si no llega, se abandona para siempre |
-
----
-
-### Fase 15.1 — Fix Críticos Inmediatos (backend-api)
-
-| # | Tarea | Estado | Ubicación |
-|---|-------|--------|-----------|
-| 15.1.1 | Envolver `_on_bus_command` y `_on_bus_confirmation` en try/except para evitar muerte del bus listener | ✅ Completado | `backend-api/app/main.py:1923-1938` |
-| 15.1.2 | Agregar reconexión automática del bus listener si muere (wrap con restart loop) | ✅ Completado | `backend-api/app/main.py:1997-2005` |
-| 15.1.3 | En `send_to_device()`: si falla el envío por socket zombie, encolar mensaje **después** del disconnect | ✅ Completado | `backend-api/app/main.py:1640-1657` |
-| 15.1.4 | En `flush_message_queue()`: no `pop()`ear la cola hasta confirmar envío. Si falla, re-encolar | ✅ Completado | `backend-api/app/main.py:1714-1754` |
-
-**Detalle técnico 15.1.1 — Protección del bus listener:**
-
-```python
-async def _on_bus_command(device_id, command, payload):
-    try:
-        if command == "WIPE_AND_RESYNC":
-            await tablet_ws_manager.send_to_device(device_id, {"command": "WIPE_AND_RESYNC"})
-        elif command == "REINICIAR":
-            message = {"command": "REINICIAR"}
-            if payload:
-                message.update(payload)
-            await tablet_ws_manager.send_to_device(device_id, message)
-        elif command in ("BANNER_INICIADO", "BANNER_FINALIZADO"):
-            await tablet_ws_manager.send_to_device(device_id, payload)
-    except Exception as e:
-        logger.error(f"[BUS] Error procesando comando para {device_id}: {e}")
-```
-
-**Detalle técnico 15.1.2 — Auto-restart del listener:**
-
-```python
-async def _start_device_bus_listener_with_retry():
-    while True:
-        try:
-            await _start_device_bus_listener()
-        except Exception as e:
-            logger.error(f"[BUS] Listener murió, reiniciando en 5s: {e}")
-            await asyncio.sleep(5)
-```
-
-**Detalle técnico 15.1.3 — Encolar después de zombie:**
-
-```python
-async def send_to_device(self, device_id, message):
-    ws = self.device_map.get(device_id)
-    if ws:
-        try:
-            await ws.send_json(message)
-            return True
-        except Exception as e:
-            await self.disconnect(ws)
-            # NO raise — encolar después del disconnect
-    # Encolar siempre si no hay socket vivo
-    await self._enqueue_message(device_id, message)
-    return False
-```
-
-**Detalle técnico 15.1.4 — Flush atómico:**
-
-```python
-async def flush_message_queue(self, device_id, websocket):
-    if device_id not in self._message_queues:
-        return 0
-    queue = self._message_queues[device_id]
-    delivered = 0
-    failed_messages = []
-    while not queue.empty():
-        try:
-            msg = queue.get_nowait()
-            await websocket.send_json(msg)
-            delivered += 1
-        except Exception as e:
-            failed_messages.append(msg)
-            break
-    # Re-encolar los que fallaron
-    for msg in failed_messages:
-        await queue.put(msg)
-    if not queue.empty():
-        self._message_queues[device_id] = queue
-    else:
-        self._message_queues.pop(device_id, None)
-    return delivered
-```
-
----
-
-### Fase 15.2 — Cola Persistente en Redis (backend-api)
-
-| # | Tarea | Estado | Ubicación |
-|---|-------|--------|-----------|
-| 15.2.1 | Crear `PendingCommandQueue` service con Redis LIST | ✅ Completado | `backend-api/app/services/pending_queue.py` |
-| 15.2.2 | Reemplazar `_message_queues` (asyncio.Queue) por cola Redis | ✅ Completado | `backend-api/app/main.py` |
-| 15.2.3 | Implementar patrón LMOVE (queue → inflight) con cleanup periódico | ✅ Completado | `backend-api/app/main.py` |
-| 15.2.4 | Integrar cola Redis en `send_to_device()` y `connect()` | ✅ Completado | `backend-api/app/main.py` |
-| 15.2.5 | Consumir `device:pending:banner:*` al reconectar (actual dead-end) | ✅ Completado | `backend-api/app/main.py` |
-
-**Estructura en Redis:**
-
-```
-device:queue:{device_id}                   → LIST - comandos pendientes de enviar
-device:queue:{device_id}:inflight          → LIST - enviados pero no confirmados
-device:pending:sync:{device_id}            → STRING "true"/"false"
-device:pending:reboot:{device_id}          → STRING - JSON último REINICIAR
-```
-
-**Diagrama de flujo:**
-
-```
-Comando llega
-    │
-    ▼
-┌──────────────────────────────┐
-│ 1. RPUSH device:queue:{id}   │ ◄── Redis (persistente, sobrevive crashes)
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────────────┐
-│ 2. LPUSH → LMOVE a inflight         │ ◄── Transacción atómica
-│    → send_json() vía WebSocket      │
-└──────────────┬───────────────────────┘
-               │
-        ┌──────┴──────┐
-        ▼              ▼
-   ¿CONFIRMATION?   ¿Fallo/Timeout?
-        │              │
-        ▼              ▼
-┌──────────────┐ ┌──────────────────────┐
-│ LREM inflight│ │ LMOVE inflight→queue │ ◄── Rollback automático
-│ ✓ Comando OK │ │ + cleanup periódico  │
-└──────────────┘ └──────────────────────┘
-```
-
-**Detalle técnico 15.2.1 — PendingCommandQueue:**
-
-```python
-# backend-api/app/services/pending_queue.py
-class PendingCommandQueue:
-    def __init__(self, redis: Redis):
-        self.redis = redis
-    
-    async def enqueue(self, device_id: str, message: dict) -> None:
-        key = f"device:queue:{device_id}"
-        await self.redis.rpush(key, json.dumps(message))
-    
-    async def dequeue(self, device_id: str) -> dict | None:
-        key = f"device:queue:{device_id}"
-        inflight_key = f"{key}:inflight"
-        # LMOVE atómico: saca de queue y pasa a inflight
-        data = await self.redis.lmove(key, inflight_key, "LEFT", "RIGHT")
-        if data:
-            return json.loads(data)
-        return None
-    
-    async def confirm(self, device_id: str, message_id: str) -> None:
-        # Eliminar de inflight (confirmado por el dispositivo)
-        inflight_key = f"device:queue:{device_id}:inflight"
-        await self.redis.lrem(inflight_key, 1, message_id)
-    
-    async def recover_inflight(self, device_id: str) -> int:
-        """Mueve todos los inflight de vuelta a queue (en disconnect)."""
-        key = f"device:queue:{device_id}"
-        inflight_key = f"{key}:inflight"
-        count = 0
-        while await self.redis.llen(inflight_key) > 0:
-            data = await self.redis.lmove(inflight_key, key, "LEFT", "RIGHT")
-            if data:
-                count += 1
-        return count
-    
-    async def get_all_pending(self, device_id: str) -> list[dict]:
-        key = f"device:queue:{device_id}"
-        inflight_key = f"{key}:inflight"
-        items = await self.redis.lrange(key, 0, -1)
-        inflight = await self.redis.lrange(inflight_key, 0, -1)
-        return [json.loads(i) for i in items] + [json.loads(i) for i in inflight]
-```
-
-**Detalle técnico 15.2.5 — Consumir pending banners al reconectar:**
-
-```python
-# En connect(), después del IDENTIFY exitoso:
-# 1. Flush message_queues (actual)
-# 2. NUEVO: procesar cola Redis
-async def process_pending_queue(self, device_id, websocket):
-    queue = PendingCommandQueue(redis)
-    while True:
-        msg = await queue.dequeue(device_id)
-        if not msg:
-            break
-        try:
-            await websocket.send_json(msg)
-            await queue.confirm(device_id, json.dumps(msg))
-        except Exception:
-            # Re-encolar si falla
-            await queue.enqueue(device_id, msg)
-            break
-
-# 3. NUEVO: consumir device:pending:banner:{device_id}
-async def consume_pending_banners(self, device_id, websocket):
-    key = f"device:pending:banner:{device_id}"
-    data = await redis.get(key)
-    if data:
-        banner_info = json.loads(data)
-        await websocket.send_json(banner_info)
-        await redis.delete(key)
-
-# 4. NUEVO: check pending_sync
-async def check_pending_sync(self, device_id):
-    key = f"device:pending:sync:{device_id}"
-    pending = await redis.get(key)
-    if pending == "true":
-        await device_command_bus.publish_command(
-            device_id=device_id,
-            command="WIPE_AND_RESYNC",
-            payload={}
-        )
-        await redis.delete(key)
-```
-
----
-
-### Fase 15.3 — Flag de Pendientes y Reinteligencia en IDENTIFY (backend-api)
-
-| # | Tarea | Estado | Ubicación |
-|---|-------|--------|-----------|
-| 15.3.1 | Crear flag `device:pending:sync:{device_id}` en Redis al fallar envío de WIPE_AND_RESYNC | ⏳ Pendiente | `backend-api/app/main.py` |
-| 15.3.2 | En `connect()`: al recibir IDENTIFY, verificar flags y disparar comandos pendientes | ⏳ Pendiente | `backend-api/app/main.py:1564-1566` |
-| 15.3.3 | Setear flag `pending:reboot:{device_id}` al enviar REINICIAR sin confirmación | ⏳ Pendiente | `backend-api/app/main.py:1254-1316` |
-| 15.3.4 | Cleanup periódico de flags huérfanos (más de 1 hora) | ⏳ Pendiente | `backend-api/app/main.py` |
-
-**Flujo completo en IDENTIFY:**
-
-```
-luzapp conecta → envía IDENTIFY
-                    │
-                    ▼
-          ┌─────────────────┐
-          │ 1. Flush queue  │ ◄── message_queues (actual)
-          └────────┬────────┘
-                   ▼
-          ┌──────────────────────┐
-          │ 2. Consume pending   │ ◄── device:pending:banner:* (NUEVO)
-          │    banners           │
-          └────────┬────────────┘
-                   ▼
-          ┌──────────────────────┐
-          │ 3. Check pending     │ ◄── device:pending:sync:{id} (NUEVO)
-          │    sync flag         │ → Si true, auto-trigger WIPE_AND_RESYNC
-          └────────┬────────────┘
-                   ▼
-          ┌──────────────────────┐
-          │ 4. Check pending     │ ◄── device:pending:reboot:{id} (NUEVO)
-          │    reboot flag       │ → Si existe, re-enviar REINICIAR
-          └────────┬────────────┘
-                   ▼
-          ┌──────────────────────┐
-          │ 5. Process Redis     │ ◄── device:queue:{id} (NUEVO)
-          │    persistent queue  │ → Enviar todos los pendientes
-          └──────────────────────┘
-```
-
----
-
-### Fase 15.4 — REINICIAR Robusto con Reintentos (backend-api)
-
-| # | Tarea | Estado | Ubicación |
-|---|-------|--------|-----------|
-| 15.4.1 | Agregar reintentos automáticos para REINICIAR (máx 5, backoff 30s) | ⏳ Pendiente | `backend-api/app/main.py` |
-| 15.4.2 | Guardar `device:pending:reboot:{device_id}` en Redis si falla el envío | ⏳ Pendiente | `backend-api/app/main.py:1254-1316` |
-| 15.4.3 | Re-enviar REINICIAR automáticamente en IDENTIFY si flag existe | ⏳ Pendiente | `backend-api/app/main.py:connect()` |
-| 15.4.4 | Limpiar flag cuando el dispositivo confirma COMPLETED | ⏳ Pendiente | `backend-api/app/main.py:process_sync_confirmation` |
-
-**Detalle técnico 15.4.1 — Reintentos para REINICIAR:**
-
-```python
-REBOOT_RETRY_LIMIT = 5
-REBOOT_RETRY_DELAY = 30  # segundos
-reboot_retry_counters: dict[str, int] = {}
-
-async def retry_reboot_with_device(device_id: str):
-    count = reboot_retry_counters.get(device_id, 0)
-    if count < REBOOT_RETRY_LIMIT:
-        reboot_retry_counters[device_id] = count + 1
-        await asyncio.sleep(REBOOT_RETRY_DELAY)
-        # Re-enviar REINICIAR
-        await device_command_bus.publish_command(
-            device_id=device_id,
-            command="REINICIAR",
-            payload={}
-        )
-    else:
-        reboot_retry_counters.pop(device_id, None)
-        logger.error(f"Dispositivo {device_id} falló reinicio tras {REBOOT_RETRY_LIMIT} reintentos.")
-```
-
----
-
-### Fase 15.5 — Versión Objetivo (Estado vs Evento) — LARGO PLAZO
-
-| # | Tarea | Estado | Ubicación |
-|---|-------|--------|-----------|
-| 15.5.1 | Guardar `device:target_version:{device_id}` en Redis con versión actual de banners | ⏳ Pendiente | `backend-api + backend-dashboard` |
-| 15.5.2 | Enviar `target_version` en respuesta al IDENTIFY (IDENTIFY_ACK) | ⏳ Pendiente | `backend-api/app/main.py:connect()` |
-| 15.5.3 | En luzapp: almacenar `local_version` y comparar contra `target_version` al reconectar | ⏳ Pendiente | `luzapp/ScanActivity.kt` |
-| 15.5.4 | Si versiones difieren, luzapp solicita sync automáticamente | ⏳ Pendiente | `luzapp/ScanActivity.kt` |
-
-**Concepto:**
-
-```
-En lugar de:  {"command": "WIPE_AND_RESYNC"}  ← evento
-Usar:         {"target_version": 15}           ← estado
-
-Flujo:
-1. Servidor guarda: device:target_version:{id} = 15
-2. IDENTIFY → servidor responde: {"type": "IDENTIFY_ACK", "target_version": 15}
-3. luzapp compara: local_version(14) != target_version(15) → auto-sync
-4. No importa si el comando se pierde — en la próxima reconexión se auto-corrige
-```
-
----
-
-**Nota sobre MQTT**: Se evaluó MQTT (Mosquitto) como alternativa y se descartó para esta fase por su complejidad operativa (nuevo broker, puertos, librería Android). Se reconsiderará en una actualización futura si la cola persistente Redis no es suficiente.
-
----
-
-## Orden de Implementación (FASE 15)
-
-La implementación se divide en **4 lotes** desplegables de forma independiente. Cada lote incluye pruebas unitarias + verificación manual antes de pasar al siguiente.
-
-### Lote 1 — Fix Críticos + Salvaguardas inmediatas ✅ COMPLETADO
-
-| # | Tarea | Archivo | Estado |
-|---|-------|---------|:------:|
-| L1.1 | Proteger bus listener: try/except en `_on_bus_command` + reconexión automática | `main.py:1923-1938, 1997-2005` | ✅ |
-| L1.2 | Zombie socket → encola: quitar `raise`, always enqueue after disconnect | `main.py:1640-1657` | ✅ |
-| L1.3 | Flush atómico: no popear hasta confirmar send, re-encolar si falla | `main.py:1714-1754` | ✅ |
-| L1.4 | Command ID + dedup en luzapp: UUID por comando, HashSet últimos 20 IDs | `main.py:1642` + `ScanActivity.kt:767` | ✅ |
-| L1.5 | Límite de cola: max 100 msg por dispositivo + TTL 24h por mensaje | `main.py:1668` + `pending_queue.py:30` | ✅ |
-| L1.6 | Endpoint `GET /api/queue/health` para monitoreo en tiempo real | `main.py:~2360` | ✅ |
-
-### Lote 2 — Cola Persistente en Redis ✅ COMPLETADO
-
-| # | Tarea | Archivo | Estado |
-|---|-------|---------|:------:|
-| L2.1 | Crear `PendingCommandQueue` service con Redis LIST + LMOVE inflight | `services/pending_queue.py` | ✅ |
-| L2.2 | Reemplazar `_message_queues` (asyncio.Queue) por cola Redis | `main.py` | ✅ |
-| L2.3 | Integrar cola Redis en `send_to_device()` y `connect()` | `main.py` | ✅ |
-| L2.4 | Consumir `device:pending:banner:*` al reconectar (actual dead-end) | `main.py` | ✅ |
-
-### Lote 3 — Flags de Pendientes + Dead-Letter Queue ✅ COMPLETADO
-
-| # | Tarea | Archivo | Estado |
-|---|-------|---------|:------:|
-| L3.1 | Flag `device:pending:sync:{id}` en Redis, setear al fallar WIPE_AND_RESYNC | `main.py:2195,2279,2313,2561` + `pending_queue.py:205` | ✅ |
-| L3.2 | Flag `device:pending:reboot:{id}` para REINICIAR no confirmado | `main.py:1331,1347,2585` + `pending_queue.py:219` | ✅ |
-| L3.3 | En `connect()`: verificar flags al recibir IDENTIFY y disparar comandos | `main.py:_flush_all_queues():1736-1759` | ✅ |
-| L3.4 | Dead-letter queue: máximo 5 reintentos por mensaje, luego a DLQ | `pending_queue.py:262-324` (flush_all_to_device + _move_to_dlq) | ✅ |
-
-### Lote 4 — REINICIAR Robusto + Reconciliación ✅ COMPLETADO
-
-| # | Tarea | Archivo | Estado |
-|---|-------|---------|:------:|
-| L4.1 | Reintentos automáticos REINICIAR (máx 5, backoff 30s) | `main.py:2565-2586` (retry_reboot_with_device) | ✅ |
-| L4.2 | Job de reconciliación periódico (30 min): verificar colas vs online, recuperar inflight, cleanup DLQ y flags | `main.py:1976-1985` (_reconciliation_loop cada 1800s) + `main.py:1940-1974` (_reconcile_all_queues) | ✅ |
-| L4.3 | Cleanup de flags huérfanos y DLQ antigua (> 24h) | `pending_queue.py:343-397` (cleanup_old_dlq + cleanup_orphan_flags) | ✅ |
-
-### Fase 15.5 — Versión Objetivo (PENDIENTE, no incluida en lotes actuales)
-
-Se deja para después por requerir cambios en backend-dashboard + luzapp. No es crítica para la entrega de comandos.
-
----
-
-## FASE 17: Cola de Comandos — Notificaciones y Visibilidad en Dashboard
-
-*Prioridad: Alta | Objetivo: Dar visibilidad al dashboard del estado de la cola de comandos en Redis, diferenciando comandos encolados de fallos reales, y cerrando el ciclo de notificación cuando la cola entrega exitosamente.*
-
-### Problema Raíz
-
-El dashboard no tiene visibilidad de la cola Redis en backend-api:
-
-- Cuando un sync falla por timeout, se reporta `FAILED` aunque el comando se haya encolado exitosamente
-- El usuario reintenta sin saber que el comando ya está pendiente
-- Cuando la cola eventualmente entrega el comando, el dashboard nunca se entera
-- No hay forma de consultar cuántos comandos están encolados para un dispositivo
-
-### Item 1: QUEUED vs FAILED — Diferenciar estado en respuesta de sync
-
-**Descripción**: Cuando el dispositivo está offline pero el comando se encola exitosamente, reportar `"QUEUED"` en vez de `"TIMEOUT"/"SEND_FAILED"`. Crear notificación `COMANDO_ENCOLADO` en lugar de `SYNC_FAILED`.
-
-| # | Archivo | Cambio | Esfuerzo |
-|---|---------|--------|----------|
-| 17.1.1 | `backend-api/app/main.py` `orchestrate_forced_sync_sequential` | Timeout/SEND_FAILED → `set_pending_sync()` exitoso → detail `status: "QUEUED"`, `queued: true`. Contador `queued` separado | ✅ |
-| 17.1.2 | `backend-api/app/main.py` `_run_force_sync_job` | Forwardear `queued` del resultado al job state | ✅ |
-| 17.1.3 | `backend-api/app/main.py` nueva función `notify_dashboard_sync_queued` | `POST /api/sync-queued` al dashboard | ✅ |
-| 17.1.4 | `backend-dashboard/app/routes/notificaciones.py` | Nuevo `POST /api/sync-queued` → crea `COMANDO_ENCOLADO`, dedup 120s | ✅ |
-| 17.1.5 | `backend-dashboard/app/services/sync_service.py` | Leer `queued` del backend-api, no contar como failed | ✅ |
-| 17.1.6 | `backend-dashboard/app/services/sync_service.py` GET job | Incluir `queued` en response del job | ✅ |
-| 17.1.7 | `dashboard/screens/DashboardScreen.tsx` | `SyncServerProgress` type + `queued`. Barra naranja, toast queued | ✅ |
-| 17.1.8 | `dashboard/services/notificacionesPresentation.ts` | Case `COMANDO_ENCOLADO` → severity `info`, título "Comando encolado" | ✅ |
-
-### Item 2: Endpoint de estado de cola (`/queue-status`)
-
-**Descripción**: Permitir que el dashboard consulte el estado de la cola Redis de un dispositivo (pendientes, inflight, DLQ, flags).
-
-| # | Archivo | Cambio | Estado |
-|---|---------|--------|:------:|
-| 17.2.1 | `backend-api/app/main.py` | Nuevo `GET /api/queue-status/{device_id}` → `{ device_id, pending, inflight, total, pending_sync, pending_reboot }`. Auth via API key | ✅ |
-| 17.2.2 | `backend-dashboard/app/routes/monitoreo/sync.py` | Nuevo `GET /api/monitoreo/cola/{device_id}` → proxy a backend-api | ✅ |
-| 17.2.3 | `dashboard/components/ServerDashboard.tsx` | En cada dispositivo, badge "N pendientes" con tooltip. Naranja si > 0, gris si vacío | ✅ Completado |
-
-### Item 3: Notificar entrega exitosa desde la cola
-
-**Descripción**: Cuando la cola Redis entrega el comando al dispositivo y este confirma SUCCESS, notificar al dashboard para crear `SINCRONIZACION_COMPLETADA`.
-
-| # | Archivo | Cambio | Estado |
-|---|---------|--------|:------:|
-| 17.3.1 | `backend-api/app/services/pending_queue.py` | Nuevos métodos: `set_delivery_pending(device_id)` + `check_delivery_pending(device_id)`. Redis key `device:delivery_pending:{id}`, TTL 300s | ✅ |
-| 17.3.2 | `backend-api/app/main.py` `_flush_all_queues` | Después de `check_pending_sync() == True` → `set_delivery_pending()`. En `flush_all_to_device`, al dequeuear WIPE_AND_RESYNC → `set_delivery_pending()` | ✅ |
-| 17.3.3 | `backend-api/app/main.py` `process_sync_confirmation` | Cuando WIPE_AND_RESYNC SUCCESS → `check_delivery_pending()` → si True → `notify_dashboard_sync_delivered()` | ✅ |
-| 17.3.4 | `backend-api/app/main.py` nueva función `notify_dashboard_sync_delivered` | `POST /api/sync-delivered` al dashboard con `{ device_id, status: "SUCCESS" }` | ✅ |
-| 17.3.5 | `backend-dashboard/app/routes/notificaciones.py` | Nuevo `POST /api/sync-delivered` → crea `SINCRONIZACION_COMPLETADA` | ✅ |
-| 17.3.6 | `dashboard/services/notificacionesPresentation.ts` | Case `SINCRONIZACION_COMPLETADA` → severity `success`, título "Sincronización completada" | ✅ |
-
-### Orden de implementación sugerido
-
-```
-Item 1 (QUEUED vs FAILED)   → desplegable independiente, bajo riesgo
-Item 2 (queue-status)        → desplegable independiente, bajo riesgo
-Item 3 (delivery notify)     → desplegable independiente, requiere Item 1
-```
-
-Cada item es desplegable por separado. Item 1 y 2 no tienen dependencias entre sí.
-
-### Archivos a modificar (resumen)
-
-| Archivo | Items | Cambios |
-|---------|-------|---------|
-| `backend-api/app/main.py` | 1, 2, 3 | 7 cambios (orchestrate, _run_job, notify_queued, queue-status endpoint, _flush_all_queues, process_sync_confirmation, notify_delivered) |
-| `backend-api/app/services/pending_queue.py` | 3 | 1 cambio (delivery_pending methods) |
-| `backend-dashboard/app/routes/notificaciones.py` | 1, 3 | 2 endpoints nuevos (sync-queued, sync-delivered) |
-| `backend-dashboard/app/routes/monitoreo.py` | 1, 2 | 1 endpoint nuevo (cola-status), 2 cambios en sync job |
-| `dashboard/screens/DashboardScreen.tsx` | 1 | SyncServerProgress type + UI rendering |
-| `dashboard/components/ServerDashboard.tsx` | 2 | Badge de cola en dispositivo |
-| `dashboard/services/notificacionesPresentation.ts` | 1, 3 | 2 nuevos cases |
-| `PLAN_MEJORAS.md` | - | Documentación |
-
----
-
-## FASE 18: Bots de Mantenimiento y Limpieza de Datos
-
-*Prioridad: Media | Objetivo: Evitar crecimiento infinito de BD, disco y Redis.*
-
-### Problema Raíz
-
-El sistema no tiene **ningún** job de limpieza automática. Datos que crecen sin control:
-
-| Dato | Crecimiento | Riesgo |
-|------|-------------|--------|
-| `DispositivoSesion` | ~8,000 filas/día (3M/año) | Queries lentas en auditoría |
-| `Notificacion` + `NotificacionLeida` | ~100 filas/día | BD crece sin límite |
-| `static/banners/` archivos huérfanos | Archivos de uploads fallidos, renombrados, banners eliminados | Disco lleno |
-| `device:state:*` en Redis | Dispositivos dados de baja nunca se limpian | Redis retiene datos stale |
-| Banners en servidores API (archivos huérfanos) | Archivos no referenciados en cada servidor | Disco lleno en servidores remotos |
-
----
-
-### Bot 1: `limpiar_sesiones` ✅ COMPLETADO
-
-| Propiedad | Valor |
-|-----------|-------|
-| **Tabla** | `DispositivoSesion` |
-| **Acción** | `DELETE WHERE fecha_fin < DATEADD(DAY, -90, GETDATE())` |
-| **Retención** | 90 días |
-| **Frecuencia** | Cada 15 días |
-| **Log** | `"cleanup_old_sessions: deleted 8421 rows"` |
-| **Ubicación** | `backend-dashboard/app/cleanup_service.py` + `scheduler.py` |
-
-### Bot 2: `limpiar_notificaciones` ✅ COMPLETADO
-
-| Propiedad | Valor |
-|-----------|-------|
-| **Tablas** | `Notificacion` + `NotificacionLeida` (cascada) |
-| **Acción** | `DELETE WHERE fecha_creacion < DATEADD(DAY, -15, GETDATE())` |
-| **Retención** | 15 días |
-| **Frecuencia** | Cada 15 días (mismo job que sesiones) |
-| **Log** | `"cleanup_old_notifications: deleted 340 rows"` |
-| **Ubicación** | `backend-dashboard/app/cleanup_service.py` + `scheduler.py` |
-
-### Bot 3: `limpiar_archivos` (dashboard) ✅ COMPLETADO
-
-| Propiedad | Valor |
-|-----------|-------|
-| **Directorio** | `backend-dashboard/static/banners/` |
-| **Acción** | `os.listdir()` → cruzar contra `SELECT Url, ThumbnailUrl FROM Publicidad` → `os.remove()` no referenciados |
-| **Frecuencia** | Cada 24h |
-| **Log** | `"cleanup_orphan_files: removed 12 files (85.3 MB)"` |
-| **Ubicación** | `backend-dashboard/app/cleanup_service.py` + `scheduler.py` |
-
-### Bot 4: `limpiar_redis_stale` ✅ COMPLETADO
-
-| Propiedad | Valor |
-|-----------|-------|
-| **Target** | `device:state:{device_id}`, `devices:all`, `device:pending:banner:{device_id}` |
-| **Acción** | Agregar `EXPIRE key 172800` (48h TTL) al crear/actualizar `device:state:*`. Renovar en cada heartbeat. Agregar TTL a `device:pending:banner:*`. |
-| **Frecuencia** | Auto-gestionado por TTL de Redis (sin scheduler) |
-| **Log** | No aplica (automático) |
-| **Ubicación** | `backend-api/app/main.py` (heartbeat/connect) + `backend-dashboard/app/services/device_service.py` |
-
-### Bot 5: `limpiar_banners_api` (backend-api) ✅ COMPLETADO
-
-| Propiedad | Valor |
-|-----------|-------|
-| **Directorio** | Carpeta local de banners en cada servidor backend-api |
-| **Acción** | `os.listdir()` → cruzar contra `SELECT Url FROM Publicidad` → `os.remove()` no referenciados |
-| **Frecuencia** | Cada 24h |
-| **Ubicación** | `backend-api/app/cleanup_service.py` + scheduler en `main.py` |
-
----
-
-## FASE 19: Limpieza de Caché en Luzapp (PurgeWorker + Dashboard Trigger)
-
-*Prioridad: Media | Objetivo: Evitar acumulación de archivos basura en kioskos 3nstar (K10-A7 8GB, K10-A11 16GB).*
-
-### Especificaciones del hardware objetivo
-
-| Modelo | Almacenamiento | Disponible real | Android | WorkManager |
-|--------|---------------|-----------------|---------|-------------|
-| **K10-A7** | 8GB eMMC | ~3-4GB libres | **7.0** | **No confiable** — ROM 3nstar suele matar Google Play Services / JobScheduler |
-| **K10-A11** | 16GB eMMC | ~8-10GB libres | 10.0 | Confiable |
-
-### Análisis de Rentabilidad
-
-**Escenario:** Borrar periódicamente archivos acumulados (`banners/`, `videos/`, `banners_meta.json`, backups JSON + SQLite) para que la app empiece de 0 sin caché.
-
-**Estimación de basura acumulada en un K10-A7 tras 6 meses sin limpieza:**
-
-| Item | Tamaño | Cantidad típica | Total |
-|------|--------|----------------|-------|
-| Banners imagen | ~500KB | 20-40 | 10-20MB |
-| Banners video | ~10MB | 5-10 | 50-100MB |
-| Backups JSON (productos, precios, ofertas) | ~5-15MB c/u | 9 archivos | 45-135MB |
-| SQLite backup index | ~10-50MB | 1 DB | 10-50MB |
-| **Total** | | | **115-305MB** |
-
-En un K10-A7 con 3-4GB libres: **115-305MB = 3-10% del espacio disponible**. Esto sí es relevante.
-
-**Factores en contra:**
-
-| Factor | Detalle |
-|--------|---------|
-| **App ya limpia metadata** | `cleanupExpiredBanners()` elimina banners vencidos del JSON al sincronizar |
-| **Backend ya limpia archivos huérfanos** | Bots 3 y 5 (FASE 18) limpian archivos no referenciados cada 24h en servidores, **no en el dispositivo** |
-| **Banners expiran naturalmente** | El archivo físico en disco del dispositivo **NO se borra** aunque el banner esté vencido — solo se elimina del metadata |
-| **Costo de redescarga** | Purga + redescarga consume datos móviles y batería. En kioskos 3nstar con plan limitado, hay que considerar frecuencia |
-| **Riesgo race condition** | Si el purge corre mientras el carrusel reproduce, puede causar flicker |
-
-**Factores a favor:**
-
-| Factor | Detalle |
-|--------|---------|
-| **K10-A7 solo 3-4GB libres** | 300MB de basura = 10% del espacio. En un kiosko que nunca se limpia, en 1 año podría llenar el disco |
-| **No hay usuario que limpie** | Kiosko autónomo y sin mantenimiento — nadie borra archivos manualmente |
-| **WorkManager no confiable en Android 7** | En ROM 3nstar K10-A7, `PeriodicWorkRequest` puede no ejecutarse. Alternativa: `Handler.postDelayed()` inline (mismo patrón que `scheduleDolarBCVRefresh()` en `ScanActivity.kt:967`) |
-| **Backups también acumulan** | Productos/precios/ofertas de meses pasados siguen en disco ocupando espacio aunque ya no apliquen |
-| **Archivos físicos de banners vencidos no se borran** | `cleanupExpiredBanners()` solo limpia el JSON metadata. El archivo `.mp4` o `.jpg` en `filesDir/banners/` **sigue ahí para siempre** |
-| **Dashboard no tiene control** | Hoy el admin no puede forzar un `WIPE_AND_RESYNC` desde el panel |
-| **Soporte técnico** | Forzar purge remoto evita enviar un técnico al kiosko cuando un banner no se actualiza |
-
-**Veredicto:**
-
-Con el hardware real (K10-A7 8GB + Android 7 + kioskos sin mantenimiento humano), **todos los items de FASE 19 son de rentabilidad Alta**. El almacenamiento es ajustado, los archivos físicos de banners vencidos nunca se limpian solos, y WorkManager no es confiable en Android 7.
-
-### Tareas Propuestas — ✅ COMPLETADO
-
-| # | Tarea | Rentabilidad | Estado | Ubicación |
-|---|-------|:------------:|--------|-----------|
-| 19.1 | Timer periódico en `ScanActivity` vía `Handler.postDelayed()` (cada 15-30 días) | 🟢 Alta | ✅ | `luzapp/.../ScanActivity.kt` |
-| 19.2 | Agregar `"WIPE_AND_RESYNC"` a comandos permitidos en backend-api | 🟢 Alta | ✅ | `backend-api/app/main.py:1472` |
-| 19.3 | Endpoint `POST /dispositivos/{id}/purge` en backend-dashboard | 🟢 Alta | ✅ | `backend-dashboard/app/services/device_service.py:241` |
-| 19.4 | Botón "Forzar purga" en dashboard React | 🟢 Alta | ✅ | `dashboard/components/ServerDashboard.tsx:312` |
-| 19.5 | Vincular timer de 19.1 en `ScanActivity.onCreate()` | 🟢 Alta | ✅ | `luzapp/.../ScanActivity.kt` |
-
-### Flujo completo del dashboard trigger
-
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│ DASHBOARD (React)                                                        │
-│                                                                          │
-│  Admin hace clic en "Forzar Purga"                                      │
-│  Modal: "¿Estás seguro de purgar Dispositivo X?"                       │
-│       │                                                                  │
-│       ▼                                                                  │
-│  POST /api/dispositivos/{device_id}/purge                                │
-│  (axios → monitoreoService.purgeDevice)                                  │
-└──────────────────────┬───────────────────────────────────────────────────┘
-                       │
-                       ▼
-┌──────────────────────────────────────────────────────────────────────────┐
-│ BACKEND-DASHBOARD (FastAPI)                                              │
-│                                                                          │
-│  routes/monitoreo/devices.py:                                            │
-│    @router.post("/dispositivos/{id}/purge")                              │
-│    → busca el dispositivo en BD                                          │
-│    → obtiene ip del servidor asociado                                    │
-│    → llama a device_service.purge_device()                               │
-│                                                                          │
-│  services/device_service.py:                                             │
-│    async def purge_device():                                             │
-│      POST http://{servidor_ip}:8000/api/comandos/{device_id}            │
-│      json = {"comando": "WIPE_AND_RESYNC", "command_id": uuid}          │
-└──────────────────────┬───────────────────────────────────────────────────┘
-                       │
-                       ▼
-┌──────────────────────────────────────────────────────────────────────────┐
-│ BACKEND-API (FastAPI - corre en el servidor secundario)                 │
-│                                                                          │
-│  main.py: POST /api/comandos/{device_id}                                 │
-│    → valida comando en ("REINICIAR", "WIPE_AND_RESYNC")                  │
-│    → genera command_id                                                   │
-│    → publica en Redis pub/sub:                                           │
-│        device_command_bus.publish_command(                               │
-│          device_id, "WIPE_AND_RESYNC", payload                           │
-│        )                                                                 │
-│    → espera confirmación del dispositivo (polling 60s)                   │
-│      ● Si el dispositivo está online: lo recibe y ejecuta               │
-│      ● Si está offline: PendingQueue lo encola en Redis                  │
-│        (device:queue:{id}) y se reenvía al reconectar                   │
-│    → retorna {"success": true/false, "status": "SUCCESS"/"TIMEOUT"...}  │
-└──────────────────────┬───────────────────────────────────────────────────┘
-                       │
-                       ▼ (Redis pub/sub)
-┌──────────────────────────────────────────────────────────────────────────┐
-│ LUZAPP (Android - en el kiosko)                                         │
-│                                                                          │
-│  ScanActivity - WebSocket onMessage:                                     │
-│    {"command": "WIPE_AND_RESYNC", "command_id": "uuid"}                  │
-│       │                                                                  │
-│       ▼                                                                  │
-│  Procesa el comando:                                                     │
-│    1. Pausa el carrusel de banners (stopStandbyCarousel)                 │
-│    2. Llama a ejecutarPurgaTotal():                                      │
-│       a. Borra banners/ Directorio físico completo                       │
-│       b. Borra videos/ Directorio físico completo                       │
-│       c. Solicita manifiesto actualizado al backend (GET /banners)      │
-│       d. Descarga todos los banners del manifiesto                      │
-│          (imágenes: delay 1.5s, videos: delay 8s entre cada uno)        │
-│       e. Guarda banners_meta.json con los nuevos items                   │
-│    3. Si la purga fue exitosa → reinicia el carrusel                     │
-│    4. Envía confirmación al backend (WebSocket CONFIRMATION)            │
-│       {"type": "CONFIRMATION", "command": "WIPE_AND_RESYNC",            │
-│        "device_id": "...", "status": "SUCCESS", "command_id": "..."}    │
-└──────────────────────────────────────────────────────────────────────────┘
-
-Resumen:  1 clic → 3 HTTP → 1 Redis pub/sub → WebSocket → purge en el kiosko ~3-5 min
-```
-
-### Archivos a modificar
-
-| Archivo | Acción |
-|---------|--------|
-| `luzapp/.../ui/scanner/ScanActivity.kt` | ✎ Agregar `Handler.postDelayed()` timer + inline cleanup cada 15-30 días |
-| `backend-api/app/main.py:1297` | ✎ 1 línea: agregar `"WIPE_AND_RESYNC"` a tupla de comandos |
-| `backend-dashboard/app/services/device_service.py` | ✎ Nueva función `purge_device()` (igual que `reboot_device()` pero con comando `WIPE_AND_RESYNC`) |
-| `backend-dashboard/app/routes/monitoreo/devices.py` | ✎ Nuevo endpoint `POST /dispositivos/{id}/purge` |
-| `dashboard/services/monitoreoService.ts` | ✎ Nueva función `purgeDevice(deviceId)` |
-| `dashboard/components/ServerDashboard.tsx` | ✎ Botón "Forzar purga" + modal confirmación |
-
----
-
-## FASE 20: Panel Resumen — Dashboard Principal con KPIs y Gráficas
-
-*Prioridad: Alta | Objetivo: Reemplazar la pantalla de inicio del dashboard con un panel resumen unificado que muestre KPIs del sistema (servidores, dispositivos, archivos, usuarios) con gráficas en tiempo real.*
-
-### Problema Raíz
-
-El dashboard no tiene una vista unificada del estado del sistema:
-
-- Las métricas están dispersas en 5+ endpoints diferentes (`/status`, `/status-detalle`, `/banners`, `/usuarios`, `/alertas`)
-- No hay KPIs visibles sin navegar a páginas específicas
-- La landing page actual (`/`) es la lista de videos, no un resumen del sistema
-- Los usuarios ADMIN deben visitar 3-4 páginas distintas para entender el estado general
-- No existe ninguna visualización gráfica (charts) en toda la aplicación
-
-### Item 1: Endpoint agregador `GET /api/resumen`
-
-**Descripción**: Endpoint único en backend-dashboard que consolida todas las métricas del sistema en una sola respuesta JSON. Evita 5+ llamadas desde el frontend.
-
-**Datos que retorna**:
-
-| Campo | Fuente (BD) | Cálculo |
-|-------|-------------|---------|
-| `servidores.total` | `ServidorSecundario` | `COUNT(*)` |
-| `servidores.online` | `ServidorSecundario` | `ultimo_heartbeat > NOW() - 5min` |
-| `dispositivos.total` | `Dispositivo` | `COUNT(*)` |
-| `dispositivos.online` | `Dispositivo` | `online = True` |
-| `banners.total` | `Publicidad` | `COUNT(*)` |
-| `banners.activos` | `Publicidad` | `Activo = True AND FechaFin > NOW()` |
-| `banners.vencidos` | `Publicidad` | `FechaFin < NOW()` |
-| `usuarios.total` | `Usuario` | `COUNT(*)` |
-| `usuarios.activos` | `Usuario` | `activo = True` |
-| `servidores_detalle[]` | Join servidores + dispositivos | Por servidor: nombre, ip, online, almacenamiento usado/total, dispositivos total/online |
-| `banners_por_servidor[]` | `PublicidadAsignacion` | `GROUP BY servidor_id` con nombre |
-| `historial_subidas[]` | `Publicidad` | `GROUP BY DATE(UpdatedAt)` últimos 30 días |
-
-| # | Archivo | Cambio | Estado |
-|---|---------|--------|:------:|
-| 20.1.1 | `backend-dashboard/app/routes/resumen.py` | Crear nuevo archivo con GET /api/resumen → SQL queries agregadas + response model | ✅ |
-| 20.1.2 | `backend-dashboard/app/main.py` | `include_router(resumen_router, prefix="/api")` | ✅ |
-
-### Item 2: Instalación de Recharts ✅ COMPLETADO
-
-**Descripción**: Agregar librería de gráficas al frontend. Se elige `recharts` por su API declarativa React y buena integración con Tailwind.
-
-| # | Archivo | Cambio | Estado |
-|---|---------|--------|:------:|
-| 20.2.1 | `dashboard/package.json` | `npm install recharts` → dependencia agregada | ✅ |
-
-### Item 3: Servicio frontend `resumenService.ts` ✅ COMPLETADO
-
-**Descripción**: Tipado TypeScript completo para la respuesta del endpoint + función `fetchResumen()` con tipado estricto.
-
-| # | Archivo | Cambio | Estado |
-|---|---------|--------|:------:|
-| 20.3.1 | `dashboard/services/resumenService.ts` | Crear: interfaces `ResumenData`, `ServidorResumen`, `BannersPorServidor`, `HistorialSubida` + `fetchResumen()` → `GET /api/resumen` | ✅ |
-
-### Item 4: Componentes visuales del resumen ✅ COMPLETADO
-
-**Descripción**: 5 componentes React que conforman las visualizaciones del panel.
-
-| # | Componente | Descripción | Tecnología |
-|---|-----------|-------------|-----------|
-| 20.4.1 | `KpiCard.tsx` | Tarjeta KPI con icono Lucide, contador animado (0→valor con requestAnimationFrame), label, subtítulo con desglose (ej. "8 online · 2 offline") | Tailwind + CSS animación |
-| 20.4.2 | `ServerStorageChart.tsx` | Barras horizontales de almacenamiento por servidor con umbral de color (verde <70%, amarillo <90%, rojo ≥90%) | Recharts `BarChart` layout="vertical" |
-| 20.4.3 | `DeviceStatusChart.tsx` | Donut online/offline con total en el centro | Recharts `PieChart` + `Label` |
-| 20.4.4 | `BannersTimeline.tsx` | Timeline de área con subidas de banners últimos 30 días | Recharts `AreaChart` con gradiente |
-| 20.4.5 | `ServerMiniTable.tsx` | Tabla compacta: servidor, estado online/offline, barra almacenamiento, dispositivos, videos | Tailwind puro (sin recharts) |
-
-| # | Archivos | Estado |
-|---|----------|:------:|
-| 20.4.1 | `dashboard/components/resumen/KpiCard.tsx` | ✅ |
-| 20.4.2 | `dashboard/components/resumen/ServerStorageChart.tsx` | ✅ |
-| 20.4.3 | `dashboard/components/resumen/DeviceStatusChart.tsx` | ✅ |
-| 20.4.4 | `dashboard/components/resumen/BannersTimeline.tsx` | ✅ |
-| 20.4.5 | `dashboard/components/resumen/ServerMiniTable.tsx` | ✅ |
-
-### Item 5: Pantalla `ResumenScreen.tsx` ✅ COMPLETADO
-
-**Descripción**: Orquestador del panel resumen. Layout en grid responsivo.
-
-**Layout**:
-```
-┌─────────────── KPIs (4 columnas → 2 → 1) ───────────────┐
-│  Servidores    │  Dispositivos  │  Archivos     │  Usuarios │
-├─────────────────────────┬────────────────────────────────┤
-│  DeviceStatusChart      │  ServerStorageChart            │
-│  (donut online/offline) │  (barras almacenamiento)       │
-├─────────────────────────┴────────────────────────────────┤
-│  BannersTimeline (área 30 días)                          │
-├─────────────────────────────────────────────────────────┤
-│  ServerMiniTable                                         │
-└─────────────────────────────────────────────────────────┘
-```
-
-**Comportamiento**:
-- Polling automático cada 60 segundos
-- Skeleton loading en carga inicial
-- Error state con botón "Reintentar"
-- Indicador "Última actualización: HH:mm:ss"
-- Animación stagger de entrada
-
-| # | Archivo | Cambio | Estado |
-|---|---------|--------|:------:|
-| 20.5.1 | `dashboard/screens/ResumenScreen.tsx` | Crear: orquestador con useEffect + setInterval 60s, grid layout, loading/error states | ✅ |
-
-### Item 6: Migración de rutas ✅ COMPLETADO
-
-**Descripción**: El panel resumen reemplaza la landing page `/`. La lista de videos se mueve a `/videos`.
-
-| # | Archivo | Cambio | Estado |
-|---|---------|--------|:------:|
-| 20.6.1 | `dashboard/App.tsx` | `/` → `<ResumenScreen />`, `/videos` → `<DashboardScreen />` | ✅ |
-| 20.6.2 | `dashboard/components/Sidebar.tsx` | Agregar "Resumen" (LayoutDashboard) primero, cambiar "Mis Videos" a `/videos`, role: all | ✅ |
-
-### Nota
-
-Todos los items de FASE 20 fueron completados. La carpeta `dashboard/components/resumen/` contiene 7 componentes (los 5 originales + `ReproductionTrendChart.tsx` + `BannerMetricsTable.tsx` de FASE 22.6).
-
----
-
-## Prioridades de Implementación (Pendientes Reales)
-
-| Prioridad | Item | Fase | Dónde | Dependencias |
-|-----------|------|------|-------|-------------|
-| 🟢 **1** | Backups SQL Server (manual) | FASE 5.1 | servidor | — |
-| 🟢 **2** | Endpoint `GET /api/reproducciones/analisis` | FASE 23.1 | backend-dashboard | metricas_service.py ✅ |
-| 🟢 **3** | Componente frontend "Pronóstico vs Real" | FASE 23.2 | dashboard | endpoint 23.1 ✅ |
-| ⚪ **4** | Versión Objetivo (FASE 15.5) | FASE 15 Lote 5 | backend-api + luzapp | largo plazo |
-
----
-
-## Resumen de Progreso Total (Todas las Fases)
-
-| Grupo | Fases | Completado | Pendiente |
-|-------|-------|------------|-----------|
-| Originales | 1-10 | 39/40 (98%) | 1/40 |
-| Refactor Backend | 11 | 3/3 ✅ (100%) | 0/3 |
-| Frontend Base | 12 | 2/2 ✅ (100%) | 0/2 |
-| UX/UI + Recharts | 13-14 | 5/5 ✅ (100%) | 0/5 |
-| Blindaje WebSocket | 15 | 17/17 ✅ (100%) | 0/17 |
-| Cola Dashboard + Badge | 17 | 17/17 ✅ (100%) | 0/17 |
-| Bots Mantenimiento | 18 | 5/5 ✅ (100%) | 0/5 |
-| Limpieza Caché Luzapp | 19 | 5/5 ✅ (100%) | 0/5 |
-| Panel Resumen | 20 | 6/6 ✅ (100%) | 0/6 |
-| Responsividad Móvil | 21 | 17/17 ✅ (100%) | 0/17 |
-| Categorización Dispositivos | 22 | 36/36 ✅ (100%) | 0/36 |
-| Análisis Pronóstico vs Real | 23 | 0/2 ⏳ | 2/2 |
-| **TOTAL** | **1-23** | **151/154 (98.1%)** | **3/154** |
-
----
-
-## FASE 21: Responsividad Móvil (Dashboard Frontend) ✅ COMPLETADA
-
-*Prioridad: Media | Objetivo: Adaptar el dashboard a pantallas de celular, evitando recortes, desbordes y mala UX en viewports < 640px.*
-
-### Problema Raíz ~~~ (RESUELTO)
-
-~~Varias pantallas del dashboard usan layouts fijos sin responsive breakpoints, causando:
-- Texto recortado o superpuesto en móvil
-- Barras de herramientas con múltiples botones que se desbordan
-- Tablas sin scroll horizontal
-- Cuadrículas que no se reacomodan
-- Modales con espaciado vertical insuficiente en landscape~~
-
----
-
-### 🔴 ALTA (se rompe en móvil) ✅ COMPLETADO
-
-| # | Archivo:Línea | Problema | Solución |
-|---|---|---|---|
-| 21.1 | ~~`ResumenScreen.tsx:79,89`~~ | ~~`grid-cols-4` fuerza 4 KPIs en una fila en móvil → texto `text-4xl` se desborda~~ | ~~`grid-cols-1 sm:grid-cols-2 lg:grid-cols-4`~~ ✅ |
-| 21.2 | ~~`DashboardScreen.tsx:1069,1093`~~ | ~~Tabla `grid grid-cols-12` sin `overflow-x-auto` → columnas de ~27px no muestran texto~~ | ~~Envolver en `<div className="overflow-x-auto">`~~ ✅ |
-| 21.3 | ~~`NotificationContainer.tsx:32`~~ | ~~`w-96` fijo (384px) se desborda en iPhone SE (375px) y pantallas menores~~ | ~~`w-full max-w-sm` o `max-w-[90vw]`~~ ✅ |
-| 21.4 | ~~`ServerDashboard.tsx:622-657`~~ | ~~5 botones de acción por dispositivo en fila sin wrap → se desbordan en móvil~~ | ~~Agregar `flex-wrap` o colapsar acciones secundarias en menú~~ ✅ |
-| 21.5 | ~~`AuditoriaScreen.tsx:222-268`~~ | ~~5 elementos en toolbar (buscar, filtros, botones) sin wrap → desbordamiento~~ | ~~`flex-wrap` o `flex-col sm:flex-row`~~ ✅ |
-| 21.6 | ~~`DashboardScreen.tsx:786`~~ | ~~Input de búsqueda `w-48` fijo (192px) no ocupa ancho disponible~~ | ~~`w-full sm:w-48`~~ ✅ |
-
-### 🟡 MEDIA (UX deficiente en móvil) ✅ COMPLETADO
-
-| # | Archivo:Línea | Problema | Solución |
-|---|---|---|---|
-| 21.7 | ~~`AuditoriaScreen.tsx:352-456`~~ | ~~Tabla de 8 columnas, mucho scroll horizontal, ninguna columna oculta en móvil~~ | ~~`hidden md:table-cell` en columnas de baja prioridad (Servidor, Duración, Usuario)~~ ✅ |
-| 21.8 | ~~`ServerDashboard.tsx:473-523`~~ | ~~Toolbar (buscar, ordenar, actualizar, programar) sin wrap → desbordamiento~~ | ~~`flex-wrap` o `flex-col sm:flex-row`~~ ✅ |
-| 21.9 | ~~`ServerDashboard.tsx:576-603`~~ | ~~Fila de insignias (nombre + 3-4 badges) sin wrap → se desbordan~~ | ~~Agregar `flex-wrap` al contenedor~~ ✅ |
-| 21.10 | ~~`CalendarScreen.tsx:355`~~ | ~~Título + leyenda (4 items) lado a lado → se superponen~~ | ~~`flex-col md:flex-row` con `gap-4`~~ ✅ |
-| 21.11 | ~~`ServerDeviceSelector.tsx:96`~~ | ~~`grid-cols-2` en pantallas muy pequeñas → items de ~140px~~ | ~~`grid-cols-1 sm:grid-cols-2`~~ ✅ |
-| 21.12 | ~~`UsersScreen.tsx:328`~~ | ~~Paginación `justify-between` sin wrap → texto y botones se superponen~~ | ~~Agregar `flex-wrap` o `flex-col` en móvil~~ ✅ |
-
-### 🔵 BAJA (casos esquina) ✅ COMPLETADO
-
-| # | Archivo:Línea | Problema | Solución |
-|---|---|---|---|
-| 21.13 | ~~`DeviceStatusChart.tsx:53`~~ | ~~`ResponsiveContainer width={220}` no se expande~~ | ~~`width="100%"`~~ ✅ |
-| 21.14 | ~~`DashboardScreen.tsx:1250`~~ | ~~Modal upload `pt-20` deja ~126px en landscape~~ | ~~`pt-4 md:pt-20`~~ ✅ |
-| 21.15 | ~~`DashboardScreen.tsx:1527`~~ | ~~Fila "SINCRONIZAR A TODOS" sin wrap~~ | ~~Agregar `flex-wrap`~~ ✅ |
-| 21.16 | `ServerStorageChart.tsx:72` | `width={90}` fijo en YAxis — aceptable | Dejar como está |
-| 21.17 | Modales varios | `max-w-6xl/5xl/2xl` — correctos con `w-full` | Sin cambios |
-| 21.18 | `CalendarScreen.tsx:348` | FullCalendar `aspectRatio: 1.5` — menor | Ajustar si es necesario |
-
----
-
-### Orden de implementación sugerido ~~~ (COMPLETADO)
-
-```
-Lote 1 (ALTA)  → 6 cambios, todos de 1 línea (flex-wrap, overflow-x-auto, grid responsive)
-Lote 2 (MEDIA) → 6 cambios, algunos requieren hidden cols o reordenamiento flex
-Lote 3 (BAJA)  → 3 cambios opcionales, impacto menor
-```
-
-### Archivos a modificar ~~~ (COMPLETADO)
-
-| Archivo | Items | Cambios |
-|---------|-------|---------|
-| `dashboard/screens/ResumenScreen.tsx` | 21.1 | ✅ Grid classes |
-| `dashboard/screens/DashboardScreen.tsx` | 21.2, 21.6, 21.14, 21.15 | ✅ overflow-x-auto, input width, pt responsive, flex-wrap |
-| `dashboard/components/NotificationContainer.tsx` | 21.3 | ✅ w-96 → max-w-sm |
-| `dashboard/components/ServerDashboard.tsx` | 21.4, 21.8, 21.9 | ✅ 3× flex-wrap |
-| `dashboard/screens/AuditoriaScreen.tsx` | 21.5, 21.7 | ✅ flex-wrap + hidden cols |
-| `dashboard/screens/CalendarScreen.tsx` | 21.10 | ✅ flex-col responsive |
-| `dashboard/components/ServerDeviceSelector.tsx` | 21.11 | ✅ grid-cols responsive |
-| `dashboard/screens/UsersScreen.tsx` | 21.12 | ✅ flex-wrap |
-| `dashboard/components/resumen/DeviceStatusChart.tsx` | 21.13 | ✅ width 100% |
-
----
-
-## FASE 22: Categorización de Dispositivos + Métricas DOOH
-
-*Prioridad: Alta | Objetivo: Diferenciar dispositivos entre TELEVISOR y VERIFICADOR, y recolectar métricas de reproducción con lógica distinta para cada tipo.*
-
----
-
-### Fase 22.1 — Identificación de Tipo de Dispositivo ✅ COMPLETADO
-
-**Android — DeviceTypeHelper simplificado:**
-- ~~Refactor `isTv()` booleano → `detectDeviceType()` retornando enum `TELEVISOR` | `VERIFICADOR`~~
-- ~~Lógica: si `Build.MANUFACTURER.equals("amazon", ignoreCase = true)` → `TELEVISOR`, si no → `VERIFICADOR`~~
-- ~~Se reutiliza el `isAmazon` existente, no se agregan nuevas comprobaciones~~
-
-| # | Tarea | Estado | Ubicación |
-|---|-------|--------|-----------|
-| 22.1.1 | Refactor `DeviceTypeHelper.kt`: `isTv()` → `detectDeviceType(): DeviceType` con enum | ✅ Completado | `luzapp/.../util/DeviceTypeHelper.kt:11` |
-| 22.1.2 | Enviar `device_type` en mensaje WebSocket IDENTIFY usando `detectDeviceType(this).name.lowercase()` | ✅ Completado | `luzapp/.../ui/scanner/ScanActivity.kt:2186` |
-| 22.1.3 | Actualizar `KioskService.kt` para usar nuevo enum (`!= TELEVISOR` en vez de `!isTv()`) | ✅ Completado | `luzapp/.../KioskService.kt:28` |
-| 22.1.4 | Actualizar `BootReceiver.kt` para usar nuevo enum (`== TELEVISOR` en vez de `isTv()`) | ✅ Completado | `luzapp/.../BootReceiver.kt:15` |
-| 22.1.5 | Loggear `Build.MANUFACTURER`, `MODEL`, `PRODUCT`, `BOARD` en `ScanActivity.onCreate()` para calibración | ✅ Completado | `luzapp/.../ui/scanner/ScanActivity.kt` |
-
-### Fase 22.2 — Backend: Almacenar `device_type` ✅ COMPLETADO
-
-| # | Tarea | Estado | Ubicación |
-|---|-------|--------|-----------|
-| 22.2.1 | Extraer `device_type` del mensaje IDENTIFY y pasarlo a `upsert_heartbeat()` | ✅ Completado | `backend-api/app/main.py:1776` |
-| 22.2.2 | Modificar `DeviceStateStore.upsert_heartbeat()` para incluir `device_type` en hash de Redis | ✅ Completado | `backend-api/app/services/device_state.py:48-68` |
-| 22.2.3 | Modelo `Dispositivo`: agregar columna `tipo = Column(String(20), nullable=False, default="verificador")` | ✅ Completado | `backend-dashboard/app/models/dispositivo.py:16` |
-| 22.2.4 | En `monitoreo_service.py`, al auto-crear un `Dispositivo`, leer `device_type` desde runtime y guardarlo | ✅ Completado | `backend-dashboard/app/services/monitoreo_service.py` |
-| 22.2.5 | Migración BD: `ALTER TABLE dispositivos ADD tipo VARCHAR(20) NOT NULL DEFAULT 'verificador'` | ✅ Completado | SQL Server |
-| 22.2.6 | Incluir `tipo` en respuesta de `/status-detalle` por dispositivo | ✅ Completado | `backend-dashboard/app/routes/monitoreo/servers.py:239` |
-| 22.2.7 | Endpoint `PATCH /api/dispositivos/{id}/tipo` para override manual desde dashboard | ✅ Completado | `backend-dashboard/app/routes/monitoreo/devices.py:43-68` |
-| 22.2.8 | Incluir desglose `verificadores`/`televisores` en endpoint `/resumen` | ✅ Completado | `backend-dashboard/app/routes/resumen.py` |
-
-### Fase 22.3 — Pipeline de Métricas de Reproducción ✅ COMPLETADO
-
-**Android — Reporte por cuartiles:**
-- ~~`PLAYBACK_START` al iniciar video~~
-- ~~`PLAYBACK_PROGRESS` periódico (% reproducido, cuartiles alcanzados)~~
-- ~~`PLAYBACK_COMPLETED` en `onCompletion`~~
-- ~~`PLAYBACK_INTERRUPTED` al escanear (con segundos reproducidos)~~
-- ~~Debounce de 5s entre reportes para evitar spam~~
-
-| # | Tarea | Estado | Ubicación |
-|---|-------|--------|-----------|
-| 22.3.1 | Enviar `PLAYBACK_START` con `banner_id`, `duracion_total` al iniciar reproducción | ✅ Completado | `luzapp/.../ScanActivity.kt:1233` (usa string "START") |
-| 22.3.2 | Timer periódico que calcula % reproducido y envía `PLAYBACK_PROGRESS` con cuartiles alcanzados | ✅ Completado | `luzapp/.../ScanActivity.kt:1752-1779` |
-| 22.3.3 | Enviar `PLAYBACK_COMPLETED` en `setOnCompletionListener` | ✅ Completado | `luzapp/.../ScanActivity.kt:1197,1247,1356` |
-| 22.3.4 | Enviar `PLAYBACK_INTERRUPTED` cuando el carrusel se detiene por escaneo (con segundos reproducidos) | ✅ Completado | `luzapp/.../ScanActivity.kt:1208,1370` |
-| 22.3.5 | Handler WebSocket en backend-api para eventos de reproducción | ✅ Completado | `backend-api/app/main.py` |
-| 22.3.6 | Almacenar métricas en Redis (TTL corto 600s) mientras dura la reproducción | ✅ Completado | `backend-api/app/services/device_state.py` |
-| 22.3.7 | Nuevo endpoint `POST /api/reproducciones` en backend-dashboard para ingesta de métricas | ✅ Completado | `backend-dashboard/app/routes/reproducciones.py` |
-| — | ApiService.kt: `PlaybackProgressRequest` data class + endpoint retrofitted | ✅ Completado | `luzapp/.../data/network/ApiService.kt:61-110` |
-
-### Fase 22.4 — Nuevo Modelo `ReproduccionMetrica` ✅ COMPLETADO
-
-| # | Tarea | Estado | Ubicación |
-|---|-------|--------|-----------|
-| 22.4.1 | Crear modelo `ReproduccionMetrica` con campos completos | ✅ Completado | `backend-dashboard/app/models/reproduccion_metrica.py` |
-| 22.4.2 | Migración BD: `CREATE TABLE reproducciones_metricas (...)` | ✅ Completado | SQL Server |
-
-### Fase 22.5 — Endpoint de Métricas para Dashboard ✅ COMPLETADO
-
-| # | Tarea | Estado | Ubicación |
-|---|-------|--------|-----------|
-| 22.5.1 | Endpoint `GET /api/reproducciones/resumen-diario` — retorna: `hoy {}`, `ayer {}`, `banners[]` con métricas por banner | ✅ Completado | `backend-dashboard/app/routes/reproducciones.py` |
-| 22.5.2 | Servicio `metricas_service.py` con lógica de consolidación (VCR, impresiones válidas >50%, agrupación por banner) | ✅ Completado | `backend-dashboard/app/services/metricas_service.py:11` (resumen_diario), `:98` (tendencia_14d), `:134` (consolidar_por_hora), `:162` (limpiar_metricas_antiguas) |
-
-### Fase 22.6 — Dashboard: ResumenScreen — Sección Reproducciones ✅ COMPLETADO
-
-Agregar al final del `ResumenScreen.tsx`, colapsado por defecto, con carga lazy.
-
-**A) Línea de tendencia combinada (últimos 14 días):**
-- Línea TV (estimadas) — constante, siempre más alta
-- Línea VER (válidas >50%) — variable según interrupciones
-- Recharts `LineChart` con dos líneas y tooltip
-
-**B) Tabla completa de banners (todos, paginada, ordenable):**
-| Banner | Tipo | Duración | Inicios | Válidas >50% | VCR |
-|---|---|---|---|---|---|
-| Coca-Cola | video | 15s | 1,200 | 540 | 45% |
-
-- Sin top 5 — todos los banners visibles
-- Ordenable por cualquier columna
-- Imágenes muestran "N/A" en VCR
-
-| # | Tarea | Estado | Ubicación |
-|---|-------|--------|-----------|
-| 22.6.1 | Componente `ReproductionTrendChart.tsx`: línea de tendencia 14 días TV + VER con Recharts | ✅ Completado | `dashboard/components/resumen/ReproductionTrendChart.tsx` |
-| 22.6.2 | Componente `BannerMetricsTable.tsx`: tabla completa de banners paginada y ordenable | ✅ Completado | `dashboard/components/resumen/BannerMetricsTable.tsx` |
-| 22.6.3 | Integrar sección "Reproducciones" colapsable al final de `ResumenScreen.tsx` | ✅ Completado | `dashboard/screens/ResumenScreen.tsx` |
-| 22.6.4 | Actualizar `resumenService.ts` con tipos para métricas y función `fetchReproduccionesResumenDiario()` | ✅ Completado | `dashboard/services/resumenService.ts` |
-
-### Fase 22.7 — Dashboard: Categorías en ServerDashboard ✅ COMPLETADO
-
-| # | Tarea | Estado | Ubicación |
-|---|-------|--------|-----------|
-| 22.7.1 | Agregar `tipo` al interface `DeviceStatus` en `monitoreoService.ts` | ✅ Completado | `dashboard/services/monitoreoService.ts` |
-| 22.7.2 | Badge de tipo (`TV` / `VER`) en cada dispositivo listado en ServerDashboard | ✅ Completado | `dashboard/components/ServerDashboard.tsx:661-665` |
-| 22.7.3 | Filtro por tipo (dropdown: Todos / Verificadores / Televisores) en barra de herramientas | ✅ Completado | `dashboard/components/ServerDashboard.tsx:96, 566-567` |
-| 22.7.4 | Modal para cambiar tipo de dispositivo (radio buttons: Verificador | Televisor) | ✅ Completado | `dashboard/components/ServerDashboard.tsx:1180-1254` |
-
-### Fase 22.8 — Scheduler: Cómputos Periódicos
-
-| # | Tarea | Estado | Ubicación |
-|---|-------|--------|-----------|
-| 22.8.1 | Tarea ~~`computar_metricas_televisores()` cada 3.5 min: calcular impresiones estimadas para TVs~~ | ~~No necesario —~~ TVs ya reportan eventos reales vía pipeline 22.3-22.6, el `ReproductionTrendChart` ya muestra datos reales | `backend-dashboard/app/scheduler.py` |
-| 22.8.2 | Tarea `consolidar_reproducciones_hora()` cada hora: agrupar métricas por hora para reportes | ✅ Completado | `backend-dashboard/app/scheduler.py:77-88` (como `consolidar_por_hora`) |
-| 22.8.3 | Tarea `limpiar_metricas_antiguas()` cada 24h: borrar métricas >90 días | ✅ Completado | `backend-dashboard/app/scheduler.py:91-101` |
-
-### Nota
-
-FASE 22 está completamente implementada (36/36). 22.8.1 se marcó como no necesario porque las TVs ya reportan eventos reales vía el pipeline 22.3-22.6 y el `ReproductionTrendChart` ya muestra datos reales sin necesidad de estimación. La implementación usa nombres de evento tipo `"START"`, `"PROGRESS"`, `"COMPLETED"`, `"INTERRUPTED"` (strings planas) en lugar de constantes `PLAYBACK_*`, pero la funcionalidad es idéntica al plan.
-
----
-
-## FASE 23: Análisis de Pronóstico vs Real (Impresiones Estimadas)
-
-*Prioridad: Media | Objetivo: Proveer una herramienta de análisis que compare las reproducciones estimadas (basadas en tiempo aire y duración de banners) contra las reproducciones reales reportadas, para detectar banners/TVs con bajo rendimiento.*
-
-### Problema identificado
-
-Actualmente el sistema muestra métricas reales de reproducción pero no hay forma de saber si un banner está rindiendo por debajo de lo esperado. No existe una línea base teórica contra la cual comparar.
-
-### Solución propuesta
-
-Endpoint de análisis que calcula **impresiones estimadas** por banner basándose en:
-
-- TVs online + su uptime del día (`DispositivoSesion`)
-- Banners activos asignados a cada TV (`PublicidadAsignacion`)
-- Duración de cada banner (promedio histórico desde `ReproduccionMetrica.duracion_total_seg`, con fallback 10s imagen / 15s video)
-- Cálculo: `estimado_por_banner = Σ( uptime_tv / ciclo_total )` para cada TV asignada
-
-Compara contra las reproducciones reales y retorna fill rate, gap, y desglose por banner y TV.
-
-### Tareas de FASE 23
-
-| # | Tarea | Estado | Ubicación |
-|---|-------|--------|-----------|
-| 23.1 | Endpoint `GET /api/reproducciones/analisis?fecha=` con algoritmo de estimación + respuesta con resumen, banners[] y tvs[] | ⏳ Pendiente | `backend-dashboard/app/services/metricas_service.py` + `backend-dashboard/app/routes/reproducciones.py` |
-| 23.2 | Componente frontend "Pronóstico vs Real": tabla comparativa de banners con fill rate, gap, barras visuales + desglose por TV | ⏳ Pendiente | `dashboard/components/resumen/AnalisisEstimadoSection.tsx` + `dashboard/screens/ResumenScreen.tsx` + `dashboard/services/resumenService.ts` |
-
-### Especificaciones técnicas
-
-**Endpoint:**
-```
-GET /api/reproducciones/analisis?fecha=2026-05-23
-```
-
-**Algoritmo de estimación (por TV):**
-```
-Por cada TV online en la fecha:
-  uptime = segundos con sesión activa (DispositivoSesion)
-  banners_asignados = active banners via PublicidadAsignacion o asignacion_todos
-  duraciones = [avg(ReproduccionMetrica.duracion_total_seg) por banner_id] o default
-  ciclo_total = sum(duraciones)
-  si ciclo_total > 0:
-    por cada banner: estimado += uptime / ciclo_total
-
-Por cada banner:
-  real = count(ReproduccionMetrica WHERE tipo=televisor AND banner_id=X AND fecha)
-  fill_rate = real / estimado (cap 1.0)
-  gap = estimado - real
-```
-
-**Formato de respuesta:**
-```json
-{
-  "fecha": "2026-05-23",
-  "resumen": {
-    "total_estimado": 4500,
-    "total_real": 3820,
-    "fill_rate_global": 0.85,
-    "brecha_total": 680
-  },
-  "banners": [
-    {
-      "banner_id": 3561,
-      "titulo": "Coca-Cola",
-      "tipo": "video",
-      "duracion_seg": 15.0,
-      "estimado": 1200,
-      "real": 980,
-      "fill_rate": 0.82,
-      "gap": 220
-    }
-  ],
-  "tvs": [
-    {
-      "dispositivo_id": "TV-001",
-      "nombre_amigable": "Fire TV Pasillo 3",
-      "uptime_hoy_seg": 82800,
-      "banners_asignados": 5,
-      "estimado": 900,
-      "real": 780,
-      "fill_rate": 0.87
-    }
-  ]
-}
-```
-
-**Frontend (sección colapsable en ResumenScreen):**
-
-Layout:
-```
-┌──────────────────────────────────────────────────────┐
-│  📊 Pronóstico vs Real  [▼ colapsar]  [🗓 fecha]     │
-├──────────────────────────────────────────────────────┤
-│  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐             │
-│  │ 4500 │  │ 3820 │  │ 85%  │  │ +680 │             │
-│  │ Estim│  │ Real │  │ Fill │  │ Gap  │             │
-│  └──────┘  └──────┘  └──────┘  └──────┘             │
-├──────────────────────────────────────────────────────┤
-│  Tabla banners (ordenable por fill rate):            │
-│  Banner     │ Dur │ Estim │ Real │ Fill │ Gap        │
-│  Coca-Cola  │ 15s │ 1200  │ 980  │ ████░ 82% │ 220  │
-│  ...                                                 │
-├──────────────────────────────────────────────────────┤
-│  ▶ Ver desglose por TV (expandible)                  │
-│  TV-001 Fire TV Pasillo 3  │ 900 │ 780 │ █████ 87%  │
-└──────────────────────────────────────────────────────┘
-```
-
-### Archivos a modificar/crear
-
-| Archivo | Acción |
-|---------|--------|
-| `backend-dashboard/app/services/metricas_service.py` | ✚ Nueva función `analisis_estimado(db, fecha)` — algoritmo completo de estimación |
-| `backend-dashboard/app/routes/reproducciones.py` | ✚ Nuevo endpoint `GET /analisis` — response model + llamada a servicio |
-| `dashboard/services/resumenService.ts` | ✎ Tipos `AnalisisEstimado`, `BannerAnalisis`, `TvAnalisis` + `fetchAnalisisEstimado(fecha)` |
-| `dashboard/components/resumen/AnalisisEstimadoSection.tsx` | ✚ **Nuevo** — sección completa: KPIs, tabla banners, desglose TVs |
-| `dashboard/screens/ResumenScreen.tsx` | ✎ Agregar sección colapsable "Pronóstico vs Real" al final |
-
-### Consideraciones
-
-| Aspecto | Detalle |
-|---------|---------|
-| **Precisión** | Limitada por falta de `DuracionSeg` en Publicidad. Usa promedio histórico de `duracion_total_seg` reportado por dispositivos. Default: 10s imagen, 15s video |
-| **Ciclo carrusel** | Asume round-robin simple. No considera prioridades ni pesos |
-| **Performance** | Cálculo on-demand (sin scheduler). Consultas agregadas indexadas |
-| **Mejora futura** | Si se necesita mayor precisión, agregar columna `DuracionSeg` a `Publicidad` + formulario en dashboard + schema en backend-api |
-| **Sin almacenamiento** | No se persisten las estimaciones — se calculan en cada request
+## Orden de Implementación
+
+1. Crear `backend-api/app/models/reproduccion_metrica.py`
+2. Crear `backend-api/app/services/metricas_locales.py`
+3. Crear `backend-api/app/services/sync_metrics.py`
+4. Modificar `backend-api/app/main.py` (registrar workers, eliminar forward batch)
+5. Crear `backend-dashboard/app/models/metricas_por_sede.py`
+6. Crear `backend-dashboard/app/routes/reproducciones_sync.py`
+7. Modificar `backend-dashboard/app/services/metricas_service.py`
+8. Modificar `backend-dashboard/app/routes/reproducciones.py`
+9. Modificar `backend-dashboard/app/database.py` (pool 5/5/5)
+10. Modificar `backend-dashboard/app/scheduler.py` (eliminar jobs 6-9)
+11. Eliminar archivos huérfanos (bulk_metrics.py, metrics_redis.py, reproduccion_metrica.py, metricas_diarias.py)
+12. Ejecutar DROP TABLE en SQL Server dashboard
+13. Rebuildear docker-compose

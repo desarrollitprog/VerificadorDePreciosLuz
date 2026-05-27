@@ -78,15 +78,8 @@ async def sincronizar_metricas(servidor_id: int):
                 resp = await client.post(SYNC_URL, json=payload)
 
             if resp.status_code == 200:
-                async with AsyncSessionLocalPublicidad() as db:
-                    stmt_del = (
-                        ReproduccionMetricaSede.__table__.delete()
-                        .where(ReproduccionMetricaSede.fecha_creacion >= inicio_utc)
-                    )
-                    await db.execute(stmt_del)
-                    await db.commit()
                 logger.info(
-                    f"[SyncMetrics] Sincronizados y limpiados {len(banners)} banners "
+                    f"[SyncMetrics] Sincronizados {len(banners)} banners "
                     f"de servidor {servidor_id}"
                 )
             else:

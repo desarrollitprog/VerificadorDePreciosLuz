@@ -8,7 +8,7 @@ import DeviceStatusChart from '../components/resumen/DeviceStatusChart';
 import BannersTimeline from '../components/resumen/BannersTimeline';
 import ServerMiniTable from '../components/resumen/ServerMiniTable';
 import ReproductionTrendChart from '../components/resumen/ReproductionTrendChart';
-import SedeMetricsTable from '../components/resumen/SedeMetricsTable';
+import MetricasTable from '../components/resumen/MetricasTable';
 
 export const ResumenScreen: React.FC = () => {
   const [data, setData] = useState<ResumenData | null>(null);
@@ -180,7 +180,7 @@ export const ResumenScreen: React.FC = () => {
                 <div className="space-y-4">
                   {reproData && <ReproductionTrendChart data={reproData.tendencia_14d} />}
                   {porSedeData ? (
-                    <SedeMetricsTable data={porSedeData.sedes} />
+                    <MetricasTable data={porSedeData.sedes} />
                   ) : (
                     <p className="text-slate-500 dark:text-slate-400 text-sm">Error al cargar métricas por sede</p>
                   )}

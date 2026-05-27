@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import text
 from app.database import AsyncSessionLocalUsuarios
 from app.models.publicidad import Publicidad
+from app.models.metricas_por_sede import MetricasPorSede
 from app.utils.logger import StructuredLogger
 from sqlalchemy import select
 
@@ -107,4 +108,24 @@ async def cleanup_orphan_files() -> int:
         return removed
     except Exception as e:
         log.error("cleanup_orphan_files_error", error=str(e))
+        return 0
+
+
+async def cleanup_old_metricas() -> int:
+    """
+    Bot 4: Elimina métricas por sede con más de 15 días de antigüedad.
+    Retorna cantidad de filas eliminadas.
+    """
+    try:
+        async with AsyncSessionLocalUsuarios() as db:
+            cutoff = (datetime.now(timezone(timedelta(hours=-4))).replace(tzinfo=None) - timedelta(days=15)).date()
+            stmt = MetricasPorSede.__table__.delete().where(MetricasPorSede.fecha < cutoff)
+            result = await db.execute(stmt)
+            await db.commit()
+            deleted = result.rowcount
+            if deleted > 0:
+                log.info("cleanup_old_metricas", deleted=deleted, cutoff=cutoff.isoformat())
+            return deleted
+    except Exception as e:
+        log.error("cleanup_old_metricas_error", error=str(e))
         return 0

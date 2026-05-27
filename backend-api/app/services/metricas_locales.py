@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
@@ -60,8 +60,28 @@ def _merge_eventos(eventos: list[dict]) -> dict | None:
     return resultados
 
 
+DIAS_CLEANUP = 15
+
+
+async def limpiar_metricas_viejas():
+    """Elimina registros de reproducciones_metricas_sede con más de 15 días."""
+    try:
+        cutoff = datetime.utcnow() - timedelta(days=DIAS_CLEANUP)
+        async with AsyncSessionLocalPublicidad() as db:
+            stmt = ReproduccionMetricaSede.__table__.delete().where(
+                ReproduccionMetricaSede.fecha_creacion < cutoff
+            )
+            result = await db.execute(stmt)
+            await db.commit()
+            if result.rowcount > 0:
+                logger.info(f"[Cleanup] Eliminadas {result.rowcount} métricas viejas (> {DIAS_CLEANUP} días)")
+    except Exception as e:
+        logger.error(f"[Cleanup] Error limpiando métricas viejas: {e}")
+
+
 async def insertar_reproducciones_locales(reproducciones_redis):
     """Worker que cada 60s lee Redis, mergea en memoria e INSERTA localmente."""
+    await limpiar_metricas_viejas()
     while True:
         try:
             await asyncio.sleep(INTERVALO_SEGUNDOS)

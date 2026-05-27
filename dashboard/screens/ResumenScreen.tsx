@@ -8,7 +8,6 @@ import DeviceStatusChart from '../components/resumen/DeviceStatusChart';
 import BannersTimeline from '../components/resumen/BannersTimeline';
 import ServerMiniTable from '../components/resumen/ServerMiniTable';
 import ReproductionTrendChart from '../components/resumen/ReproductionTrendChart';
-import BannerMetricsTable from '../components/resumen/BannerMetricsTable';
 import SedeMetricsTable from '../components/resumen/SedeMetricsTable';
 
 export const ResumenScreen: React.FC = () => {
@@ -178,31 +177,20 @@ export const ResumenScreen: React.FC = () => {
                     </span>
                   )}
                 </div>
-                {reproData ? (
-                  <div className="space-y-4">
-                    <ReproductionTrendChart data={reproData.tendencia_14d} />
-                    <BannerMetricsTable data={reproData.resumen.banners} />
-                  </div>
-                ) : (
-                  <p className="text-slate-500 dark:text-slate-400 text-sm">Error al cargar datos</p>
-                )}
+                <div className="space-y-4">
+                  {reproData && <ReproductionTrendChart data={reproData.tendencia_14d} />}
+                  {porSedeData ? (
+                    <SedeMetricsTable data={porSedeData.sedes} />
+                  ) : (
+                    <p className="text-slate-500 dark:text-slate-400 text-sm">Error al cargar métricas por sede</p>
+                  )}
+                </div>
               </div>
             </div>
           </div>
 
           <div className="stagger-5">
             <ServerMiniTable data={data.servidores_detalle} />
-          </div>
-
-          {/* Tabla por sede */}
-          <div className="stagger-5">
-            {porSedeData ? (
-              <SedeMetricsTable data={porSedeData.sedes} />
-            ) : (
-              <div className="bg-white dark:bg-[#1c2936] rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden p-5">
-                <p className="text-slate-500 dark:text-slate-400 text-sm">Cargando métricas por sede...</p>
-              </div>
-            )}
           </div>
         </>
       )}

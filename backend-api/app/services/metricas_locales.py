@@ -145,21 +145,42 @@ async def insertar_reproducciones_locales(reproducciones_redis, device_state_sto
                         except IntegrityError:
                             await db.rollback()
                             try:
-                                stmt = (
+                                # Merge no-destructivo: solo mejorar, nunca empeorar
+                                stmt_sel = (
+                                    select(
+                                        ReproduccionMetricaSede.completo,
+                                        ReproduccionMetricaSede.cuartil_50,
+                                        ReproduccionMetricaSede.segundos_reproducidos,
+                                    )
+                                    .where(
+                                        ReproduccionMetricaSede.reproduccion_id
+                                        == row["reproduccion_id"]
+                                    )
+                                )
+                                result = await db.execute(stmt_sel)
+                                existing = result.fetchone()
+                                if existing is None:
+                                    ok += 1
+                                    continue
+
+                                merged = {
+                                    "completo": existing.completo or row["completo"],
+                                    "cuartil_50": existing.cuartil_50 or row["cuartil_50"],
+                                    "segundos_reproducidos": max(
+                                        (existing.segundos_reproducidos or 0),
+                                        (row["segundos_reproducidos"] or 0),
+                                    ) or None,
+                                }
+
+                                stmt_upd = (
                                     update(ReproduccionMetricaSede)
                                     .where(
                                         ReproduccionMetricaSede.reproduccion_id
                                         == row["reproduccion_id"]
                                     )
-                                    .values(
-                                        completo=row["completo"],
-                                        cuartil_50=row["cuartil_50"],
-                                        segundos_reproducidos=row[
-                                            "segundos_reproducidos"
-                                        ],
-                                    )
+                                    .values(**merged)
                                 )
-                                await db.execute(stmt)
+                                await db.execute(stmt_upd)
                                 await db.flush()
                                 ok += 1
                             except Exception:

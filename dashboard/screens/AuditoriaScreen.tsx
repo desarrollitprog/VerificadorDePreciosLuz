@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Search, Filter, ChevronLeft, ChevronRight, Calendar, Server, Monitor, Clock, X, ChevronDown, ChevronUp, User, RotateCcw, Check, Circle, Download, XCircle } from 'lucide-react';
-import { getAuditoria, markNotificacionRead, exportAuditoriaPDF, AuditoriaItem, AuditoriaFiltros } from '../services/auditoriaService';
+import { getAuditoria, getAuditoriaTipos, markNotificacionRead, exportAuditoriaPDF, AuditoriaItem, AuditoriaFiltros } from '../services/auditoriaService';
 import { getServersStatus } from '../services/monitoreoService';
 import { useNotification } from '../components/useNotification';
 import { TableSkeleton } from '../components/TableSkeleton';
@@ -56,13 +56,53 @@ function formatDate(dateStr: string | null): string {
   });
 }
 
+const TIPO_LABELS: Record<string, string> = {
+  'CONEXION_DISPOSITIVO': 'Conexión',
+  'DESCONEXION_DISPOSITIVO': 'Desconexión',
+  'SUBIDA_MULTIMEDIA': 'Subida Multimedia',
+  'SUBIDA_MULTIMEDIA_BATCH': 'Subida Multimedia (Lote)',
+  'BORRADO_MULTIMEDIA': 'Borrado Multimedia',
+  'CAMBIO_ESTADO_MULTIMEDIA': 'Cambio Estado Multimedia',
+  'EDICION_VIGENCIA_MULTIMEDIA': 'Edición Vigencia',
+  'ASIGNAR_PUBLICIDAD': 'Asignar Publicidad',
+  'ERROR_REPLICACION_ASIGNACION': 'Error Replicación',
+  'SINCRONIZAR_PUBLICIDADES': 'Sincronizar Publicidades',
+  'SINCRONIZACION_FORZADA': 'Sincronización Forzada',
+  'SINCRONIZACION_SELECTIVA': 'Sincronización Selectiva',
+  'SYNC_FAILED': 'Sincronización Fallida',
+  'PLAYBACK_FAILED': 'Reproducción Fallida',
+  'COMANDO_ENCOLADO': 'Comando Encolado',
+  'SINCRONIZACION_COMPLETADA': 'Sincronización Completada',
+  'BANNER_INICIADO': 'Banner Iniciado',
+  'BANNER_FINALIZADO': 'Banner Finalizado',
+  'CAMBIO_ESTADO_SERVIDOR': 'Cambio Estado Servidor',
+  'ALERTA_SERVIDOR': 'Alerta Servidor',
+  'RENOMBRAR_SERVIDOR': 'Renombrar Servidor',
+  'ELIMINAR_SERVIDOR': 'Eliminar Servidor',
+  'RENOMBRAR_DISPOSITIVO': 'Renombrar Dispositivo',
+  'ELIMINAR_DISPOSITIVO': 'Eliminar Dispositivo',
+  'REINICIAR_DISPOSITIVO': 'Reiniciar Dispositivo',
+  'REINICIAR_DISPOSITIVO_FALLO': 'Reinicio Fallido',
+  'PURGA_DISPOSITIVO': 'Purga Dispositivo',
+  'PURGA_DISPOSITIVO_FALLO': 'Purga Fallida',
+  'PROGRAMAR_REINICIO_MASIVO': 'Reinicio Masivo',
+  'CREAR_USUARIO': 'Crear Usuario',
+  'ACTUALIZAR_USUARIO': 'Actualizar Usuario',
+  'BORRAR_USUARIO': 'Borrar Usuario',
+  'PUBLICIDAD_VENCIDA': 'Publicidad Vencida',
+};
+
+function getTipoLabel(tipo: string): string {
+  return TIPO_LABELS[tipo] || tipo.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
 function getTypeBadge(tipo: string) {
   const tipoUpper = tipo.toUpperCase();
   
-  if (tipoUpper.includes('DESCONEXION') || tipoUpper.includes('SESION_CERRADA')) {
+  if (tipoUpper.includes('DESCONEXION')) {
     return { label: 'Desconexión', classes: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' };
   }
-  if (tipoUpper.includes('CONEXION') || tipoUpper.includes('SESION_ACTIVA')) {
+  if (tipoUpper.includes('CONEXION')) {
     return { label: 'Conexión', classes: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' };
   }
   if (tipoUpper.includes('SYNC') || tipoUpper.includes('SINCRONIZACION')) {
@@ -101,6 +141,9 @@ export const AuditoriaScreen: React.FC = () => {
   const [servidorFiltro, setServidorFiltro] = useState('');
   const [servidores, setServidores] = useState<ServidorOption[]>([]);
   const [showFilters, setShowFilters] = useState(false);
+  const [tipos, setTipos] = useState<string[]>([]);
+  const [tipoOpen, setTipoOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const fetchAuditoria = async (pageNum: number = 1) => {
     setLoading(true);
@@ -138,6 +181,16 @@ export const AuditoriaScreen: React.FC = () => {
     getServersStatus()
       .then((data) => setServidores(data.map((s) => ({ id: s.id, nombre: s.nombre, ip: s.ip }))))
       .catch(() => {});
+    getAuditoriaTipos().then(setTipos).catch(() => setTipos([]));
+  }, []);
+
+  useEffect(() => {
+    const f = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node))
+        setTipoOpen(false);
+    };
+    document.addEventListener('mousedown', f);
+    return () => document.removeEventListener('mousedown', f);
   }, []);
 
   const handleRefresh = () => {
@@ -273,20 +326,39 @@ export const AuditoriaScreen: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
                 <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Tipo de Evento</label>
-                <select
-                  value={tipoFiltro}
-                  onChange={(e) => setTipoFiltro(e.target.value)}
-                  className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary"
-                >
-                  <option value="">Todos</option>
-                  <option value="CONEXION_DISPOSITIVO">Conexión</option>
-                  <option value="DESCONEXION_DISPOSITIVO">Desconexión</option>
-                  <option value="SESION_ACTIVA">Sesión Activa</option>
-                  <option value="SESION_CERRADA">Sesión Cerrada</option>
-                  <option value="SINCRONIZACION_FORZADA">Sincronización Forzada</option>
-                  <option value="RENOMBRAR_DISPOSITIVO">Renombrar Dispositivo</option>
-                  <option value="RENOMBRAR_SERVIDOR">Renombrar Servidor</option>
-                </select>
+                <div className="relative" ref={dropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setTipoOpen(!tipoOpen)}
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-left flex items-center justify-between gap-2 focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <span className="truncate">{tipoFiltro ? getTipoLabel(tipoFiltro) : 'Todos'}</span>
+                    <ChevronDown size={14} className={`shrink-0 transition-transform ${tipoOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  {tipoOpen && (
+                    <div className="absolute z-50 mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg overflow-hidden">
+                      <div className="max-h-60 overflow-y-auto">
+                        <button
+                          type="button"
+                          onClick={() => { setTipoFiltro(''); setTipoOpen(false); }}
+                          className={`w-full px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-700 ${!tipoFiltro ? 'bg-primary/10 text-primary font-medium' : ''}`}
+                        >
+                          Todos
+                        </button>
+                        {tipos.map(t => (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => { setTipoFiltro(t); setTipoOpen(false); }}
+                            className={`w-full px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-700 ${tipoFiltro === t ? 'bg-primary/10 text-primary font-medium' : ''}`}
+                          >
+                            {getTipoLabel(t)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">

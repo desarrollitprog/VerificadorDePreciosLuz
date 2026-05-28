@@ -58,6 +58,11 @@ export async function markNotificacionRead(notificacionId: number): Promise<{ su
   return response.data;
 }
 
+export async function getAuditoriaTipos(): Promise<string[]> {
+  const response = await api.get('/auditoria/tipos');
+  return (response.data as { success: boolean; tipos: string[] }).tipos;
+}
+
 export async function exportAuditoriaPDF(filtros: AuditoriaFiltros = {}): Promise<Blob> {
   const params = new URLSearchParams();
 

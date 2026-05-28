@@ -198,10 +198,10 @@ async def _periodic_banner_cleanup():
 
 
 async def _run_local_insert():
-    """Wrapper que pasa la referencia de reproducciones_redis al worker local."""
+    """Wrapper que pasa las referencias al worker local."""
     from app.services.metricas_locales import insertar_reproducciones_locales
-    global reproducciones_redis
-    await insertar_reproducciones_locales(reproducciones_redis)
+    global reproducciones_redis, device_state_store
+    await insertar_reproducciones_locales(reproducciones_redis, device_state_store)
 
 
 async def _notify_banners_started():

@@ -14,6 +14,18 @@ def get_venezuela_now() -> datetime:
     return datetime.now(TZ_VENEZUELA).replace(tzinfo=None)
 
 
+async def _sum_by_tipo(db: AsyncSession, target_date: date, tipo: str, col):
+    """Suma una columna para un tipo_dispositivo específico en una fecha."""
+    stmt = select(
+        func.coalesce(func.sum(col), 0)
+    ).where(
+        MetricasPorSede.fecha == target_date,
+        MetricasPorSede.tipo_dispositivo == tipo,
+    )
+    row = (await db.execute(stmt)).scalar()
+    return row or 0
+
+
 async def resumen_diario(db: AsyncSession, target_date: date) -> dict:
     stmt_totals = select(
         func.coalesce(func.sum(MetricasPorSede.reproducciones), 0).label("total_eventos"),
@@ -23,23 +35,8 @@ async def resumen_diario(db: AsyncSession, target_date: date) -> dict:
     ).where(MetricasPorSede.fecha == target_date)
     totals = (await db.execute(stmt_totals)).one()
 
-    stmt_totals_tipo = select(
-        MetricasPorSede.tipo_dispositivo,
-        func.coalesce(func.sum(MetricasPorSede.validas_50), 0).label("validas"),
-    ).where(
-        MetricasPorSede.fecha == target_date
-    ).group_by(
-        MetricasPorSede.tipo_dispositivo,
-    )
-    rows_tipo = (await db.execute(stmt_totals_tipo)).all()
-
-    ver_total = 0
-    tv_total = 0
-    for r in rows_tipo:
-        if r.tipo_dispositivo == "televisor":
-            tv_total = r.validas or 0
-        else:
-            ver_total = r.validas or 0
+    ver_validas = await _sum_by_tipo(db, target_date, "verificador", MetricasPorSede.validas_50)
+    tv_validas = await _sum_by_tipo(db, target_date, "televisor", MetricasPorSede.validas_50)
 
     stmt_banners = select(
         MetricasPorSede.titulo,
@@ -71,8 +68,8 @@ async def resumen_diario(db: AsyncSession, target_date: date) -> dict:
         "total_eventos": total,
         "inicios": total,
         "validas_50": validas,
-        "ver_total": ver_total,
-        "tv_total": tv_total,
+        "ver_total": ver_validas,
+        "tv_total": tv_validas,
         "banners": banners,
     }
 
@@ -132,25 +129,11 @@ async def tendencia_14d(db: AsyncSession, hasta: date) -> list[dict]:
     results = []
     for i in range(14):
         dia = desde + timedelta(days=i)
-        stmt = select(
-            MetricasPorSede.tipo_dispositivo,
-            func.coalesce(func.sum(MetricasPorSede.validas_50), 0).label("validas"),
-        ).where(
-            MetricasPorSede.fecha == dia
-        ).group_by(
-            MetricasPorSede.tipo_dispositivo,
-        )
-        rows = (await db.execute(stmt)).all()
-        ver_validas = 0
-        tv_estimadas = 0
-        for r in rows:
-            if r.tipo_dispositivo == "televisor":
-                tv_estimadas = r.validas or 0
-            else:
-                ver_validas = r.validas or 0
+        ver_validas = await _sum_by_tipo(db, dia, "verificador", MetricasPorSede.validas_50)
+        tv_validas = await _sum_by_tipo(db, dia, "televisor", MetricasPorSede.validas_50)
         results.append({
             "fecha": dia.isoformat(),
-            "tv_estimadas": tv_estimadas,
+            "tv_estimadas": tv_validas,
             "ver_validas": ver_validas,
         })
     return results

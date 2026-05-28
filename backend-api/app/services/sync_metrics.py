@@ -36,6 +36,7 @@ async def sincronizar_metricas(servidor_id: int):
                     select(
                         ReproduccionMetricaSede.banner_id,
                         ReproduccionMetricaSede.titulo,
+                        ReproduccionMetricaSede.tipo_dispositivo,
                         func.count(ReproduccionMetricaSede.id).label("reproducciones"),
                         func.sum(
                             cast(ReproduccionMetricaSede.completo, Integer)
@@ -51,6 +52,7 @@ async def sincronizar_metricas(servidor_id: int):
                     .group_by(
                         ReproduccionMetricaSede.banner_id,
                         ReproduccionMetricaSede.titulo,
+                        ReproduccionMetricaSede.tipo_dispositivo,
                     )
                 )
                 rows = (await db.execute(stmt)).all()
@@ -58,6 +60,7 @@ async def sincronizar_metricas(servidor_id: int):
                     banners.append({
                         "banner_id": row.banner_id,
                         "titulo": row.titulo or "Sin título",
+                        "tipo_dispositivo": row.tipo_dispositivo or "verificador",
                         "reproducciones": row.reproducciones or 0,
                         "completados": row.completados or 0,
                         "validas_50": row.validas_50 or 0,

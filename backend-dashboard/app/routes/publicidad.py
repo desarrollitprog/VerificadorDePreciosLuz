@@ -676,8 +676,8 @@ async def eliminar_banner(
         await db.commit()
         user_id = current_user.get("user_id")
         if user_id is not None:
-            disp_id = dispositivo_ids[0] if dispositivo_ids else None
-            srv_id = servidor_ids[0] if servidor_ids else None
+            disp_id = dispositivo_ids[0] if dispositivo_ids else "*"
+            srv_id = servidor_ids[0] if servidor_ids else 0
             await registrar_accion(db, user_id, "BORRADO_MULTIMEDIA", descripcion_audit, dispositivo_id=disp_id, servidor_id=srv_id)
         return {"success": True, "message": "Banner eliminado correctamente."}
     except HTTPException:
@@ -1041,9 +1041,12 @@ async def asignar_banner_a_dispositivos(
         
         user_id = current_user.get("user_id")
         if user_id is not None:
+            asig_disp_id = asignaciones[0].dispositivo_id if asignaciones and asignaciones[0].dispositivo_id else "*"
+            asig_srv_id = asignaciones[0].servidor_id if asignaciones and asignaciones[0].servidor_id else 0
             await registrar_accion(
                 db, user_id, "ASIGNAR_PUBLICIDAD",
-                f"Publicidades asignadas a dispositivos: IdBanner={id}"
+                f"Publicidades asignadas a dispositivos: IdBanner={id}",
+                dispositivo_id=asig_disp_id, servidor_id=asig_srv_id,
             )
         
         return {"success": True, "resultados": resultados}

@@ -3121,6 +3121,11 @@ async def recibir_progreso_reproduccion(body: PlaybackProgressRequest):
             import json
             item = body.model_dump()
             item["_ts"] = datetime.now(timezone.utc).isoformat()
+            if device_state_store is not None:
+                tipo_disp = await device_state_store.get_device_type(body.dispositivo_id)
+                item["tipo_dispositivo"] = tipo_disp or "verificador"
+            else:
+                item["tipo_dispositivo"] = "verificador"
             await reproducciones_redis.rpush("reproducciones:pending", json.dumps(item))
             await reproducciones_redis.expire("reproducciones:pending", 28800)
         return {"success": True}

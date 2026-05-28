@@ -23,6 +23,24 @@ async def resumen_diario(db: AsyncSession, target_date: date) -> dict:
     ).where(MetricasPorSede.fecha == target_date)
     totals = (await db.execute(stmt_totals)).one()
 
+    stmt_totals_tipo = select(
+        MetricasPorSede.tipo_dispositivo,
+        func.coalesce(func.sum(MetricasPorSede.validas_50), 0).label("validas"),
+    ).where(
+        MetricasPorSede.fecha == target_date
+    ).group_by(
+        MetricasPorSede.tipo_dispositivo,
+    )
+    rows_tipo = (await db.execute(stmt_totals_tipo)).all()
+
+    ver_total = 0
+    tv_total = 0
+    for r in rows_tipo:
+        if r.tipo_dispositivo == "televisor":
+            tv_total = r.validas or 0
+        else:
+            ver_total = r.validas or 0
+
     stmt_banners = select(
         MetricasPorSede.titulo,
         func.coalesce(func.sum(MetricasPorSede.reproducciones), 0).label("inicios"),
@@ -53,8 +71,8 @@ async def resumen_diario(db: AsyncSession, target_date: date) -> dict:
         "total_eventos": total,
         "inicios": total,
         "validas_50": validas,
-        "ver_total": 0,
-        "tv_total": 0,
+        "ver_total": ver_total,
+        "tv_total": tv_total,
         "banners": banners,
     }
 
@@ -115,12 +133,24 @@ async def tendencia_14d(db: AsyncSession, hasta: date) -> list[dict]:
     for i in range(14):
         dia = desde + timedelta(days=i)
         stmt = select(
+            MetricasPorSede.tipo_dispositivo,
             func.coalesce(func.sum(MetricasPorSede.validas_50), 0).label("validas"),
-        ).where(MetricasPorSede.fecha == dia)
-        row = (await db.execute(stmt)).one()
+        ).where(
+            MetricasPorSede.fecha == dia
+        ).group_by(
+            MetricasPorSede.tipo_dispositivo,
+        )
+        rows = (await db.execute(stmt)).all()
+        ver_validas = 0
+        tv_estimadas = 0
+        for r in rows:
+            if r.tipo_dispositivo == "televisor":
+                tv_estimadas = r.validas or 0
+            else:
+                ver_validas = r.validas or 0
         results.append({
             "fecha": dia.isoformat(),
-            "tv_estimadas": 0,
-            "ver_validas": row.validas or 0,
+            "tv_estimadas": tv_estimadas,
+            "ver_validas": ver_validas,
         })
     return results

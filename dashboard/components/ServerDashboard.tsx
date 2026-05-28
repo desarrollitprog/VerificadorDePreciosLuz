@@ -1082,7 +1082,7 @@ export function ServerDashboard() {
                   onDispositivoChange={handleRestartDispositivoChange}
                   expandedServidores={scheduleRestartModal.expandedServidores}
                   onToggleExpand={handleRestartToggleExpand}
-                  label="Seleccionar servidores para reinicio:"
+                  label="Seleccionar sedes para reinicio:"
                   maxHeight="max-h-64"
                   accentColor="#3b82f6"
                 />

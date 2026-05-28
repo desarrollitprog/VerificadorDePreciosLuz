@@ -120,6 +120,14 @@ class DeviceStateStore:
             logger.error(f"[Redis] get_all_status falló definitivamente: {e}")
             return {}
 
+    async def get_device_type(self, device_id: str) -> str | None:
+        """Obtiene el tipo de dispositivo desde Redis, o None si no existe."""
+        key = f"device:state:{device_id}"
+        data = await self.redis.hgetall(key)
+        if data:
+            return data.get("device_type") or "verificador"
+        return None
+
     async def update_playing_content(self, device_id: str, content: dict | None) -> None:
         async def _do_update():
             key = f"device:playing:{device_id}"

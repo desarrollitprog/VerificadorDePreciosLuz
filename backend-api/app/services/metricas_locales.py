@@ -41,6 +41,7 @@ def _merge_eventos(eventos: list[dict]) -> dict | None:
                     "completo": ev.get("completo") or tipo == "COMPLETED",
                     "cuartil_50": ev.get("cuartil_50") or False,
                     "segundos_reproducidos": ev.get("segundos_reproducidos"),
+                    "tipo_dispositivo": ev.get("tipo_dispositivo", "verificador"),
                     "fecha_creacion": datetime.utcnow(),
                 }
             else:

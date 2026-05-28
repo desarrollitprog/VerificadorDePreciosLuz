@@ -1020,31 +1020,22 @@ export const DashboardScreen: React.FC = () => {
                                  </span>
                                </div>
                              ))}
+                              {expandedCardId === video.id && video.asignaciones && video.asignaciones.slice(3).map((asig: any, idx: number) => (
+                                <div key={idx} className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                                  <Smartphone size={10} />
+                                  <span className="truncate">
+                                    {asig.dispositivo_nombre || asig.dispositivo_codigo || 'Dispositivo'} - {asig.servidor_nombre || 'Servidor'}
+                                  </span>
+                                </div>
+                              ))}
                               {video.asignaciones && video.asignaciones.length > 3 && (
-                                <button 
-                                  onClick={(e) => {
-                                    const isExpanding = expandedCardId !== video.id;
-                                    setExpandedCardId(isExpanding ? video.id : null);
-                                    if (isExpanding) {
-                                      const btn = e.currentTarget;
-                                      setTimeout(() => {
-                                        btn.scrollIntoView({ behavior: 'smooth', block: 'end' });
-                                      }, 100);
-                                    }
-                                  }}
-                                  className="text-xs text-primary hover:underline font-medium"
-                                >
-                                  {expandedCardId === video.id ? 'Ver menos' : `Ver más (${video.asignaciones.length - 3})`}
-                                </button>
-                              )}
-                             {expandedCardId === video.id && video.asignaciones && video.asignaciones.slice(3).map((asig: any, idx: number) => (
-                               <div key={idx} className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1">
-                                 <Smartphone size={10} />
-                                 <span className="truncate">
-                                   {asig.dispositivo_nombre || asig.dispositivo_codigo || 'Dispositivo'} - {asig.servidor_nombre || 'Servidor'}
-                                 </span>
-                               </div>
-                             ))}
+                                 <button 
+                                   onClick={() => setExpandedCardId(expandedCardId === video.id ? null : video.id)}
+                                   className="text-xs text-primary hover:underline font-medium"
+                                 >
+                                   {expandedCardId === video.id ? 'Ver menos' : `Ver más (${video.asignaciones.length - 3})`}
+                                 </button>
+                               )}
                              {(!video.asignaciones || video.asignaciones.length === 0) && (
                                <p className="text-xs text-slate-400 italic">Sin asignaciones específicas</p>
                              )}

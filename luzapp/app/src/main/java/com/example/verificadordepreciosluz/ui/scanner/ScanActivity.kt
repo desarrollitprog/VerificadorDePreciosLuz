@@ -1121,6 +1121,12 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         if (standbyIndex >= standbyItems.size) standbyIndex = 0
         val item = standbyItems[standbyIndex]
         Log.d(TAG, "playStandbyItem: item=${item.id} tipo=${item.tipo} fechaInicioMs=${item.fechaInicioMs} localPath=${item.localPath}")
+
+        // Guard anti-duplicado: evitar doble inicio del mismo banner
+        if (reproduccionIdActual != null && ultimoBannerId == item.id) {
+            Log.w(TAG, "playStandbyItem: llamada duplicada para banner ${item.id}, ignorando")
+            return
+        }
         
         // FASE 7.3: Validar vigencia - skip banners no vigentes
         val now = System.currentTimeMillis()

@@ -101,8 +101,8 @@ class PlayerManager(
 
     fun release() {
         cancelRecoveryWatchdog()
-        exoPlayer?.stop()
         exoPlayer?.removeListener(playerListener)
+        exoPlayer?.stop()
         exoPlayer?.release()
         exoPlayer = null
         playerView.player = null

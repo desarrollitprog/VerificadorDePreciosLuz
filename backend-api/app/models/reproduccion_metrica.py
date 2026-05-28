@@ -14,5 +14,5 @@ class ReproduccionMetricaSede(BasePublicidad):
     completo = Column(Boolean, default=False)
     cuartil_50 = Column(Boolean, default=False)
     segundos_reproducidos = Column(Float, nullable=True)
-    tipo_dispositivo = Column(String(20), nullable=True)
+    tipo_dispositivo = Column(String(20), nullable=False, default="verificador")
     fecha_creacion = Column(DateTime, default=datetime.utcnow)

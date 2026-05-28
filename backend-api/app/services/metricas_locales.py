@@ -94,7 +94,9 @@ async def _enriquecer_con_tipo_dispositivo(rows: list[dict], device_state_store)
 
     for r in rows:
         did = r.get("dispositivo_id", "")
-        r["tipo_dispositivo"] = tipo_cache.get(did, "verificador")
+        tipo = tipo_cache.get(did)
+        if tipo is not None:
+            r["tipo_dispositivo"] = tipo
 
 
 async def insertar_reproducciones_locales(reproducciones_redis, device_state_store=None):

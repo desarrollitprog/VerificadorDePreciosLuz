@@ -62,8 +62,10 @@ async def cambiar_tipo_dispositivo(
     await registrar_accion(
         db,
         usuario_id=user_id,
-        tipo="auditoria",
+        tipo="CAMBIAR_TIPO_DISPOSITIVO",
         descripcion=f"Tipo de dispositivo {device_id} cambiado a {body.tipo}",
+        dispositivo_id=device_id,
+        servidor_id=dispositivo.servidor_id,
     )
     return {"success": True, "device_id": device_id, "tipo": body.tipo}
 

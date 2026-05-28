@@ -120,6 +120,14 @@ class DeviceStateStore:
             logger.error(f"[Redis] get_all_status falló definitivamente: {e}")
             return {}
 
+    async def get_device_type(self, device_id: str) -> str | None:
+        """Obtiene el tipo de dispositivo desde Redis, o None si no existe."""
+        key = f"device:state:{device_id}"
+        data = await self.redis.hgetall(key)
+        if data:
+            return data.get("device_type") or "verificador"
+        return None
+
     async def update_playing_content(self, device_id: str, content: dict | None) -> None:
         async def _do_update():
             key = f"device:playing:{device_id}"
@@ -148,6 +156,20 @@ class DeviceStateStore:
         except Exception as e:
             logger.error(f"[Redis] get_playing_content({device_id}) falló: {e}")
             return None
+
+    async def get_device_type(self, device_id: str) -> str:
+        async def _do_get():
+            key = f"device:state:{device_id}"
+            data = await self.redis.hgetall(key)
+            if data:
+                return data.get("device_type") or "verificador"
+            return "verificador"
+
+        try:
+            return await self._retry_operation(_do_get, operation_name=f"get_device_type({device_id})")
+        except Exception as e:
+            logger.error(f"[Redis] get_device_type({device_id}) falló: {e}")
+            return "verificador"
 
     async def remove_device(self, device_id: str) -> None:
         """Elimina completamente un dispositivo de Redis (state, playing, y del set devices:all)."""

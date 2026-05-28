@@ -25,14 +25,14 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
   onDispositivoChange,
   expandedServidores,
   onToggleExpand,
-  label = 'Seleccionar servidores:',
+  label = 'Seleccionar sedes:',
   maxHeight = 'max-h-32',
   accentColor = '#3b82f6',
 }) => {
   const [tipoFilter, setTipoFilter] = useState<TipoFilter>('todos');
 
   if (servidores.length === 0) {
-    return <p className="text-sm text-slate-500">No hay servidores disponibles</p>;
+    return <p className="text-sm text-slate-500">No hay sedes disponibles</p>;
   }
 
   const filteredServidores = servidores
@@ -230,7 +230,7 @@ export const ServerDeviceSelector: React.FC<ServerDeviceSelectorProps> = ({
 
       <div className="pt-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
         <p className="text-xs text-slate-500">
-          <span className="font-semibold text-slate-700 dark:text-slate-300">{selectedServidorIds.length}</span> servidores,{' '}
+          <span className="font-semibold text-slate-700 dark:text-slate-300">{selectedServidorIds.length}</span> sedes,{' '}
           <span className="font-semibold text-slate-700 dark:text-slate-300">{selectedDispositivoIds.length}</span> dispositivos
         </p>
         {(selectedServidorIds.length > 0 || selectedDispositivoIds.length > 0) && (

@@ -4,17 +4,17 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import { getVideos } from '../services/videoService';
 import { Video } from '../types';
-import { Spinner } from '../components/Spinner';
+
 
 const calendarStyles = `
   /* Base */
   .fc {
-    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
   }
   
   /* Header */
   .fc .fc-toolbar-title {
-    color: #137fec;
+    color: #22d3ee;
     font-weight: 700;
     font-size: 1.25rem;
     letter-spacing: -0.02em;
@@ -60,11 +60,11 @@ const calendarStyles = `
   
   /* Today */
   .fc .fc-day-today {
-    background-color: rgba(19, 127, 236, 0.1) !important;
+    background-color: rgba(34, 211, 238, 0.1) !important;
   }
   
   .fc .fc-day-today .fc-daygrid-day-number {
-    background: #137fec;
+    background: #22d3ee;
     color: white;
     width: 32px;
     height: 32px;
@@ -73,7 +73,7 @@ const calendarStyles = `
     align-items: center;
     justify-content: center;
     font-weight: 700;
-    box-shadow: 0 4px 12px rgba(19, 127, 236, 0.4);
+    box-shadow: 0 4px 12px rgba(34, 211, 238, 0.4);
   }
   
   /* Buttons */
@@ -99,10 +99,10 @@ const calendarStyles = `
   }
   
   .fc .fc-button-active {
-    background: #137fec !important;
+    background: #22d3ee !important;
     border-color: transparent !important;
     color: white !important;
-    box-shadow: 0 4px 12px rgba(19, 127, 236, 0.4) !important;
+    box-shadow: 0 4px 12px rgba(34, 211, 238, 0.4) !important;
   }
   
   .fc .fc-button-group {
@@ -123,18 +123,22 @@ const calendarStyles = `
   
   .fc-daygrid-event {
     border-radius: 0.375rem !important;
-    font-size: 0.7rem !important;
+    font-size: 0.75rem !important;
     font-weight: 600 !important;
-    padding: 0.25rem 0.5rem !important;
+    padding: 0.2rem 0.4rem !important;
     border: none !important;
     margin-bottom: 0.25rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
     transition: all 0.2s ease;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   }
   
   .fc-daygrid-event:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.12);
   }
   
   .fc-event-main {
@@ -146,7 +150,7 @@ const calendarStyles = `
   }
   
   .fc-more-link {
-    color: #137fec !important;
+    color: #22d3ee !important;
     font-weight: 600 !important;
     font-size: 0.7rem !important;
   }
@@ -198,7 +202,7 @@ const calendarStyles = `
   }
   
   .dark .fc .fc-day-today {
-    background-color: rgba(19, 127, 236, 0.15) !important;
+    background-color: rgba(34, 211, 238, 0.15) !important;
   }
   
   .dark .fc .fc-button {
@@ -236,7 +240,7 @@ const calendarStyles = `
       min-height: 16px !important;
     }
     .fc-daygrid-event {
-      font-size: 0.5rem !important;
+      font-size: 0.6rem !important;
       padding: 0.1rem 0.2rem !important;
       margin-bottom: 0.1rem !important;
     }
@@ -308,7 +312,7 @@ export const CalendarScreen: React.FC = () => {
           } else {
             const estadoLower = String(estado).toLowerCase();
             if (estadoLower === 'programado' || estadoLower === 'borrador') {
-              backgroundColor = '#3b82f6';
+              backgroundColor = '#8b5cf6';
             }
           }
 
@@ -389,6 +393,9 @@ export const CalendarScreen: React.FC = () => {
     eventDisplay: 'block' as const,
     dayMaxEvents: dayMaxEvents,
     moreLinkClick: 'popover' as const,
+    eventDidMount: (info: any) => {
+      info.el.title = info.event.title;
+    },
     height: 'auto' as const,
     contentHeight: 'auto' as const,
     aspectRatio: 1.5,
@@ -415,7 +422,7 @@ export const CalendarScreen: React.FC = () => {
               <span className="text-slate-600 dark:text-slate-300">Activo</span>
             </span>
             <span className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-sm shadow-indigo-500/50"></span>
+              <span className="w-2.5 h-2.5 rounded-full bg-violet-500 shadow-sm shadow-violet-500/50"></span>
               <span className="text-slate-600 dark:text-slate-300">Programado</span>
             </span>
             <span className="flex items-center gap-2">
@@ -430,13 +437,28 @@ export const CalendarScreen: React.FC = () => {
         </div>
       </div>
 
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-lg shadow-slate-200/50 dark:shadow-none border border-slate-200 dark:border-slate-800 p-4 relative overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-lg shadow-slate-200/50 dark:shadow-none border border-slate-200 dark:border-slate-800 p-4 relative">
         <div className="absolute top-0 left-0 right-0 h-1 bg-primary dark:bg-slate-700"></div>
         {loading && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/60 dark:bg-slate-900/60 rounded-2xl">
-            <div className="flex items-center gap-2 bg-white dark:bg-slate-800 px-4 py-2 rounded-full shadow-lg border border-slate-200 dark:border-slate-700">
-              <Spinner size="sm" />
-              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Cargando...</span>
+          <div className="absolute inset-0 z-10 flex flex-col gap-3 p-6 bg-white/60 dark:bg-slate-900/60 rounded-2xl animate-pulse">
+            <div className="h-4 bg-slate-200 dark:bg-[#253247] rounded w-1/3"></div>
+            <div className="flex gap-2">
+              <div className="flex-1 h-20 bg-slate-200 dark:bg-[#253247] rounded-xl"></div>
+              <div className="flex-1 h-20 bg-slate-200 dark:bg-[#253247] rounded-xl"></div>
+              <div className="flex-1 h-20 bg-slate-200 dark:bg-[#253247] rounded-xl"></div>
+              <div className="flex-1 h-20 bg-slate-200 dark:bg-[#253247] rounded-xl"></div>
+              <div className="flex-1 h-20 bg-slate-200 dark:bg-[#253247] rounded-xl"></div>
+              <div className="flex-1 h-20 bg-slate-200 dark:bg-[#253247] rounded-xl"></div>
+              <div className="flex-1 h-20 bg-slate-200 dark:bg-[#253247] rounded-xl"></div>
+            </div>
+            <div className="flex gap-2">
+              <div className="flex-1 h-24 bg-slate-200 dark:bg-[#253247] rounded-xl"></div>
+              <div className="flex-1 h-24 bg-slate-200 dark:bg-[#253247] rounded-xl"></div>
+              <div className="flex-1 h-24 bg-slate-200 dark:bg-[#253247] rounded-xl"></div>
+              <div className="flex-1 h-24 bg-slate-200 dark:bg-[#253247] rounded-xl"></div>
+              <div className="flex-1 h-24 bg-slate-200 dark:bg-[#253247] rounded-xl"></div>
+              <div className="flex-1 h-24 bg-slate-200 dark:bg-[#253247] rounded-xl"></div>
+              <div className="flex-1 h-24 bg-slate-200 dark:bg-[#253247] rounded-xl"></div>
             </div>
           </div>
         )}
@@ -457,7 +479,7 @@ export const CalendarScreen: React.FC = () => {
             </div>
             <div className="p-5">
               <div className="flex items-center gap-3 mb-4">
-                <div className={`px-3 py-1.5 rounded-full text-xs font-bold ${selectedEvent.extendedProps.estado === 'activo' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : selectedEvent.extendedProps.estado === 'vencido' ? 'bg-rose-100 text-rose-700 border border-rose-200' : selectedEvent.extendedProps.estado === 'inactivo' ? 'bg-slate-100 text-slate-600 border border-slate-200' : 'bg-indigo-100 text-indigo-700 border border-indigo-200'}`}>
+                <div className={`px-3 py-1.5 rounded-full text-xs font-bold ${selectedEvent.extendedProps.estado === 'activo' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : selectedEvent.extendedProps.estado === 'vencido' ? 'bg-rose-100 text-rose-700 border border-rose-200' : selectedEvent.extendedProps.estado === 'inactivo' ? 'bg-slate-100 text-slate-600 border border-slate-200' : 'bg-violet-100 text-violet-700 border border-violet-200'}`}>
                   {selectedEvent.extendedProps.estado}
                 </div>
                 <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">

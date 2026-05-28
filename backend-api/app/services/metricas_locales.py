@@ -41,6 +41,7 @@ def _merge_eventos(eventos: list[dict]) -> dict | None:
                     "completo": ev.get("completo") or tipo == "COMPLETED",
                     "cuartil_50": ev.get("cuartil_50") or False,
                     "segundos_reproducidos": ev.get("segundos_reproducidos"),
+                    "tipo_dispositivo": ev.get("tipo_dispositivo", "verificador"),
                     "fecha_creacion": datetime.utcnow(),
                 }
             else:
@@ -79,7 +80,26 @@ async def limpiar_metricas_viejas():
         logger.error(f"[Cleanup] Error limpiando métricas viejas: {e}")
 
 
-async def insertar_reproducciones_locales(reproducciones_redis):
+async def _enriquecer_con_tipo_dispositivo(rows: list[dict], device_state_store) -> None:
+    """Obtiene el tipo de dispositivo desde Redis y lo asigna a cada fila."""
+    dispositivos_vistos: set[str] = set()
+    for r in rows:
+        did = r.get("dispositivo_id", "")
+        if did and did not in dispositivos_vistos:
+            dispositivos_vistos.add(did)
+
+    tipo_cache: dict[str, str] = {}
+    for did in dispositivos_vistos:
+        tipo_cache[did] = await device_state_store.get_device_type(did)
+
+    for r in rows:
+        did = r.get("dispositivo_id", "")
+        tipo = tipo_cache.get(did)
+        if tipo is not None:
+            r["tipo_dispositivo"] = tipo
+
+
+async def insertar_reproducciones_locales(reproducciones_redis, device_state_store=None):
     """Worker que cada 60s lee Redis, mergea en memoria e INSERTA localmente."""
     await limpiar_metricas_viejas()
     while True:
@@ -108,6 +128,9 @@ async def insertar_reproducciones_locales(reproducciones_redis):
             if not rows:
                 await reproducciones_redis.ltrim(REDIS_KEY, len(items), -1)
                 continue
+
+            if device_state_store is not None:
+                await _enriquecer_con_tipo_dispositivo(rows, device_state_store)
 
             ok = 0
             failed = 0

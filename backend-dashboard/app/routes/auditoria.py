@@ -639,3 +639,14 @@ async def _fetch_auditoria_page(db, busqueda, tipo, dispositivo_id, servidor_id,
 
     items.sort(key=lambda x: x.get("fecha") or "", reverse=True)
     return {"items": items, "total": len(items)}
+
+
+@router.get("/auditoria/tipos")
+async def obtener_tipos_auditoria(
+    db: AsyncSession = Depends(get_db_usuarios),
+    current_user: dict = Depends(get_current_admin),
+):
+    stmt = select(Notificacion.tipo).distinct().order_by(Notificacion.tipo)
+    rows = (await db.execute(stmt)).scalars().all()
+    tipos = sorted(set(rows) | {"CONEXION_DISPOSITIVO", "DESCONEXION_DISPOSITIVO"})
+    return {"success": True, "tipos": tipos}

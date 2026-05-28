@@ -47,7 +47,8 @@ async def status(
                 db,
                 usuario_id,
                 tipo="CAMBIO_ESTADO_SERVIDOR",
-                descripcion=f"Servidor '{s.nombre}' cambió a {estado_actual}"
+                descripcion=f"Servidor '{s.nombre}' cambió a {estado_actual}",
+                servidor_id=s.id,
             )
         s._last_estado = estado_actual
 
@@ -57,7 +58,8 @@ async def status(
                 db,
                 usuario_id,
                 tipo="ALERTA_SERVIDOR",
-                descripcion=f"Servidor '{s.nombre}' espacio crítico: {espacio_usado*100:.1f}%"
+                descripcion=f"Servidor '{s.nombre}' espacio crítico: {espacio_usado*100:.1f}%",
+                servidor_id=s.id,
             )
 
         total = s.almacenamiento_total or 0
@@ -307,6 +309,7 @@ async def renombrar_servidor(
                 user_id,
                 "RENOMBRAR_SERVIDOR",
                 f"Servidor {servidor.ip} renombrado a '{servidor.nombre}'",
+                servidor_id=servidor.id,
             )
         except Exception as e:
             logger.warning("No se pudo registrar auditoría de rename para servidor %s: %s", servidor.id, e)
@@ -360,6 +363,7 @@ async def eliminar_servidor(
                 user_id,
                 "ELIMINAR_SERVIDOR",
                 f"Servidor '{nombre_para_log}' ({ip_para_log}) eliminado",
+                servidor_id=server_id,
             )
         except Exception as e:
             logger.warning("No se pudo registrar auditoría de eliminación de servidor %s: %s", server_id, e)

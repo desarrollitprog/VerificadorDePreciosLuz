@@ -14,6 +14,18 @@ def get_venezuela_now() -> datetime:
     return datetime.now(TZ_VENEZUELA).replace(tzinfo=None)
 
 
+async def _sum_by_tipo(db: AsyncSession, target_date: date, tipo: str, col):
+    """Suma una columna para un tipo_dispositivo específico en una fecha."""
+    stmt = select(
+        func.coalesce(func.sum(col), 0)
+    ).where(
+        MetricasPorSede.fecha == target_date,
+        MetricasPorSede.tipo_dispositivo == tipo,
+    )
+    row = (await db.execute(stmt)).scalar()
+    return row or 0
+
+
 async def resumen_diario(db: AsyncSession, target_date: date) -> dict:
     stmt_totals = select(
         func.coalesce(func.sum(MetricasPorSede.reproducciones), 0).label("total_eventos"),
@@ -22,6 +34,9 @@ async def resumen_diario(db: AsyncSession, target_date: date) -> dict:
         func.coalesce(func.sum(MetricasPorSede.segundos_totales), 0).label("segundos_totales"),
     ).where(MetricasPorSede.fecha == target_date)
     totals = (await db.execute(stmt_totals)).one()
+
+    ver_validas = await _sum_by_tipo(db, target_date, "verificador", MetricasPorSede.validas_50)
+    tv_validas = await _sum_by_tipo(db, target_date, "televisor", MetricasPorSede.validas_50)
 
     stmt_banners = select(
         MetricasPorSede.titulo,
@@ -53,8 +68,8 @@ async def resumen_diario(db: AsyncSession, target_date: date) -> dict:
         "total_eventos": total,
         "inicios": total,
         "validas_50": validas,
-        "ver_total": 0,
-        "tv_total": 0,
+        "ver_total": ver_validas,
+        "tv_total": tv_validas,
         "banners": banners,
     }
 
@@ -114,13 +129,11 @@ async def tendencia_14d(db: AsyncSession, hasta: date) -> list[dict]:
     results = []
     for i in range(14):
         dia = desde + timedelta(days=i)
-        stmt = select(
-            func.coalesce(func.sum(MetricasPorSede.validas_50), 0).label("validas"),
-        ).where(MetricasPorSede.fecha == dia)
-        row = (await db.execute(stmt)).one()
+        ver_validas = await _sum_by_tipo(db, dia, "verificador", MetricasPorSede.validas_50)
+        tv_validas = await _sum_by_tipo(db, dia, "televisor", MetricasPorSede.validas_50)
         results.append({
             "fecha": dia.isoformat(),
-            "tv_estimadas": 0,
-            "ver_validas": row.validas or 0,
+            "tv_estimadas": tv_validas,
+            "ver_validas": ver_validas,
         })
     return results

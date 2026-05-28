@@ -14,6 +14,7 @@ logger = logging.getLogger("uvicorn.error")
 class BannerSyncItem(BaseModel):
     banner_id: int
     titulo: str | None = None
+    tipo_dispositivo: str = "verificador"
     reproducciones: int = 0
     completados: int = 0
     validas_50: int = 0
@@ -39,6 +40,7 @@ async def recibir_sync(body: SyncPayload, db: AsyncSession = Depends(get_db_usua
             "servidor_id": body.servidor_id,
             "banner_id": b.banner_id,
             "titulo": b.titulo,
+            "tipo_dispositivo": b.tipo_dispositivo,
             "fecha": target_date,
             "reproducciones": b.reproducciones,
             "completados": b.completados,

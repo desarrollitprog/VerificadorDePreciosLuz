@@ -481,7 +481,7 @@ export const AuditoriaScreen: React.FC = () => {
                       </td>
                       <td className="px-4 py-3">
                         <div className="text-sm font-medium text-slate-900 dark:text-white">
-                          {item.dispositivo_nombre || item.dispositivo_id || '-'}
+                          {item.dispositivo_id === '*' ? 'Todos los dispositivos' : (item.dispositivo_nombre || item.dispositivo_id || '-')}
                         </div>
                         {item.dispositivo_nombre && item.dispositivo_id && (
                           <div className="text-xs text-slate-400">{item.dispositivo_id}</div>
@@ -489,7 +489,7 @@ export const AuditoriaScreen: React.FC = () => {
                       </td>
                       <td className="px-4 py-3 hidden md:table-cell">
                         <div className="text-sm font-medium text-slate-900 dark:text-white">
-                          {item.servidor_nombre || (item.servidor_id != null ? `ID: ${item.servidor_id}` : '-')}
+                          {item.servidor_id === 0 ? 'Todas las sedes' : (item.servidor_nombre || (item.servidor_id != null ? `ID: ${item.servidor_id}` : '-'))}
                         </div>
                         {item.servidor_nombre && item.servidor_id != null && (
                           <div className="text-xs text-slate-400">ID: {item.servidor_id}</div>

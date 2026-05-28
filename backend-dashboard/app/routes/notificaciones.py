@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from app.models import Notificacion, NotificacionLeida
 from app.models.usuario import Usuario
 from app.models.dispositivo import Dispositivo
+from app.models.publicidad import Publicidad
 from app.database import get_db_usuarios
 from app.dependencies import get_current_cliente
 from app.services.notificacion_service import registrar_accion
@@ -30,6 +31,18 @@ async def _get_device_name(db: AsyncSession, device_id: str) -> str:
     except Exception as e:
         logger.warning("Error al obtener nombre_amigable para %s: %s", device_id, e)
     return device_id
+
+
+async def _get_device_servidor_id(db: AsyncSession, device_id: str) -> int | None:
+    try:
+        result = await db.execute(
+            select(Dispositivo.servidor_id).where(Dispositivo.codigo_kiosko == device_id)
+        )
+        return result.scalar_one_or_none()
+    except Exception as e:
+        logger.warning("Error al obtener servidor_id para %s: %s", device_id, e)
+        return None
+
 
 @router.get("/notificaciones")
 async def listar_notificaciones(
@@ -282,12 +295,14 @@ async def sync_status(
             "id": existing.id,
         }
 
+    servidor_id = await _get_device_servidor_id(db, body.device_id)
     await registrar_accion(
         db=db,
         usuario_id=None,
         tipo="SYNC_FAILED",
         descripcion=descripcion,
         dispositivo_id=body.device_id,
+        servidor_id=servidor_id,
     )
     return {"success": True, "message": "Notificación de sincronización registrada", "duplicated": False}
 
@@ -324,12 +339,14 @@ async def playback_status(
             "id": existing.id,
         }
 
+    servidor_id = await _get_device_servidor_id(db, body.device_id)
     await registrar_accion(
         db=db,
         usuario_id=None,
         tipo="PLAYBACK_FAILED",
         descripcion=descripcion,
         dispositivo_id=body.device_id,
+        servidor_id=servidor_id,
     )
     return {
         "success": True,
@@ -362,9 +379,11 @@ async def sync_queued_webhook(
     if existing:
         return {"success": True, "duplicated": True, "id": existing.id}
 
+    servidor_id = await _get_device_servidor_id(db, body.device_id)
     await registrar_accion(
         db=db, usuario_id=None, tipo=tipo,
         descripcion=descripcion, dispositivo_id=body.device_id,
+        servidor_id=servidor_id,
     )
     return {"success": True, "message": "Notificación de comando encolado registrada", "duplicated": False}
 
@@ -378,9 +397,11 @@ async def sync_delivered_webhook(
     tipo = "SINCRONIZACION_COMPLETADA"
     descripcion = f"Dispositivo {nombre}: sincronización completada exitosamente"
 
+    servidor_id = await _get_device_servidor_id(db, body.device_id)
     await registrar_accion(
         db=db, usuario_id=None, tipo=tipo,
         descripcion=descripcion, dispositivo_id=body.device_id,
+        servidor_id=servidor_id,
     )
     return {"success": True, "message": "Notificación de sincronización completada registrada"}
 
@@ -398,18 +419,24 @@ async def banner_status(
 ):
     nombre = await _get_device_name(db, body.device_id)
     tipo = "BANNER_INICIADO" if body.status == "INICIADO" else "BANNER_FINALIZADO"
-    
+
     descripcion = f"Dispositivo {nombre}"
     if body.banner_id:
-        descripcion += f" - Banner ID {body.banner_id}"
+        result = await db.execute(
+            select(Publicidad.Titulo).where(Publicidad.IdPublicidad == body.banner_id)
+        )
+        titulo = result.scalar_one_or_none()
+        descripcion += f" - Banner '{titulo or 'Sin título'}' (ID {body.banner_id})"
     descripcion += f" - {body.status}"
-    
+
+    servidor_id = await _get_device_servidor_id(db, body.device_id)
     await registrar_accion(
         db=db,
         usuario_id=None,
         tipo=tipo,
         descripcion=descripcion,
         dispositivo_id=body.device_id,
+        servidor_id=servidor_id,
     )
     return {
         "success": True,

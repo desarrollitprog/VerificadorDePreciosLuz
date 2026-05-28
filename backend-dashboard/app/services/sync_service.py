@@ -232,8 +232,8 @@ async def _execute_force_sync_job(job_id: str, user_id: int | None, username: st
                         f"Servidores online: {len(online_servers)}, éxito: {success_count}, fallo: {failed_count}. "
                         f"Fallos: {resumen_fallos if resumen_fallos else 'ninguno'}"
                     ),
-                    dispositivo_id=None,
-                    servidor_id=None,
+                    dispositivo_id="*",
+                    servidor_id=0,
                 )
 
             await _set_job_state(

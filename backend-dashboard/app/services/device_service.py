@@ -398,6 +398,7 @@ async def program_reboot(
         user_id,
         "PROGRAMAR_REINICIO_MASIVO",
         f"Reinicio programado por {actor_name}: {len(dispositivos_ids)} dispositivos, hour={hour}, recurring={recurring}",
+        dispositivo_id="*",
     )
 
     return resultados

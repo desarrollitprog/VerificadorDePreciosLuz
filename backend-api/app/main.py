@@ -534,8 +534,8 @@ async def _delayed_batch_flush():
                         for did in list(offline_ids):
                             if await dr.device_registry.is_device_registered(did):
                                 offline_ids.discard(did)
-            except Exception as e:
-                logger.warning(f"[WS] Registry check falló para {device_id}: {e}")
+                    except Exception as e:
+                        logger.warning(f"[WS] Registry check falló: {e}")
 
                 if not offline_ids:
                     return

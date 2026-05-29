@@ -28,7 +28,7 @@ class PendingCommandQueue:
     PENDING_REBOOT_PREFIX = "device:pending:reboot"
     PENDING_BANNER_PREFIX = "device:pending:banner"
     DELIVERY_PENDING_PREFIX = "device:delivery_pending"
-    MAX_QUEUE_PER_DEVICE = 100
+    MAX_QUEUE_PER_DEVICE = 30
     MAX_MESSAGE_AGE = 86400  # 24h
     MAX_RETRIES = 5
     DLQ_PREFIX = "device:dlq"
@@ -94,11 +94,20 @@ class PendingCommandQueue:
         total = queue_len + inflight_len
 
         if total >= self.MAX_QUEUE_PER_DEVICE:
-            logger.warning(
-                f"[QUEUE] Cola llena para {device_id} "
-                f"({total}/{self.MAX_QUEUE_PER_DEVICE} msgs), descartando mensaje"
-            )
-            return False
+            # Intentar limpiar mensajes viejos antes de descartar
+            try:
+                await self.cleanup_old_messages()
+            except Exception:
+                pass
+            queue_len = await self.redis.llen(key)
+            inflight_len = await self.redis.llen(inflight_key)
+            total = queue_len + inflight_len
+            if total >= self.MAX_QUEUE_PER_DEVICE:
+                logger.warning(
+                    f"[QUEUE] Cola llena para {device_id} "
+                    f"({total}/{self.MAX_QUEUE_PER_DEVICE} msgs), descartando mensaje"
+                )
+                return False
 
         message_with_ts = {**message, "enqueued_at": time.time()}
         await self.redis.rpush(key, json.dumps(message_with_ts))
@@ -303,7 +312,6 @@ class PendingCommandQueue:
         Retorna cantidad de mensajes entregados exitosamente.
         """
         delivered = 0
-        failed_raws = []
 
         while True:
             result = await self.dequeue(device_id)
@@ -320,27 +328,22 @@ class PendingCommandQueue:
                         await self.set_delivery_pending(device_id)
                     delivered += 1
                 else:
+                    await self.confirm(device_id, raw)
                     if retry_count >= self.MAX_RETRIES - 1:
                         await self._move_to_dlq(device_id, msg)
                     else:
                         msg["retry_count"] = retry_count + 1
-                        failed_raws.append(json.dumps(msg))
+                        await self.redis.lpush(self._queue_key(device_id), json.dumps(msg))
                     break
             except Exception as e:
                 logger.warning(f"[QUEUE] Error enviando a {device_id}: {e}")
+                await self.confirm(device_id, raw)
                 if retry_count >= self.MAX_RETRIES - 1:
                     await self._move_to_dlq(device_id, msg)
                 else:
                     msg["retry_count"] = retry_count + 1
-                    failed_raws.append(json.dumps(msg))
+                    await self.redis.lpush(self._queue_key(device_id), json.dumps(msg))
                 break
-
-        # Re-encolar los que fallaron (con retry_count incrementado)
-        for raw in failed_raws:
-            try:
-                await self.redis.lpush(self._queue_key(device_id), raw)
-            except Exception:
-                pass
 
         if delivered > 0:
             logger.info(f"[QUEUE] {delivered} mensajes entregados de cola Redis a {device_id}")

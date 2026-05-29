@@ -303,7 +303,6 @@ class PendingCommandQueue:
         Retorna cantidad de mensajes entregados exitosamente.
         """
         delivered = 0
-        failed_raws = []
 
         while True:
             result = await self.dequeue(device_id)
@@ -320,27 +319,22 @@ class PendingCommandQueue:
                         await self.set_delivery_pending(device_id)
                     delivered += 1
                 else:
+                    await self.confirm(device_id, raw)
                     if retry_count >= self.MAX_RETRIES - 1:
                         await self._move_to_dlq(device_id, msg)
                     else:
                         msg["retry_count"] = retry_count + 1
-                        failed_raws.append(json.dumps(msg))
+                        await self.redis.lpush(self._queue_key(device_id), json.dumps(msg))
                     break
             except Exception as e:
                 logger.warning(f"[QUEUE] Error enviando a {device_id}: {e}")
+                await self.confirm(device_id, raw)
                 if retry_count >= self.MAX_RETRIES - 1:
                     await self._move_to_dlq(device_id, msg)
                 else:
                     msg["retry_count"] = retry_count + 1
-                    failed_raws.append(json.dumps(msg))
+                    await self.redis.lpush(self._queue_key(device_id), json.dumps(msg))
                 break
-
-        # Re-encolar los que fallaron (con retry_count incrementado)
-        for raw in failed_raws:
-            try:
-                await self.redis.lpush(self._queue_key(device_id), raw)
-            except Exception:
-                pass
 
         if delivered > 0:
             logger.info(f"[QUEUE] {delivered} mensajes entregados de cola Redis a {device_id}")

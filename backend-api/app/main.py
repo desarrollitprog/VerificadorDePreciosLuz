@@ -2033,14 +2033,17 @@ class TabletWebSocketManager:
                 if await dr.device_registry.is_device_registered(device_id):
                     # Vivo en otro worker → no enqueueamos (no infla badge)
                     # Seteamos pending_sync 24h como respaldo
-                    if pending_queue is not None:
+                    # Pero NO si este mensaje viene del re-publish en reconnect
+                    # (evita loop: pending_sync → bus → send_to_device → pending_sync)
+                    if not message.get("_from_reconnect") and pending_queue is not None:
                         await pending_queue.set_pending_sync(device_id)
                     return True
             except Exception:
                 pass
         
         # Dispositivo offline real — encolar para cuando reconecte
-        await self._enqueue_message(device_id, message)
+        if not message.get("_from_reconnect"):
+            await self._enqueue_message(device_id, message)
         return False
 
     async def _enqueue_message(self, device_id: str, message: dict, websocket: WebSocket | None = None):
@@ -2101,7 +2104,7 @@ class TabletWebSocketManager:
                         await device_command_bus.publish_command(
                             device_id=device_id,
                             command="WIPE_AND_RESYNC",
-                            payload={},
+                            payload={"_from_reconnect": True},
                         )
                     else:
                         await self.send_to_device(device_id, {"command": "WIPE_AND_RESYNC"})

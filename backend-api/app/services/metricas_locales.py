@@ -139,11 +139,10 @@ async def insertar_reproducciones_locales(reproducciones_redis, device_state_sto
                     sub = rows[i:i + SUB_BATCH_SIZE]
                     for row in sub:
                         try:
-                            db.add(ReproduccionMetricaSede(**row))
-                            await db.flush()
+                            async with db.begin_nested():
+                                db.add(ReproduccionMetricaSede(**row))
                             ok += 1
                         except IntegrityError:
-                            await db.rollback()
                             try:
                                 # Merge no-destructivo: solo mejorar, nunca empeorar
                                 stmt_sel = (
@@ -184,7 +183,6 @@ async def insertar_reproducciones_locales(reproducciones_redis, device_state_sto
                                 await db.flush()
                                 ok += 1
                             except Exception:
-                                await db.rollback()
                                 failed += 1
                 await db.commit()
 

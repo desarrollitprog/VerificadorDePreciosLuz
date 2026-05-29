@@ -389,9 +389,16 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             BackupIndexRepository(this@ScanActivity).ensureIndex(offlineBackup?.updatedAt)
         }
         if (offlineBackup == null) {
-            showOutOfService()
-            return
+            if (!Build.MANUFACTURER.equals("amazon", ignoreCase = true)) {
+                showOutOfService()
+                return
+            }
+            Log.i(TAG, "FireTV sin backup al iniciar - modo offline con publicidad cacheados")
         }
+        // Iniciar carrusel de publicidad desde caché local (funciona sin red ni backup)
+        uiHandler.postDelayed({
+            startStandbyCarousel()
+        }, 500)
     }
 
     // Reemplazar en setupMockInput el addTextChangedListener por un TextWatcher explícito
@@ -1813,18 +1820,20 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 val (ok, reason) = pingWithRetries(service)
                 if (!ok) {
                     val backup = offlineBackup ?: loadOfflineBackup()
-                    if (backup != null) {
-                        if (isBackupStale(backup)) {
-                            uiHandler.post {
-                                showThrottledError("offline_stale", getString(R.string.error_backup_stale))
-                            }
-                            goToConfig(getString(R.string.error_backup_stale))
-                            return@launch
-                        }
+                    if (backup != null && !isBackupStale(backup)) {
                         offlineBackup = backup
                         setOfflineMode(true)
                         uiHandler.post { updateOfflineTimestamp(offlineBackup) }
                         // Reintenta ping cada 60 segundos en modo offline
+                        delay(60000)
+                        offlineRetry = true
+                        continue
+                    }
+                    // Sin backup válido
+                    if (Build.MANUFACTURER.equals("amazon", ignoreCase = true)) {
+                        // FireTV: no necesita backup, continúa en offline con banners cacheados
+                        Log.i(TAG, "FireTV sin conexión y sin backup - modo offline con publicidad cacheados")
+                        setOfflineMode(true)
                         delay(60000)
                         offlineRetry = true
                         continue

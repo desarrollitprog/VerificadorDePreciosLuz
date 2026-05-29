@@ -534,8 +534,8 @@ async def _delayed_batch_flush():
                         for did in list(offline_ids):
                             if await dr.device_registry.is_device_registered(did):
                                 offline_ids.discard(did)
-                    except Exception as e:
-                        logger.warning(f"[WS] Registry check falló: {e}")
+                    except Exception:
+                        pass
 
                 if not offline_ids:
                     return
@@ -1921,10 +1921,6 @@ class TabletWebSocketManager:
             if old_ws and old_ws is not websocket:
                 await self._safe_disconnect(old_ws)
                 logger.info(f"[WebSocket] Conexión anterior de {device_id} cerrada por reconexión")
-                # Re-registrar porque _safe_disconnect hace unregister_device,
-                # borrando el key que register_device creó arriba (race en is_device_registered)
-                from app.services.device_registry import register_device
-                await register_device(device_id)
             
             self.device_map[device_id] = websocket
             self.device_types[device_id] = device_type
@@ -2037,17 +2033,14 @@ class TabletWebSocketManager:
                 if await dr.device_registry.is_device_registered(device_id):
                     # Vivo en otro worker → no enqueueamos (no infla badge)
                     # Seteamos pending_sync 24h como respaldo
-                    # Pero NO si este mensaje viene del re-publish en reconnect
-                    # (evita loop: pending_sync → bus → send_to_device → pending_sync)
-                    if not message.get("_from_reconnect") and pending_queue is not None:
+                    if pending_queue is not None:
                         await pending_queue.set_pending_sync(device_id)
                     return True
             except Exception:
                 pass
         
         # Dispositivo offline real — encolar para cuando reconecte
-        if not message.get("_from_reconnect"):
-            await self._enqueue_message(device_id, message)
+        await self._enqueue_message(device_id, message)
         return False
 
     async def _enqueue_message(self, device_id: str, message: dict, websocket: WebSocket | None = None):
@@ -2108,7 +2101,7 @@ class TabletWebSocketManager:
                         await device_command_bus.publish_command(
                             device_id=device_id,
                             command="WIPE_AND_RESYNC",
-                            payload={"_from_reconnect": True},
+                            payload={},
                         )
                     else:
                         await self.send_to_device(device_id, {"command": "WIPE_AND_RESYNC"})

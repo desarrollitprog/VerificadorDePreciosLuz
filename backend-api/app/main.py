@@ -534,8 +534,8 @@ async def _delayed_batch_flush():
                         for did in list(offline_ids):
                             if await dr.device_registry.is_device_registered(did):
                                 offline_ids.discard(did)
-                    except Exception:
-                        pass
+            except Exception as e:
+                logger.warning(f"[WS] Registry check falló para {device_id}: {e}")
 
                 if not offline_ids:
                     return
@@ -1921,6 +1921,10 @@ class TabletWebSocketManager:
             if old_ws and old_ws is not websocket:
                 await self._safe_disconnect(old_ws)
                 logger.info(f"[WebSocket] Conexión anterior de {device_id} cerrada por reconexión")
+                # Re-registrar porque _safe_disconnect hace unregister_device,
+                # borrando el key que register_device creó arriba (race en is_device_registered)
+                from app.services.device_registry import register_device
+                await register_device(device_id)
             
             self.device_map[device_id] = websocket
             self.device_types[device_id] = device_type

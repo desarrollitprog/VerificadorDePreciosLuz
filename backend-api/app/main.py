@@ -2233,6 +2233,11 @@ class TabletWebSocketManager:
                 # L2: Cleanup de mensajes antiguos en Redis
                 if pending_queue is not None:
                     asyncio.create_task(pending_queue.cleanup_old_messages())
+                # Extender TTL de registro para dispositivos conectados
+                # Evita falsos offline en is_device_registered() por TTL expirado
+                from app.services.device_registry import extend_device_ttl
+                for device_id in list(self.device_map.keys()):
+                    asyncio.create_task(extend_device_ttl(device_id))
                 # Flush de cola Redis para dispositivos online
                 asyncio.create_task(self._flush_online_queues())
             except asyncio.CancelledError:

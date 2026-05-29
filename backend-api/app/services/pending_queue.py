@@ -32,7 +32,7 @@ class PendingCommandQueue:
     MAX_MESSAGE_AGE = 86400  # 24h
     MAX_RETRIES = 5
     DLQ_PREFIX = "device:dlq"
-    DEDUP_COMMANDS = {"WIPE_AND_RESYNC", "REINICIAR"}
+    DEDUP_COMMANDS = {"WIPE_AND_RESYNC", "REINICIAR", "BANNER_LIST"}
 
     def __init__(self, redis: Redis):
         self.redis = redis

@@ -118,6 +118,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private var lastMockSubmitAt = 0L
     private var pendingMockText: String? = null
     private var mockIdleRunnable: Runnable? = null
+    private var scannerResetRunnable: Runnable? = null
     private var offlineMode = false
     private var isNetworkAvailable = false
     private var networkCallbackRegistered = false
@@ -349,6 +350,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         if (!hasNetwork) {
             schedulePeriodicPurge()
         }
+
+        scheduleScannerReset()
     }
 
     // Implementación de métodos de la interfaz BackupProgressListener
@@ -605,11 +608,14 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         pendingMockText = null
         resetStandbyTimer() // Reinicia el timer de publicidad también en mock
         maybeProcessCode(code)
-        // No limpiar si hay solicitud en vuelo: el texto acumulado podría ser
-        // el inicio de un nuevo código cuyo escaneo comenzó mientras requestInFlight=true
-        if (!requestInFlight) {
+        // Limpiar diferido: esperar 250ms para que el HID termine de enviar
+        // todos los caracteres del siguiente código antes de limpiar.
+        // Previene pérdida del primer carácter por race condition entre
+        // clear() y la llegada de teclas HID.
+        uiHandler.postDelayed({
             binding.etMockCode.text?.clear()
-        }
+            binding.etMockCode.requestFocus()
+        }, 250)
     }
 
     private fun sanitizeCode(raw: String): String? {
@@ -1085,6 +1091,28 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             Log.i(TAG, "[Purge] Próxima limpieza programada en ${delay / (24 * 60 * 60 * 1000)} días")
         }
         uiHandler.postDelayed(purgeTimerRunnable!!, delay)
+    }
+
+    // Programa reset periódico del escáner HID cada 30s para prevenir
+    // corrupción del InputConnection en Android 7 (rk3128_box)
+    private fun scheduleScannerReset() {
+        scannerResetRunnable?.let { uiHandler.removeCallbacks(it) }
+        scannerResetRunnable = Runnable {
+            runOnUiThread {
+                lastCode = null
+                lastScanAt = 0L
+                pauseUntil = 0L
+                pendingMockText = null
+                binding.etMockCode.text?.clear()
+                binding.etMockCode.requestFocus()
+                if (analyzerPaused) {
+                    pauseAnalyzer(false)
+                }
+                Log.d(TAG, "[ScannerReset] Reset periódico ejecutado")
+            }
+            uiHandler.postDelayed(scannerResetRunnable!!, 30_000L)
+        }
+        uiHandler.postDelayed(scannerResetRunnable!!, 30_000L)
     }
 
     // Reinicia el temporizador de inactividad
@@ -2117,6 +2145,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         // Cleanup de reconnect handler para evitar memory leak
         uiHandler.removeCallbacks(reconnectRunnable)
         purgeTimerRunnable?.let { uiHandler.removeCallbacks(it) }
+        scannerResetRunnable?.let { uiHandler.removeCallbacks(it) }
         tabletWebSocket?.close(1000, "Activity destroyed")
         tabletWebSocket = null
         wsClient?.dispatcher?.executorService?.shutdown()
@@ -2128,6 +2157,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         super.onPause()
         playerManager.pause()
         cameraProvider?.unbindAll()
+        scannerResetRunnable?.let { uiHandler.removeCallbacks(it) }
     }
 
     override fun onResume() {
@@ -2147,6 +2177,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         playerManager.resume()
         resumeCameraIfAvailable()  // Solo reiniciar cámara si está disponible
         binding.etMockCode.requestFocus()
+        scheduleScannerReset()
     }
 
     private fun toggleMockPanel() {

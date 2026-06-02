@@ -4,6 +4,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -73,6 +74,8 @@ class PlayerManager(
         player.playWhenReady = true
         player.addListener(playerListener)
         playerView.player = player
+        playerView.setKeepScreenOn(true)
+        player.setWakeMode(C.WAKE_MODE_LOCAL)
 
         if (enableRecoveryTimeout) {
             lastCheckedPosition = 0

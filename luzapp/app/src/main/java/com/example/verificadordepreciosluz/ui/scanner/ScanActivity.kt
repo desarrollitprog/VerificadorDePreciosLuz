@@ -2221,6 +2221,10 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         scheduleScannerReset()
     }
 
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+    }
+
     private fun toggleMockPanel() {
         // En lugar de cambiar alpha del panel, cambiamos visibilidad del rectángulo ocultador
         val isRectanguloVisible = binding.rectanguloOcultador.visibility == View.VISIBLE

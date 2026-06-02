@@ -161,6 +161,9 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private lateinit var playerManager: PlayerManager
     private val PURGE_INTERVAL_MS = 30L * 24 * 60 * 60 * 1000  // 30 días
     private var purgeTimerRunnable: Runnable? = null
+    private var deviceType: DeviceTypeHelper.DeviceType = DeviceTypeHelper.DeviceType.VERIFICADOR
+    private var lastAutoResyncAt = 0L
+    private val autoResyncCooldownMs = 5 * 60 * 1000L
     private val deviceId: String by lazy {
         Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
     }
@@ -309,7 +312,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
         ensurePermissionAndStart()
 
-        val deviceType = DeviceTypeHelper.detectDeviceType(this)
+        deviceType = DeviceTypeHelper.detectDeviceType(this)
         Log.d(TAG, "Tipo de dispositivo detectado: $deviceType")
         Log.d(TAG, "Build: MANUFACTURER=${Build.MANUFACTURER}, MODEL=${Build.MODEL}, PRODUCT=${Build.PRODUCT}, BOARD=${Build.BOARD}")
         if (deviceType == DeviceTypeHelper.DeviceType.TELEVISOR) {
@@ -1115,6 +1118,34 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         uiHandler.postDelayed(scannerResetRunnable!!, 30_000L)
     }
 
+    // Intenta auto-resincronizar banners cuando el queue se vacía en Fire TV
+    private fun maybeAutoResync() {
+        if (deviceType != DeviceTypeHelper.DeviceType.TELEVISOR) return
+        if (isPurging) return
+        if (!isNetworkAvailable) return
+        if (api == null || backendBaseUrl == null) return
+        val now = System.currentTimeMillis()
+        if (now - lastAutoResyncAt < autoResyncCooldownMs) return
+        lastAutoResyncAt = now
+        isPurging = true
+        Log.i(TAG, "[AutoResync] Iniciando auto-resync por queue vacío en Fire TV")
+        stopStandbyCarousel("auto_resync")
+        scope.launch {
+            try {
+                ejecutarPurgaTotal(this@ScanActivity, api!!, backendBaseUrl!!, deviceId) {
+                    uiHandler.post {
+                        Log.i(TAG, "[AutoResync] Completado exitosamente")
+                        startStandbyCarousel()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "[AutoResync] Error", e)
+            } finally {
+                isPurging = false
+            }
+        }
+    }
+
     // Reinicia el temporizador de inactividad
     private fun resetStandbyTimer() {
         standbyTimerRunnable?.let { uiHandler.removeCallbacks(it) }
@@ -1131,6 +1162,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         val cache = repo.loadCache() ?: return
         if (cache.items.isEmpty()) {
             Log.w(TAG, "Standby: cache vacío, no inicia carrusel")
+            maybeAutoResync()
             return
         }
 
@@ -1189,6 +1221,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             if (standbyItems.isEmpty()) {
                 Log.i(TAG, "Standby: todos los banners han vencido. Deteniendo carrusel.")
                 stopStandbyCarousel()
+                maybeAutoResync()
                 return
             }
             if (standbyIndex >= standbyItems.size) standbyIndex = 0
@@ -1196,7 +1229,12 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             return
         }
         
-        val fileExists = File(item.localPath).exists()
+        val itemFile = File(item.localPath)
+        val fileExists = itemFile.exists() && itemFile.length() > 512L
+        if (itemFile.exists() && !fileExists) {
+            Log.w(TAG, "Standby: archivo corrupto (${itemFile.length()} bytes), eliminando: ${item.localPath}")
+            itemFile.delete()
+        }
         Log.d(TAG, "playStandbyItem: archivo existe=$fileExists path=${item.localPath}")
         if (!fileExists) {
             // Contador de reintentos para evitar spam de notificaciones
@@ -1222,6 +1260,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             if (standbyItems.isEmpty()) {
                 Log.e(TAG, "Standby: todos los archivos han sido eliminados. Deteniendo carrusel.")
                 stopStandbyCarousel()
+                maybeAutoResync()
                 return
             }
             if (standbyIndex >= standbyItems.size) standbyIndex = 0
@@ -1356,12 +1395,14 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             }
             if (standbyItems.size == 1) {
                 stopStandbyCarousel()
+                maybeAutoResync()
             } else {
                 if (standbyItems.isNotEmpty()) {
                     standbyItems.removeAt(standbyIndex)
                 }
                 if (standbyItems.isEmpty()) {
                     stopStandbyCarousel()
+                    maybeAutoResync()
                 } else {
                     if (standbyIndex >= standbyItems.size) standbyIndex = 0
                     uiHandler.postDelayed({ playStandbyItem() }, 150)

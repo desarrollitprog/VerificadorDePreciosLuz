@@ -24,7 +24,7 @@ async function main() {
   const maxSide = Math.max(metadata.width, metadata.height);
   const squareSize = Math.max(maxSide, 512);
 
-  // Create padded square version (transparent background)
+  // Create padded square version (white background)
   const left = Math.floor((squareSize - metadata.width) / 2);
   const top = Math.floor((squareSize - metadata.height) / 2);
 
@@ -33,7 +33,7 @@ async function main() {
       width: squareSize,
       height: squareSize,
       channels: 4,
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
+      background: { r: 255, g: 255, b: 255, alpha: 1 },
     },
   })
     .composite([{ input: src, left, top }])
@@ -44,7 +44,7 @@ async function main() {
   for (const { name, size } of sizes) {
     const outPath = join(outDir, name);
     await sharp(squareBuffer)
-      .resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .resize(size, size, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
       .png()
       .toFile(outPath);
     console.log(`✓ ${name} (${size}×${size})`);

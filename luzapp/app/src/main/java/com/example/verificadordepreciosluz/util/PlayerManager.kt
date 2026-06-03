@@ -4,6 +4,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -14,6 +15,7 @@ class PlayerManager(
     private val playerView: PlayerView,
     private val enableRecoveryTimeout: Boolean = false,
     private val recoveryCheckMs: Long = 5_000L,
+    private val persistentPlayer: Boolean = false,
     private val tag: String = "PlayerManager"
 ) {
 
@@ -64,15 +66,19 @@ class PlayerManager(
     fun play(uri: Uri) {
         currentUri = uri
 
-        val player = ExoPlayer.Builder(playerView.context).build()
-        exoPlayer?.release()
-        exoPlayer = player
-
+        if (exoPlayer == null) {
+            exoPlayer = ExoPlayer.Builder(playerView.context).build().apply {
+                playWhenReady = true
+                addListener(playerListener)
+            }
+        }
+        val player = exoPlayer ?: return
+        player.stop()
         player.setMediaItem(MediaItem.fromUri(uri))
         player.prepare()
-        player.playWhenReady = true
-        player.addListener(playerListener)
         playerView.player = player
+        playerView.setKeepScreenOn(true)
+        player.setWakeMode(C.WAKE_MODE_LOCAL)
 
         if (enableRecoveryTimeout) {
             lastCheckedPosition = 0
@@ -101,13 +107,29 @@ class PlayerManager(
 
     fun release() {
         cancelRecoveryWatchdog()
+        if (persistentPlayer) {
+            exoPlayer?.stop()
+            playerView.player = null
+        } else {
+            exoPlayer?.removeListener(playerListener)
+            exoPlayer?.stop()
+            exoPlayer?.release()
+            exoPlayer = null
+            playerView.player = null
+        }
+        currentUri = null
+        Log.d(tag, "release")
+    }
+
+    fun dispose() {
+        cancelRecoveryWatchdog()
         exoPlayer?.removeListener(playerListener)
         exoPlayer?.stop()
         exoPlayer?.release()
         exoPlayer = null
         playerView.player = null
         currentUri = null
-        Log.d(tag, "release")
+        Log.d(tag, "dispose")
     }
 
     fun currentPosition(): Int = exoPlayer?.currentPosition?.toInt() ?: 0

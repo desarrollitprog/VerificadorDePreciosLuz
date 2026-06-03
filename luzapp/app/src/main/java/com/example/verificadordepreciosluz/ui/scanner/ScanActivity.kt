@@ -4,6 +4,7 @@ package com.example.verificadordepreciosluz.ui.scanner
 
 import android.Manifest
 import android.app.admin.DevicePolicyManager
+import android.content.ComponentCallbacks2
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -270,6 +271,13 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         })
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        Thread.setDefaultUncaughtExceptionHandler { _, e ->
+            Log.e(TAG, "UncaughtException: ${e.message}", e)
+            val intent = packageManager.getLaunchIntentForPackage(packageName)
+            intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+            android.os.Process.killProcess(android.os.Process.myPid())
+        }
         connectivityManager = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
         cameraExecutor = Executors.newSingleThreadExecutor()
         tone = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80)
@@ -319,9 +327,11 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             binding.tvTituloScanner.text = getString(R.string.title_tv_mode)
             Log.d(TAG, "FireTV detectado, título cambiado a 'AUTOMERCADOS LUZ'")
         }
+        val esTV = deviceType == DeviceTypeHelper.DeviceType.TELEVISOR
         playerManager = PlayerManager(
             binding.standbyPlayer,
-            enableRecoveryTimeout = deviceType == DeviceTypeHelper.DeviceType.TELEVISOR
+            enableRecoveryTimeout = esTV,
+            persistentPlayer = esTV
         )
         Log.d(TAG, "PlayerManager inicializado con ExoPlayer")
 
@@ -2173,7 +2183,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     }
 
     override fun onDestroy() {
-        playerManager.release()
+        playerManager.dispose()
         super.onDestroy()
         stopBannerPolling()
         cameraProvider?.unbindAll()
@@ -2223,6 +2233,15 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
     override fun onUserInteraction() {
         super.onUserInteraction()
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+            Log.w(TAG, "onTrimMemory: nivel $level, liberando recursos")
+            releaseStandbyBitmap()
+            System.gc()
+        }
     }
 
     private fun toggleMockPanel() {

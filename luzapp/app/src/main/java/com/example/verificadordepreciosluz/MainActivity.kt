@@ -6,6 +6,7 @@ import android.view.View
 import android.view.KeyEvent
 import android.widget.Toast
 import android.provider.Settings
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -289,6 +290,13 @@ class MainActivity : AppCompatActivity() {
                             Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
                         } else {
                             Toast.makeText(this@MainActivity, "Sin conexión: modo offline", Toast.LENGTH_LONG).show()
+                            val isFireTv = Build.MANUFACTURER.equals("amazon", ignoreCase = true)
+                            if (isFireTv) {
+                                Log.i("MainActivity", "FireTV sin conexión - entrando a offline con banners cacheados")
+                                startActivity(Intent(this@MainActivity, com.example.verificadordepreciosluz.ui.scanner.ScanActivity::class.java))
+                                finish()
+                                return@withContext
+                            }
                             val backup = BackupRepository(this@MainActivity).loadBackup()
                             if (backup != null) {
                                 startActivity(Intent(this@MainActivity, com.example.verificadordepreciosluz.ui.scanner.ScanActivity::class.java))

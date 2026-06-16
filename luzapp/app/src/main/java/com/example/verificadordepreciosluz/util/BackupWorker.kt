@@ -38,8 +38,8 @@ class BackupWorker(context: Context, workerParams: WorkerParameters) :
             val existing = BackupRepository(ctx).getUpdatedAt()
             if (existing != null) {
                 val millis = BackupUtils.parseIsoToMillis(existing)
-                if (millis != null && (System.currentTimeMillis() - millis) < 12 * 60 * 60 * 1000L) {
-                    Log.i(TAG, "Backup vigente (<12h), saltando descarga programada")
+                if (millis != null && (System.currentTimeMillis() - millis) < 24 * 60 * 60 * 1000L) {
+                    Log.i(TAG, "Backup vigente (<24h), saltando descarga programada")
                     return Result.success()
                 }
             }
@@ -81,7 +81,8 @@ class BackupWorker(context: Context, workerParams: WorkerParameters) :
                 }
             }
 
-            val initialDelay = target.timeInMillis - now.timeInMillis
+            val jitter = (Math.random() * 30 * 60 * 1000).toLong() // 0-30 min aleatorio
+            val initialDelay = target.timeInMillis - now.timeInMillis + jitter
 
             val workRequest = PeriodicWorkRequestBuilder<BackupWorker>(
                 24, TimeUnit.HOURS

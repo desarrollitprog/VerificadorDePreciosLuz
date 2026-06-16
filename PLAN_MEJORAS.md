@@ -367,14 +367,20 @@ Cargar precio y oferta con `selectinload` o una sola query con JOIN. Baja priori
 
 ## Resumen de Cambios Realizados
 
-| # | Cambio | Archivo |
-|---|--------|---------|
-| 1 | Reemplazado `CAST(FechaFin AS DATE)` por comparación directa `FechaFin >= today_start` | `app/main.py` |
-| 2 | Creadas funciones `buscar_producto_completo` y `_build_query_completo` con OUTER JOINs + subqueries | `app/main.py` |
-| 3 | Creada `buscar_por_barras_asociadas` con JOIN directo en 1 query | `app/main.py` |
-| 4 | Agregada caché en memoria para tasas de impuesto con TTL 10min | `app/main.py` |
-| 5 | Configurado `pool_size=3, max_overflow=2` para ERP_MPC y `pool_size=2, max_overflow=1` para ERP_POS_CENTRAL | `app/database.py` |
-| 6 | Eliminado N+1 en `/productos` con carga bulk de precios/ofertas por `IdProducto IN (...)` | `app/routes/consultas.py` |
+| # | Cambio | Archivo | Tipo |
+|---|--------|---------|------|
+| 1 | Reemplazado `CAST(FechaFin AS DATE)` por comparación directa `FechaFin >= today_start` | `app/main.py` | Backend |
+| 2 | Creadas funciones `buscar_producto_completo` y `_build_query_completo` con OUTER JOINs + subqueries | `app/main.py` | Backend |
+| 3 | Creada `buscar_por_barras_asociadas` con JOIN directo en 1 query | `app/main.py` | Backend |
+| 4 | Agregada caché en memoria para tasas de impuesto con TTL 10min | `app/main.py` | Backend |
+| 5 | Configurado `pool_size=3, max_overflow=2` para ERP_MPC y `pool_size=2, max_overflow=1` para ERP_POS_CENTRAL | `app/database.py` | Backend |
+| 6 | Eliminado N+1 en `/productos` con carga bulk de precios/ofertas por `IdProducto IN (...)` | `app/routes/consultas.py` | Backend |
+| 7A | Caché de backup en RAM (`_backup_cache`, TTL 24h, double-checked locking, response compatible) | `app/main.py` | Backend |
+| 7B | Keyset pagination (`WHERE pk > ? ORDER BY pk`) en carga de caché + endpoint `/backup/reload` | `app/main.py` | Backend |
+| 7C | Jitter aleatorio 0-30 min en `BackupWorker.schedule()` | `BackupWorker.kt` | Android |
+| 7D | `backupMaxAgeMs` 12h→24h en ScanActivity + BackupWorker | `ScanActivity.kt`, `BackupWorker.kt` | Android |
+| 8 | Caché LRU local (`ScanCache.kt`): LinkedHashMap accessOrder=true, 500 items, TTL 15 min | `ScanCache.kt` + `ScanActivity.kt` | Android |
+| 9 | Caché reactiva de escaneo (`_scan_cache`, TTL 15 min) en endpoint `/consultar/{codigo}` | `app/main.py` | Backend |
 
 ### Correcciones de Fidelidad (puntos 2-3)
 
@@ -384,3 +390,34 @@ Durante la revisión se identificaron y corrigieron dos filtros faltantes para m
 |----------------|----------------|-------|
 | `ProductoOferta.IndActivo == 1` | OUTER JOIN en `_build_query_completo` y `buscar_por_barras_asociadas` | `main.py:913, 973` |
 | `Detalles.IndActivo == 1 OR Detalles.IndActivo IS NULL` | OUTER JOIN en `_build_query_completo` y `buscar_por_barras_asociadas` | `main.py:924-927, 984-987` |
+
+### Flujo final de escaneo (3 capas de caché)
+
+```
+Producto escaneado
+    → P8: Android LRU (LinkedHashMap, 500 items, TTL 15 min)
+        → Hit: respuesta inmediata, 0 red
+        → Miss:
+    → P9: Backend scan cache (_scan_cache, TTL 15 min, compartida entre kioskos)
+        → Hit: respuesta desde RAM del backend, 0 SQL
+        → Miss:
+    → SQL Server (1 query unificada sargable con JOINs, pool limitado)
+        → Éxito: guarda en P9 y P8
+        → Error:
+    → Offline backup local (BackupRepository.lookupProductoOffline)
+        → Éxito: guarda en P8
+        → Error: producto no encontrado
+```
+
+### Backup diario (3 dispositivos a las 8:30 AM)
+
+```
+Primer dispositivo pide backup
+    → Cache miss → carga desde SQL con keyset pagination (O(1) por página)
+    → Serializa y guarda en RAM
+    → Sirve respuesta
+
+Segundo y tercer dispositivo piden backup (segundos después)
+    → Cache hit → sirve desde RAM (0 queries SQL)
+    → Respuesta en ~1ms por sección
+```

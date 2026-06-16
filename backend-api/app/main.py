@@ -1074,6 +1074,11 @@ async def buscar_tasa_impuesto(
     return _tax_rate_cache.get(impuesto.IdTasaImpuesto)
 
 
+# Caché reactiva de escaneo (P9)
+_scan_cache: dict[str, tuple[float, dict]] = {}
+_SCAN_CACHE_TTL = 900  # 15 minutos
+
+
 def armar_respuesta(
     producto: models.Producto,
     precio: models.ProductoPrecio | None,
@@ -1125,6 +1130,145 @@ def armar_respuesta(
         "id_empaque": int(precio.IdEmpaque) if precio and precio.IdEmpaque is not None else None,
     }
 
+# ─────────────────────────────────────────────────────────────
+# P7A + P7B: Caché de backup con keyset pagination
+# ─────────────────────────────────────────────────────────────
+ALLOWED_BACKUP_SECTIONS = {
+    "productos", "precios", "ofertas", "ofertas_vigencia",
+    "ofertas_sucursal", "ofertas_detalles", "impuestos_producto",
+    "tasas_impuesto", "barras_asociadas",
+}
+
+_backup_cache: dict[str, tuple[float, list[dict]]] = {}
+_BACKUP_CACHE_TTL = 86400  # 24 horas
+_cache_locks: dict[str, asyncio.Lock] = {s: asyncio.Lock() for s in ALLOWED_BACKUP_SECTIONS}
+
+_SECTION_PK_CONFIG: dict[str, tuple] = {
+    "productos": (models.Producto, models.Producto.IdProducto),
+    "precios": (models.ProductoPrecio, models.ProductoPrecio.IdProductosXEmpaqueXSucursal),
+    "ofertas": (models.ProductoOferta, models.ProductoOferta.IdProductoOfertaxSucursal),
+    "ofertas_vigencia": (models.OfertasxProductos, models.OfertasxProductos.IdOfertaxProducto),
+    "ofertas_sucursal": (models.OfertasxProductosxSucursal, models.OfertasxProductosxSucursal.IdOfertaxProductoxSucursal),
+    "ofertas_detalles": (models.OfertasxProductosxSucursalesDetalles, models.OfertasxProductosxSucursalesDetalles.IdOfertaxProductoxSucursalDetalle),
+    "impuestos_producto": (models.ProductosXImpuestos, models.ProductosXImpuestos.IdProductoxImpuesto),
+    "tasas_impuesto": (models.TasaImpuesto, models.TasaImpuesto.IdTasaImpuesto),
+    "barras_asociadas": (models.BarrasAsociadas, models.BarrasAsociadas.IdBarraAsociada),
+}
+
+
+def _serialize_section_row(section: str, row) -> dict:
+    if section == "productos":
+        return {"IdProducto": row.IdProducto, "SKU": row.SKU, "Nombre": row.Nombre}
+    if section == "precios":
+        d = {
+            "IdProductosXEmpaqueXSucursal": row.IdProductosXEmpaqueXSucursal,
+            "IdProducto": row.IdProducto,
+            "IdEmpaque": row.IdEmpaque,
+            "CostoBase": float(row.CostoBase) if row.CostoBase is not None else None,
+            "PVPBase": float(row.PVPBase) if row.PVPBase is not None else None,
+            "PVPConversion": float(row.PVPConversion) if row.PVPConversion is not None else None,
+            "IndIVA": row.IndIVA,
+        }
+        if hasattr(row, "FechaModifica") and row.FechaModifica:
+            d["FechaModifica"] = row.FechaModifica.isoformat()
+        return d
+    if section == "ofertas":
+        return {
+            "IdProductoOfertaxSucursal": row.IdProductoOfertaxSucursal,
+            "IdProducto": row.IdProducto,
+            "IdEmpaque": row.IdEmpaque,
+            "IndActivo": row.IndActivo,
+            "PvpOferta": float(row.PvpOferta) if row.PvpOferta is not None else None,
+            "PvpBaseOferta": float(row.PvpBaseOferta) if row.PvpBaseOferta is not None else None,
+        }
+    if section == "ofertas_vigencia":
+        return {
+            "IdOfertaxProducto": row.IdOfertaxProducto,
+            "IndExpirado": row.IndExpirado,
+            "FechaInicio": row.FechaInicio.isoformat() if row.FechaInicio else None,
+            "FechaFin": row.FechaFin.isoformat() if row.FechaFin else None,
+        }
+    if section == "ofertas_sucursal":
+        return {
+            "IdOfertaxProductoxSucursal": row.IdOfertaxProductoxSucursal,
+            "IdOfertaxProducto": row.IdOfertaxProducto,
+        }
+    if section == "ofertas_detalles":
+        return {
+            "IdOfertaxProductoxSucursalDetalle": row.IdOfertaxProductoxSucursalDetalle,
+            "IdEmpaque": row.IdEmpaque,
+            "IdOfertaxProductoxSucursal": row.IdOfertaxProductoxSucursal,
+            "IndActivo": row.IndActivo,
+        }
+    if section == "impuestos_producto":
+        return {
+            "IdProductoxImpuesto": row.IdProductoxImpuesto,
+            "IdProducto": row.IdProducto,
+            "IdTasaImpuesto": row.IdTasaImpuesto,
+            "IndActivo": row.IndActivo,
+        }
+    if section == "tasas_impuesto":
+        return {
+            "IdTasaImpuesto": row.IdTasaImpuesto,
+            "Tasa": float(row.Tasa) if row.Tasa is not None else None,
+        }
+    if section == "barras_asociadas":
+        return {
+            "IdBarraAsociada": row.IdBarraAsociada,
+            "IdProducto": row.IdProducto,
+            "IdEmpaque": row.IdEmpaque,
+            "Barra": row.Barra,
+            "IndActivo": row.IndActivo,
+            "IndVisible": row.IndVisible,
+        }
+    return {}
+
+
+async def _load_section_to_cache(section: str, db: AsyncSession, db_erp: AsyncSession) -> list[dict]:
+    """P7B: Barre la tabla usando keyset pagination (WHERE pk > last_id, O(1) por página)."""
+    model, pk_col = _SECTION_PK_CONFIG[section]
+    session = db_erp if section == "tasas_impuesto" else db
+
+    rows: list[dict] = []
+    last_id = 0
+    PAGE_SIZE = 1000
+
+    while True:
+        stmt = select(model).where(pk_col > last_id).order_by(pk_col.asc()).limit(PAGE_SIZE)
+        result = (await session.execute(stmt)).scalars().all()
+        if not result:
+            break
+        for row in result:
+            rows.append(_serialize_section_row(section, row))
+        last_id = getattr(result[-1], pk_col.name)
+        if len(result) < PAGE_SIZE:
+            break
+
+    return rows
+
+
+async def _get_backup_section(section: str, db: AsyncSession, db_erp: AsyncSession) -> list[dict]:
+    """P7A: Obtiene sección desde caché RAM (double-checked locking). Carga desde SQL si es necesario."""
+    global _backup_cache
+    now = time.time()
+    entry = _backup_cache.get(section)
+
+    if entry and (now - entry[0]) < _BACKUP_CACHE_TTL:
+        logger.debug("Backup cache HIT: section=%s", section)
+        return entry[1]
+
+    async with _cache_locks[section]:
+        entry = _backup_cache.get(section)
+        if entry and (now - entry[0]) < _BACKUP_CACHE_TTL:
+            return entry[1]
+
+        logger.info("Backup cache MISS: section=%s — cargando desde SQL con keyset pagination", section)
+        data = await _load_section_to_cache(section, db, db_erp)
+        _backup_cache[section] = (time.time(), data)
+        logger.info("Backup cache LOADED: section=%s rows=%d", section, len(data))
+        return data
+
+
 @app.get("/backup")
 async def backup_data(
     section: str = "productos",
@@ -1134,233 +1278,44 @@ async def backup_data(
     db: AsyncSession = Depends(database.get_db),
     db_erp: AsyncSession = Depends(database.get_db_erp),
 ):
-    updated_at = datetime.utcnow().isoformat() + "Z"
-
     limit = max(1, min(limit or 1000, 5000))
     offset = max(0, offset)
 
-    allowed_sections = {
-        "productos",
-        "precios",
-        "ofertas",
-        "ofertas_vigencia",
-        "ofertas_sucursal",
-        "ofertas_detalles",
-        "impuestos_producto",
-        "tasas_impuesto",
-        "barras_asociadas",
-    }
-    if section not in allowed_sections:
+    if section not in ALLOWED_BACKUP_SECTIONS:
         raise HTTPException(status_code=400, detail="Sección de backup inválida")
 
-    logger.info("/backup section=%s offset=%s limit=%s updated_since=%s", section, offset, limit, updated_since)
+    logger.info("/backup section=%s offset=%s limit=%s", section, offset, limit)
 
-    productos: list[models.Producto] = []
-    precios: list[models.ProductoPrecio] = []
-    ofertas: list[models.ProductoOferta] = []
-    ofertas_vigencia: list[models.OfertasxProductos] = []
-    ofertas_sucursal: list[models.OfertasxProductosxSucursal] = []
-    ofertas_detalles: list[models.OfertasxProductosxSucursalesDetalles] = []
-    impuestos_producto: list[models.ProductosXImpuestos] = []
-    tasas_impuesto: list[models.TasaImpuesto] = []
-    barras_asociadas: list[models.BarrasAsociadas] = []
+    cache_data = await _get_backup_section(section, db, db_erp)
 
-    # Soporte incremental solo para precios (ejemplo)
-    if section == "productos":
-        stmt = select(models.Producto).order_by(models.Producto.IdProducto)
-        stmt = stmt.offset(offset).limit(limit)
-        productos = (await db.execute(stmt)).scalars().all()
-    elif section == "precios":
-        stmt = select(models.ProductoPrecio).order_by(models.ProductoPrecio.IdProductosXEmpaqueXSucursal)
-        if updated_since:
-            try:
-                dt = isoparse(updated_since)
-                stmt = stmt.where(models.ProductoPrecio.FechaModifica > dt)
-            except Exception:
-                raise HTTPException(status_code=400, detail="updated_since inválido")
-        stmt = stmt.offset(offset).limit(limit)
-        precios = (await db.execute(stmt)).scalars().all()
-    elif section == "ofertas":
-        ofertas = (
-            await db.execute(
-                select(models.ProductoOferta)
-                .order_by(models.ProductoOferta.IdProductoOfertaxSucursal)
-                .offset(offset)
-                .limit(limit)
-            )
-        ).scalars().all()
-    elif section == "ofertas_vigencia":
-        ofertas_vigencia = (
-            await db.execute(
-                select(models.OfertasxProductos)
-                .order_by(models.OfertasxProductos.IdOfertaxProducto)
-                .offset(offset)
-                .limit(limit)
-            )
-        ).scalars().all()
-    elif section == "ofertas_sucursal":
-        ofertas_sucursal = (
-            await db.execute(
-                select(models.OfertasxProductosxSucursal)
-                .order_by(models.OfertasxProductosxSucursal.IdOfertaxProductoxSucursal)
-                .offset(offset)
-                .limit(limit)
-            )
-        ).scalars().all()
-    elif section == "ofertas_detalles":
-        ofertas_detalles = (
-            await db.execute(
-                select(models.OfertasxProductosxSucursalesDetalles)
-                .order_by(models.OfertasxProductosxSucursalesDetalles.IdOfertaxProductoxSucursalDetalle)
-                .offset(offset)
-                .limit(limit)
-            )
-        ).scalars().all()
-    elif section == "impuestos_producto":
-        impuestos_producto = (
-            await db.execute(
-                select(models.ProductosXImpuestos)
-                .order_by(models.ProductosXImpuestos.IdProductoxImpuesto)
-                .offset(offset)
-                .limit(limit)
-            )
-        ).scalars().all()
-    elif section == "tasas_impuesto":
-        tasas_impuesto = (
-            await db_erp.execute(
-                select(models.TasaImpuesto)
-                .order_by(models.TasaImpuesto.IdTasaImpuesto)
-                .offset(offset)
-                .limit(limit)
-            )
-        ).scalars().all()
-    elif section == "barras_asociadas":
-        barras_asociadas = (
-            await db.execute(
-                select(models.BarrasAsociadas)
-                .order_by(models.BarrasAsociadas.IdBarraAsociada)
-                .offset(offset)
-                .limit(limit)
-            )
-        ).scalars().all()
+    data = cache_data[offset:offset + limit]
+    has_more = len(data) >= limit
+    updated_at = datetime.utcnow().isoformat() + "Z"
 
-    def _count_for_section() -> int:
-        if section == "productos":
-            return len(productos)
-        if section == "precios":
-            return len(precios)
-        if section == "ofertas":
-            return len(ofertas)
-        if section == "ofertas_vigencia":
-            return len(ofertas_vigencia)
-        if section == "ofertas_sucursal":
-            return len(ofertas_sucursal)
-        if section == "ofertas_detalles":
-            return len(ofertas_detalles)
-        if section == "impuestos_producto":
-            return len(impuestos_producto)
-        if section == "tasas_impuesto":
-            return len(tasas_impuesto)
-        if section == "barras_asociadas":
-            return len(barras_asociadas)
-        return 0
-
-    count = _count_for_section()
-    has_more = count >= limit  
-    next_offset = offset + limit if has_more else None
-
-    return {
+    response = {
         "updated_at": updated_at,
         "section": section,
         "offset": offset,
         "limit": limit,
         "has_more": has_more,
-        "next_offset": next_offset,
-        "productos": [
-            {
-                "IdProducto": p.IdProducto,
-                "SKU": p.SKU,
-                "Nombre": p.Nombre
-            }
-            for p in productos
-        ],
-        "precios": [
-            {
-                "IdProductosXEmpaqueXSucursal": pr.IdProductosXEmpaqueXSucursal,
-                "IdProducto": pr.IdProducto,
-                "IdEmpaque": pr.IdEmpaque,
-                "CostoBase": float(pr.CostoBase) if pr.CostoBase is not None else None,
-                "PVPBase": float(pr.PVPBase) if pr.PVPBase is not None else None,
-                "PVPConversion": float(pr.PVPConversion) if pr.PVPConversion is not None else None,
-                "IndIVA": pr.IndIVA,
-                **({"FechaModifica": pr.FechaModifica.isoformat()} if hasattr(pr, "FechaModifica") and pr.FechaModifica else {})
-            }
-            for pr in precios
-        ],
-        "ofertas": [
-            {
-                "IdProductoOfertaxSucursal": o.IdProductoOfertaxSucursal,
-                "IdProducto": o.IdProducto,
-                "IdEmpaque": o.IdEmpaque,
-                "IndActivo": o.IndActivo,
-                "PvpOferta": float(o.PvpOferta) if o.PvpOferta is not None else None,
-                "PvpBaseOferta": float(o.PvpBaseOferta) if o.PvpBaseOferta is not None else None,
-            }
-            for o in ofertas
-        ],
-        "ofertas_vigencia": [
-            {
-                "IdOfertaxProducto": ov.IdOfertaxProducto,
-                "IndExpirado": ov.IndExpirado,
-                "FechaInicio": ov.FechaInicio.isoformat() if ov.FechaInicio else None,
-                "FechaFin": ov.FechaFin.isoformat() if ov.FechaFin else None,
-            }
-            for ov in ofertas_vigencia
-        ],
-        "ofertas_sucursal": [
-            {
-                "IdOfertaxProductoxSucursal": os.IdOfertaxProductoxSucursal,
-                "IdOfertaxProducto": os.IdOfertaxProducto,
-            }
-            for os in ofertas_sucursal
-        ],
-        "ofertas_detalles": [
-            {
-                "IdOfertaxProductoxSucursalDetalle": od.IdOfertaxProductoxSucursalDetalle,
-                "IdEmpaque": od.IdEmpaque,
-                "IdOfertaxProductoxSucursal": od.IdOfertaxProductoxSucursal,
-                "IndActivo": od.IndActivo,
-            }
-            for od in ofertas_detalles
-        ],
-        "impuestos_producto": [
-            {
-                "IdProductoxImpuesto": ip.IdProductoxImpuesto,
-                "IdProducto": ip.IdProducto,
-                "IdTasaImpuesto": ip.IdTasaImpuesto,
-                "IndActivo": ip.IndActivo,
-            }
-            for ip in impuestos_producto
-        ],
-        "tasas_impuesto": [
-            {
-                "IdTasaImpuesto": t.IdTasaImpuesto,
-                "Tasa": float(t.Tasa) if t.Tasa is not None else None,
-            }
-            for t in tasas_impuesto
-        ],
-        "barras_asociadas": [
-            {
-                "IdBarraAsociada": b.IdBarraAsociada,
-                "IdProducto": b.IdProducto,
-                "IdEmpaque": b.IdEmpaque,
-                "Barra": b.Barra,
-                "IndActivo": b.IndActivo,
-                "IndVisible": b.IndVisible,
-            }
-            for b in barras_asociadas
-        ],
+        "next_offset": offset + limit if has_more else None,
     }
+
+    empty: list = []
+    for s in ALLOWED_BACKUP_SECTIONS:
+        response[s] = data if s == section else empty
+
+    return response
+
+
+@app.post("/backup/reload")
+async def reload_backup_cache():
+    """Invalida la caché de backup forzando recarga en el próximo request."""
+    global _backup_cache
+    _backup_cache.clear()
+    logger.info("Backup cache invalidada manualmente via /backup/reload")
+    return {"ok": True, "message": "Caché de backup invalidada"}
+
 
 # Endpoint principal usando funciones auxiliares async
 @app.get("/consultar/{codigo_barras}")
@@ -1369,6 +1324,12 @@ async def obtener_precio(
     db: AsyncSession = Depends(database.get_db),
     db_erp: AsyncSession = Depends(database.get_db_erp),
 ):
+    # P9: Caché reactiva de escaneo en RAM
+    cached = _scan_cache.get(codigo_barras)
+    if cached and (time.time() - cached[0]) < _SCAN_CACHE_TTL:
+        logger.debug("Scan cache HIT: codigo=%s", codigo_barras)
+        return cached[1]
+
     # Normalizar código de barras para búsqueda
     codigos_a_buscar = normalizar_codigo_barras(codigo_barras)
     
@@ -1380,14 +1341,18 @@ async def obtener_precio(
         if resultado:
             producto, precio, oferta, detalle = resultado
             tasa_impuesto = await buscar_tasa_impuesto(db, db_erp, producto.IdProducto, precio)
-            return armar_respuesta(producto, precio, oferta, detalle, tasa_impuesto)
+            resp = armar_respuesta(producto, precio, oferta, detalle, tasa_impuesto)
+            _scan_cache[codigo_barras] = (time.time(), resp)
+            return resp
         
         # Buscar en BarrasAsociadas si no se encuentra por SKU
         resultado = await buscar_por_barras_asociadas(db, codigo, now)
         if resultado:
             producto, precio, oferta, detalle = resultado
             tasa_impuesto = await buscar_tasa_impuesto(db, db_erp, producto.IdProducto, precio)
-            return armar_respuesta(producto, precio, oferta, detalle, tasa_impuesto)
+            resp = armar_respuesta(producto, precio, oferta, detalle, tasa_impuesto)
+            _scan_cache[codigo_barras] = (time.time(), resp)
+            return resp
     
     raise HTTPException(
         status_code=404,

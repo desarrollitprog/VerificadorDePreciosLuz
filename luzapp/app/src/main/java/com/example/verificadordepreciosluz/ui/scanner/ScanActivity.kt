@@ -54,6 +54,7 @@ import com.example.verificadordepreciosluz.data.local.BackupRepository
 import com.example.verificadordepreciosluz.data.local.BackupResponse
 import com.example.verificadordepreciosluz.data.local.BackupIndexRepository
 import com.example.verificadordepreciosluz.data.local.BackupUtils
+import com.example.verificadordepreciosluz.data.local.ScanCache
 import com.example.verificadordepreciosluz.data.local.BannerRepository
 import com.example.verificadordepreciosluz.data.local.BannerCacheItem
 import com.example.verificadordepreciosluz.databinding.ActivityScanBinding
@@ -126,7 +127,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private var connectivityManager: ConnectivityManager? = null
     private var offlineBackup: BackupResponse? = null
     private var backupReadyNotified = false
-    private val backupMaxAgeMs = (12 * 60 * 60 * 1000L)
+    private val backupMaxAgeMs = (24 * 60 * 60 * 1000L)
+    private val scanCache = ScanCache()
     private var cameraProvider: ProcessCameraProvider? = null
     private val bannerMaxAgeMs = (12 * 60 * 60 * 1000L)
     private val bannerPollIntervalMs = (60 * 1000L)  // 60 segundos - suficiente para detectar programaciones
@@ -1631,6 +1633,16 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private fun onBarcodeDetected(code: String) {
         stopStandbyCarousel()
         resetStandbyTimer() // Reinicia el timer de publicidad cada vez que se escanea
+
+        // P8: Caché LRU local — respuesta inmediata sin red ni backup
+        val cached = scanCache.get(code)
+        if (cached != null) {
+            feedbackSuccess()
+            showResult(cached)
+            pauseUntil = android.os.SystemClock.elapsedRealtime() + 4000
+            return
+        }
+
         if (!isNetworkAvailable) {
             if (!offlineMode) {
                 setOfflineMode(true)
@@ -1653,6 +1665,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             requestInFlight = true
             try {
                 val producto = api.consultar(code)
+                scanCache.put(code, producto) // P8: guardar en caché LRU
                 uiHandler.post {
                     feedbackSuccess()
                     showResult(producto)
@@ -1709,7 +1722,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 val isStale = isBackupStale(backup)
                 Log.d(TAG, "[OFFLINE] Backup updatedAt: ${backup.updatedAt}, isStale: $isStale")
                 if (isStale) {
-                    Log.w(TAG, "[OFFLINE] showOutOfService: backup stale (más de 12h)")
+                    Log.w(TAG, "[OFFLINE] showOutOfService: backup stale (más de 24h)")
                     uiHandler.post { showOutOfService() }
                     return@launch
                 }
@@ -1721,6 +1734,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                     uiHandler.post { showThrottledError("offline_not_found", getString(R.string.error_product_not_found)) }
                     return@launch
                 }
+                scanCache.put(code, producto) // P8: guardar en caché LRU
                 uiHandler.post {
                     feedbackSuccess()
                     showResult(producto)

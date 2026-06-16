@@ -849,152 +849,23 @@ async def shutdown_device_state_store():
 
 
 # ─────────────────────────────────────────────────────────────
-# Funciones unificadas de consulta (Punto 2 + Punto 3)
-# Reemplazan: buscar_producto_y_precio, buscar_oferta,
-#             buscar_detalle_oferta_vigente, buscar_en_barras_asociadas
+# Funciones originales de consulta (restauradas desde git)
+# Flujo: 1) producto+precio, 2) oferta (precios), 3) detalle (validez fechas)
 # ─────────────────────────────────────────────────────────────
 
-def _build_sub_ofertas_vigentes(now: datetime):
-    """Subquery de ofertas no expiradas y dentro del rango de fechas."""
-    today_start = datetime.combine(now.date(), datetime.min.time())
-    return (
-        select(models.OfertasxProductos.IdOfertaxProducto)
-        .where(
-            or_(
-                models.OfertasxProductos.IndExpirado != 1,
-                models.OfertasxProductos.IndExpirado.is_(None),
-            ),
-            or_(
-                models.OfertasxProductos.FechaInicio.is_(None),
-                models.OfertasxProductos.FechaInicio <= now,
-            ),
-            or_(
-                models.OfertasxProductos.FechaFin.is_(None),
-                models.OfertasxProductos.FechaFin >= today_start,
-            ),
-        )
-        .subquery()
-    )
-
-
-def _build_sub_ofertas_sucursal(sub_ofertas_vigentes):
-    """Subquery de ofertas por sucursal filtradas por las vigentes."""
-    return (
-        select(models.OfertasxProductosxSucursal.IdOfertaxProductoxSucursal)
-        .where(
-            models.OfertasxProductosxSucursal.IdOfertaxProducto.in_(
-                select(sub_ofertas_vigentes.c.IdOfertaxProducto)
-            )
-        )
-        .subquery()
-    )
-
-
-def _build_query_completo(codigo_barras: str, now: datetime):
-    """Construye la query unificada con OUTER JOINs + subqueries de ofertas."""
-    sub_ofertas_vigentes = _build_sub_ofertas_vigentes(now)
-    sub_ofertas_sucursal = _build_sub_ofertas_sucursal(sub_ofertas_vigentes)
-
-    return (
-        select(
-            models.Producto,
-            models.ProductoPrecio,
-            models.ProductoOferta,
-            models.OfertasxProductosxSucursalesDetalles,
-        )
+# Paso 1a: Buscar producto y precio por SKU (1 query)
+async def buscar_producto_y_precio(db: AsyncSession, codigo_barras: str):
+    stmt = (
+        select(models.Producto, models.ProductoPrecio)
         .join(
             models.ProductoPrecio,
             models.Producto.IdProducto == models.ProductoPrecio.IdProducto,
-        )
-        .outerjoin(
-            models.ProductoOferta,
-            and_(
-                models.Producto.IdProducto == models.ProductoOferta.IdProducto,
-                models.ProductoOferta.IndActivo == 1,
-            ),
-        )
-        .outerjoin(
-            models.OfertasxProductosxSucursalesDetalles,
-            and_(
-                models.ProductoPrecio.IdEmpaque
-                == models.OfertasxProductosxSucursalesDetalles.IdEmpaque,
-                models.OfertasxProductosxSucursalesDetalles.IdOfertaxProductoxSucursal.in_(
-                    select(sub_ofertas_sucursal.c.IdOfertaxProductoxSucursal)
-                ),
-                or_(
-                    models.OfertasxProductosxSucursalesDetalles.IndActivo == 1,
-                    models.OfertasxProductosxSucursalesDetalles.IndActivo.is_(None),
-                ),
-            ),
         )
         .where(
             models.Producto.SKU == codigo_barras,
             models.ProductoPrecio.CostoBase > 0,
         )
-        .limit(1)
     )
-
-
-async def buscar_producto_completo(
-    db: AsyncSession, codigo_barras: str, now: datetime
-) -> tuple | None:
-    """Busca producto + precio + oferta + detalle en UNA SOLA QUERY por SKU."""
-    stmt = _build_query_completo(codigo_barras, now)
-    result = await db.execute(stmt)
-    return result.first()
-
-
-async def buscar_por_barras_asociadas(
-    db: AsyncSession, codigo_barras: str, now: datetime
-) -> tuple | None:
-    """Busca producto + precio + oferta + detalle en UNA SOLA QUERY por código de barras alternativo."""
-    sub_ofertas_vigentes = _build_sub_ofertas_vigentes(now)
-    sub_ofertas_sucursal = _build_sub_ofertas_sucursal(sub_ofertas_vigentes)
-
-    stmt = (
-        select(
-            models.Producto,
-            models.ProductoPrecio,
-            models.ProductoOferta,
-            models.OfertasxProductosxSucursalesDetalles,
-        )
-        .join(
-            models.BarrasAsociadas,
-            models.BarrasAsociadas.IdProducto == models.Producto.IdProducto,
-        )
-        .join(
-            models.ProductoPrecio,
-            models.Producto.IdProducto == models.ProductoPrecio.IdProducto,
-        )
-        .outerjoin(
-            models.ProductoOferta,
-            and_(
-                models.Producto.IdProducto == models.ProductoOferta.IdProducto,
-                models.ProductoOferta.IndActivo == 1,
-            ),
-        )
-        .outerjoin(
-            models.OfertasxProductosxSucursalesDetalles,
-            and_(
-                models.ProductoPrecio.IdEmpaque
-                == models.OfertasxProductosxSucursalesDetalles.IdEmpaque,
-                models.OfertasxProductosxSucursalesDetalles.IdOfertaxProductoxSucursal.in_(
-                    select(sub_ofertas_sucursal.c.IdOfertaxProductoxSucursal)
-                ),
-                or_(
-                    models.OfertasxProductosxSucursalesDetalles.IndActivo == 1,
-                    models.OfertasxProductosxSucursalesDetalles.IndActivo.is_(None),
-                ),
-            ),
-        )
-        .where(
-            models.BarrasAsociadas.Barra == codigo_barras,
-            models.BarrasAsociadas.IndActivo == 1,
-            models.ProductoPrecio.CostoBase > 0,
-        )
-        .limit(1)
-    )
-
     result = await db.execute(stmt)
     return result.first()
 
@@ -1034,6 +905,97 @@ async def buscar_coincidencias_cercanas(db: AsyncSession, codigo_barras: str, li
     
     result = await db.execute(stmt)
     return result.all()
+
+
+# Paso 1c: Buscar producto por código de barras alternativo (1 query BarrasAsociadas + 1 query Producto+Price)
+async def buscar_en_barras_asociadas(db: AsyncSession, codigo_barras: str):
+    """
+    Busca el código de barras en la tabla Transaccional.BarrasAsociadas.
+    Si lo encuentra, retorna el IdProducto asociado para buscar el producto completo.
+    """
+    stmt = select(models.BarrasAsociadas).where(
+        models.BarrasAsociadas.Barra == codigo_barras,
+        models.BarrasAsociadas.IndActivo == 1,
+    )
+    result = await db.execute(stmt)
+    barra_asociada = result.scalars().first()
+    
+    if not barra_asociada:
+        return None
+    
+    stmt_producto = (
+        select(models.Producto, models.ProductoPrecio)
+        .join(
+            models.ProductoPrecio,
+            models.Producto.IdProducto == models.ProductoPrecio.IdProducto,
+        )
+        .where(
+            models.Producto.IdProducto == barra_asociada.IdProducto,
+            models.ProductoPrecio.CostoBase > 0,
+        )
+    )
+    result_producto = await db.execute(stmt_producto)
+    return result_producto.first()
+
+
+# Paso 2: Buscar oferta asociada (1 query, precios)
+async def buscar_oferta(db: AsyncSession, id_producto: int):
+    stmt = select(models.ProductoOferta).where(
+        models.ProductoOferta.IdProducto == id_producto,
+        models.ProductoOferta.IndActivo == 1,
+    )
+    result = await db.execute(stmt)
+    return result.scalars().first()
+
+
+# Paso 3: Buscar detalle de oferta vigente por empaque (1 query con JOINs, validación de fechas)
+# P1: CAST(FechaFin AS DATE) reemplazado por FechaFin >= today_start (sargable)
+async def buscar_detalle_oferta_vigente(
+    db: AsyncSession,
+    precio: models.ProductoPrecio | None,
+    now: datetime,
+):
+    if not precio or precio.IdEmpaque is None:
+        return None
+
+    today_start = datetime.combine(now.date(), datetime.min.time())
+
+    stmt = (
+        select(models.OfertasxProductosxSucursalesDetalles)
+        .join(
+            models.OfertasxProductosxSucursal,
+            models.OfertasxProductosxSucursal.IdOfertaxProductoxSucursal
+            == models.OfertasxProductosxSucursalesDetalles.IdOfertaxProductoxSucursal,
+        )
+        .join(
+            models.OfertasxProductos,
+            models.OfertasxProductos.IdOfertaxProducto
+            == models.OfertasxProductosxSucursal.IdOfertaxProducto,
+        )
+        .where(
+            models.OfertasxProductosxSucursalesDetalles.IdEmpaque == precio.IdEmpaque,
+            or_(
+                models.OfertasxProductosxSucursalesDetalles.IndActivo == 1,
+                models.OfertasxProductosxSucursalesDetalles.IndActivo.is_(None),
+            ),
+            or_(
+                models.OfertasxProductos.IndExpirado != 1,
+                models.OfertasxProductos.IndExpirado.is_(None),
+            ),
+            or_(
+                models.OfertasxProductos.FechaInicio.is_(None),
+                models.OfertasxProductos.FechaInicio <= now,
+            ),
+            or_(
+                models.OfertasxProductos.FechaFin.is_(None),
+                models.OfertasxProductos.FechaFin >= today_start,
+            ),
+        )
+        .limit(1)
+    )
+
+    result = await db.execute(stmt)
+    return result.scalars().first()
 
 
 # Caché en memoria para tasas de impuesto (Punto 4)
@@ -1333,22 +1295,26 @@ async def obtener_precio(
     # Normalizar código de barras para búsqueda
     codigos_a_buscar = normalizar_codigo_barras(codigo_barras)
     
-    now = datetime.now()
-    
     # Intentar buscar con cada variante del código
     for codigo in codigos_a_buscar:
-        resultado = await buscar_producto_completo(db, codigo, now)
+        resultado = await buscar_producto_y_precio(db, codigo)
         if resultado:
-            producto, precio, oferta, detalle = resultado
+            producto, precio = resultado
+            oferta = await buscar_oferta(db, producto.IdProducto)
+            now = datetime.now()
+            detalle = await buscar_detalle_oferta_vigente(db, precio, now)
             tasa_impuesto = await buscar_tasa_impuesto(db, db_erp, producto.IdProducto, precio)
             resp = armar_respuesta(producto, precio, oferta, detalle, tasa_impuesto)
             _scan_cache[codigo_barras] = (time.time(), resp)
             return resp
         
         # Buscar en BarrasAsociadas si no se encuentra por SKU
-        resultado = await buscar_por_barras_asociadas(db, codigo, now)
-        if resultado:
-            producto, precio, oferta, detalle = resultado
+        resultado_barras_asociadas = await buscar_en_barras_asociadas(db, codigo)
+        if resultado_barras_asociadas:
+            producto, precio = resultado_barras_asociadas
+            oferta = await buscar_oferta(db, producto.IdProducto)
+            now = datetime.now()
+            detalle = await buscar_detalle_oferta_vigente(db, precio, now)
             tasa_impuesto = await buscar_tasa_impuesto(db, db_erp, producto.IdProducto, precio)
             resp = armar_respuesta(producto, precio, oferta, detalle, tasa_impuesto)
             _scan_cache[codigo_barras] = (time.time(), resp)

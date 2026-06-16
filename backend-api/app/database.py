@@ -65,6 +65,8 @@ async_engine = create_async_engine(
     echo=False,
     pool_pre_ping=True,
     pool_recycle=1800,
+    pool_size=3,
+    max_overflow=2,
 )
 AsyncSessionLocal = sessionmaker(
     bind=async_engine,
@@ -100,6 +102,8 @@ engine_erp = create_async_engine(
     echo=False,
     pool_pre_ping=True,
     pool_recycle=1800,
+    pool_size=2,
+    max_overflow=1,
 )
 
 # Session maker async para BD ERP

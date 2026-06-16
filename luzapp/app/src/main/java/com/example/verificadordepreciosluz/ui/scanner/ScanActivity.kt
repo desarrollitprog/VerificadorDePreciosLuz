@@ -54,6 +54,7 @@ import com.example.verificadordepreciosluz.data.local.BackupRepository
 import com.example.verificadordepreciosluz.data.local.BackupResponse
 import com.example.verificadordepreciosluz.data.local.BackupIndexRepository
 import com.example.verificadordepreciosluz.data.local.BackupUtils
+import com.example.verificadordepreciosluz.data.local.ScanCache
 import com.example.verificadordepreciosluz.data.local.BannerRepository
 import com.example.verificadordepreciosluz.data.local.BannerCacheItem
 import com.example.verificadordepreciosluz.databinding.ActivityScanBinding
@@ -126,7 +127,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private var connectivityManager: ConnectivityManager? = null
     private var offlineBackup: BackupResponse? = null
     private var backupReadyNotified = false
-    private val backupMaxAgeMs = (12 * 60 * 60 * 1000L)
+    private val backupMaxAgeMs = (24 * 60 * 60 * 1000L)
+    private val scanCache = ScanCache()
     private var cameraProvider: ProcessCameraProvider? = null
     private val bannerMaxAgeMs = (12 * 60 * 60 * 1000L)
     private val bannerPollIntervalMs = (60 * 1000L)  // 60 segundos - suficiente para detectar programaciones
@@ -1631,6 +1633,17 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private fun onBarcodeDetected(code: String) {
         stopStandbyCarousel()
         resetStandbyTimer() // Reinicia el timer de publicidad cada vez que se escanea
+
+        // P8: Caché LRU local — respuesta inmediata sin red ni backup
+        val cached = scanCache.get(code)
+        if (cached != null) {
+            logPromoData("P8 CACHE HIT", code, cached)
+            feedbackSuccess()
+            showResult(cached)
+            pauseUntil = android.os.SystemClock.elapsedRealtime() + 4000
+            return
+        }
+
         if (!isNetworkAvailable) {
             if (!offlineMode) {
                 setOfflineMode(true)
@@ -1653,6 +1666,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             requestInFlight = true
             try {
                 val producto = api.consultar(code)
+                logPromoData("API ONLINE", code, producto)
+                scanCache.put(code, producto) // P8: guardar en caché LRU
                 uiHandler.post {
                     feedbackSuccess()
                     showResult(producto)
@@ -1709,7 +1724,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 val isStale = isBackupStale(backup)
                 Log.d(TAG, "[OFFLINE] Backup updatedAt: ${backup.updatedAt}, isStale: $isStale")
                 if (isStale) {
-                    Log.w(TAG, "[OFFLINE] showOutOfService: backup stale (más de 12h)")
+                    Log.w(TAG, "[OFFLINE] showOutOfService: backup stale (más de 24h)")
                     uiHandler.post { showOutOfService() }
                     return@launch
                 }
@@ -1721,6 +1736,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                     uiHandler.post { showThrottledError("offline_not_found", getString(R.string.error_product_not_found)) }
                     return@launch
                 }
+                logPromoData("OFFLINE BACKUP", code, producto)
+                scanCache.put(code, producto) // P8: guardar en caché LRU
                 uiHandler.post {
                     feedbackSuccess()
                     showResult(producto)
@@ -1964,6 +1981,24 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             startActivity(Intent(this@ScanActivity, MainActivity::class.java))
             finish()
         }
+    }
+
+    private fun logPromoData(source: String, code: String, p: ProductoResponse) {
+        Log.d("PROMO", "=== $source (barcode=$code) ===")
+        Log.d("PROMO", "idProducto=${p.idProducto}, sku=${p.sku}, nombre=${p.nombre}")
+        Log.d("PROMO", "pvpBase=${p.pvpBase}, pvpConversion=${p.pvpConversion}")
+        Log.d("PROMO", "indIva=${p.indIva}, idTasaImpuesto=${p.idTasaImpuesto}")
+        Log.d("PROMO", "ivaIncluidoBs=${p.ivaIncluidoBs}, precioFinalConIva=${p.precioFinalConIva}")
+        Log.d("PROMO", "pvpOferta=${p.pvpOferta}, pvpBaseOferta=${p.pvpBaseOferta}")
+        Log.d("PROMO", "idEmpaque=${p.idEmpaque}")
+        if (p.pvpOferta != null && p.pvpOferta > 0) {
+            Log.d("PROMO", ">>> MODO OFERTA: pvpOferta=$" + String.format("%.2f", p.pvpOferta) +
+                    ", pvpBaseOferta=$" + String.format("%.2f", p.pvpBaseOferta ?: 0.0) +
+                    ", precioFinal=$" + String.format("%.2f", p.precioFinalConIva ?: 0.0))
+        } else {
+            Log.d("PROMO", ">>> MODO NORMAL (sin oferta activa)")
+        }
+        Log.d("PROMO", "======================")
     }
 
     private fun showResult(producto: ProductoResponse) {

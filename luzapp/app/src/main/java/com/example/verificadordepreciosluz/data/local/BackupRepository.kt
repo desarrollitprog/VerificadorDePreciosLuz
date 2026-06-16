@@ -198,7 +198,7 @@ class BackupRepository(
                 if (productos.isEmpty() || precios.isEmpty()) {
                     Log.e("BackupRepository", "Backup inválido: productos o precios vacíos")
                     null
-                } else if (precios.any { it.pvpBase == null || it.pvpBase == 0.0 }) {
+                } else if (precios.all { it.pvpBase == null || it.pvpBase == 0.0 }) {
                     Log.e("BackupRepository", "Backup inválido: precios nulos o en 0 detectados")
                     null
                 } else {

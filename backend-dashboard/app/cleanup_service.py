@@ -4,12 +4,13 @@ Bots 1-3: limpieza de sesiones antiguas, notificaciones viejas, y archivos huér
 """
 import os
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import text
+from sqlalchemy import delete, select, text
 from app.database import AsyncSessionLocalUsuarios
 from app.models.publicidad import Publicidad
 from app.models.metricas_por_sede import MetricasPorSede
+from app.models.notificacion import Notificacion
+from app.models.dispositivo_sesion import DispositivoSesion
 from app.utils.logger import StructuredLogger
-from sqlalchemy import select
 
 log = StructuredLogger("cleanup_service")
 
@@ -22,8 +23,8 @@ async def cleanup_old_sessions() -> int:
     try:
         async with AsyncSessionLocalUsuarios() as db:
             cutoff = datetime.now(timezone(timedelta(hours=-4))).replace(tzinfo=None) - timedelta(days=90)
-            stmt = text("DELETE FROM dispositivo_sesiones WHERE fin < :cutoff")
-            result = await db.execute(stmt, {"cutoff": cutoff})
+            stmt = delete(DispositivoSesion).where(DispositivoSesion.fin < cutoff)
+            result = await db.execute(stmt)
             await db.commit()
             deleted = result.rowcount
             if deleted > 0:
@@ -43,8 +44,8 @@ async def cleanup_old_notifications() -> int:
     try:
         async with AsyncSessionLocalUsuarios() as db:
             cutoff = datetime.now(timezone(timedelta(hours=-4))).replace(tzinfo=None) - timedelta(days=15)
-            stmt = text("DELETE FROM notificaciones WHERE fecha_creacion < :cutoff")
-            result = await db.execute(stmt, {"cutoff": cutoff})
+            stmt = delete(Notificacion).where(Notificacion.fecha_creacion < cutoff)
+            result = await db.execute(stmt)
             await db.commit()
             deleted = result.rowcount
             if deleted > 0:

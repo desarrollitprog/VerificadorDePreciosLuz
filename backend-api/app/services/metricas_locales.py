@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import time
 from datetime import datetime, timedelta
 
 from sqlalchemy import select, update
@@ -12,6 +13,7 @@ from ..models.reproduccion_metrica import ReproduccionMetricaSede
 logger = logging.getLogger("uvicorn.error")
 REDIS_KEY = "reproducciones:pending"
 INTERVALO_SEGUNDOS = 60
+INTERVALO_LIMPIEZA_SEGUNDOS = 15 * 24 * 60 * 60  # 15 días
 SUB_BATCH_SIZE = 25
 
 
@@ -101,9 +103,14 @@ async def _enriquecer_con_tipo_dispositivo(rows: list[dict], device_state_store)
 
 async def insertar_reproducciones_locales(reproducciones_redis, device_state_store=None):
     """Worker que cada 60s lee Redis, mergea en memoria e INSERTA localmente."""
-    await limpiar_metricas_viejas()
+    ultima_limpieza = 0.0
     while True:
         try:
+            ahora = time.monotonic()
+            if ahora - ultima_limpieza >= INTERVALO_LIMPIEZA_SEGUNDOS:
+                await limpiar_metricas_viejas()
+                ultima_limpieza = ahora
+
             await asyncio.sleep(INTERVALO_SEGUNDOS)
 
             if reproducciones_redis is None:

@@ -150,7 +150,8 @@ async def actualizar_sesiones_dispositivos() -> None:
 
 
 async def _crear_nueva_sesion(db: AsyncSession, dispositivo_id: str, inicio: datetime) -> None:
-    """Crea una nueva sesión para el dispositivo."""
+    """Cierra sesiones huérfanas y crea una nueva sesión para el dispositivo."""
+    await _cerrar_sesion_activa(db, dispositivo_id, inicio)
     sesion = DispositivoSesion(
         dispositivo_id=dispositivo_id,
         inicio=inicio,
@@ -160,15 +161,15 @@ async def _crear_nueva_sesion(db: AsyncSession, dispositivo_id: str, inicio: dat
 
 
 async def _cerrar_sesion_activa(db: AsyncSession, dispositivo_id: str, fin: datetime) -> None:
-    """Cierra la sesión activa del dispositivo."""
+    """Cierra todas las sesiones activas del dispositivo."""
     stmt_sesion = select(DispositivoSesion).where(
         DispositivoSesion.dispositivo_id == dispositivo_id,
         DispositivoSesion.fin == None
     )
     result_sesion = await db.execute(stmt_sesion)
-    sesion_activa = result_sesion.scalars().first()
-    if sesion_activa:
-        sesion_activa.fin = fin
-        duracion = int((fin - sesion_activa.inicio).total_seconds())
-        sesion_activa.duracion_segundos = duracion
+    sesiones_activas = result_sesion.scalars().all()
+    for sesion in sesiones_activas:
+        sesion.fin = fin
+        sesion.duracion_segundos = int((fin - sesion.inicio).total_seconds())
+    if sesiones_activas:
         await db.flush()

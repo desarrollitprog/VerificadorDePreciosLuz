@@ -10,6 +10,7 @@ from app.dependencies import get_current_cliente, get_current_admin
 from app.models.dispositivo import Dispositivo
 from app.models.dispositivo_sesion import DispositivoSesion
 from app.models.servidor_secundario import ServidorSecundario
+from app.services.monitoreo_service import _cerrar_sesion_activa, _crear_nueva_sesion
 from app.services.notificacion_service import registrar_accion
 from app.services.server_service import HEARTBEAT_OFFLINE_MINUTES, _utcnow, _obtener_dispositivos_de_servidor, _obtener_conteo_videos_servidor
 import asyncio
@@ -123,35 +124,15 @@ async def status_detalle(
                     dispositivo_por_codigo[codigo] = dispositivo
 
                     if bool(info.get("online", False)):
-                        sesion = DispositivoSesion(
-                            dispositivo_id=codigo,
-                            inicio=now,
-                        )
-                        db.add(sesion)
-                        await db.flush()
+                        await _crear_nueva_sesion(db, codigo, now)
                 else:
                     estaba_online = dispositivo.online
                     ahora_online = bool(info.get("online", False))
 
                     if not estaba_online and ahora_online:
-                        sesion = DispositivoSesion(
-                            dispositivo_id=codigo,
-                            inicio=now,
-                        )
-                        db.add(sesion)
-                        await db.flush()
+                        await _crear_nueva_sesion(db, codigo, now)
                     elif estaba_online and not ahora_online:
-                        stmt_sesion = select(DispositivoSesion).where(
-                            DispositivoSesion.dispositivo_id == codigo,
-                            DispositivoSesion.fin == None
-                        )
-                        result_sesion = await db.execute(stmt_sesion)
-                        sesion_activa = result_sesion.scalars().first()
-                        if sesion_activa:
-                            sesion_activa.fin = now
-                            duracion = int((now - sesion_activa.inicio).total_seconds())
-                            sesion_activa.duracion_segundos = duracion
-                            await db.flush()
+                        await _cerrar_sesion_activa(db, codigo, now)
 
                     dispositivo.online = ahora_online
                     dispositivo.servidor_id = s.id
@@ -159,33 +140,13 @@ async def status_detalle(
             for dispositivo in dispositivo_por_codigo.values():
                 if dispositivo.servidor_id == s.id and dispositivo.codigo_kiosko not in vistos:
                     if dispositivo.online:
-                        stmt_sesion = select(DispositivoSesion).where(
-                            DispositivoSesion.dispositivo_id == dispositivo.codigo_kiosko,
-                            DispositivoSesion.fin == None
-                        )
-                        result_sesion = await db.execute(stmt_sesion)
-                        sesion_activa = result_sesion.scalars().first()
-                        if sesion_activa:
-                            sesion_activa.fin = now
-                            duracion = int((now - sesion_activa.inicio).total_seconds())
-                            sesion_activa.duracion_segundos = duracion
-                            await db.flush()
+                        await _cerrar_sesion_activa(db, dispositivo.codigo_kiosko, now)
                     dispositivo.online = False
         else:
             for dispositivo in dispositivo_por_codigo.values():
                 if dispositivo.servidor_id == s.id:
                     if dispositivo.online:
-                        stmt_sesion = select(DispositivoSesion).where(
-                            DispositivoSesion.dispositivo_id == dispositivo.codigo_kiosko,
-                            DispositivoSesion.fin == None
-                        )
-                        result_sesion = await db.execute(stmt_sesion)
-                        sesion_activa = result_sesion.scalars().first()
-                        if sesion_activa:
-                            sesion_activa.fin = now
-                            duracion = int((now - sesion_activa.inicio).total_seconds())
-                            sesion_activa.duracion_segundos = duracion
-                            await db.flush()
+                        await _cerrar_sesion_activa(db, dispositivo.codigo_kiosko, now)
                     dispositivo.online = False
 
         dispositivos: list[dict[str, Any]] = []
@@ -201,7 +162,7 @@ async def status_detalle(
             stmt_sesion_activa = select(DispositivoSesion).where(
                 DispositivoSesion.dispositivo_id == dispositivo.codigo_kiosko,
                 DispositivoSesion.fin == None
-            )
+            ).order_by(DispositivoSesion.inicio.desc())
             result_sesion_activa = await db.execute(stmt_sesion_activa)
             sesion_activa = result_sesion_activa.scalars().first()
 

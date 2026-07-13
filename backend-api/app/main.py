@@ -1960,6 +1960,7 @@ class TabletWebSocketManager:
                     asyncio.create_task(device_state_store.mark_offline(device_id))
                 from app.services.device_registry import unregister_device
                 asyncio.create_task(unregister_device(device_id))
+                asyncio.create_task(_notify_dashboard_disconnect(device_id))
 
     async def broadcast(self, message: dict):
         dead = []
@@ -2192,6 +2193,7 @@ class TabletWebSocketManager:
                     asyncio.create_task(device_state_store.mark_offline(device_id))
                 from app.services.device_registry import unregister_device
                 asyncio.create_task(unregister_device(device_id))
+                asyncio.create_task(_notify_dashboard_disconnect(device_id))
         except Exception as e:
             logger.error(f"[WS] Error en _safe_disconnect: {e}")
 
@@ -2876,6 +2878,20 @@ async def notify_dashboard_sync_delivered(device_id: str):
             await client.post(notify_endpoint, json=payload, timeout=10)
     except Exception as e:
         logging.error(f"Error notificando sync delivered al dashboard: {e}")
+
+
+async def _notify_dashboard_disconnect(device_id: str):
+    """Notifica al dashboard que un dispositivo se desconectó (fire-and-forget)."""
+    dashboard_url = os.getenv("DASHBOARD_URL")
+    if not dashboard_url:
+        return
+    api_key = os.getenv("HEARTBEAT_API_KEY", "")
+    url = f"{dashboard_url.rstrip('/')}/api/dispositivo-offline/{device_id}"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(url, headers={"X-API-KEY": api_key})
+    except Exception:
+        pass
 
 
 async def notify_dashboard_banner_iniciado(device_id: str, banner_id: int | None = None):

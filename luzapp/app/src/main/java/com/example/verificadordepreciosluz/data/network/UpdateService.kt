@@ -19,7 +19,7 @@ interface UpdateApiService {
 }
 
 object UpdateService {
-    private const val BASE_URL = "https://tavorl25.github.io/VerificadorDePreciosLuz"
+    private const val BASE_URL = "https://desarrollitprog.github.io/VerificadorDePreciosLuz"
     private const val UPDATE_PATH = "/version.json"
 
     private val client: OkHttpClient by lazy {

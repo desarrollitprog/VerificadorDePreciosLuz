@@ -90,7 +90,7 @@ docker-compose up -d --build
 - Signing: **same release keystore for debug & release**. If a device has a locally-built debug APK, CI updates fail (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`). Reinstall from CI APK once.
 
 ### Updates
-- **Not served by any backend**. Delivered via **GitHub Pages**: `https://tavorl25.github.io/VerificadorDePreciosLuz/version.json`
+- **Not served by any backend**. Delivered via **GitHub Pages**: `https://desarrollitprog.github.io/VerificadorDePreciosLuz/version.json`
 - CI builds `assembleRelease` daily at 9 AM UTC, signs via secrets, commits `luzapp.apk` + `version.json` to `main` with `--force` (build-apk.yml:67). Falls back to pull+rebase if force-push fails.
 - 3 update modes: `DIALOG` (user confirms via FileProvider), `SILENT` (notification), `AUTO` (silent install via PackageInstaller + Device Owner)
 

@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, UniqueConstraint
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import backref, relationship
 
 from ..database import Base
 
@@ -28,5 +28,12 @@ class NotificacionLeida(Base):
     )
     fecha_lectura = Column(DateTime, nullable=False, default=datetime.utcnow)
 
-    usuario = relationship("Usuario", backref="notificaciones_leidas")
+    usuario = relationship(
+        "Usuario",
+        backref=backref(
+            "notificaciones_leidas",
+            cascade="all, delete-orphan",
+            passive_deletes=True,
+        ),
+    )
     notificacion = relationship("Notificacion", backref="lecturas")

@@ -7,7 +7,7 @@ backend-dashboard/.env
 backend-dashboard/venv/
 backend-dashboard/.vscode/
 backend-dashboard/hash_script.py
-backend-dashboard/static/banners/
+backend-dashboard/app/static/banners/
 backend-api/.env
 backend-api/venv/
 backend-api/.vscode/

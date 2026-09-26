@@ -3,6 +3,7 @@ Módulo de scheduler para tareas periódicas.
 Utiliza APScheduler con AsyncIOScheduler para tareas asíncronas.
 """
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
 from app.utils.logger import StructuredLogger
 
@@ -14,7 +15,7 @@ _scheduler: AsyncIOScheduler | None = None
 def iniciar_scheduler() -> AsyncIOScheduler:
     """
     Inicializa y devuelve el scheduler.
-    Agrega jobs de monitoreo cada 3.5 minutos.
+    Agrega jobs de monitoreo cada 3.5 minutos y limpiezas programadas.
     """
     global _scheduler
     if _scheduler is not None:
@@ -44,40 +45,44 @@ def iniciar_scheduler() -> AsyncIOScheduler:
         replace_existing=True
     )
 
-    # Job 3: Limpiar sesiones antiguas (>90 días) cada 15 días
+    # Job 3: Limpiar sesiones antiguas (>90 días) - domingos a las 03:17
     _scheduler.add_job(
         cleanup_old_sessions,
-        'interval',
-        days=15,
+        CronTrigger(day_of_week='sun', hour=3, minute=17),
         id='limpiar_sesiones',
-        replace_existing=True
+        replace_existing=True,
+        coalesce=True,
+        misfire_grace_time=3600,
     )
 
-    # Job 4: Limpiar notificaciones viejas (>15 días) cada 15 días
+    # Job 4: Limpiar notificaciones viejas (>15 días) - domingos a las 03:41
     _scheduler.add_job(
         cleanup_old_notifications,
-        'interval',
-        days=15,
+        CronTrigger(day_of_week='sun', hour=3, minute=41),
         id='limpiar_notificaciones',
-        replace_existing=True
+        replace_existing=True,
+        coalesce=True,
+        misfire_grace_time=3600,
     )
 
-    # Job 5: Limpiar archivos huérfanos cada 24 horas
+    # Job 5: Limpiar archivos huérfanos - diario a las 04:23
     _scheduler.add_job(
         cleanup_orphan_files,
-        'interval',
-        hours=24,
+        CronTrigger(hour=4, minute=23),
         id='limpiar_archivos_huérfanos',
-        replace_existing=True
+        replace_existing=True,
+        coalesce=True,
+        misfire_grace_time=3600,
     )
 
-    # Job 6: Limpiar métricas de reproducciones > 15 días cada 24h
+    # Job 6: Limpiar métricas de reproducciones > 15 días - diario a las 05:11
     _scheduler.add_job(
         cleanup_old_metricas,
-        'interval',
-        hours=24,
+        CronTrigger(hour=5, minute=11),
         id='limpiar_metricas_viejas',
         replace_existing=True,
+        coalesce=True,
+        misfire_grace_time=3600,
     )
 
     def job_executed_listener(event):

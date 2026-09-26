@@ -58,6 +58,9 @@ dashboard/node_modules/
 *.log
 *.tmp
 
+# Backups de base de datos
+backups/
+
 # Archivos de sistema
 .DS_Store
 Thumbs.db

@@ -1,0 +1,13 @@
+backend-dashboard/app/static/banners/
+**/venv/
+**/node_modules/
+**/__pycache__/
+*.pyc
+.env*
+*.log
+*.apk
+*.bak
+*.docx
+*.tmp
+backups/
+.git/

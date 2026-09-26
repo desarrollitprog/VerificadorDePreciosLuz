@@ -7,16 +7,17 @@ services:
     environment:
       - TZ=America/Caracas
       - ACCEPT_EULA=Y
-      - MSSQL_SA_PASSWORD=${SA_PASSWORD:-Dit12345*}
+      - MSSQL_SA_PASSWORD=${SA_PASSWORD:?SA_PASSWORD no esta definido en .env}
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
       - mssql_data:/var/opt/mssql
+      - ./backups:/backups
     ports:
       - "1433:1433"
     restart: always
     healthcheck:
-      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P ${SA_PASSWORD:-Dit12345*} -Q "SELECT 1" || exit 1
+      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P ${SA_PASSWORD:?SA_PASSWORD no esta definido en .env} -Q "SELECT 1" || exit 1
       interval: 10s
       timeout: 5s
       retries: 5
@@ -34,6 +35,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+    command: redis-server --maxmemory 512mb --maxmemory-policy noeviction
 
   dashboard-backend:
     build:
@@ -53,7 +55,13 @@ services:
       sqlserver:
         condition: service_healthy
       dashboard-redis:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   dashboard-frontend:
     build:
@@ -65,8 +73,15 @@ services:
     volumes:
       - ./updates:/usr/share/nginx/html/updates:ro
     depends_on:
-      - dashboard-backend
+      dashboard-backend:
+        condition: service_healthy
     restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/ > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 volumes:
   mssql_data:

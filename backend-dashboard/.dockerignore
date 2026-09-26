@@ -1,0 +1,11 @@
+app/static/banners/
+venv/
+__pycache__/
+*.pyc
+.env*
+*.log
+tests/__pycache__/
+.pytest_cache/
+*.egg-info/
+*.bak
+*.tmp

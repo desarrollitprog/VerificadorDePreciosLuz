@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-BACKUP_DIR="/backups"
+BACKUP_DIR="/home/desarrolloit/VerificadorDePreciosLuz/backups"
 LOG_FILE="$BACKUP_DIR/backup.log"
 RETENTION_DAYS=14
 DB_NAME="DashboardUsuarios"

@@ -2,7 +2,9 @@ app/static/banners/
 venv/
 __pycache__/
 *.pyc
+.env
 .env*
+!.env.dashboard
 *.log
 tests/__pycache__/
 .pytest_cache/

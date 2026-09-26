@@ -4,6 +4,9 @@
 
 set -euo pipefail
 
+# Cargar variables de entorno
+source /home/desarrolloit/VerificadorDePreciosLuz/.env
+
 BACKUP_DIR="/home/desarrolloit/VerificadorDePreciosLuz/backups"
 LOG_FILE="/tmp/backup_sqlserver.log"
 RETENTION_DAYS=14

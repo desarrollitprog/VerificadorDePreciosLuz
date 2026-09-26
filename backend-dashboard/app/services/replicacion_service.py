@@ -277,18 +277,33 @@ async def replicar_archivos_batch_a_todas_las_apis(file_paths: list, banners: li
     return resultados
 
 
-async def Borrado_a_todas_las_apis(id_remoto: int, timeout: int = 30) -> list:
+async def Borrado_a_todas_las_apis(id_remoto: int, timeout: int = 8) -> list:
     """
-    Env├¡a petici├│n de borrado a todas las APIs de replicaci├│n configuradas.
+    Envía petición de borrado a todas las APIs de replicación configuradas.
+
+    Las peticiones se envían en PARALELO (asyncio.gather) para que un servidor
+    lento o inalcanzable no sumara su timeout a los demás. Un fallo de un
+    servidor NO impide el borrado de los demás; se devuelve success=False
+    solo para ese caso concreto.
     """
     api_urls = get_api_urls()
+    if not api_urls:
+        return []
+
+    # Timeout configurable por entorno; 8s por defecto (antes 30s).
+    timeout = int(os.getenv("REPLICACION_DELETE_TIMEOUT", timeout))
+
+    resultados_raw = await asyncio.gather(
+        *[Borrado_api(api_url, id_remoto, timeout) for api_url in api_urls],
+        return_exceptions=True,
+    )
+
     resultados = []
-    for api_url in api_urls:
-        try:
-            resp = await Borrado_api(api_url, id_remoto, timeout)
-            resultados.append({"api_url": api_url, "success": True, "response": resp})
-        except Exception as e:
-            resultados.append({"api_url": api_url, "success": False, "error": str(e)})
+    for idx, res in enumerate(resultados_raw):
+        if isinstance(res, Exception):
+            resultados.append({"api_url": api_urls[idx], "success": False, "error": str(res)})
+        else:
+            resultados.append({"api_url": api_urls[idx], "success": True, "response": res})
     return resultados
 
 

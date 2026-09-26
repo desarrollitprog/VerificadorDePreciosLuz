@@ -645,13 +645,20 @@ async def eliminar_banner(
         srv_info = f", Servidores: {srv_nombres}" if srv_nombres else ", Asignado a: todos"
         
         descripcion_audit = f"Banner eliminado: IdPublicidad={banner.IdPublicidad}, Titulo={banner.Titulo or ''}{disp_info}{srv_info}"
-        # Eliminar archivo físico si existe
-        if banner.Url:
-            filename = os.path.basename(banner.Url)
-            file_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "static", "banners", filename))
-            if os.path.exists(file_path):
-                os.remove(file_path)
-        
+        # BORRAR REMOTAMENTE en cada backend-api (paralelo, tolerante a fallos).
+        # Un servidor inalcanzable NO impide el borrado local; se registra como warning.
+        remote_id = banner.IdPublicidad
+        fallos_remotos = []
+        try:
+            replicacion_resultados = await Borrado_a_todas_las_apis(remote_id)
+            for res in replicacion_resultados:
+                if not res.get("success", False):
+                    fallos_remotos.append(res.get("api_url"))
+                    log.warning("borrado_remoto_fallo", banner_id=remote_id,
+                                api_url=res.get("api_url"), error=res.get("error"))
+        except Exception as e:
+            log.error("borrado_remoto_excepcion", banner_id=remote_id, error=str(e))
+
         # Eliminar asignaciones
         try:
             from sqlalchemy import delete
@@ -660,26 +667,35 @@ async def eliminar_banner(
         except Exception as e:
             log.error("error_eliminar_asignaciones", banner_id=id, error=str(e))
             await db.rollback()
-        
-        # Intentar borrar remotamente en backend-api
-        try:
-            remote_id = banner.IdPublicidad
-            replicacion_resultados = await Borrado_a_todas_las_apis(remote_id)
-            for res in replicacion_resultados:
-                if not res.get("success", False):
-                    raise Exception(f"No se pudo borrar remotamente en {res['api_url']}: {res.get('error', 'Sin mensaje')}")
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error al borrar remotamente: {str(e)}")
 
-        # Borrar físicamente
+        # Borrar físicamente el registro del banner
         await db.delete(banner)
         await db.commit()
+
+        # Eliminar archivos físicos (video + miniatura) UNA VEZ el DB esté limpio.
+        # Si el DB falla, los archivos se conservan; si falla el archivo, el DB ya está limpio.
+        for attr in ("Url", "ThumbnailUrl"):
+            url = getattr(banner, attr, None)
+            if not url:
+                continue
+            filename = os.path.basename(url)
+            file_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "static", "banners", filename))
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except OSError as e:
+                    log.warning("error_eliminar_archivo_fisico", banner_id=id, path=file_path, error=str(e))
+
         user_id = current_user.get("user_id")
         if user_id is not None:
             disp_id = dispositivo_ids[0] if dispositivo_ids else "*"
             srv_id = servidor_ids[0] if servidor_ids else 0
             await registrar_accion(db, user_id, "BORRADO_MULTIMEDIA", descripcion_audit, dispositivo_id=disp_id, servidor_id=srv_id)
-        return {"success": True, "message": "Banner eliminado correctamente."}
+        warning = None
+        if fallos_remotos:
+            warning = f'No se pudo borrar remotamente en: {", ".join(fallos_remotos)}'
+        return {"success": True, "message": "Banner eliminado correctamente.", "warning": warning}
+
     except HTTPException:
         raise
     except Exception as e:

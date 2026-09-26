@@ -18,6 +18,8 @@ services:
     restart: always
     security_opt:
       - apparmor:unconfined
+    cap_add:
+      - DAC_OVERRIDE
     healthcheck:
       test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P ${SA_PASSWORD:?SA_PASSWORD no esta definido en .env} -Q "SELECT 1" || exit 1
       interval: 10s

@@ -196,3 +196,59 @@ export async function deleteVideo(videoId: string) {
   const response = await api.delete(`/banners/${videoId}`);
   return response.data;
 }
+
+export interface ReplicationJobStatus {
+  success: boolean;
+  job_id: string;
+  status: string;
+  progress: number;
+  banner_id?: number;
+  replicated_servers?: number;
+  total_servers?: number;
+  details?: any[];
+  error?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export async function getReplicationJobStatus(jobId: string): Promise<ReplicationJobStatus> {
+  const response = await api.get(`/banners/upload/${jobId}`);
+  return response.data;
+}
+
+export async function uploadMediaWithProgress(
+  file: File,
+  payload?: UploadMediaPayload,
+  onProgress?: (percent: number) => void
+): Promise<any> {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (payload) {
+    formData.append(' Titulo', payload.titulo);
+    if (payload.fechaInicio) {
+      formData.append('FechaInicio', payload.fechaInicio);
+    }
+    if (payload.fechaFin) {
+      formData.append('FechaFin', payload.fechaFin);
+    }
+    formData.append('Activo', String(payload.activo));
+    formData.append('AsignacionTodos', String(payload.asignacionTodos ?? true));
+    if (payload.servidorIds && payload.servidorIds.length > 0) {
+      formData.append('ServidorIds', JSON.stringify(payload.servidorIds));
+    }
+    if (payload.dispositivoIds && payload.dispositivoIds.length > 0) {
+      formData.append('DispositivoIds', JSON.stringify(payload.dispositivoIds));
+    }
+  }
+  const response = await api.post('/banners/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 900000,
+    onUploadProgress: (progressEvent) => {
+      if (onProgress && progressEvent.total) {
+        const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+        onProgress(percent);
+      }
+    },
+  });
+  return response.data;
+}

@@ -219,61 +219,87 @@ def get_api_urls() -> list:
 async def replicar_archivo_a_todas_las_apis(
     file_path: str,
     IdPublicidadRemoto: int = None,
-titulo: str = None,
+    titulo: str = None,
     tipo: str = None,
     prioridad: int = 0,
     fecha_inicio: str = None,
     fecha_fin: str = None,
     activo: bool = True,
-    timeout: int = 30,
+    timeout: int = 300,
     dispositivo_ids: list = None
 ) -> list:
     """
-    Replica un archivo a todas las APIs de replicación configuradas.
+    Replica un archivo a todas las APIs de replicación configuradas en paralelo.
     Retorna una lista de resultados por cada API.
     Si dispositivo_ids está presente (no None), lo envía al backend-api.
     """
     api_urls = get_api_urls()
+    if not api_urls:
+        return []
+    
+    # Create tasks for parallel execution
+    tasks = [
+        replicar_archivo_al_api(
+            api_url=api_url,
+            file_path=file_path,
+            IdPublicidadRemoto=IdPublicidadRemoto,
+            titulo=titulo,
+            tipo=tipo,
+            prioridad=prioridad,
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
+            activo=activo,
+            timeout=timeout,
+            dispositivo_ids=dispositivo_ids
+        )
+        for api_url in api_urls
+    ]
+    
+    # Execute all in parallel
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    # Process results
     resultados = []
-    for api_url in api_urls:
-        try:
-            resp = await replicar_archivo_al_api(
-                api_url=api_url,
-                file_path=file_path,
-                IdPublicidadRemoto=IdPublicidadRemoto,
-                titulo=titulo,
-                tipo=tipo,
-                prioridad=prioridad,
-                fecha_inicio=fecha_inicio,
-                fecha_fin=fecha_fin,
-                activo=activo,
-                timeout=timeout,
-                dispositivo_ids=dispositivo_ids
-            )
-            resultados.append({"api_url": api_url, "success": True, "response": resp})
-        except Exception as e:
-            resultados.append({"api_url": api_url, "success": False, "error": str(e)})
+    for api_url, result in zip(api_urls, results):
+        if isinstance(result, Exception):
+            log.error("replication_error", api_url=api_url, error=str(result))
+            resultados.append({"api_url": api_url, "success": False, "error": str(result)})
+        else:
+            resultados.append({"api_url": api_url, "success": True, "response": result})
     return resultados
 
 
-async def replicar_archivos_batch_a_todas_las_apis(file_paths: list, banners: list, timeout: int = 30) -> list:
+async def replicar_archivos_batch_a_todas_las_apis(file_paths: list, banners: list, timeout: int = 300) -> list:
     """
-    Replica m├║ltiples archivos a todas las APIs de replicaci├│n configuradas.
+    Replica múltiples archivos a todas las APIs de replicación configuradas en paralelo.
     Retorna una lista de resultados por cada archivo y cada API.
     """
     api_urls = get_api_urls()
+    if not api_urls:
+        return []
+    
+    # Create tasks for parallel execution across APIs
+    tasks = [
+        replicar_archivos_batch_al_api(
+            api_url=api_url,
+            file_paths=file_paths,
+            banners=banners,
+            timeout=timeout
+        )
+        for api_url in api_urls
+    ]
+    
+    # Execute all in parallel
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    # Process results
     resultados = []
-    for api_url in api_urls:
-        try:
-            batch_results = await replicar_archivos_batch_al_api(
-                api_url=api_url,
-                file_paths=file_paths,
-                banners=banners,
-                timeout=timeout
-            )
-            resultados.append({"api_url": api_url, "success": True, "results": batch_results})
-        except Exception as e:
-            resultados.append({"api_url": api_url, "success": False, "error": str(e)})
+    for api_url, result in zip(api_urls, results):
+        if isinstance(result, Exception):
+            log.error("batch_replication_error", api_url=api_url, error=str(result))
+            resultados.append({"api_url": api_url, "success": False, "error": str(result)})
+        else:
+            resultados.append({"api_url": api_url, "success": True, "results": result})
     return resultados
 
 

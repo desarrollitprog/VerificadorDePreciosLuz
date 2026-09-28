@@ -1,6 +1,8 @@
 import os
 import shutil
 import uuid
+import asyncio
+import subprocess
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Path, Query
@@ -11,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy import func
-import cv2
 from ..models import Publicidad, PublicidadAsignacion, ServidorSecundario, Dispositivo, SubidaLog
 from ..schemas import PublicidadResponse, PublicidadCreate
 from ..database import get_db_usuarios
@@ -32,6 +33,11 @@ from ..services.replicacion_service import (
     replicar_banner_completo_a_servidores_con_verificacion,
     verificar_banner_en_servidores,
     procesar_cambio_asignacion
+)
+from ..services.replicacion_jobs import (
+    _set_job_state,
+    _get_job_state,
+    _execute_replication_job,
 )
 from app.utils.logger import StructuredLogger
 from app.utils import sanitize_html, FileTypeValidator
@@ -58,30 +64,69 @@ def _format_size_human(size_bytes: int) -> str:
     return f"{value:.1f} {units[unit_index]}"
 
 
+def _run_ffmpeg(cmd: list[str], timeout: int = 60) -> tuple[bool, str]:
+    """Ejecuta ffmpeg con timeout, retorna (success, stderr)."""
+    try:
+        result = subprocess.run(cmd, capture_output=True, timeout=timeout)
+        if result.returncode == 0:
+            return True, ""
+        return False, result.stderr.decode(errors="ignore")
+    except subprocess.TimeoutExpired:
+        return False, "timeout"
+    except Exception as e:
+        return False, str(e)
+
+
+def transcode_video(input_path: str, output_path: str, timeout: int = 300) -> tuple[bool, str]:
+    """
+    Transcodifica video a H.264 720p con audio AAC.
+    Retorna (success, error_msg).
+    """
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", input_path,
+        "-c:v", "libx264",
+        "-preset", "veryfast",
+        "-crf", "28",
+        "-vf", "scale=-2:720",
+        "-c:a", "aac",
+        "-b:a", "96k",
+        "-movflags", "+faststart",
+        output_path
+    ]
+    return _run_ffmpeg(cmd, timeout)
+
+
+def _write_file(source_file, dest_path: str) -> None:
+    """Escribe el contenido de un archivo subido a disco de forma bloqueante."""
+    with open(dest_path, "wb") as buffer:
+        shutil.copyfileobj(source_file, buffer)
+
+
 def generar_thumbnail(video_path: str, output_dir: str) -> Optional[str]:
     """
-    Genera un thumbnail (frame inicial) de un video usando OpenCV.
+    Genera un thumbnail (frame a 1s) de un video usando ffmpeg.
     Retorna la URL relativa del thumbnail o None si falla.
     """
     try:
-        video = cv2.VideoCapture(video_path)
-        if not video.isOpened():
-            log.warning("thumbnail_generation_failed", reason="cannot_open_video", path=video_path)
-            return None
-        
-        success, frame = video.read()
-        video.release()
-        
-        if not success:
-            log.warning("thumbnail_generation_failed", reason="cannot_read_frame", path=video_path)
-            return None
-        
         thumbnail_filename = f"thumb_{uuid.uuid4().hex[:8]}.jpg"
         thumbnail_path = os.path.join(output_dir, thumbnail_filename)
         
-        success = cv2.imwrite(thumbnail_path, frame)
+        cmd = [
+            "ffmpeg", "-y",
+            "-ss", "00:00:01",
+            "-i", video_path,
+            "-vframes", "1",
+            "-vf", "scale=320:-1",
+            thumbnail_path
+        ]
+        success, err = _run_ffmpeg(cmd, timeout=30)
         if not success:
-            log.warning("thumbnail_generation_failed", reason="cannot_write_thumbnail", path=video_path)
+            log.warning("thumbnail_generation_failed", reason=err, path=video_path)
+            return None
+        
+        if not os.path.exists(thumbnail_path):
+            log.warning("thumbnail_generation_failed", reason="no_output_file", path=video_path)
             return None
         
         thumbnail_url = f"/static/banners/{thumbnail_filename}"
@@ -310,6 +355,7 @@ def listar_archivos_banners(current_user: dict = Depends(get_current_cliente)):
 
 @router.post("/banners/upload")
 async def upload_banner(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     Titulo: str = Form(None),
     Activo: bool = Form(True),
@@ -330,10 +376,10 @@ async def upload_banner(
     allowed_videos = ["mp4", "webm", "mkv", "avi", "mov"]
     if ext in allowed_images:
         Tipo = "image"
-        max_size = 100 * 1024 * 1024  # 100 MB
+        max_size = 150 * 1024 * 1024  # 150 MB
     elif ext in allowed_videos:
         Tipo = "video"
-        max_size = 100 * 1024 * 1024  # 100 MB
+        max_size = 150 * 1024 * 1024  # 150 MB
     else:
         raise HTTPException(status_code=400, detail=f"Tipo de archivo no permitido: .{ext}")
 
@@ -353,8 +399,7 @@ async def upload_banner(
         file_location = os.path.join(banners_dir, filename)
 
     try:
-        with open(file_location, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        await asyncio.to_thread(_write_file, file.file, file_location)
         
         is_valid, mime_type = FileTypeValidator.validate_file(file_location, allowed_images + allowed_videos)
         if not is_valid:

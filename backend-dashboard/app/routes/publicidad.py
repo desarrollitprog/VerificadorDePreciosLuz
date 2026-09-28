@@ -456,160 +456,133 @@ async def upload_banner(
             os.remove(file_location)
         raise HTTPException(status_code=500, detail=f"Error al guardar metadatos en la base de datos: {str(e)}")
 
-    # Replicar archivo al backend-api según asignaciones
-    replicacion_resultados = []
-    try:
-        import json
-        selected_servidor_ids = []
-        selected_dispositivo_ids = []
-        
-        if ServidorIds:
-            try:
-                selected_servidor_ids = json.loads(ServidorIds)
-            except Exception:
-                log.warning("json_parse_failed", field="ServidorIds", value=ServidorIds)
-                selected_servidor_ids = []
-        
-        if DispositivoIds:
-            try:
-                selected_dispositivo_ids = json.loads(DispositivoIds)
-            except Exception:
-                log.warning("json_parse_failed", field="DispositivoIds", value=DispositivoIds)
-                selected_dispositivo_ids = []
-        
-        if AsignacionTodos and not selected_dispositivo_ids:
-            log.info("upload_replicate_all", banner_id=nuevo_banner.IdPublicidad)
-            replicacion_resultados = await replicar_archivo_a_todas_las_apis(
-                file_path=file_location,
-                IdPublicidadRemoto=nuevo_banner.IdPublicidad,
-                titulo=Titulo,
-                tipo=Tipo,
-                prioridad=Prioridad,
-                fecha_inicio=FechaInicio,
-                fecha_fin=FechaFin,
-                activo=Activo,
-                dispositivo_ids=None,
-            )
-        elif selected_dispositivo_ids:
-            log.info("upload_replicate_specific_devices", banner_id=nuevo_banner.IdPublicidad, dispositivo_ids=selected_dispositivo_ids)
-            
-            # Obtener servidores únicos de los dispositivos seleccionados
-            disp_query = select(Dispositivo).where(Dispositivo.codigo_kiosko.in_(selected_dispositivo_ids))
-            disp_result = await db.execute(disp_query)
-            dispositivos_encontrados = disp_result.scalars().all()
-            
-            servidor_ids_unicos = list(set([d.servidor_id for d in dispositivos_encontrados]))
-            
-            if servidor_ids_unicos:
-                srv_query = select(ServidorSecundario).where(ServidorSecundario.id.in_(servidor_ids_unicos))
-                srv_result = await db.execute(srv_query)
-                servidores = srv_result.scalars().all()
-                servidores_data = [
-                    {
-                        "id": s.id,
-                        "nombre": s.nombre,
-                        "ip": s.ip,
-                        "api_url": f"http://{s.ip}:8000"
-                    }
-                    for s in servidores
-                ]
-                log.info("upload_replicate_to_servers", banner_id=nuevo_banner.IdPublicidad, servidores=[s['nombre'] for s in servidores_data])
-                replicacion_resultados = await replicar_a_servidores(
-                    file_path=file_location,
-                    servidores=servidores_data,
-                    IdPublicidadRemoto=nuevo_banner.IdPublicidad,
-                    titulo=Titulo,
-                    tipo=Tipo,
-                    prioridad=Prioridad,
-                    fecha_inicio=FechaInicio,
-                    fecha_fin=FechaFin,
-                    activo=Activo,
-                    dispositivo_ids=selected_dispositivo_ids,
-                )
-            else:
-                log.warning("upload_no_servers_found", banner_id=nuevo_banner.IdPublicidad)
-        elif selected_servidor_ids:
-            log.info("upload_replicate_specific_servers", banner_id=nuevo_banner.IdPublicidad, servidor_ids=selected_servidor_ids)
-            srv_query = select(ServidorSecundario).where(ServidorSecundario.id.in_(selected_servidor_ids))
-            srv_result = await db.execute(srv_query)
-            servidores = srv_result.scalars().all()
-            servidores_data = [
-                {
-                    "id": s.id,
-                    "nombre": s.nombre,
-                    "ip": s.ip,
-                    "api_url": f"http://{s.ip}:8000"
-                }
-                for s in servidores
-            ]
-            replicacion_resultados = await replicar_a_servidores(
-                file_path=file_location,
-                servidores=servidores_data,
-                IdPublicidadRemoto=nuevo_banner.IdPublicidad,
-                titulo=Titulo,
-                tipo=Tipo,
-                prioridad=Prioridad,
-                fecha_inicio=FechaInicio,
-                fecha_fin=FechaFin,
-                activo=Activo,
-                dispositivo_ids=None,  # Sin filtro = todos los dispositivos de esos servidores
-            )
-        else:
-            log.warning("upload_no_replication", banner_id=nuevo_banner.IdPublicidad)
-        log.info("upload_replication_complete", banner_id=nuevo_banner.IdPublicidad, resultados=replicacion_resultados)
-    except Exception as e:
-        log.error("upload_replication_error", banner_id=nuevo_banner.IdPublicidad if 'nuevo_banner' in dir() else None, error=str(e))
+    # Preparar job de replicación async
+    import json
+    selected_servidor_ids = []
+    selected_dispositivo_ids = []
+    
+    if ServidorIds:
+        try:
+            selected_servidor_ids = json.loads(ServidorIds)
+        except Exception:
+            log.warning("json_parse_failed", field="ServidorIds", value=ServidorIds)
+            selected_servidor_ids = []
+    
+    if DispositivoIds:
+        try:
+            selected_dispositivo_ids = json.loads(DispositivoIds)
+        except Exception:
+            log.warning("json_parse_failed", field="DispositivoIds", value=DispositivoIds)
+            selected_dispositivo_ids = []
 
+    # Guardar asignaciones en la tabla publicidad_asignacion
+    guardar_asignaciones = (not AsignacionTodos and (selected_servidor_ids or selected_dispositivo_ids)) or (AsignacionTodos and selected_dispositivo_ids)
+    if guardar_asignaciones:
+        try:
+            dispositivos_query = select(Dispositivo)
+            if selected_servidor_ids:
+                dispositivos_query = dispositivos_query.where(Dispositivo.servidor_id.in_(selected_servidor_ids))
+            if selected_dispositivo_ids:
+                dispositivos_query = dispositivos_query.where(Dispositivo.codigo_kiosko.in_(selected_dispositivo_ids))
+            
+            dispositivos_result = await db.execute(dispositivos_query)
+            dispositivos = dispositivos_result.scalars().all()
+            
+            for disp in dispositivos:
+                asignacion = PublicidadAsignacion(
+                    publicidad_id=nuevo_banner.IdPublicidad,
+                    servidor_id=disp.servidor_id,
+                    dispositivo_id=disp.codigo_kiosko
+                )
+                db.add(asignacion)
+            
+            await db.commit()
+            log.info("asignaciones_guardadas", banner_id=nuevo_banner.IdPublicidad, cantidad=len(dispositivos))
+        except Exception as e:
+            await db.rollback()
+            log.error("asignaciones_error", banner_id=nuevo_banner.IdPublicidad, error=str(e))
+            # Continue without failing the upload
+
+    # Preparar job de replicación async
+    job_id = str(uuid.uuid4())
+    actor_name = (current_user.get("nombre_usuario") or current_user.get("usuario") or "Sistema")
+    
+    # Initial job state
+    await _set_job_state(
+        job_id,
+        status="QUEUED",
+        progress=0,
+        created_at=datetime.now().isoformat(),
+        requested_by=actor_name,
+        banner_id=nuevo_banner.IdPublicidad,
+        file_path=file_location,
+        titulo=Titulo,
+        tipo=Tipo,
+        IdPublicidadRemoto=nuevo_banner.IdPublicidad,
+        activo=Activo,
+        prioridad=Prioridad,
+        fecha_inicio=FechaInicio,
+        fecha_fin=FechaFin,
+        asignacion_todos=AsignacionTodos,
+        dispositivo_ids=selected_dispositivo_ids,
+    )
+    
+    # Kick off background task
+    background_tasks.add_task(
+        _execute_replication_job,
+        job_id=job_id,
+        file_path=file_location,
+        titulo=Titulo,
+        tipo=Tipo,
+        IdPublicidadRemoto=nuevo_banner.IdPublicidad,
+        activo=Activo,
+        prioridad=Prioridad,
+        fecha_inicio=FechaInicio,
+        fecha_fin=FechaFin,
+        asignacion_todos=AsignacionTodos,
+        dispositivo_ids=selected_dispositivo_ids,
+        timeout=int(os.getenv("REPLICACION_FILE_TIMEOUT", "300")),
+    )
+    
+    log.info("upload_job_created", job_id=job_id, banner_id=nuevo_banner.IdPublicidad)
+    
+    # Auditoría de seguridad: registro de subida exitosa
     user_id = current_user.get("user_id")
     if user_id is not None:
-        # Obtener nombres de dispositivos y servidores
-        dispositivos_info = ""
-        if selected_dispositivo_ids:
-            stmt_disp = select(Dispositivo).where(Dispositivo.codigo_kiosko.in_(selected_dispositivo_ids))
-            result_disp = await db.execute(stmt_disp)
-            dispositivos = result_disp.scalars().all()
-            if dispositivos:
-                nombres_disp = [f"'{d.nombre_amigable or d.codigo_kiosko}' ({d.codigo_kiosko})" for d in dispositivos]
-                dispositivos_info = f" - Dispositivos: {', '.join(nombres_disp)}"
-        
-        servidores_info = ""
-        if selected_servidor_ids:
-            stmt_srv = select(ServidorSecundario).where(ServidorSecundario.id.in_(selected_servidor_ids))
-            result_srv = await db.execute(stmt_srv)
-            servidores = result_srv.scalars().all()
-            if servidores:
-                nombres_srv = [f"'{s.nombre}' ({s.ip})" for s in servidores]
-                servidores_info = f" - Servidores: {', '.join(nombres_srv)}"
-        
-        descripcion = f"Archivo '{filename}' (Id: {nuevo_banner.IdPublicidad}){dispositivos_info}{servidores_info}"
-        
-        # Usar el primer dispositivo/servidor para los campos de auditoría
-        disp_id = selected_dispositivo_ids[0] if selected_dispositivo_ids else None
-        srv_id = selected_servidor_ids[0] if selected_servidor_ids else None
-        
         await registrar_accion(
-            db,
-            user_id,
-            "SUBIDA_MULTIMEDIA",
-            descripcion,
-            dispositivo_id=disp_id,
-            servidor_id=srv_id,
+            db=db,
+            user_id=user_id,
+            accion="UPLOAD_BANNER_SUCCESS",
+            detalle=f"Banner subido exitosamente: '{titulo_sanitized}' (ID: {nuevo_banner.IdPublicidad})",
+            entidad_tipo="Publicidad",
+            entidad_id=nuevo_banner.IdPublicidad,
         )
 
     return {
         "success": True,
-        "message": "Archivo y metadatos guardados correctamente.",
-        "filename": filename,
-        "url": url,
-        "tipo": Tipo,
-        "banner": {
-            "IdPublicidad": nuevo_banner.IdPublicidad,
-            "Titulo": nuevo_banner.Titulo,
-            "Prioridad": nuevo_banner.Prioridad,
-            "FechaInicio": str(nuevo_banner.FechaInicio) if nuevo_banner.FechaInicio else None,
-            "FechaFin": str(nuevo_banner.FechaFin) if nuevo_banner.FechaFin else None,
-        }
+        "message": "Upload accepted, replication in progress",
+        "job_id": job_id,
+        "banner_id": nuevo_banner.IdPublicidad,
+        "status": "QUEUED",
     }
+
+
+@router.get("/banners/upload/{job_id}")
+async def get_upload_job_status(
+    job_id: str,
+    current_user: dict = Depends(get_current_cliente),
+):
+    """Consulta el estado de un job de subida/replicación."""
+    job = await _get_job_state(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job no encontrado")
+    return {
+        "success": True,
+        "job_id": job_id,
+        **job,
+    }
+
+
 @router.delete("/banners/{id}")
 async def eliminar_banner(
     id: int = Path(..., description="ID del banner a eliminar"),

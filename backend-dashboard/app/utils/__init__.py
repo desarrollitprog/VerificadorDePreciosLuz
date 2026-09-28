@@ -2,11 +2,92 @@ import html
 import logging
 import re
 import struct
+import subprocess
+import uuid
+import asyncio
+import os
+from typing import Optional, Tuple
 
 logger = logging.getLogger("uvicorn.error")
 
+
 def clean_log(text: str) -> str:
     return text.strip() if text else text
+
+
+def _run_ffmpeg(cmd: list[str], timeout: int = 60) -> tuple[bool, str]:
+    """Ejecuta ffmpeg con timeout, retorna (success, stderr)."""
+    try:
+        result = subprocess.run(cmd, capture_output=True, timeout=timeout)
+        if result.returncode == 0:
+            return True, ""
+        return False, result.stderr.decode(errors="ignore")
+    except subprocess.TimeoutExpired:
+        return False, "timeout"
+    except Exception as e:
+        return False, str(e)
+
+
+def transcode_video(input_path: str, output_path: str, timeout: int = 300) -> tuple[bool, str]:
+    """
+    Transcodifica video a H.264 720p con audio AAC.
+    Retorna (success, error_msg).
+    """
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", input_path,
+        "-c:v", "libx264",
+        "-preset", "veryfast",
+        "-crf", "28",
+        "-vf", "scale=-2:720",
+        "-c:a", "aac",
+        "-b:a", "96k",
+        "-movflags", "+faststart",
+        output_path
+    ]
+    return _run_ffmpeg(cmd, timeout)
+
+
+def _write_file(source_file, dest_path: str) -> None:
+    """Escribe el contenido de un archivo subido a disco de forma bloqueante."""
+    with open(dest_path, "wb") as buffer:
+        import shutil
+        shutil.copyfileobj(source_file, buffer)
+
+
+def generar_thumbnail(video_path: str, output_dir: str) -> Optional[str]:
+    """
+    Genera un thumbnail (frame a 1s) de un video usando ffmpeg.
+    Retorna la URL relativa del thumbnail o None si falla.
+    """
+    try:
+        thumbnail_filename = f"thumb_{uuid.uuid4().hex[:8]}.jpg"
+        thumbnail_path = os.path.join(output_dir, thumbnail_filename)
+        
+        cmd = [
+            "ffmpeg", "-y",
+            "-ss", "00:00:01",
+            "-i", video_path,
+            "-vframes", "1",
+            "-vf", "scale=320:-1",
+            thumbnail_path
+        ]
+        success, err = _run_ffmpeg(cmd, timeout=30)
+        if not success:
+            logger.warning("thumbnail_generation_failed", reason=err, path=video_path)
+            return None
+        
+        if not os.path.exists(thumbnail_path):
+            logger.warning("thumbnail_generation_failed", reason="no_output_file", path=video_path)
+            return None
+        
+        thumbnail_url = f"/static/banners/{thumbnail_filename}"
+        logger.info("thumbnail_generated", video_path=video_path, thumbnail=thumbnail_url)
+        return thumbnail_url
+    
+    except Exception as e:
+        logger.warning("thumbnail_generation_error", error=str(e), path=video_path)
+        return None
 
 
 class FileTypeValidator:

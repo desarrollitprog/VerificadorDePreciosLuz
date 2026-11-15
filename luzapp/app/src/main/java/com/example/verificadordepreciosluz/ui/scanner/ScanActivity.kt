@@ -72,10 +72,12 @@ import retrofit2.HttpException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import java.io.IOException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -108,6 +110,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     private val job = Job()
     private val scope = CoroutineScope(Dispatchers.IO + job)
     private var api: ApiService? = null
+    private var apiFast: ApiService? = null
     private var pingJob: Job? = null
     private var imageAnalysis: ImageAnalysis? = null
     private var analyzerPaused = false
@@ -187,12 +190,40 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
             val hasInternet = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             handleNetworkChange(hasInternet)
+            // Si el sistema deja de validar la salida a internet, comprobar el backend
+            // de inmediato (timeout corto) en vez de esperar al monitor de ping.
+            if (!networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) {
+                triggerFastBackendCheck()
+            }
+        }
+    }
+
+    /**
+     * Verificación rápida de alcance del backend (con timeouts cortos).
+     * Si no responde y hay backup válido, pasa a modo offline de inmediato.
+     */
+    private fun triggerFastBackendCheck() {
+        val service = apiFast ?: return
+        scope.launch {
+            val ok = runCatching { withTimeout(REQUEST_TIMEOUT_MS) { service.ping(deviceId) } }.isSuccess
+            if (!ok) {
+                val backup = offlineBackup ?: loadOfflineBackup() ?: return@launch
+                if (!isBackupStale(backup)) {
+                    offlineBackup = backup
+                    setOfflineMode(true)
+                    uiHandler.post { updateOfflineTimestamp(backup) }
+                }
+            }
         }
     }
 
     // Cámara opcional: se inicia solo si el permiso ya está concedido
     // Si no hay permiso, se usa solo el escánero externo (USB HID)
-    companion object { private const val TAG = "ScanActivity" }
+    companion object {
+        private const val TAG = "ScanActivity"
+        // Tope duro para una consulta de precio: si la red no responde, se cae al backup local
+        private const val REQUEST_TIMEOUT_MS = 8000L
+    }
 
     // Declarar backupReady como propiedad de la clase, antes de cualquier uso
     private var backupReady: Boolean = false
@@ -1657,15 +1688,16 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             return
         }
 
-        val api = api ?: run {
+        val fastApi = apiFast ?: api ?: run {
             goToConfig("Configura IP/puerto primero")
             return
         }
 
         scope.launch {
             requestInFlight = true
+            var fallbackToBackup = false
             try {
-                val producto = api.consultar(code)
+                val producto = withTimeout(REQUEST_TIMEOUT_MS) { fastApi.consultar(code) }
                 logPromoData("API ONLINE", code, producto)
                 scanCache.put(code, producto) // P8: guardar en caché LRU
                 uiHandler.post {
@@ -1674,12 +1706,21 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                     // Pausa el escáner 3 s tras un éxito para evitar lecturas inmediatas repetidas
                     pauseUntil = android.os.SystemClock.elapsedRealtime() + 4000
                 }
+            } catch (e: TimeoutCancellationException) {
+                // La red no respondió a tiempo: pasar a modo offline y resolver con el backup
+                fallbackToBackup = true
+                if (!offlineMode) setOfflineMode(true)
+                uiHandler.post { showThrottledError("timeout", getString(R.string.error_timeout)) }
             } catch (e: Exception) {
                 var setOffline = false
                 val (key, msg) = when (e) {
                     is HttpException -> when (e.code()) {
                         404 -> "404" to getString(R.string.error_product_not_found)
-                        in 500..599 -> "5xx" to getString(R.string.error_server, e.code())
+                        in 500..599 -> {
+                            // ERP/backend con problemas: usar respaldo local en este mismo escaneo
+                            setOffline = true
+                            "5xx" to getString(R.string.error_server, e.code())
+                        }
                         else -> "4xx" to getString(R.string.error_http, e.code())
                     }
                     is SocketTimeoutException -> {
@@ -1692,8 +1733,11 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                     }
                     else -> "unknown" to getString(R.string.error_unexpected)
                 }
-                if (setOffline && !offlineMode) {
-                    setOfflineMode(true)
+                if (setOffline) {
+                    fallbackToBackup = true
+                    if (!offlineMode) {
+                        setOfflineMode(true)
+                    }
                 }
                 uiHandler.post {
                     showThrottledError(key, msg)
@@ -1706,6 +1750,10 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 requestInFlight = false
                 // Reprocesar texto acumulado en el campo mock mientras había requestInFlight=true
                 uiHandler.post { processPendingMockText() }
+            }
+            // Fallback inmediato: el mismo escaneo se resuelve con el backup local
+            if (fallbackToBackup) {
+                handleOfflineLookup(code)
             }
         }
     }
@@ -1775,6 +1823,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         val normalized = NetworkUtils.buildBaseUrl(sanitized, portToUse, defaultPort)
         backendBaseUrl = normalized
         api = ApiClient.create(normalized, BuildConfig.DEBUG)
+        apiFast = ApiClient.createFast(normalized)
         return true
     }
 
@@ -1908,7 +1957,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
     }
 
     private fun startPingMonitor() {
-        val service = api ?: return
+        val service = apiFast ?: api ?: return
         pingJob?.cancel()
         pingJob = scope.launch {
             var offlineRetry = false
@@ -1942,8 +1991,8 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                     resyncBackupIfOnline(service)
                     offlineRetry = false
                 }
-                // Ping cada 180 segundos (3 minutos) en modo online
-                delay(180000)
+                // Ping cada 45 s en modo online (detección rápida de caída de red)
+                delay(45_000)
             }
         }
     }
@@ -2149,8 +2198,11 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
 
         val overlayVisible = binding.resultOverlay.isVisible
         Log.w(TAG, "scan_error key=$key overlay=$overlayVisible msg=$message")
-        if (!overlayVisible) {
-            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        // Mostrar SIEMPRE el aviso al cliente (antes se ocultaba si había un resultado en pantalla,
+        // por lo que un fallo de red parecía que el equipo "no hacía nada").
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        if (overlayVisible) {
+            binding.tvOfflineIndicator.visibility = View.VISIBLE
         }
     }
 

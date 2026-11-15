@@ -131,4 +131,26 @@ object ApiClient {
             .build()
         return retrofit.create(ApiService::class.java)
     }
+
+    /**
+     * Cliente con timeouts cortos para consultas de precio (escaneo).
+     * Evita que un escaneo quede bloqueado hasta 60 s cuando la red se cae,
+     * permitiendo caer rápido al respaldo local (backup) del equipo.
+     */
+    fun createFast(baseUrl: String): ApiService {
+        val normalized = NetworkUtils.normalizeBase(baseUrl)
+        val client = OkHttpClient.Builder()
+            .callTimeout(6, TimeUnit.SECONDS)
+            .connectTimeout(3, TimeUnit.SECONDS)
+            .readTimeout(5, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(false)
+            .build()
+
+        val retrofit = Retrofit.Builder()
+            .baseUrl(normalized)
+            .addConverterFactory(GsonConverterFactory.create())
+            .client(client)
+            .build()
+        return retrofit.create(ApiService::class.java)
+    }
 }

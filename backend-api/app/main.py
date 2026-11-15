@@ -855,19 +855,28 @@ async def shutdown_device_state_store():
 
 # Paso 1a: Buscar producto y precio por SKU (1 query)
 async def buscar_producto_y_precio(db: AsyncSession, codigo_barras: str):
-    stmt = (
-        select(models.Producto, models.ProductoPrecio)
-        .join(
-            models.ProductoPrecio,
-            models.Producto.IdProducto == models.ProductoPrecio.IdProducto,
-        )
-        .where(
-            models.Producto.SKU == codigo_barras,
-            models.ProductoPrecio.CostoBase > 0,
-        )
+    base_filters = (
+        models.Producto.SKU == codigo_barras,
+        models.ProductoPrecio.CostoBase > 0,
     )
-    result = await db.execute(stmt)
-    return result.first()
+    # Primero se prefieren las filas habilitadas para la venta (IndActivoVenta = 1).
+    # Si el producto solo tiene filas deshabilitadas, se hace fallback al
+    # comportamiento anterior para no romper productos con datos incompletos.
+    for extra_filters in ((models.ProductoPrecio.IndActivoVenta == 1,), ()):
+        stmt = (
+            select(models.Producto, models.ProductoPrecio)
+            .join(
+                models.ProductoPrecio,
+                models.Producto.IdProducto == models.ProductoPrecio.IdProducto,
+            )
+            .where(*base_filters, *extra_filters)
+            .order_by(models.ProductoPrecio.IdProductosXEmpaqueXSucursal.asc())
+        )
+        result = await db.execute(stmt)
+        row = result.first()
+        if row:
+            return row
+    return None
 
 
 # Paso 1b: Buscar coincidencias cercanas (async, no utilizada actualmente)
@@ -891,6 +900,7 @@ async def buscar_coincidencias_cercanas(db: AsyncSession, codigo_barras: str, li
         )
         .where(
             models.ProductoPrecio.CostoBase > 0,
+            models.ProductoPrecio.IndActivoVenta == 1,
             or_(
                 models.Producto.SKU.like(f"{codigo}%"),
                 models.Producto.SKU.like(f"%{codigo}%"),
@@ -932,10 +942,30 @@ async def buscar_en_barras_asociadas(db: AsyncSession, codigo_barras: str):
         .where(
             models.Producto.IdProducto == barra_asociada.IdProducto,
             models.ProductoPrecio.CostoBase > 0,
+            models.ProductoPrecio.IndActivoVenta == 1,
         )
+        .order_by(models.ProductoPrecio.IdProductosXEmpaqueXSucursal.asc())
     )
     result_producto = await db.execute(stmt_producto)
-    return result_producto.first()
+    row = result_producto.first()
+    if row:
+        return row
+
+    # Fallback: si no hay filas habilitadas para venta, usar el comportamiento previo
+    stmt_fallback = (
+        select(models.Producto, models.ProductoPrecio)
+        .join(
+            models.ProductoPrecio,
+            models.Producto.IdProducto == models.ProductoPrecio.IdProducto,
+        )
+        .where(
+            models.Producto.IdProducto == barra_asociada.IdProducto,
+            models.ProductoPrecio.CostoBase > 0,
+        )
+        .order_by(models.ProductoPrecio.IdProductosXEmpaqueXSucursal.asc())
+    )
+    result_fallback = await db.execute(stmt_fallback)
+    return result_fallback.first()
 
 
 # Paso 2: Buscar oferta asociada (1 query, precios)
@@ -1126,6 +1156,9 @@ def _serialize_section_row(section: str, row) -> dict:
             "IdProductosXEmpaqueXSucursal": row.IdProductosXEmpaqueXSucursal,
             "IdProducto": row.IdProducto,
             "IdEmpaque": row.IdEmpaque,
+            "IdSucursal": row.IdSucursal,
+            "IdEstatus": row.IdEstatus,
+            "IndActivoVenta": bool(row.IndActivoVenta) if row.IndActivoVenta is not None else None,
             "CostoBase": float(row.CostoBase) if row.CostoBase is not None else None,
             "PVPBase": float(row.PVPBase) if row.PVPBase is not None else None,
             "PVPConversion": float(row.PVPConversion) if row.PVPConversion is not None else None,

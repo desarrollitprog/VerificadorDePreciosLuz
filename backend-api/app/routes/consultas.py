@@ -29,6 +29,7 @@ async def listar_productos(
     precio_stmt = select(models.ProductoPrecio).where(
         models.ProductoPrecio.IdProducto.in_(ids),
         models.ProductoPrecio.CostoBase > 0,
+        models.ProductoPrecio.IndActivoVenta == 1,
     )
     precio_result = await db.execute(precio_stmt)
     precios = precio_result.scalars().all()

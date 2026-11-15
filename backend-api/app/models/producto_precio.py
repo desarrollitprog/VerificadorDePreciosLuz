@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Numeric, BigInteger, DateTime
+from sqlalchemy import Column, Integer, Numeric, BigInteger, DateTime, Boolean
 from ..database import Base
 
 class ProductoPrecio(Base):
@@ -16,6 +16,12 @@ class ProductoPrecio(Base):
     )
     IdProducto = Column("IdProducto", Integer, nullable=False, index=True)
     IdEmpaque = Column("IdEmpaque", Integer, nullable=False, index=True)
+    IdSucursal = Column("IdSucursal", Integer, nullable=True)
+    IdEstatus = Column("IdEstatus", Integer, nullable=True)
+
+    # Indicadores de disponibilidad (ERP)
+    IndActivoVenta = Column("IndActivoVenta", Boolean, nullable=True)
+    IndActivoCompra = Column("IndActivoCompra", Boolean, nullable=True)
 
     # Costos
     CostoBase = Column("CostoBase", Numeric(18, 2), nullable=True)

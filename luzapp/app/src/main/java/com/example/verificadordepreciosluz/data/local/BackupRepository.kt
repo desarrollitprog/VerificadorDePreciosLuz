@@ -303,29 +303,25 @@ class BackupRepository(
     }
 
     private fun findBestPrecio(idProducto: Int): BackupPrecio? {
-        var best: BackupPrecio? = null
+        // Se prefieren las filas habilitadas para la venta (IndActivoVenta != false).
+        // Entre varias, se elige la de menor IdProductosXEmpaqueXSucursal para
+        // replicar el orden determinista del backend (evita mostrar el empaque
+        // "master"/mayor que puede estar deshabilitado).
+        var bestActive: BackupPrecio? = null
+        var bestFallback: BackupPrecio? = null
         BackupUtils.streamArray(context, FILE_PRECIOS) { item: BackupPrecio ->
             if (item.idProducto != idProducto) return@streamArray
             if ((item.costoBase ?: 0.0) <= 0.0 || (item.pvpBase ?: 0.0) <= 0.0) return@streamArray
-            if (best == null) {
-                best = item
-                return@streamArray
-            }
-            val bestHasConversion = (best?.pvpConversion ?: 0.0) > 0.0
-            val currentHasConversion = (item.pvpConversion ?: 0.0) > 0.0
-            if (currentHasConversion && !bestHasConversion) {
-                best = item
-                return@streamArray
-            }
-            if (currentHasConversion == bestHasConversion) {
-                val bestBase = best?.pvpBase ?: 0.0
-                val currentBase = item.pvpBase ?: 0.0
-                if (currentBase > bestBase) {
-                    best = item
-                }
+
+            val fallbackId = bestFallback?.idProductosXEmpaqueXSucursal ?: Long.MAX_VALUE
+            if (item.idProductosXEmpaqueXSucursal < fallbackId) bestFallback = item
+
+            if (item.indActivoVenta != false) {
+                val activeId = bestActive?.idProductosXEmpaqueXSucursal ?: Long.MAX_VALUE
+                if (item.idProductosXEmpaqueXSucursal < activeId) bestActive = item
             }
         }
-        return best
+        return bestActive ?: bestFallback
     }
 
     private fun findBestOferta(idProducto: Int, idEmpaque: Int): BackupOferta? {

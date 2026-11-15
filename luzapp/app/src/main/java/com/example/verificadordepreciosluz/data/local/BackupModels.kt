@@ -37,6 +37,7 @@ data class BackupPrecio(
     @SerializedName("IdProductosXEmpaqueXSucursal") val idProductosXEmpaqueXSucursal: Long,
     @SerializedName("IdProducto") val idProducto: Int,
     @SerializedName("IdEmpaque") val idEmpaque: Int,
+    @SerializedName("IndActivoVenta") val indActivoVenta: Boolean? = null,
     @SerializedName("CostoBase") val costoBase: Double?,
     @SerializedName("PVPBase") val pvpBase: Double?,
     @SerializedName("PVPConversion") val pvpConversion: Double?,

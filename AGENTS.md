@@ -51,6 +51,7 @@ docker-compose up -d --build
 | Interval | Jobs |
 |----------|------|
 | Every 3.5 min | `actualizar_sesiones_dispositivos` (mark offline), `expirar_banners_vencidos` |
+| Every 5 min | `alertas_flota` (heartbeat + smoke test de precio por sede) — ver `docs/alertas-flota.md` |
 | Every 15 days | `cleanup_old_sessions` (>90 day sessions), `cleanup_old_notifications` (>15 day) |
 | Every 24h | `cleanup_orphan_files` (stale banner files), `limpiar_metricas_antiguas` |
 | Every hour | `consolidar_por_hora` (metric aggregation) |

@@ -143,7 +143,8 @@ async def _smoke_test_precio(ip: str, sku: str, timeout: float) -> tuple[bool, s
             return False, "sin precio en la respuesta"
         return True, "ok"
     except Exception as e:  # noqa: BLE001 - se reporta como detalle de la alerta
-        return False, str(e)[:200]
+        detalle = str(e).strip() or type(e).__name__
+        return False, detalle[:200]
 
 
 async def verificar_flota() -> None:

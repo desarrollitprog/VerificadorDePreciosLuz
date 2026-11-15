@@ -24,6 +24,7 @@ def iniciar_scheduler() -> AsyncIOScheduler:
 
     from app.services.monitoreo_service import actualizar_sesiones_dispositivos
     from app.services.publicidad_service import expirar_banners_vencidos
+    from app.services.alertas_service import verificar_flota
     from app.cleanup_service import cleanup_old_sessions, cleanup_old_notifications, cleanup_orphan_files, cleanup_old_metricas
     _scheduler = AsyncIOScheduler()
 
@@ -42,6 +43,15 @@ def iniciar_scheduler() -> AsyncIOScheduler:
         'interval',
         minutes=3.5,
         id='expirar_banners',
+        replace_existing=True
+    )
+
+    # Job 2b: Monitoreo proactivo de la flota (heartbeat + smoke test de precios)
+    _scheduler.add_job(
+        verificar_flota,
+        'interval',
+        minutes=5,
+        id='alertas_flota',
         replace_existing=True
     )
 

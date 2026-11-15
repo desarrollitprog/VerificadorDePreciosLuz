@@ -38,6 +38,11 @@ services:
     volumes:
       - ./static/banners:/code/static/banners
     restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
 
   redis:
     image: redis:7-alpine

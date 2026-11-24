@@ -1229,7 +1229,14 @@ async def _load_section_to_cache(section: str, db: AsyncSession, db_erp: AsyncSe
     PAGE_SIZE = 1000
 
     while True:
-        stmt = select(model).where(pk_col > last_id).order_by(pk_col.asc()).limit(PAGE_SIZE)
+        stmt = select(model).where(pk_col > last_id)
+        # El backup que descargan los verificadores solo debe contener precios
+        # vendibles. Las filas deshabilitadas (IndActivoVenta = 0, p.ej. el
+        # empaque "master") hacían que la app en modo offline mostrara un
+        # precio que no corresponde.
+        if section == "precios":
+            stmt = stmt.where(model.IndActivoVenta == 1)
+        stmt = stmt.order_by(pk_col.asc()).limit(PAGE_SIZE)
         result = (await session.execute(stmt)).scalars().all()
         if not result:
             break

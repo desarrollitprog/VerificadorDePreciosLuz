@@ -668,6 +668,14 @@ export function ServerDashboard() {
                                   <span className="font-medium text-sm text-slate-900 dark:text-white truncate">
                                     {d.nombre_mostrado || d.device_id}
                                   </span>
+                                  {d.app_version && (
+                                    <span
+                                      className="text-[10px] font-mono px-1 py-0.5 rounded bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                                      title="Versión de la app instalada"
+                                    >
+                                      v{d.app_version}
+                                    </span>
+                                  )}
                                   {getDeviceUptime(d) && (
                                     <span className={`ml-auto text-xs font-medium px-1.5 py-0.5 rounded ${
                                       d.sesion_activa 

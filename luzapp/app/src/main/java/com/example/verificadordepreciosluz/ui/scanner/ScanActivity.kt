@@ -243,6 +243,14 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         startTabletWebSocket()
     }
 
+    // Auto-recuperación: si el equipo queda "colgado" (sin WS ni backend)
+    // durante 10 minutos, se reinicia la pantalla del verificador.
+    private var lastWsSignalAt = 0L
+    private var lastBackendOkAt = 0L
+    private var lastSelfHealAt = 0L
+    private var selfHealJob: Job? = null
+    private val selfHealThresholdMs = 10 * 60 * 1000L
+
     // Función para enviar logs de debug al backend
     private fun sendDebugLog(
         message: String,
@@ -1698,6 +1706,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             var fallbackToBackup = false
             try {
                 val producto = withTimeout(REQUEST_TIMEOUT_MS) { fastApi.consultar(code) }
+                lastBackendOkAt = android.os.SystemClock.elapsedRealtime()
                 logPromoData("API ONLINE", code, producto)
                 scanCache.put(code, producto) // P8: guardar en caché LRU
                 uiHandler.post {
@@ -1788,7 +1797,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                 scanCache.put(code, producto) // P8: guardar en caché LRU
                 uiHandler.post {
                     feedbackSuccess()
-                    showResult(producto)
+                    showResult(producto, fromBackup = true)
                     pauseUntil = android.os.SystemClock.elapsedRealtime() + 4000
                 }
             } finally {
@@ -1824,6 +1833,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         backendBaseUrl = normalized
         api = ApiClient.create(normalized, BuildConfig.DEBUG)
         apiFast = ApiClient.createFast(normalized)
+        startSelfHealWatchdog()
         return true
     }
 
@@ -1997,6 +2007,37 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         }
     }
 
+    /**
+     * Si el equipo queda sin señales del backend/WebSocket durante 10 minutos
+     * (p.ej. app colgada tras una caída de red), reinicia la pantalla del
+     * verificador. Es la "auto-recuperación" para no depender de que alguien
+     * vaya al local a reiniciar el equipo.
+     */
+    private fun startSelfHealWatchdog() {
+        if (selfHealJob?.isActive == true) return
+        selfHealJob = scope.launch {
+            while (isActive) {
+                delay(60_000)
+                val now = android.os.SystemClock.elapsedRealtime()
+                val lastSignal = maxOf(lastWsSignalAt, lastBackendOkAt)
+                if (lastSignal == 0L) continue
+                val silenceMs = now - lastSignal
+                if (silenceMs >= selfHealThresholdMs && (now - lastSelfHealAt) >= selfHealThresholdMs) {
+                    lastSelfHealAt = now
+                    Log.w(TAG, "[SelfHeal] Sin señal del backend/WS por ${silenceMs / 1000}s. Reiniciando pantalla...")
+                    uiHandler.post {
+                        runCatching {
+                            startActivity(android.content.Intent(this@ScanActivity, ScanActivity::class.java))
+                            finish()
+                        }.onFailure { e ->
+                            Log.e(TAG, "[SelfHeal] No se pudo reiniciar la pantalla", e)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private suspend fun pingWithRetries(service: ApiService): Pair<Boolean, String?> {
         val delays = listOf(0L, 1500L)
         var lastReason: String? = null
@@ -2004,6 +2045,7 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
             if (waitMs > 0) delay(waitMs)
             try {
                 service.ping(deviceId)
+                lastBackendOkAt = android.os.SystemClock.elapsedRealtime()
                 return true to null
             } catch (e: HttpException) {
                 lastReason = if (e.code() in 400..499) {
@@ -2050,7 +2092,16 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
         Log.d("PROMO", "======================")
     }
 
-    private fun showResult(producto: ProductoResponse) {
+    private fun showResult(producto: ProductoResponse, fromBackup: Boolean = false) {
+
+        // Indicador visible cuando el precio proviene del respaldo local
+        if (fromBackup) {
+            binding.tvOfflineIndicator.text = getString(R.string.offline_price_label)
+            binding.tvOfflineIndicator.visibility = View.VISIBLE
+            binding.tvOfflineUpdated.visibility = View.VISIBLE
+        } else {
+            binding.tvOfflineIndicator.text = getString(R.string.offline_indicator)
+        }
 
         // Mostrar nombre
         binding.tvNombre.text = producto.nombre
@@ -2385,13 +2436,17 @@ class ScanActivity : AppCompatActivity(), BackupRepository.BackupProgressListene
                         identifyMsg.put("type", "IDENTIFY")
                         identifyMsg.put("device_id", deviceId)
                         identifyMsg.put("device_type", DeviceTypeHelper.detectDeviceType(this@ScanActivity).name.lowercase(Locale.ROOT))
+                        identifyMsg.put("app_version", BuildConfig.VERSION_NAME)
+                        identifyMsg.put("app_version_code", BuildConfig.VERSION_CODE)
                         webSocket.send(identifyMsg.toString())
-                        Log.i(TAG, "[WebSocket] Identificación enviada: device_id=$deviceId")
+                        lastWsSignalAt = android.os.SystemClock.elapsedRealtime()
+                        Log.i(TAG, "[WebSocket] Identificación enviada: device_id=$deviceId version=${BuildConfig.VERSION_NAME}")
                     } catch (e: Exception) {
                         Log.e(TAG, "[WebSocket] Error enviando identificación", e)
                     }
                 }
                 override fun onMessage(webSocket: WebSocket, text: String) {
+                    lastWsSignalAt = android.os.SystemClock.elapsedRealtime()
                     Log.i(TAG, "[WebSocket] Mensaje recibido (texto): $text")
                     try {
                         val message = org.json.JSONObject(text)

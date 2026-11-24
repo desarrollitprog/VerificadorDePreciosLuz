@@ -33,6 +33,8 @@ async def _obtener_dispositivos_de_servidor(ip: str) -> list[dict[str, Any]]:
                     "online": bool(info.get("online", False)),
                     "last_seen": info.get("last_seen"),
                     "server_id": info.get("server_id"),
+                    "device_type": info.get("device_type"),
+                    "app_version": info.get("app_version"),
                 }
             )
 

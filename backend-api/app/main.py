@@ -1823,6 +1823,7 @@ class TabletWebSocketManager:
         self.active_connections: list[WebSocket] = []
         self.device_map: dict[str, WebSocket] = {}  # device_id -> WebSocket
         self.device_types: dict[str, str] = {}  # device_id -> device_type
+        self.device_versions: dict[str, str] = {}  # device_id -> app_version
         self.ping_tasks: dict[int, asyncio.Task] = {}  # id(websocket) -> Task
         self.pending_pong: dict[int, asyncio.Event] = {}  # id(websocket) -> Event (set by main loop when pong arrives)
         self._lock = asyncio.Lock()  # Protege acceso concurrente a estructuras compartidas
@@ -1926,6 +1927,8 @@ class TabletWebSocketManager:
             logger.info(f"[WebSocket] device_id del mensaje: {device_id}")
             device_type = msg.get("device_type", "verificador")
             logger.info(f"[WebSocket] device_type del mensaje: {device_type}")
+            app_version = msg.get("app_version")
+            logger.info(f"[WebSocket] app_version del mensaje: {app_version}")
             
             if not device_id:
                 logger.warning("[WebSocket] device_id no proporcionado, cerrando conexión")
@@ -1944,12 +1947,18 @@ class TabletWebSocketManager:
             
             self.device_map[device_id] = websocket
             self.device_types[device_id] = device_type
+            if app_version:
+                self.device_versions[device_id] = app_version
             logger.info(f"[WebSocket] device_map actualizado: {device_id} -> websocket (tipo={device_type})")
             
             # Actualizar heartbeat en Redis
             if device_state_store is not None:
                 try:
-                    await device_state_store.upsert_heartbeat(device_id=device_id, device_type=device_type)
+                    await device_state_store.upsert_heartbeat(
+                        device_id=device_id,
+                        device_type=device_type,
+                        app_version=app_version,
+                    )
                 except Exception as e:
                     logger.error(f"[Heartbeat] Error actualizando estado para {device_id}: {e}")
             
@@ -1988,6 +1997,7 @@ class TabletWebSocketManager:
                     device_id = k
                     del self.device_map[k]
                     self.device_types.pop(k, None)
+                    self.device_versions.pop(k, None)
                     self._message_queues.pop(k, None)
                     # L2: Recuperar mensajes inflight de Redis
                     if pending_queue is not None:
@@ -3107,7 +3117,8 @@ async def websocket_tablet(websocket: WebSocket):
             if device_id and device_state_store is not None:
                 try:
                     dt = tablet_ws_manager.device_types.get(device_id)
-                    await device_state_store.upsert_heartbeat(device_id=device_id, device_type=dt)
+                    ver = tablet_ws_manager.device_versions.get(device_id)
+                    await device_state_store.upsert_heartbeat(device_id=device_id, device_type=dt, app_version=ver)
                 except Exception:
                     pass
             try:

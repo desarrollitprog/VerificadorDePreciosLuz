@@ -11,6 +11,7 @@ export interface DeviceStatus {
   ultima_duracion?: number | null;
   tiempo_acumulado?: number | null;
   server_id?: string | null;
+  app_version?: string | null;
   tipo?: string;
   hora_reinicio?: string | null;
   reinicio_recurrente?: boolean;
@@ -128,6 +129,7 @@ export async function getServersStatusWithDevices(): Promise<ServerStatusDetail[
           ultima_duracion: d.ultima_duracion ?? null,
           tiempo_acumulado: d.tiempo_acumulado ?? null,
           server_id: d.server_id ?? null,
+          app_version: d.app_version ?? null,
           tipo: d.tipo ?? 'verificador',
           hora_reinicio: d.hora_reinicio ?? null,
           reinicio_recurrente: d.reinicio_recurrente ?? false,

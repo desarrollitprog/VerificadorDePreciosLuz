@@ -45,7 +45,7 @@ class DeviceStateStore:
                     logger.error(f"[Redis] {operation_name} falló después de {self.max_retries} intentos: {e}")
         raise last_exception
 
-    async def upsert_heartbeat(self, device_id: str, server_id: str | None = None, device_type: str | None = None) -> None:
+    async def upsert_heartbeat(self, device_id: str, server_id: str | None = None, device_type: str | None = None, app_version: str | None = None) -> None:
         async def _do_upsert():
             now_epoch = int(time.time())
             now_iso = datetime.now(timezone.utc).isoformat()
@@ -60,6 +60,8 @@ class DeviceStateStore:
             }
             if device_type:
                 mapping["device_type"] = device_type
+            if app_version:
+                mapping["app_version"] = app_version
 
             pipe = self.redis.pipeline()
             pipe.sadd("devices:all", device_id)
@@ -110,6 +112,7 @@ class DeviceStateStore:
                     "last_seen": row.get("last_seen"),
                     "server_id": row.get("server_id") or None,
                     "device_type": row.get("device_type") or "verificador",
+                    "app_version": row.get("app_version") or None,
                 }
 
             return result
